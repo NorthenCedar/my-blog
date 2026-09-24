@@ -1,0 +1,66 @@
+---
+import { render, type CollectionEntry } from 'astro:content';
+import Base from './Base.astro';
+import Meta from '../components/Meta.astro';
+import Toc from '../components/Toc.astro';
+import type { PostMeta, Heading } from '../lib/post-meta';
+
+interface Props {
+  entry: CollectionEntry<'posts'>;
+  meta: PostMeta;
+  headings: Heading[];
+  adjacent: { prev?: PostMeta; next?: PostMeta };
+}
+const { entry, meta, headings, adjacent } = Astro.props;
+const { Content } = await render(entry);
+---
+<Base title={`${meta.title} — 北杉札记`} description={meta.summary}>
+  <Fragment slot="band">
+    <div>
+      <h1 class="hero-title">{meta.title}</h1>
+      <Meta post={meta} />
+    </div>
+  </Fragment>
+
+  <article>
+    <Toc headings={headings} />
+    <div class="prose"><Content /></div>
+  </article>
+
+  <nav class="adj" aria-label="相邻文章">
+    {adjacent.prev && <a href={adjacent.prev.url}>← {adjacent.prev.title}</a>}
+    {adjacent.next && <a class="next" href={adjacent.next.url}>{adjacent.next.title} →</a>}
+  </nav>
+</Base>
+
+<style>
+  .hero-title {
+    font-size: var(--fs-title);
+    line-height: var(--lh-title);
+    letter-spacing: var(--ls-title);
+    margin: 0 0 var(--sp-4);
+    font-weight: 800;
+    max-width: 24em;
+  }
+  .adj {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+    margin-top: var(--sp-8);
+    padding-top: var(--sp-5);
+    border-top: 1px solid var(--ink);
+    font-size: var(--fs-sm);
+  }
+  .adj a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .adj a:hover {
+    color: var(--accent-ink);
+    text-decoration: underline;
+  }
+  .adj .next {
+    margin-left: auto;
+  }
+</style>

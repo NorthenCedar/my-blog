@@ -1,0 +1,30 @@
+---
+import Base from '../../layouts/Base.astro';
+import PostIndex from '../../components/PostIndex.astro';
+import { getAllTags, getPostsByTag } from '../../lib/posts';
+
+// 只产出「已登记且有文章」的标签页 —— 0 篇文章的标签不会生成空页面。
+export async function getStaticPaths() {
+  const tags = await getAllTags();
+  return tags.map((t) => ({ params: { tag: t.tag } }));
+}
+
+const { tag } = Astro.params;
+const posts = await getPostsByTag(tag!);
+---
+<Base title={`${tag} — 北杉札记`} current="tags">
+  <Fragment slot="band">
+    <h1 class="h">{tag}</h1>
+  </Fragment>
+
+  <PostIndex posts={posts} />
+</Base>
+
+<style>
+  .h {
+    font-size: var(--fs-title);
+    margin: 0;
+    font-weight: 800;
+    letter-spacing: var(--ls-title);
+  }
+</style>

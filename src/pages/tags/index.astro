@@ -1,0 +1,54 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getAllTags } from '../../lib/posts';
+
+const tags = await getAllTags();
+---
+<Base title="标签 — 北杉札记" current="tags">
+  <Fragment slot="band">
+    <h1 class="h">标签</h1>
+  </Fragment>
+
+  <ul class="chips">
+    {tags.map((t) => (
+      <li>
+        <a href={`/tags/${encodeURIComponent(t.tag)}/`}>
+          {t.tag} <span class="n">{t.count}</span>
+        </a>
+      </li>
+    ))}
+  </ul>
+</Base>
+
+<style>
+  .h {
+    font-size: var(--fs-title);
+    margin: 0;
+    font-weight: 800;
+    letter-spacing: var(--ls-title);
+  }
+  .chips {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+  }
+  .chips a {
+    font-size: var(--fs-lede);
+    color: inherit;
+    text-decoration: none;
+    border: 1px solid var(--hair);
+    padding: var(--sp-2) var(--sp-4);
+  }
+  .chips a:hover {
+    border-color: var(--accent-ink);
+    color: var(--accent-ink);
+  }
+  .n {
+    color: var(--muted);
+    font-size: var(--fs-sm);
+    font-variant-numeric: tabular-nums;
+  }
+</style>

@@ -1,0 +1,79 @@
+---
+import type { PostMeta } from '../lib/post-meta';
+import DraftBadge from './DraftBadge.astro';
+
+interface Props {
+  posts: PostMeta[];
+  heading?: string;
+}
+const { posts, heading } = Astro.props;
+---
+{heading && <h2 class="section">{heading}</h2>}
+<ul class="index">
+  {posts.map((p) => (
+    <li>
+      <a href={p.url}>
+        <span class="date">
+          <time datetime={p.date}>{p.date}</time>
+          {p.draft && <> <DraftBadge /></>}
+        </span>
+        <span class="title">{p.title}</span>
+        <span class="summary">{p.summary}</span>
+        <span class="tags">{p.tags.join(' / ')}</span>
+      </a>
+    </li>
+  ))}
+</ul>
+
+<style>
+  .section {
+    font-size: var(--fs-lg);
+    font-weight: 700;
+    margin: 0 0 var(--sp-4);
+  }
+  .index {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--ink);
+  }
+  .index li {
+    border-bottom: 1px solid var(--hair);
+  }
+  .index a {
+    display: block;
+    padding: var(--sp-6) 0;
+    text-decoration: none;
+    color: inherit;
+  }
+  .date {
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .title {
+    display: block;
+    margin: var(--sp-2) 0 var(--sp-3);
+    max-width: 22em;
+    font-size: var(--fs-item);
+    line-height: var(--lh-item);
+    letter-spacing: var(--ls-item);
+    font-weight: 800;
+  }
+  /* 条目字号远大于 24px，所以 3.68:1 的 --accent 合法 */
+  .index a:hover .title {
+    color: var(--accent);
+  }
+  .summary {
+    display: block;
+    font-size: var(--fs-sm);
+    color: var(--muted);
+    max-width: 40em;
+  }
+  .tags {
+    display: block;
+    margin-top: var(--sp-3);
+    font-size: var(--fs-xs);
+    color: var(--muted);
+  }
+</style>

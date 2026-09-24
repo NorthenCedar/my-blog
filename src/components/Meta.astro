@@ -1,0 +1,33 @@
+---
+import type { PostMeta } from '../lib/post-meta';
+import DraftBadge from './DraftBadge.astro';
+
+interface Props {
+  post: PostMeta;
+}
+const { post } = Astro.props;
+---
+<p class="meta">
+  <time datetime={post.date}>{post.date}</time>
+  <span>{post.charCount.toLocaleString('zh-CN')} 字</span>
+  <span>约 {post.readingMinutes} 分钟</span>
+  {post.draft && <DraftBadge />}
+  {post.tags.map((t) => <span class="tag">{t}</span>)}
+</p>
+
+<style>
+  /* 故意不用 · 连接元信息（那是生成页面的默认零件，design-spec.md §2），靠 gap 分组。
+     日期与数字用正文字族 + tabular-nums，等宽族只留给代码。 */
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-4);
+    margin: 0;
+    font-size: var(--fs-xs);
+    color: var(--on-band-meta);
+    font-variant-numeric: tabular-nums;
+  }
+  .tag {
+    color: var(--on-band-sub);
+  }
+</style>

@@ -1,0 +1,63 @@
+/* 值与 docs/design-spec.md §3 完全一致。改这里 = 改全站视觉。
+   组件里不许出现字面量颜色与间距。 */
+:root {
+  /* 颜色（对比度为实测值，见 scripts/assert-tokens.mjs） */
+  --paper: #ffffff;
+  --ink: #0e0e0e;          /* 对纸 19.3:1 */
+  --muted: #5c5c5c;        /* 对纸 6.69:1 */
+  --hair: #d6d6d6;         /* 纯装饰线，不承载文字 */
+  --accent: #e4572e;       /* 对纸 3.68:1 —— 仅 ≥24px 文字 / 图形 */
+  --accent-ink: #c2410c;   /* 对纸 5.18:1 —— 小字专用 */
+  --on-band: #ffffff;      /* 黑带上 19.3:1 */
+  --on-band-sub: #dedede;  /* 黑带上 14.35:1 */
+  --on-band-meta: #b4b4b4; /* 黑带上 9.31:1 */
+  --code-bg: #0e0e0e;
+  --code-fg: #ededed;      /* 对代码底 16.49:1 */
+
+  /* 字号（11 档） */
+  --fs-display: clamp(2.8rem, 13vw, 8.5rem);
+  --fs-title: clamp(1.9rem, 1.1rem + 3.6vw, 3.8rem);
+  --fs-item: clamp(1.6rem, 1rem + 4.2vw, 3.4rem);
+  --fs-h2: clamp(1.45rem, 1.05rem + 1.5vw, 2.1rem);
+  --fs-h3: clamp(1.15rem, 1rem + 0.7vw, 1.4rem);
+  --fs-lg: 1.375rem;
+  --fs-lede: 1.125rem;
+  --fs-body: 1.0625rem;
+  --fs-sm: 0.875rem;
+  --fs-xs: 0.8125rem;
+  --fs-mono: 0.85rem;
+
+  /* 行高 */
+  --lh-display: 0.9;
+  --lh-title: 1.02;
+  --lh-item: 1.03;
+  --lh-heading: 1.18;
+  --lh-body: 1.75;
+
+  /* 字距 */
+  --ls-display: -0.045em;
+  --ls-title: -0.035em;
+  --ls-item: -0.032em;
+  --ls-h2: -0.012em;
+
+  /* 间距（4px 基准，8 档） */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+  --sp-7: 3rem;
+  --sp-8: 4.5rem;
+
+  /* 版心 */
+  --wrap: 82rem;
+  --measure: 34em;
+  --gutter: clamp(1rem, 4vw, 3rem);
+  --band-h: min(74vh, 42rem);
+
+  /* 动效 */
+  --dur-fast: 120ms;
+  --dur-enter: 320ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}

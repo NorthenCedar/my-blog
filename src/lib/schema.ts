@@ -1,7 +1,18 @@
 import { z } from 'astro/zod';
 import { TAGS } from '../tag-registry';
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * YAML 会把未加引号的 `date: 2026-09-08` 隐式解析成 Date 对象。
+ * 内容文件是冻结契约（权威），不该为了迁就 schema 去给日期加引号 ——
+ * 所以在这里归一化，两种写法都接受，落库一律 YYYY-MM-DD。
+ */
+const dateField = (label: string) =>
+  z.preprocess(
+    (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v),
+    z.string().regex(ISO_DATE, `${label} 必须是 YYYY-MM-DD`)
+  );
 
 /**
  * 内容契约的机器可读形式 —— docs/content-model.md §1 的 6 条校验规则。
@@ -10,8 +21,8 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const postSchema = z
   .object({
     title: z.string().min(1),
-    date: z.string().regex(DATE, 'date 必须是 YYYY-MM-DD'),
-    updated: z.string().regex(DATE, 'updated 必须是 YYYY-MM-DD').optional(),
+    date: dateField('date'),
+    updated: dateField('updated').optional(),
     summary: z.string().min(1).max(80, 'summary 不能超过 80 字'),
     tags: z
       .array(z.string())

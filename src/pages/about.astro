@@ -1,0 +1,24 @@
+---
+import { getEntry, render } from 'astro:content';
+import Base from '../layouts/Base.astro';
+
+// 关于页正文来自 content/pages/about.md —— 主题不持有任何正文（content-model.md §7）
+const entry = await getEntry('pages', 'about');
+const Content = entry ? (await render(entry)).Content : null;
+---
+<Base title="关于 — 北杉札记" current="about">
+  <Fragment slot="band">
+    <h1 class="h">关于</h1>
+  </Fragment>
+
+  <div class="prose">{Content && <Content />}</div>
+</Base>
+
+<style>
+  .h {
+    font-size: var(--fs-title);
+    margin: 0;
+    font-weight: 800;
+    letter-spacing: var(--ls-title);
+  }
+</style>

@@ -1,0 +1,47 @@
+---
+interface Props {
+  tall?: boolean;
+}
+const { tall = true } = Astro.props;
+---
+<header class:list={['band', { tall }]}>
+  <div class="wrap">
+    <slot />
+  </div>
+</header>
+
+<style>
+  .band {
+    background: var(--ink);
+    color: var(--on-band);
+  }
+  .wrap {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding: var(--sp-4) var(--gutter) var(--sp-6);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: var(--sp-7);
+  }
+  .band.tall .wrap {
+    min-height: var(--band-h);
+  }
+
+  /* 全站唯一的入场动效（design-spec.md §3.5）。别的地方一律不许加。 */
+  @media (prefers-reduced-motion: no-preference) {
+    .band .wrap > :last-child {
+      animation: rise var(--dur-enter) var(--ease) both;
+    }
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  }
+</style>
