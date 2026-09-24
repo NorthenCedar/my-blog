@@ -72,14 +72,19 @@
 
 **已知代价**：大陆访问可能不稳定。等你决定买域名（约 ¥50/年）后，把自定义域绑上去通常比 `pages.dev` 子域略好，但**同样不保证**。真要把大陆速度当硬指标，唯一的路是域名 + ICP 备案 + 国内云，约 2–4 周流程。
 
-### 部署形态（阶段 6 执行，未经你同意不会 push）
+### 部署形态
 
-1. 本地 `<博客仓库>` 建独立 git 仓库
-2. 推到你的 GitHub（`NorthenCedar`）—— **需要你明确同意才会执行**
-3. Cloudflare Pages 连接该仓库，构建命令 `npm run build`，输出目录 `dist/`
-4. 站点 URL 由 `*.pages.dev` 决定；这个值要写进 Astro 的 `site` 配置（RSS 与绝对链接依赖它）
+1. ✅ 本地 `<博客仓库>` 已建独立 git 仓库（10 个提交，91 个跟踪文件）
+2. ✅ **已推送到 https://github.com/NorthenCedar/personal（`main` 分支）** —— 2026-09-25 经站主明确同意后执行
+3. ⏳ Cloudflare Pages 连接该仓库，构建命令 `npm run build`，输出目录 `dist/`（**未执行，等站主决定**）
+4. ⏳ 站点 URL 由 `*.pages.dev` 决定；这个值要写进 Astro 的 `site` 配置（RSS 与绝对链接依赖它）
 
 **换域名只改一处**：`site` 配置。其余 URL 全部是相对路径。
+
+> **推送到 GitHub 时踩到的环境事实**（下次会再遇到）：这台机器的 `hosts` 里有 27 条 GitHub 域名指向 `127.0.0.1`，
+> 由 **`Steam++.Accelerator`（Watt Toolkit）** 在 443/80 上反向代理 —— 那是加速工具，不是屏蔽。
+> 所以 `github.com` 能连上（经它转发），推送失败的真实原因只可能是**凭据**。
+> 排查时**不要**用 `GIT_TERMINAL_PROMPT=0` / `GCM_INTERACTIVE=never`，那会把「缺凭据」伪装成「推不上去」。
 
 ---
 
