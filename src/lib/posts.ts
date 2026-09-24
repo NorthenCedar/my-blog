@@ -6,7 +6,6 @@ import {
   groupByYear,
   collectTags,
   adjacentOf,
-  headingTree,
   type PostMeta,
   type RawEntry,
 } from './post-meta';
@@ -16,18 +15,12 @@ import { TAGS } from '../tag-registry';
 const isDev = import.meta.env.DEV;
 
 function toRaw(entry: CollectionEntry<'posts'>): RawEntry {
-  const headings = (entry.rendered?.metadata?.headings ?? []) as RawEntry['headings'];
-  const body = entry.body ?? '';
-  if (headings.length === 0 && /^##\s/m.test(body)) {
-    // 自检：如果 Astro 的 rendered.metadata.headings 在某版本里不可用，
-    // 这里会喊出来，而不是静默生成一个没有目录的文章页。
-    console.warn(`[posts] ${entry.id} 的标题树为空但正文有二级标题 —— TOC 不会渲染`);
-  }
+  // 标题树不在这里取：deferRender 打开后 entry.rendered 在查询期不可用，
+  // 标题树由页面在 render(entry) 之后拿到（见 layouts/Post.astro）。
   return {
     id: entry.id,
     data: entry.data as unknown as RawEntry['data'],
-    body,
-    headings,
+    body: entry.body ?? '',
   };
 }
 
@@ -55,7 +48,6 @@ export async function getPost(slug: string) {
   return {
     entry,
     meta: toPostMeta(raw),
-    headings: headingTree(raw.headings),
     adjacent: adjacentOf(visible, slug),
   };
 }

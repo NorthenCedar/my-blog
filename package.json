@@ -5,9 +5,10 @@
   "private": true,
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && node scripts/prune-draft-assets.mjs",
     "preview": "astro preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify": "npm run build && vitest run"
   },
   "devDependencies": {
     "vitest": "^5.0.1"

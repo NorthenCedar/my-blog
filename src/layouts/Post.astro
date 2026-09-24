@@ -3,16 +3,17 @@ import { render, type CollectionEntry } from 'astro:content';
 import Base from './Base.astro';
 import Meta from '../components/Meta.astro';
 import Toc from '../components/Toc.astro';
-import type { PostMeta, Heading } from '../lib/post-meta';
+import { headingTree, type PostMeta } from '../lib/post-meta';
 
 interface Props {
   entry: CollectionEntry<'posts'>;
   meta: PostMeta;
-  headings: Heading[];
   adjacent: { prev?: PostMeta; next?: PostMeta };
 }
-const { entry, meta, headings, adjacent } = Astro.props;
-const { Content } = await render(entry);
+const { entry, meta, adjacent } = Astro.props;
+// 标题树在渲染时才有（deferRender 的代价，也是它换来"草稿素材不产出"的原因）
+const { Content, headings } = await render(entry);
+const toc = headingTree(headings);
 ---
 <Base title={`${meta.title} — 北杉札记`} description={meta.summary}>
   <Fragment slot="band">
@@ -23,7 +24,7 @@ const { Content } = await render(entry);
   </Fragment>
 
   <article>
-    <Toc headings={headings} />
+    <Toc headings={toc} />
     <div class="prose"><Content /></div>
   </article>
 
@@ -64,3 +65,8 @@ const { Content } = await render(entry);
     margin-left: auto;
   }
 </style>
+
+<script>
+  // 全站唯一的客户端脚本（代码块工具栏）。见 src/scripts/copy-code.ts
+  import '../scripts/copy-code';
+</script>

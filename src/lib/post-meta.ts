@@ -16,7 +16,8 @@ export type RawEntry = {
     coverAlt?: string;
   };
   body: string;
-  headings: { depth: number; text: string; id: string }[];
+  /** 标题树由页面在 render(entry) 之后取得，查询期不保证可用（deferRender） */
+  headings?: { depth: number; text: string; id: string }[];
 };
 
 export type PostMeta = {

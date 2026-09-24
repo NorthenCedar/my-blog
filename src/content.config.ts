@@ -9,6 +9,9 @@ const posts = defineCollection({
     // 显式生成 id：默认行为由 github-slugger 决定，对 foo/index.md 的结果没有明文保证，
     // 而 slug 会被永久写进 URL，不能赌。
     generateId: ({ entry }) => entry.replace(/\/index\.md$/, ''),
+    // 默认行为是同步阶段就渲染所有条目 —— 那会把草稿的图片也优化并产出到 dist/。
+    // 页面不产出但素材被部署，等于草稿漏了一半。deferRender 让渲染推迟到"真正被页面用到"时。
+    deferRender: true,
   }),
   schema: postSchema,
 });

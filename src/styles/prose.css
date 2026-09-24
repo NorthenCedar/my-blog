@@ -95,3 +95,76 @@
   border-bottom: 2px solid var(--ink);
   white-space: nowrap;
 }
+
+/* ---------- 代码块（阶段 2 决策：黑底白字）----------
+   选择器与变量名以 Shiki 的真实输出为准，实测于 astro 7.3.5 + shikiConfig.theme='css-variables'：
+   <pre class="astro-code css-variables"
+        style="background-color:var(--astro-code-background);color:var(--astro-code-foreground); overflow-x: auto;"
+        tabindex="0" data-language="bash">
+   因为底色与前景色是内联样式引用的变量，所以改的是变量本身，不需要 !important。 */
+.astro-code {
+  --astro-code-background: var(--code-bg);
+  --astro-code-foreground: var(--code-fg);
+  /* 代码高亮只用一个强调色（关键词），其余靠灰阶 —— 与全站"一支墨 + 一个信号色"一致。
+     对 #0e0e0e 的实测对比度（scripts 复算，非估计）：
+     comment #8a8a8a 5.59 / punctuation #b4b4b4 9.31 / string #e8e8e8 15.76 /
+     keyword #ff8a66 8.35 / function #ffffff 19.3 / constant #dedede 14.35 —— 全部 ≥ 4.5。 */
+  --astro-code-token-comment: #8a8a8a;
+  --astro-code-token-punctuation: #b4b4b4;
+  --astro-code-token-string: #e8e8e8;
+  --astro-code-token-string-expression: #e8e8e8;
+  --astro-code-token-keyword: #ff8a66;
+  --astro-code-token-function: #ffffff;
+  --astro-code-token-constant: #dedede;
+  --astro-code-token-parameter: #dedede;
+  --astro-code-token-link: #ff8a66;
+  padding: var(--sp-4) var(--sp-5);
+  font-size: var(--fs-mono);
+  line-height: 1.72;
+  border-radius: 0;
+}
+.astro-code code {
+  font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  background: none;
+  padding: 0;
+}
+.astro-code .line {
+  display: block;
+}
+
+/* 代码块工具栏（由唯一的客户端脚本注入；JS 关闭时不出现，代码照样可复制） */
+.code-holder {
+  position: relative;
+  margin: var(--sp-6) 0;
+}
+.code-holder .astro-code {
+  margin: 0;
+}
+.code-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  background: var(--code-bg);
+  border-bottom: 1px solid #333;
+  padding: var(--sp-1) var(--sp-3);
+}
+.code-lang {
+  font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #b4b4b4;
+}
+.copy-btn {
+  background: none;
+  border: 1px solid #4a4a4a;
+  color: var(--code-fg);
+  font-size: var(--fs-xs);
+  padding: 0 var(--sp-2);
+  cursor: pointer;
+}
+.copy-btn:hover {
+  background: #242424;
+  border-color: var(--code-fg);
+}

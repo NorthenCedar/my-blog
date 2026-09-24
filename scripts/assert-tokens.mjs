@@ -1,0 +1,53 @@
+// 从 tokens.css 读真实取值，按 WCAG 相对亮度复算对比度，与 docs/design-spec.md §5 的断言表比对。
+// 这里不"相信"任何写下来的数字 —— 包括我们自己写进注释的那些。
+import { readFileSync } from 'node:fs';
+
+const css = readFileSync(new URL('../src/styles/tokens.css', import.meta.url), 'utf8');
+
+const get = (name) => {
+  const m = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`));
+  if (!m) throw new Error(`tokens.css 里找不到 --${name}`);
+  return m[1].toLowerCase();
+};
+
+const lum = (hex) => {
+  const v = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const l = v.map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
+};
+
+const ratio = (a, b) => {
+  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+  return Math.round(((x + 0.05) / (y + 0.05)) * 100) / 100;
+};
+
+// [前景, 背景, 规格值, 下限]
+const CASES = [
+  ['ink', 'paper', 19.3, 4.5],
+  ['muted', 'paper', 6.69, 4.5],
+  ['accent-ink', 'paper', 5.18, 4.5],
+  ['accent', 'paper', 3.68, 3.0], // 只承诺大字/图形门槛（≥24px）
+  ['on-band', 'ink', 19.3, 4.5],
+  ['on-band-sub', 'ink', 14.35, 4.5],
+  ['on-band-meta', 'ink', 9.31, 4.5],
+  ['accent', 'ink', 5.24, 4.5],
+  ['code-fg', 'code-bg', 16.49, 4.5],
+];
+
+let failed = 0;
+for (const [fg, bg, expect, min] of CASES) {
+  const actual = ratio(get(fg), get(bg));
+  const ok = actual >= min && Math.abs(actual - expect) < 0.05;
+  if (!ok) {
+    failed++;
+    console.error(`✗ ${fg} on ${bg}: 实测 ${actual}，规格 ${expect}，下限 ${min}`);
+  } else {
+    console.log(`✓ ${fg} on ${bg}: ${actual}（下限 ${min}）`);
+  }
+}
+
+if (failed) {
+  console.error(`\n${failed} 项不达标`);
+  process.exit(1);
+}
+console.log('\n全部 token 对比度达标');

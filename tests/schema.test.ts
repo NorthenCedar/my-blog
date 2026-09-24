@@ -50,6 +50,31 @@ describe('postSchema 的 6 条规则', () => {
     expect(postSchema.safeParse({ ...valid, excerpt: '多余的字段' }).success).toBe(false);
   });
 
+  it('7. YAML 把未加引号的日期解析成 Date 对象时，归一化成 YYYY-MM-DD', () => {
+    // 这是第一次构建时真实撞到的坑：content/ 里写 date: 2026-09-16，
+    // YAML 隐式类型把它变成 Date，字符串 schema 直接拒绝。
+    const r = postSchema.safeParse({ ...valid, date: new Date('2026-09-08T00:00:00Z') });
+    expect(r.success).toBe(true);
+    expect(r.data?.date).toBe('2026-09-08');
+
+    const u = postSchema.safeParse({
+      ...valid,
+      date: new Date('2026-09-08T00:00:00Z'),
+      updated: new Date('2026-09-20T00:00:00Z'),
+    });
+    expect(u.success).toBe(true);
+    expect(u.data?.updated).toBe('2026-09-20');
+  });
+
+  it('8. 归一化之后，updated < date 这条跨字段规则仍然生效', () => {
+    const r = postSchema.safeParse({
+      ...valid,
+      date: new Date('2026-09-08T00:00:00Z'),
+      updated: new Date('2026-09-01T00:00:00Z'),
+    });
+    expect(r.success).toBe(false);
+  });
+
   it('合法输入通过（三篇真草稿的实际 frontmatter 形状）', () => {
     expect(postSchema.safeParse(valid).success).toBe(true);
     expect(

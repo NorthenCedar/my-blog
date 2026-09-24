@@ -11,4 +11,4 @@ export async function getStaticPaths() {
 const { slug } = Astro.params;
 const post = await getPost(slug!);
 ---
-{post && <Post entry={post.entry} meta={post.meta} headings={post.headings} adjacent={post.adjacent} />}
+{post && <Post entry={post.entry} meta={post.meta} adjacent={post.adjacent} />}
