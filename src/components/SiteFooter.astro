@@ -33,6 +33,8 @@ const year = new Date().getFullYear();
     margin-left: var(--sp-4);
   }
   .links a:hover {
-    color: var(--accent);
+    /* 13px 小字，必须用 AA 达标的 --accent-ink（5.18:1）。
+       --accent 对白只有 3.68:1，只许用在 ≥24px 文字或非文字图形上（design-spec §3.1）。 */
+    color: var(--accent-ink);
   }
 </style>

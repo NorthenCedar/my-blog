@@ -10,11 +10,19 @@ import {
   type RawEntry,
 } from './post-meta';
 import { TAGS } from '../tag-registry';
+import { unknownFields } from './schema';
 
 // 环境值和内容源都是"从外面拿进来"的，核心逻辑（post-meta.ts）不认识它们。
 const isDev = import.meta.env.DEV;
 
 function toRaw(entry: CollectionEntry<'posts'>): RawEntry {
+  // 内容契约规则 6：未登记字段只警告，不失败（.strict() 是我一开始写错的）。
+  const extra = unknownFields(entry.data as Record<string, unknown>);
+  if (extra.length > 0) {
+    console.warn(
+      `[content] ${entry.id} 有未登记字段：${extra.join(', ')} —— 确认是否该走内容模型变更流程（content-model.md §6）`
+    );
+  }
   // 标题树不在这里取：deferRender 打开后 entry.rendered 在查询期不可用，
   // 标题树由页面在 render(entry) 之后拿到（见 layouts/Post.astro）。
   return {

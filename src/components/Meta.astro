@@ -9,6 +9,7 @@ const { post } = Astro.props;
 ---
 <p class="meta">
   <time datetime={post.date}>{post.date}</time>
+  {post.updated && <span>更新于 <time datetime={post.updated}>{post.updated}</time></span>}
   <span>{post.charCount.toLocaleString('zh-CN')} 字</span>
   <span>约 {post.readingMinutes} 分钟</span>
   {post.draft && <DraftBadge />}

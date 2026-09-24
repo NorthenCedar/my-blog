@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { postSchema } from '../src/lib/schema';
+import { postSchema, unknownFields, KNOWN_FIELDS } from '../src/lib/schema';
 
 const valid = {
   title: '标题',
@@ -46,8 +46,12 @@ describe('postSchema 的 6 条规则', () => {
     expect(postSchema.safeParse({ ...valid, cover: './a.jpg', coverAlt: '一张图' }).success).toBe(true);
   });
 
-  it('6. 未登记字段要报错', () => {
-    expect(postSchema.safeParse({ ...valid, excerpt: '多余的字段' }).success).toBe(false);
+  it('6. 未登记字段不失败，但能被检测出来（契约要求"只警告"）', () => {
+    // content-model.md §1 规则 6：出现未登记字段 → 构建**警告（不失败）**。
+    // 一开始我写成 .strict() 让它失败了，那是错的。
+    const r = postSchema.safeParse({ ...valid, excerpt: '多余的字段' });
+    expect(r.success).toBe(true);
+    expect(unknownFields(r.data as Record<string, unknown>)).toEqual(['excerpt']);
   });
 
   it('7. YAML 把未加引号的日期解析成 Date 对象时，归一化成 YYYY-MM-DD', () => {

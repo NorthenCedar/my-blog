@@ -1,9 +1,10 @@
 ---
 import Base from '../layouts/Base.astro';
+import PageTitle from '../components/PageTitle.astro';
 ---
 <Base title="页面不存在 — 北杉札记">
   <Fragment slot="band">
-    <h1 class="h">404</h1>
+    <PageTitle size="display">404</PageTitle>
   </Fragment>
 
   <p class="prose">
@@ -11,12 +12,3 @@ import Base from '../layouts/Base.astro';
   </p>
   <p><a href="/">回到首页</a></p>
 </Base>
-
-<style>
-  .h {
-    font-size: var(--fs-display);
-    margin: 0;
-    font-weight: 800;
-    letter-spacing: var(--ls-display);
-  }
-</style>

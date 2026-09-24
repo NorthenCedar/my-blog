@@ -47,7 +47,9 @@ export const postSchema = z
       .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'slug 只允许小写字母、数字与单个连字符')
       .optional(),
   })
-  .strict()
+  // content-model.md §1 规则 6：未登记字段**只警告，不失败**。
+  // 用 .strict() 会把它变成构建失败 —— 那是我一开始写错的，测试也跟着错了。
+  .passthrough()
   .refine((d) => !d.updated || d.updated >= d.date, {
     message: 'updated 不能早于 date',
     path: ['updated'],
@@ -59,3 +61,20 @@ export const postSchema = z
   });
 
 export type PostFrontmatter = z.infer<typeof postSchema>;
+
+/** 契约登记的 9 个字段。用来实现规则 6 的"未登记字段 → 警告"。 */
+export const KNOWN_FIELDS = [
+  'title',
+  'date',
+  'updated',
+  'summary',
+  'tags',
+  'draft',
+  'cover',
+  'coverAlt',
+  'slug',
+] as const;
+
+export function unknownFields(data: Record<string, unknown>): string[] {
+  return Object.keys(data).filter((k) => !(KNOWN_FIELDS as readonly string[]).includes(k));
+}

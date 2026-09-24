@@ -13,6 +13,11 @@
   --on-band-meta: #b4b4b4; /* 黑带上 9.31:1 */
   --code-bg: #0e0e0e;
   --code-fg: #ededed;      /* 对代码底 16.49:1 */
+  --code-inline-bg: #f2f1ef; /* 行内代码底色（装饰，文字仍是 --ink） */
+  --code-rule: #333333;    /* 工具栏与代码块之间的分隔线（装饰线） */
+  --code-btn-line: #4a4a4a;
+  --code-btn-bg: #242424;
+  --code-keyword: #ff8a66; /* 代码里唯一的强调色；对 --code-bg 实测 8.35:1 */
 
   /* 字号（11 档） */
   --fs-display: clamp(2.8rem, 13vw, 8.5rem);

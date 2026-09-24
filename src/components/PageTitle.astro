@@ -1,0 +1,25 @@
+---
+interface Props {
+  /** title = --fs-title（常规页）；display = --fs-display（404 这种整页声明） */
+  size?: 'title' | 'display';
+}
+const { size = 'title' } = Astro.props;
+---
+<h1 class:list={['h', size]}><slot /></h1>
+
+<style>
+  /* 五个页面共用同一个页标题样式 —— 之前是每个页面各抄一份（architecture §1.5 承诺的组件没落地）。 */
+  .h {
+    margin: 0;
+    font-weight: 800;
+  }
+  .h.title {
+    font-size: var(--fs-title);
+    letter-spacing: var(--ls-title);
+  }
+  .h.display {
+    font-size: var(--fs-display);
+    letter-spacing: var(--ls-display);
+    line-height: var(--lh-display);
+  }
+</style>

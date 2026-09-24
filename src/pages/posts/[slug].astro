@@ -1,4 +1,6 @@
 ---
+import Base from '../../layouts/Base.astro';
+import PageTitle from '../../components/PageTitle.astro';
 import Post from '../../layouts/Post.astro';
 import { getVisiblePosts, getPost } from '../../lib/posts';
 
@@ -11,4 +13,19 @@ export async function getStaticPaths() {
 const { slug } = Astro.params;
 const post = await getPost(slug!);
 ---
-{post && <Post entry={post.entry} meta={post.meta} adjacent={post.adjacent} />}
+{
+  /* getStaticPaths 只列出可见文章，所以生产构建下 post 恒为真。
+     兜底分支保留：宁可渲染一句人话，也不要一个空 body 的 200。 */
+}
+{post ? (
+  <Post entry={post.entry} meta={post.meta} adjacent={post.adjacent} />
+) : (
+  <Base title="找不到这篇文章 — 北杉札记">
+    <Fragment slot="band">
+      <PageTitle>找不到这篇文章</PageTitle>
+    </Fragment>
+    <p class="prose">
+      它可能还是草稿，或者地址写错了。<a href="/">回到首页</a>
+    </p>
+  </Base>
+)}

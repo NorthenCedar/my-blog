@@ -1,12 +1,13 @@
 ---
 import Base from '../../layouts/Base.astro';
+import PageTitle from '../../components/PageTitle.astro';
 import { getAllTags } from '../../lib/posts';
 
 const tags = await getAllTags();
 ---
 <Base title="标签 — 北杉札记" current="tags">
   <Fragment slot="band">
-    <h1 class="h">标签</h1>
+    <PageTitle>标签</PageTitle>
   </Fragment>
 
   <ul class="chips">
@@ -21,12 +22,6 @@ const tags = await getAllTags();
 </Base>
 
 <style>
-  .h {
-    font-size: var(--fs-title);
-    margin: 0;
-    font-weight: 800;
-    letter-spacing: var(--ls-title);
-  }
   .chips {
     list-style: none;
     margin: 0;

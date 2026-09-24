@@ -66,6 +66,12 @@ describe('toPostMeta', () => {
     expect(m.slug).toBe('custom');
     expect(m.url).toBe('/posts/custom/');
   });
+
+  it('updated 透传到 PostMeta（详情页要显示「更新于」）', () => {
+    expect(toPostMeta(raw()).updated).toBeUndefined();
+    const m = toPostMeta(raw({ data: { ...baseData, updated: '2026-09-20' } }));
+    expect(m.updated).toBe('2026-09-20');
+  });
 });
 
 describe('filterVisible —— 草稿三态里的两态', () => {

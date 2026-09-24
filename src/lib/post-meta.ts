@@ -1,20 +1,12 @@
 import type { Tag } from '../tag-registry';
+import type { PostFrontmatter } from './schema';
 
 export type Heading = { depth: 2 | 3; text: string; id: string };
 
 export type RawEntry = {
   id: string;
-  data: {
-    title: string;
-    date: string;
-    summary: string;
-    tags: string[];
-    draft: boolean;
-    slug?: string;
-    updated?: string;
-    cover?: string;
-    coverAlt?: string;
-  };
+  /** 字段形状来自 schema —— 唯一事实来源，不在这里手抄一遍（那会漂移）。 */
+  data: PostFrontmatter;
   body: string;
   /** 标题树由页面在 render(entry) 之后取得，查询期不保证可用（deferRender） */
   headings?: { depth: number; text: string; id: string }[];
@@ -24,6 +16,8 @@ export type PostMeta = {
   slug: string;
   title: string;
   date: string;
+  /** 有则详情页显示「更新于」（content-model.md §1） */
+  updated?: string;
   summary: string;
   tags: Tag[];
   draft: boolean;
@@ -66,6 +60,7 @@ export function toPostMeta(entry: RawEntry): PostMeta {
     slug,
     title: data.title,
     date: data.date,
+    updated: data.updated,
     summary: data.summary,
     tags: data.tags as Tag[],
     draft: data.draft,

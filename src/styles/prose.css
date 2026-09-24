@@ -59,7 +59,7 @@
 .prose code {
   font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
   font-size: 0.88em;
-  background: #f2f1ef;
+  background: var(--code-inline-bg);
   padding: 0.12em 0.38em;
 }
 
@@ -74,13 +74,13 @@
   margin: var(--sp-7) 0;
 }
 
-.tablewrap {
-  margin: var(--sp-6) 0;
-  overflow-x: auto;
-}
+/* 表格横向滚动：table 上直接 display:block 会产生匿名表格盒，既保留表格布局又能滚动。
+   这条替代了原先那个全库零引用的 .tablewrap（死 CSS），超宽表格现在真的能滚。 */
 .prose table {
   border-collapse: collapse;
-  width: 100%;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
   font-size: var(--fs-sm);
   line-height: 1.55;
 }
@@ -113,7 +113,7 @@
   --astro-code-token-punctuation: #b4b4b4;
   --astro-code-token-string: #e8e8e8;
   --astro-code-token-string-expression: #e8e8e8;
-  --astro-code-token-keyword: #ff8a66;
+  --astro-code-token-keyword: var(--code-keyword);
   --astro-code-token-function: #ffffff;
   --astro-code-token-constant: #dedede;
   --astro-code-token-parameter: #dedede;
@@ -146,25 +146,25 @@
   justify-content: space-between;
   gap: var(--sp-4);
   background: var(--code-bg);
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--code-rule);
   padding: var(--sp-1) var(--sp-3);
 }
+/* 语言标注：等宽 + 小号，但**不做全大写、不加字距** —— design-spec §2 明确禁止
+   装饰性的全大写标签，只给拉丁 wordmark 留了例外。 */
 .code-lang {
   font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-  font-size: var(--fs-xs);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #b4b4b4;
+  font-size: var(--fs-mono);
+  color: var(--on-band-meta);
 }
 .copy-btn {
   background: none;
-  border: 1px solid #4a4a4a;
+  border: 1px solid var(--code-btn-line);
   color: var(--code-fg);
   font-size: var(--fs-xs);
   padding: 0 var(--sp-2);
   cursor: pointer;
 }
 .copy-btn:hover {
-  background: #242424;
+  background: var(--code-btn-bg);
   border-color: var(--code-fg);
 }

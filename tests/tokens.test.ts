@@ -18,9 +18,11 @@ describe('token 对比度', () => {
 });
 
 describe('橙色越界（--accent 只允许出现在白名单选择器里）', () => {
-  // 这是"金名单"，不是"白名单"：新增一处裸 var(--accent) 就会失败，
-  // 逼你回来确认它确实用在 ≥24px 的文字或非文字图形上（design-spec.md §3.1）。
-  const ALLOWED = ['nav a[aria-current', 'a:hover'];
+  // 这是"金名单"：新增一处裸 var(--accent) 就会失败，逼你回来确认它确实用在 ≥24px 的文字
+  // 或非文字图形上（design-spec.md §3.1）。
+  // 注意：白名单必须写**完整选择器**。曾经写成 'a:hover' 这种片段，
+  // 结果把页脚 13px 小字上的越界用法一起放行了 —— 断言过宽等于没有断言。
+  const ALLOWED = ['nav a[aria-current=page]', '.index a:hover .title'];
 
   it('构建产物的 CSS 里，裸 var(--accent) 只出现在白名单选择器里', () => {
     const dist = 'dist';

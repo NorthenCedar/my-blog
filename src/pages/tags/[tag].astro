@@ -1,5 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
+import PageTitle from '../../components/PageTitle.astro';
 import PostIndex from '../../components/PostIndex.astro';
 import { getAllTags, getPostsByTag } from '../../lib/posts';
 
@@ -12,19 +13,20 @@ export async function getStaticPaths() {
 const { tag } = Astro.params;
 const posts = await getPostsByTag(tag!);
 ---
-<Base title={`${tag} — 北杉札记`} current="tags">
-  <Fragment slot="band">
-    <h1 class="h">{tag}</h1>
-  </Fragment>
-
-  <PostIndex posts={posts} />
-</Base>
-
-<style>
-  .h {
-    font-size: var(--fs-title);
-    margin: 0;
-    font-weight: 800;
-    letter-spacing: var(--ls-title);
-  }
-</style>
+{posts.length > 0 ? (
+  <Base title={`${tag} — 北杉札记`} current="tags">
+    <Fragment slot="band">
+      <PageTitle>{tag}</PageTitle>
+    </Fragment>
+    <PostIndex posts={posts} />
+  </Base>
+) : (
+  <Base title="没有这个标签 — 北杉札记" current="tags">
+    <Fragment slot="band">
+      <PageTitle>没有这个标签</PageTitle>
+    </Fragment>
+    <p class="prose">
+      这个标签没有文章，或者它还没登记。<a href="/tags/">看看全部标签</a>
+    </p>
+  </Base>
+)}
