@@ -97,6 +97,26 @@
 > 由 **`Steam++.Accelerator`（Watt Toolkit）** 在 443/80 上反向代理 —— 那是加速工具，不是屏蔽。
 > 所以 `github.com` 能连上（经它转发），推送失败的真实原因只可能是**凭据**。
 > 排查时**不要**用 `GIT_TERMINAL_PROMPT=0` / `GCM_INTERACTIVE=never`，那会把「缺凭据」伪装成「推不上去」。
+>
+> **另一个坑**：`curl` / `Invoke-WebRequest` 走 github.com 时可能返回 `HTTP 000`（加速器的 HTTP 转发路径会抽风），
+> **而同一时刻 `git ls-remote` 却是通的**。所以判断仓库可见性不要用 HTTP 请求，用下面那条命令。
+
+### 仓库可见性：已转私有（2026-09-25）
+
+站主决定把仓库转为私有。原因是：**草稿的保密性等于仓库的保密性** ——
+`draft: true` 的文章不会发布到网站，但它的 `.md` 原文就在仓库里；
+仓库公开时，任何人翻仓库都能读到未发布的草稿。
+
+**怎么验证它确实是私有的**（不依赖 HTTP，绕开加速器抽风）：
+
+```powershell
+git ls-remote --heads origin                                              # 带凭据：应当成功
+git -c credential.helper= ls-remote --heads https://github.com/NorthenCedar/personal.git
+```
+
+实测（2026-09-25）：第一条成功读到 `refs/heads/main`；第二条报
+`fatal: could not read Username for 'https://github.com'` ——
+**服务器拒绝匿名访问，确认为私有。**
 
 ---
 
