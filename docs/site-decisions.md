@@ -76,8 +76,20 @@
 
 1. ✅ 本地 `<博客仓库>` 已建独立 git 仓库（10 个提交，91 个跟踪文件）
 2. ✅ **已推送到 https://github.com/NorthenCedar/personal（`main` 分支）** —— 2026-09-25 经站主明确同意后执行
-3. ⏳ Cloudflare Pages 连接该仓库，构建命令 `npm run build`，输出目录 `dist/`
-4. ✅ 站点地址定为 **https://personal-br4.pages.dev**（2026-09-25 站主确认，已写进 `astro.config.mjs` 的 `site` 与 `public/robots.txt`）
+3. ✅ Cloudflare Pages 已连接该仓库并自动部署（build `npm run build` / output `dist`）—— 推送 `main` 触发构建，实测约 1 分钟内上线
+4. ✅ 站点地址 **https://personal-br4.pages.dev**（2026-09-25 站主确认，已写进 `astro.config.mjs` 的 `site` 与 `public/robots.txt`）
+
+**线上实测（2026-09-25，从站主这台机器）**：
+
+| 项 | 结果 |
+|---|---|
+| 首页 / 三篇文章页 / 标签页 / 归档 / 关于 / 404 | 全部 HTTP 200 |
+| Lighthouse（线上真实地址，非本地 preview） | 首页与文章页均 **100 / 100 / 100 / 100** |
+| FCP / LCP / TBT / CLS | 1.2–1.3 s / 1.2–1.3 s / 0 ms / ≈0 |
+
+> **关于「大陆可达性」**：阶段 1 我明确记过「除了 Vercel 的官方说明，Cloudflare Pages 在大陆的可达性我只有第三方经验帖、无官方数据」。
+> 现在有了**一个真实数据点**：从这台位于中国大陆的机器访问 `personal-br4.pages.dev` 全部 200 且响应迅速。
+> 这是实测不是保证 —— 单点、单时刻，不能外推成 SLA。
 
 **换域名只改两处**：`site` 配置 + `robots.txt` 里的 Sitemap 行。其余 URL 全部是相对路径。
 
