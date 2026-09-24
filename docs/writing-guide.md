@@ -1,7 +1,15 @@
 # 北杉札记 · 作者手册
 
 > 这份手册给**站主本人**看。它不发布到博客上（是作者工具，不是读者内容）。
-> 最后更新：2026-09-25 ｜ 对应仓库：https://github.com/NorthenCedar/personal
+> 最后更新：2026-09-25 ｜ 对应仓库：https://github.com/NorthenCedar/personal（**已转私有**）
+>
+> **怎么打开这份手册：**
+> 1. 这台电脑上：`<博客仓库>\docs\writing-guide.md`（推荐用 VS Code 打开，能实时渲染）
+> 2. 别的设备上：先登录 GitHub，再访问
+>    https://github.com/NorthenCedar/personal/blob/main/docs/writing-guide.md
+>    —— **仓库已私有，未登录的人是 404**，所以这一条只对你自己有效
+>
+> 想在任何设备上不登录就能查？把它发布成 `personal-br4.pages.dev/guide/` 页面即可（那是个独立决定，需要时告诉我）。
 
 ---
 
