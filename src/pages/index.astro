@@ -2,20 +2,16 @@
 import Base from '../layouts/Base.astro';
 import PostIndex from '../components/PostIndex.astro';
 import { getVisiblePosts } from '../lib/posts';
+import { getSite } from '../lib/site';
 
 const posts = await getVisiblePosts();
-
-// 首页 hero 用全文；meta description 用站主另写的短句（site-decisions.md §1）
-const INTRO =
-  '你好，我是郑云嘉，合肥人，安徽大学大一在读。小学把钢琴弹到了八级，跳过几年 locking，高三开始拍照，中途还学过跆拳道、游泳、围棋、机器人和一段无疾而终的 C++——学过的东西很多，真正留下的不多，这个博客就用来存放留下来的那些。我在这里写随笔、放照片、记一些用 AI 折腾项目的经历。写得好不好另说，先写。';
-const META_DESC =
-  '你好，我是郑云嘉，合肥人，安徽大学大一在读。学过钢琴、街舞、跆拳道、围棋……大部分半途而废，这个博客存放留下来的那些：随笔、照片，以及用 AI 折腾项目的记录。写得好不好另说，先写。';
+const site = await getSite();
 ---
-<Base title="北杉札记" description={META_DESC} current="index">
+<Base description={site.metaDescription} current="index">
   <Fragment slot="band">
     <div>
-      <h1 class="hero-title">北杉札记</h1>
-      <p class="lede">{INTRO}</p>
+      <h1 class="hero-title">{site.name}</h1>
+      <p class="lede">{site.intro}</p>
     </div>
   </Fragment>
 

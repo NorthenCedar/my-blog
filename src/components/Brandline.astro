@@ -1,8 +1,10 @@
 ---
 interface Props {
   current?: 'index' | 'tags' | 'archive' | 'about';
+  name: string;
+  wordmark: string;
 }
-const { current } = Astro.props;
+const { current, name, wordmark } = Astro.props;
 const links: { href: string; label: string; key: Props['current'] }[] = [
   { href: '/', label: '文章', key: 'index' },
   { href: '/tags/', label: '标签', key: 'tags' },
@@ -11,8 +13,8 @@ const links: { href: string; label: string; key: Props['current'] }[] = [
 ];
 ---
 <div class="brandline">
-  <a class="wm" href="/">北杉札记</a>
-  <span class="sub">North_Cedar's notes</span>
+  <a class="wm" href="/">{name}</a>
+  <span class="sub">{wordmark}</span>
   <nav aria-label="主导航">
     {links.map((l) => (
       <a href={l.href} aria-current={current === l.key ? 'page' : undefined}>{l.label}</a>

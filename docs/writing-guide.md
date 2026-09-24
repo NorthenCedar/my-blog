@@ -170,8 +170,12 @@ content/posts/my-new-post/
 
 - **文件夹名就是 URL**：`content/posts/my-new-post/` → `https://personal-br4.pages.dev/posts/my-new-post/`
 - 只允许小写字母、数字、单个连字符：`my-new-post` ✅ ｜ `My_New_Post` ❌ ｜ `我的新文章` ❌
+- **这条现在是构建期硬校验**：文件夹名不合法，`npm run build` 直接失败并告诉你是哪个文件夹。
+  （以前它只写在文档里、没人执行 —— 建个中文文件夹会静默生成中文 URL。）
+- 长度上限 60 字符。
 - **发布之后不要改文件夹名**，那是死链。要改标题就只改 `title`。
-- 中文标题没问题 —— 标题写在 `title` 里，文件夹用英文。想自定义 URL 就写 `slug:`
+- 中文标题没问题 —— 标题写在 `title` 里，文件夹用英文。想自定义 URL 就写 `slug:`。
+  写了 `slug:` 但和文件夹名不一致时，构建会**告警**提醒你 URL 会用哪个（契约 §3 的要求）。
 
 ---
 
@@ -219,9 +223,25 @@ curl.exe -sI https://personal-br4.pages.dev/posts/my-new-post/ | Select-String "
 **Q：文章怎么排序？**
 按 `date` 倒序。归档页按年分组。都是自动的。
 
-**Q：想改站点名 / 简介 / 关于页？**
-站点名和首页简介在 `src/pages/index.astro` 顶部（`INTRO` / `META_DESC` 两个常量），
-关于页正文在 `content/pages/about.md`，页脚的邮箱与 GitHub 在 `src/components/SiteFooter.astro`。
+**Q：想改站点名 / 首页简介 / 页脚邮箱 / GitHub？**
+全部在 **`content/site.md`** 一个文件里，不用碰任何代码：
 
-> 这一条其实破了「主题不持有正文」的原则 —— 首页简介和页脚信息硬编码在 `src/` 里。
-> 当时的选择是：三篇文章都还没发布，先把站点跑起来。**要挪进 `content/` 的话告诉我。**
+```markdown
+---
+name: 北杉札记
+wordmark: North_Cedar's notes
+intro: 首页那句长简介……
+metaDescription: 搜索引擎与分享卡片用的短句（≤ 120 字）
+email: a13655515876@163.com
+github: https://github.com/NorthenCedar
+---
+```
+
+**Q：想改关于页？**
+正文在 `content/pages/about.md`，同样是一个 `.md` 文件。
+
+**Q：页面标题格式（`XXX — 北杉札记`）在哪改？**
+`src/layouts/Base.astro` 里一行：`const docTitle = title ? \`${title} — ${site.name}\` : site.name;`
+
+> 换句话说：**文字都在 `content/`，版式都在 `src/`。** 这条现在有测试守着 ——
+> `src/` 里一旦出现站名或邮箱，`npm test` 就会失败。

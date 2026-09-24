@@ -7,7 +7,7 @@ import PageTitle from '../components/PageTitle.astro';
 const entry = await getEntry('pages', 'about');
 const Content = entry ? (await render(entry)).Content : null;
 ---
-<Base title="关于 — 北杉札记" current="about">
+<Base title="关于" current="about">
   <Fragment slot="band">
     <PageTitle>关于</PageTitle>
   </Fragment>

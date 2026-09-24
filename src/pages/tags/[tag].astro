@@ -14,14 +14,14 @@ const { tag } = Astro.params;
 const posts = await getPostsByTag(tag!);
 ---
 {posts.length > 0 ? (
-  <Base title={`${tag} — 北杉札记`} current="tags">
+  <Base title={tag} current="tags">
     <Fragment slot="band">
       <PageTitle>{tag}</PageTitle>
     </Fragment>
     <PostIndex posts={posts} />
   </Base>
 ) : (
-  <Base title="没有这个标签 — 北杉札记" current="tags">
+  <Base title="没有这个标签" current="tags">
     <Fragment slot="band">
       <PageTitle>没有这个标签</PageTitle>
     </Fragment>

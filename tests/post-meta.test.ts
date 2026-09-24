@@ -9,6 +9,7 @@ import {
   collectTags,
   adjacentOf,
   headingTree,
+  slugIssues,
   type RawEntry,
 } from '../src/lib/post-meta';
 
@@ -134,5 +135,43 @@ describe('排序 / 分组 / 标签 / 相邻 / 标题树', () => {
       { depth: 2, text: '二', id: 'b' },
       { depth: 3, text: '三', id: 'c' },
     ]);
+  });
+});
+
+describe('slugIssues —— 契约 §3 的 URL 片段规则', () => {
+  it('合法文件夹名不报错', () => {
+    const r = slugIssues([{ id: 'my-new-post' }, { id: 'post2' }, { id: 'a1-b2-c3' }]);
+    expect(r.errors).toEqual([]);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it('中文文件夹名报错（这是以前完全没人管的情况）', () => {
+    const r = slugIssues([{ id: '我的新文章' }]);
+    expect(r.errors.length).toBe(1);
+    expect(r.errors[0]).toContain('我的新文章');
+    expect(r.errors[0]).toContain('slug');
+  });
+
+  it('大写、下划线、空格、首尾连字符、连续连字符都报错', () => {
+    for (const bad of ['My-Post', 'my_post', 'my post', '-my-post', 'my-post-', 'my--post', 'my/post']) {
+      expect(slugIssues([{ id: bad }]).errors.length, `${bad} 应该报错`).toBe(1);
+    }
+  });
+
+  it('超长（> 60）报错', () => {
+    expect(slugIssues([{ id: 'a'.repeat(61) }]).errors.length).toBe(1);
+    expect(slugIssues([{ id: 'a'.repeat(60) }]).errors.length).toBe(0);
+  });
+
+  it('frontmatter 的 slug 可以救回一个中文文件夹名', () => {
+    const r = slugIssues([{ id: '我的新文章', slug: 'my-new-post' }]);
+    expect(r.errors).toEqual([]);
+    // 但契约 §3 说"不一致则告警"，所以这里必须有一条 warning
+    expect(r.warnings.length).toBe(1);
+    expect(r.warnings[0]).toContain('不一致');
+  });
+
+  it('文件夹名与 slug 一致时不告警', () => {
+    expect(slugIssues([{ id: 'same-name', slug: 'same-name' }]).warnings).toEqual([]);
   });
 });

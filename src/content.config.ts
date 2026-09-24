@@ -1,5 +1,6 @@
 import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
+import { z } from 'astro/zod';
 import { postSchema } from './lib/schema';
 
 const posts = defineCollection({
@@ -27,4 +28,21 @@ const pages = defineCollection({
   }),
 });
 
-export const collections = { posts, pages };
+// 站点文案（站名 / 首页简介 / meta description / 页脚联系方式）
+const site = defineCollection({
+  loader: glob({
+    pattern: 'site.md',
+    base: './content',
+    generateId: () => 'site',
+  }),
+  schema: z.object({
+    name: z.string().min(1),
+    wordmark: z.string().min(1),
+    intro: z.string().min(1),
+    metaDescription: z.string().min(1).max(120),
+    email: z.string().email(),
+    github: z.string().url(),
+  }),
+});
+
+export const collections = { posts, pages, site };

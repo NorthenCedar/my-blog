@@ -6,20 +6,25 @@ import '../styles/prose.css';
 import Brandline from '../components/Brandline.astro';
 import Band from '../components/Band.astro';
 import SiteFooter from '../components/SiteFooter.astro';
+import { getSite } from '../lib/site';
 
 interface Props {
-  title: string;
+  /** 页面自己的标题（不含站名）。不传就是首页。 */
+  title?: string;
   description?: string;
   current?: 'index' | 'tags' | 'archive' | 'about';
 }
 const { title, description, current } = Astro.props;
+// 站名/简介/联系方式来自 content/site.md —— 主题不持有任何文案
+const site = await getSite();
+const docTitle = title ? `${title} — ${site.name}` : site.name;
 ---
 <!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title}</title>
+    <title>{docTitle}</title>
     {description && <meta name="description" content={description} />}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preload" href="/fonts/plex-sans-400.woff2" as="font" type="font/woff2" crossorigin />
@@ -27,13 +32,13 @@ const { title, description, current } = Astro.props;
   <body>
     <a class="skip" href="#main">跳到正文</a>
     <Band>
-      <Brandline current={current} />
+      <Brandline current={current} name={site.name} wordmark={site.wordmark} />
       <slot name="band" />
     </Band>
     <main id="main">
       <div class="wrap"><slot /></div>
     </main>
-    <SiteFooter />
+    <SiteFooter name={site.name} email={site.email} github={site.github} />
   </body>
 </html>
 

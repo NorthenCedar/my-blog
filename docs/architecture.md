@@ -11,14 +11,17 @@
 
 ```
 content/                      ← 内容层：纯文本 + 图片，无模板（契约见 content-model.md）
+   │                            含 site.md（站点文案）、posts/、pages/
    │
-   ├─ src/content.config.ts   ← 适配器（浅）：声明 loader + zod schema
+   ├─ src/content.config.ts   ← 适配器（浅）：声明 3 个集合的 loader + zod schema
    │
-   ├─ src/lib/posts.ts        ← ★ 唯一接缝（深）：查询 / 校验 / 派生 / 草稿三态
+   ├─ src/lib/post-meta.ts    ← ★ 纯函数核心（无 Astro 依赖，可单测）
+   ├─ src/lib/posts.ts        ← ★ Astro 适配器（深接缝）：查询 / 校验 / 派生 / 草稿三态
+   ├─ src/lib/site.ts         ← 站点文案的读取
    │
    ├─ src/components/*.astro  ← 表现层：只接 props，不取数
    ├─ src/layouts/*.astro     ← 表现层：页面外壳
-   ├─ src/pages/*.astro       ← 路由：只做拼装，每页 ≤ 40 行
+   ├─ src/pages/*.astro       ← 路由：只做拼装
    └─ src/styles/*.css        ← token / 基础 / 正文排版（换主题只动这里 + 组件）
         │
         ▼
@@ -31,9 +34,11 @@ content/                      ← 内容层：纯文本 + 图片，无模板（�
 
 ### 1.1 内容层 `content/`（契约，不是代码模块）
 
-- **接口**：9 个 frontmatter 字段 + `posts/<slug>/index.md` 目录约定 + 6 条校验规则。
-- 这里没有"实现"可言，深度体现在**规则数量与字段数量之比**：6 条校验、3 态草稿语义、图片同目录、标签注册表 —— 全部由 9 个字段名承载。这是刻意压出来的比例。
+- **接口**：9 个 frontmatter 字段 + `posts/<slug>/index.md` 目录约定 + 6 条校验规则 + `site.md` 的 6 个文案字段。
+- 这里没有"实现"可言，深度体现在**规则数量与字段数量之比**：6 条校验、3 态草稿语义、图片同目录、标签注册表、URL 片段规则 —— 全部由字段名与目录约定承载。
 - 它不认识 Astro，也不认识 CSS。换框架时它一行不改。
+- **`site.md` 也在这里**（站名/简介/meta/页脚联系方式）。曾经硬编码在 `index.astro` 与 `SiteFooter.astro` 里，
+  那破了「文字在内容层、版式在表现层」的对称性。现在有一条测试守着 `src/` 不许再出现这些文字。
 
 ### 1.2 `src/content.config.ts`（适配器，浅）
 

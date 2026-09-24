@@ -15,7 +15,7 @@ const { entry, meta, adjacent } = Astro.props;
 const { Content, headings } = await render(entry);
 const toc = headingTree(headings);
 ---
-<Base title={`${meta.title} — 北杉札记`} description={meta.summary}>
+<Base title={meta.title} description={meta.summary}>
   <Fragment slot="band">
     <div>
       <h1 class="hero-title">{meta.title}</h1>

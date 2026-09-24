@@ -61,6 +61,7 @@ coverAlt: 新首页在桌面端的截图
 ```
 <博客仓库>\
 ├─ content/                      # ← 内容层：只有正文与素材，不含任何模板
+│  ├─ site.md                    #   站点文案：站名 / 英文副标 / 首页简介 / meta description / 页脚联系方式
 │  ├─ posts/                     #   一篇文章 = 一个文件夹
 │  │  ├─ ai-built-this-blog/
 │  │  │  └─ index.md
@@ -81,6 +82,12 @@ coverAlt: 新首页在桌面端的截图
 
 **为什么 `content/` 放在仓库根，而不是框架默认位置**
 内容层不该被任何框架的目录约定绑死。把 `content/` 放在根，换栈时内容零迁移；框架侧用配置指过来即可 —— Astro 7 的 glob loader 提供官方 `base` 选项，直接支持这种布局（写法见 Astro 文档 `content-loader-reference`）。代价：配置里多写一行。**这个代价是故意付的。**
+
+**`content/site.md` 为什么算内容层**
+站名、首页那句简介、meta description、页脚邮箱与 GitHub —— 这些是**文字**，不是版式。
+它们一度硬编码在 `src/pages/index.astro` 与 `src/components/SiteFooter.astro` 里，那破了「换主题不该动文章文件」的对称原则：
+改一句简介要去改 `.astro`，而改一篇文章只需改 `.md`。现在它们和文章一样在 `content/` 下，
+`tests/content-invariants.test.ts` 里有一条断言守着 `src/` 不许再出现这些文字。
 
 **图片为什么与正文同目录**
 一篇文章的全部素材在一个文件夹里，删除/备份/迁移都是一次拖拽；正文写 `![](./screenshot.png)`，不依赖任何全局路径约定。同时同目录图片能进构建期优化管线（生成多尺寸 + 现代格式），集中放 `public/` 的图片不能。

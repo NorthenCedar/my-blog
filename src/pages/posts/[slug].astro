@@ -20,7 +20,7 @@ const post = await getPost(slug!);
 {post ? (
   <Post entry={post.entry} meta={post.meta} adjacent={post.adjacent} />
 ) : (
-  <Base title="找不到这篇文章 — 北杉札记">
+  <Base title="找不到这篇文章">
     <Fragment slot="band">
       <PageTitle>找不到这篇文章</PageTitle>
     </Fragment>

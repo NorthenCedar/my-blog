@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://personal-br4.pages.dev/sitemap-index.xml

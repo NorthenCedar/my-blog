@@ -114,3 +114,47 @@ export function headingTree(headings: { depth: number; text: string; id: string 
     .filter((h) => h.depth === 2 || h.depth === 3)
     .map((h) => ({ depth: h.depth as 2 | 3, text: h.text, id: h.id }));
 }
+
+/** 契约 §3：URL 片段只允许小写字母、数字、单个连字符，长度 1–60。 */
+export const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+export const SLUG_MAX = 60;
+
+/**
+ * 校验 URL 片段。`id` 是文件夹名（由 loader 的 generateId 从路径得来），`slug` 是 frontmatter 里的覆盖值。
+ *
+ * 为什么要单独做这件事：zod schema 只看得到 frontmatter，看不到文件夹名。
+ * 于是「文件夹名必须是合法 slug」这条契约规则此前完全没有执行 ——
+ * 建一个中文名的文件夹会静默生成一个中文 URL。
+ *
+ * 不合法 → 错误（构建失败）：URL 一旦发出去就改不得，宁可在构建期挡住。
+ * 与文件夹名不一致 → 警告（契约 §3 明说"不一致则告警"，不是失败）。
+ */
+export function slugIssues(entries: { id: string; slug?: string }[]): {
+  errors: string[];
+  warnings: string[];
+} {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  for (const e of entries) {
+    const effective = e.slug ?? e.id;
+
+    if (effective.length > SLUG_MAX) {
+      errors.push(`${e.id}：URL 片段「${effective}」超过 ${SLUG_MAX} 字符`);
+    } else if (!SLUG_PATTERN.test(effective)) {
+      errors.push(
+        `${e.id}：URL 片段「${effective}」不合法 —— 只允许小写字母、数字与单个连字符。` +
+          `中文标题请把文件夹名写成英文短名，或在 frontmatter 里加 slug: english-name`
+      );
+    }
+
+    if (e.slug && e.slug !== e.id) {
+      warnings.push(
+        `${e.id}：文件夹名与 frontmatter 的 slug 不一致（${e.id} ≠ ${e.slug}）——` +
+          `页面 URL 会用 slug 的值 /posts/${e.slug}/，确认这是你要的`
+      );
+    }
+  }
+
+  return { errors, warnings };
+}

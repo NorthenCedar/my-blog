@@ -6,6 +6,7 @@ import {
   groupByYear,
   collectTags,
   adjacentOf,
+  slugIssues,
   type PostMeta,
   type RawEntry,
 } from './post-meta';
@@ -32,8 +33,30 @@ function toRaw(entry: CollectionEntry<'posts'>): RawEntry {
   };
 }
 
-async function allMeta(): Promise<PostMeta[]> {
+let slugChecked = false;
+
+/**
+ * 取全部文章条目，并在第一次取的时候做 URL 片段校验（契约 §3）。
+ * zod 只看得到 frontmatter，看不到文件夹名，所以这条规则必须在这里执行。
+ * 不合法直接抛错 = 构建失败 —— URL 发出去就改不得，宁可在构建期挡住。
+ */
+async function getPosts(): Promise<CollectionEntry<'posts'>[]> {
   const entries = await getCollection('posts');
+  if (!slugChecked) {
+    const { errors, warnings } = slugIssues(entries.map((e) => ({ id: e.id, slug: e.data.slug })));
+    for (const w of warnings) console.warn(`[slug] ${w}`);
+    if (errors.length > 0) {
+      throw new Error(
+        `文章 URL 片段不合法（content-model.md §3）：\n  - ${errors.join('\n  - ')}`
+      );
+    }
+    slugChecked = true;
+  }
+  return entries;
+}
+
+async function allMeta(): Promise<PostMeta[]> {
+  const entries = await getPosts();
   return sortByDateDesc(entries.map((e) => toPostMeta(toRaw(e))));
 }
 
@@ -46,7 +69,7 @@ export async function getVisiblePosts(): Promise<PostMeta[]> {
  * 调用方（getStaticPaths）必须用 getVisiblePosts，本函数的 draft 判断是第二道闸。
  */
 export async function getPost(slug: string) {
-  const entries = await getCollection('posts');
+  const entries = await getPosts();
   const entry = entries.find((e) => (e.data.slug ?? e.id) === slug);
   if (!entry) return undefined;
   if (entry.data.draft && !isDev) return undefined;
