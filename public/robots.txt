@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://beishan-notes.pages.dev/sitemap-index.xml
+Sitemap: https://personal-br4.pages.dev/sitemap-index.xml

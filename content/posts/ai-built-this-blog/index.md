@@ -3,7 +3,7 @@ title: 我用手机 AI 指挥电脑 AI，从零搭了这个博客
 date: 2026-09-16
 summary: 一行代码没手写：把电脑里的 skills 列表发给手机上的 DeepSeek，让它生成提示词去指挥 Codex，从 0 搭了一个个人博客。
 tags: [AI, 建站]
-draft: true
+draft: false
 ---
 
 先说清楚这件事有多离谱：我，一个 Python 学了不到半年的人，想拥有一个个人博客。正常的做法是学 HTML、CSS、JavaScript，再学一个框架，两个月过去了。我的做法不太一样：手机上一个 AI，电脑上一个 AI，我夹在中间负责传话和点头。

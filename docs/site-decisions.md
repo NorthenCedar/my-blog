@@ -76,10 +76,10 @@
 
 1. ✅ 本地 `<博客仓库>` 已建独立 git 仓库（10 个提交，91 个跟踪文件）
 2. ✅ **已推送到 https://github.com/NorthenCedar/personal（`main` 分支）** —— 2026-09-25 经站主明确同意后执行
-3. ⏳ Cloudflare Pages 连接该仓库，构建命令 `npm run build`，输出目录 `dist/`（**未执行，等站主决定**）
-4. ⏳ 站点 URL 由 `*.pages.dev` 决定；这个值要写进 Astro 的 `site` 配置（RSS 与绝对链接依赖它）
+3. ⏳ Cloudflare Pages 连接该仓库，构建命令 `npm run build`，输出目录 `dist/`
+4. ✅ 站点地址定为 **https://personal-br4.pages.dev**（2026-09-25 站主确认，已写进 `astro.config.mjs` 的 `site` 与 `public/robots.txt`）
 
-**换域名只改一处**：`site` 配置。其余 URL 全部是相对路径。
+**换域名只改两处**：`site` 配置 + `robots.txt` 里的 Sitemap 行。其余 URL 全部是相对路径。
 
 > **推送到 GitHub 时踩到的环境事实**（下次会再遇到）：这台机器的 `hosts` 里有 27 条 GitHub 域名指向 `127.0.0.1`，
 > 由 **`Steam++.Accelerator`（Watt Toolkit）** 在 443/80 上反向代理 —— 那是加速工具，不是屏蔽。

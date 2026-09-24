@@ -2,8 +2,8 @@ import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 
 export default defineConfig({
-  // 部署在 Cloudflare Pages，先用免费子域；换域名只改这一行
-  site: 'https://beishan-notes.pages.dev',
+  // Cloudflare Pages 实际地址（2026-09-25 站主确认）。换域名时只改这一行。
+  site: 'https://personal-br4.pages.dev',
   integrations: [sitemap()],
   markdown: {
     // 用 CSS 变量接管代码块配色（design-spec.md：黑底白字），
