@@ -10,4 +10,9 @@ export default defineConfig({
     // 这样 Shiki 输出的是变量引用，我们能在 prose.css 里覆盖，不必写自定义主题 JSON。
     shikiConfig: { theme: 'css-variables' },
   },
+  image: {
+    // 让正文里的图片自动带 srcset/sizes。不加这条，短文那三张 2133px 宽的原图
+    // 会被整张传下去（实测浪费约 560 KB），而显示宽度只有 578px。
+    layout: 'constrained',
+  },
 });

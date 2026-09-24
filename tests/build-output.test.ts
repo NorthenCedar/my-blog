@@ -133,6 +133,23 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       expect(/fonts\.(googleapis|gstatic)\.com/.test(html), `${f} 引用了 Google Fonts`).toBe(false);
     }
   });
+
+  it('favicon 存在且每页都声明了它（否则浏览器会 404 请求 /favicon.ico）', () => {
+    expect(existsSync(join(DIST, 'favicon.svg')), 'dist/favicon.svg 不存在').toBe(true);
+    for (const f of htmlFiles()) {
+      expect(readFileSync(f, 'utf8'), `${f} 没有声明 favicon`).toContain('rel="icon"');
+    }
+  });
+
+  it('正文图片带 srcset（否则整张原图会被传下去）', () => {
+    const postPage = join(DIST, 'posts', PUBLISHED[0]?.slug ?? '', 'index.html');
+    if (PUBLISHED.length === 0) return;
+    const html = readFileSync(postPage, 'utf8');
+    const imgs = [...html.matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
+    const withSrcset = imgs.filter((t) => t.includes('srcset='));
+    expect(imgs.length, '这篇文章页没有图片，断言等于空转').toBeGreaterThan(0);
+    expect(withSrcset.length, '正文图片没有 srcset，原图会被整张传输').toBe(imgs.length);
+  });
 });
 
 describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一篇已发布文章）', () => {
