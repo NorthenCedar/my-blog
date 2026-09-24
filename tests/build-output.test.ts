@@ -4,7 +4,33 @@ import { join } from 'node:path';
 
 const DIST = 'dist';
 const hasDist = existsSync(DIST);
-const DRAFT_SLUGS = ['piano-eight-level-and-after', 'ai-built-this-blog', 'camera-in-gaosan'];
+const POSTS_DIR = 'content/posts';
+
+type PostInfo = { slug: string; draft: boolean; images: string[] };
+
+/**
+ * 从内容层推导草稿/已发布，**不硬编码**。
+ * 之前把「三篇全是草稿」写死在测试里，短文一转正就 4 条误报 —— 测试的假设过期了，
+ * 不是代码坏了。发布状态是站主的决定，会变，测试必须跟着内容走。
+ */
+function readPosts(): PostInfo[] {
+  if (!existsSync(POSTS_DIR)) return [];
+  return readdirSync(POSTS_DIR, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .flatMap((d) => {
+      const file = join(POSTS_DIR, d.name, 'index.md');
+      if (!existsSync(file)) return [];
+      const text = readFileSync(file, 'utf8');
+      const fm = text.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+      if (!fm) return [];
+      const images = [...fm[2].matchAll(/!\[[^\]]*\]\(\.\/([^)\s]+)\)/g)].map((m) => m[1].split('/').pop()!);
+      return [{ slug: d.name, draft: /^draft:\s*true\s*$/m.test(fm[1]), images }];
+    });
+}
+
+const POSTS = readPosts();
+const DRAFTS = POSTS.filter((p) => p.draft);
+const PUBLISHED = POSTS.filter((p) => !p.draft);
 
 function walk(dir: string, filter: (name: string) => boolean): string[] {
   const out: string[] = [];
@@ -18,39 +44,59 @@ function walk(dir: string, filter: (name: string) => boolean): string[] {
 
 const htmlFiles = () => (hasDist ? walk(DIST, (n) => n.endsWith('.html')) : []);
 
-describe.skipIf(!hasDist)('构建产物：草稿三态里的第三态', () => {
-  it('草稿文章不产出任何页面', () => {
-    for (const slug of DRAFT_SLUGS) {
-      expect(existsSync(join(DIST, 'posts', slug)), `${slug} 是草稿，不该有页面`).toBe(false);
+describe.skipIf(!hasDist)('草稿三态：第三态（直链不产出）', () => {
+  it('内容层里确实存在草稿（否则本组断言是空转）', () => {
+    expect(DRAFTS.length, '一个草稿都没有，这组断言等于没跑').toBeGreaterThan(0);
+  });
+
+  it('草稿文章不产出页面', () => {
+    for (const p of DRAFTS) {
+      expect(existsSync(join(DIST, 'posts', p.slug)), `草稿 ${p.slug} 不该有页面`).toBe(false);
     }
   });
 
   it('草稿的 slug 不出现在任何产出的 HTML 里', () => {
     for (const f of htmlFiles()) {
       const html = readFileSync(f, 'utf8');
-      for (const slug of DRAFT_SLUGS) {
-        expect(html.includes(slug), `${f} 里出现了草稿 slug ${slug}`).toBe(false);
+      for (const p of DRAFTS) {
+        expect(html.includes(p.slug), `${f} 里出现了草稿 slug ${p.slug}`).toBe(false);
       }
     }
   });
 
-  it('草稿的素材不产出（scripts/prune-draft-assets.mjs 的净效果）', () => {
+  it('草稿的素材不产出（prune-draft-assets.mjs 的净效果）', () => {
     const astroDir = join(DIST, '_astro');
     if (!existsSync(astroDir)) return;
-    const leaked = readdirSync(astroDir).filter((n) => n.startsWith('Image_'));
-    expect(leaked, `草稿素材被部署了：${leaked.join(', ')}`).toEqual([]);
+    const files = readdirSync(astroDir);
+    for (const p of DRAFTS) {
+      for (const img of p.images) {
+        const stem = img.replace(/\.[^.]+$/, '');
+        const leaked = files.filter((f) => f.startsWith(stem + '.') || f.startsWith(stem + '_'));
+        expect(leaked, `草稿 ${p.slug} 的素材被部署了：${leaked.join(', ')}`).toEqual([]);
+      }
+    }
   });
 
-  it('RSS 与 sitemap 都存在，且草稿不进 RSS', () => {
-    expect(existsSync(join(DIST, 'rss.xml')), 'rss.xml 不存在').toBe(true);
-    expect(existsSync(join(DIST, 'sitemap-index.xml')), 'sitemap 不存在').toBe(true);
-    const rss = readFileSync(join(DIST, 'rss.xml'), 'utf8');
-    // 三篇全是草稿 → 生产构建下 RSS 应当一条 item 都没有
-    expect(rss.includes('<item>'), 'RSS 里出现了条目（草稿不该进）').toBe(false);
+  it('已发布文章确实产出了页面（否则上面几条是空转）', () => {
+    for (const p of PUBLISHED) {
+      expect(existsSync(join(DIST, 'posts', p.slug, 'index.html')), `已发布 ${p.slug} 缺页面`).toBe(true);
+    }
   });
 });
 
-describe.skipIf(!hasDist)('构建产物：全局硬约束', () => {
+describe.skipIf(!hasDist)('RSS 与 sitemap', () => {
+  it('两个文件都存在', () => {
+    expect(existsSync(join(DIST, 'rss.xml')), 'rss.xml 不存在').toBe(true);
+    expect(existsSync(join(DIST, 'sitemap-index.xml')), 'sitemap 不存在').toBe(true);
+  });
+
+  it('RSS 条目数恰好等于已发布文章数（草稿不进，已发布不落）', () => {
+    const rss = readFileSync(join(DIST, 'rss.xml'), 'utf8');
+    expect((rss.match(/<item>/g) ?? []).length).toBe(PUBLISHED.length);
+  });
+});
+
+describe.skipIf(!hasDist)('全局硬约束', () => {
   it('每页恰好一个 h1，且语言标记正确', () => {
     for (const f of htmlFiles()) {
       const html = readFileSync(f, 'utf8');
@@ -80,25 +126,30 @@ describe.skipIf(!hasDist)('构建产物：全局硬约束', () => {
     }
   });
 
-  it('字体全部自托管（产物里存在 4 个 woff2）', () => {
-    const fonts = walk(DIST, (n) => n.endsWith('.woff2'));
-    expect(fonts.length).toBe(4);
+  it('字体全部自托管（4 个 woff2，且没有任何外链字体）', () => {
+    expect(walk(DIST, (n) => n.endsWith('.woff2')).length).toBe(4);
+    for (const f of htmlFiles()) {
+      const html = readFileSync(f, 'utf8');
+      expect(/fonts\.(googleapis|gstatic)\.com/.test(html), `${f} 引用了 Google Fonts`).toBe(false);
+    }
   });
 });
 
-describe.skipIf(!hasDist)('构建产物：发布态（当前无已发布文章时会跳过）', () => {
-  const postPages = hasDist ? walk(DIST, (n) => n === 'index.html').filter((p) => p.includes(`${'posts'}`)) : [];
+describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一篇已发布文章）', () => {
+  const page = join(DIST, 'posts', PUBLISHED[0]?.slug ?? '', 'index.html');
 
-  it('JS 预算：全站只有一处脚本，且 < 1 KB', () => {
-    if (postPages.length === 0) {
-      console.warn('没有已发布的文章页 —— 三篇草稿都不产出页面，JS 预算无法在此断言');
-      return;
-    }
-    const js = walk(DIST, (n) => n.endsWith('.js'));
-    expect(js.length, '只允许一个 JS 文件').toBeLessThanOrEqual(1);
-    if (js.length === 1) {
-      expect(statSync(js[0]).size, 'JS 超过 1 KB').toBeLessThan(1024);
-    }
+  it('文章页恰好一处 <script>，且内联内容 < 1 KB', () => {
+    const html = readFileSync(page, 'utf8');
+    const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
+    expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBe(1);
+
+    const bytes = Buffer.byteLength(scripts[0][1], 'utf8');
+    console.log(`内联脚本 ${bytes} 字节`);
+    expect(bytes, `内联脚本 ${bytes} 字节，超过 1 KB 预算`).toBeLessThan(1024);
+  });
+
+  it('没有独立 JS 文件（预算的另一种表达）', () => {
+    expect(walk(DIST, (n) => n.endsWith('.js') || n.endsWith('.mjs'))).toEqual([]);
   });
 });
 
