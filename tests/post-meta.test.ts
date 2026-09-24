@@ -1,0 +1,132 @@
+import { describe, it, expect } from 'vitest';
+import {
+  countChars,
+  readingMinutes,
+  toPostMeta,
+  sortByDateDesc,
+  filterVisible,
+  groupByYear,
+  collectTags,
+  adjacentOf,
+  headingTree,
+  type RawEntry,
+} from '../src/lib/post-meta';
+
+const baseData = {
+  title: '标题',
+  date: '2026-09-08',
+  summary: '摘要',
+  tags: ['成长'],
+  draft: true,
+};
+
+const raw = (over: Partial<RawEntry> = {}): RawEntry => ({
+  id: 'a-post',
+  data: { ...baseData },
+  body: '正文一二三四五',
+  headings: [{ depth: 2, text: '小标题', id: 'x' }],
+  ...over,
+});
+
+describe('countChars', () => {
+  it('中文按字计，拉丁按词计', () => {
+    expect(countChars('你好世界')).toBe(4);
+    expect(countChars('hello world')).toBe(2);
+    expect(countChars('你好 Astro 世界')).toBe(5);
+  });
+
+  it('代码块不计入字数', () => {
+    expect(countChars('前言\n```js\nconst a = 1;\n```\n后记')).toBe(4);
+  });
+
+  it('行内代码与图片地址不计入字数', () => {
+    expect(countChars('这是 `code` 与 ![图](./a.png) 的测试')).toBe(6);
+  });
+});
+
+describe('readingMinutes', () => {
+  it('按每分钟 400 字，最少 1 分钟', () => {
+    expect(readingMinutes(0)).toBe(1);
+    expect(readingMinutes(401)).toBe(1);
+    expect(readingMinutes(801)).toBe(2);
+  });
+});
+
+describe('toPostMeta', () => {
+  it('拼出 url 与派生字段，slug 取自 id', () => {
+    const m = toPostMeta(raw());
+    expect(m.slug).toBe('a-post');
+    expect(m.url).toBe('/posts/a-post/');
+    expect(m.charCount).toBe(7);
+    expect(m.readingMinutes).toBe(1);
+  });
+
+  it('frontmatter 里的 slug 覆盖 id', () => {
+    const m = toPostMeta(raw({ data: { ...baseData, slug: 'custom' } }));
+    expect(m.slug).toBe('custom');
+    expect(m.url).toBe('/posts/custom/');
+  });
+});
+
+describe('filterVisible —— 草稿三态里的两态', () => {
+  const posts = [
+    toPostMeta(raw({ id: 'p', data: { ...baseData, draft: false } })),
+    toPostMeta(raw({ id: 'd', data: { ...baseData, draft: true } })),
+  ];
+
+  it('dev 下草稿与已发布都可见', () => {
+    expect(filterVisible(posts, true).map((p) => p.slug)).toEqual(['p', 'd']);
+  });
+
+  it('生产下只剩已发布', () => {
+    expect(filterVisible(posts, false).map((p) => p.slug)).toEqual(['p']);
+  });
+});
+
+describe('排序 / 分组 / 标签 / 相邻 / 标题树', () => {
+  const dated = (id: string, date: string, tags: string[] = ['成长']) =>
+    toPostMeta(raw({ id, data: { ...baseData, date, tags } }));
+
+  it('按日期倒序', () => {
+    const ps = [dated('a', '2026-01-01'), dated('b', '2026-09-01'), dated('c', '2025-12-31')];
+    expect(sortByDateDesc(ps).map((p) => p.date)).toEqual(['2026-09-01', '2026-01-01', '2025-12-31']);
+  });
+
+  it('按年分组，年内保持倒序', () => {
+    const ps = sortByDateDesc([dated('a', '2026-09-08'), dated('b', '2025-03-01'), dated('c', '2026-01-02')]);
+    expect(groupByYear(ps).map((g) => [g.year, g.posts.map((p) => p.slug)])).toEqual([
+      ['2026', ['a', 'c']],
+      ['2025', ['b']],
+    ]);
+  });
+
+  it('标签只统计有文章的，按数量倒序', () => {
+    const ps = [dated('a', '2026-09-08', ['成长', '随笔']), dated('b', '2026-09-07', ['成长'])];
+    expect(collectTags(ps)).toEqual([
+      { tag: '成长', count: 2 },
+      { tag: '随笔', count: 1 },
+    ]);
+  });
+
+  it('相邻文章按时间序，不跨越草稿过滤结果', () => {
+    const ps = sortByDateDesc([dated('new', '2026-09-24'), dated('mid', '2026-09-16'), dated('old', '2026-09-08')]);
+    expect(adjacentOf(ps, 'mid')).toEqual({ prev: ps[0], next: ps[2] });
+    expect(adjacentOf(ps, 'new')).toEqual({ prev: undefined, next: ps[1] });
+    expect(adjacentOf(ps, 'old')).toEqual({ prev: ps[1], next: undefined });
+    expect(adjacentOf(ps, '不存在')).toEqual({});
+  });
+
+  it('标题树只保留 h2/h3', () => {
+    expect(
+      headingTree([
+        { depth: 1, text: '一', id: 'a' },
+        { depth: 2, text: '二', id: 'b' },
+        { depth: 3, text: '三', id: 'c' },
+        { depth: 4, text: '四', id: 'd' },
+      ])
+    ).toEqual([
+      { depth: 2, text: '二', id: 'b' },
+      { depth: 3, text: '三', id: 'c' },
+    ]);
+  });
+});
