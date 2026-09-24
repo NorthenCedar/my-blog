@@ -160,6 +160,10 @@
 
 规则：**组内用 1–4，组间用 5–8。** 不允许出现不在这个阶梯上的间距值。
 
+**一条明确的例外**：正文内部的**排版节奏**（段落间距 `1.15em`、列表缩进 `1.35em`）用 `em` 而非 token。
+理由：它们必须随字号缩放，而 token 是 `rem`（不随字号缩放）。这不是"随手加的间距"，
+而是排版学上的基线节奏 —— 布局间距仍然只走上面这八档。
+
 ### 3.4 版心与断点
 
 ```css
@@ -197,7 +201,7 @@
 | 标签 `TagChips` | 13px；1px `--hair` 边框；无圆角 | hover 边框与文字转 `--accent-ink` | 是链接就进 Tab 序；标签数量多时用 `<ul>` |
 | 草稿标记 `DraftBadge` | 12px；1px `--accent-ink` 边框 + 同色文字 | 无 | 需要可见文本"草稿"，不能只靠颜色 |
 | 目录 `Toc` | 14px；860px 以上两栏 | 锚点跳转；`scroll-margin-top` 留出 1.5rem | `<nav aria-label="本文目录">` |
-| 代码块 | 黑底 `--code-bg`；顶部一条：语言标注（`--fs-mono`，`#B4B4B4`）+ 复制按钮 | 复制按钮 hover 反色 | `pre > code`；复制按钮有可读文本；**JS 关闭时不出现** |
+| 代码块 | 黑底 `--code-bg`；顶部一条：语言标注（`--fs-mono`，`--on-band-meta`，**不做全大写、不加字距**）+ 复制按钮 | 复制按钮 hover 反色 | `pre > code`；复制按钮有可读文本；**JS 关闭时不出现** |
 | 超长代码行 | `pre{overflow-x:auto}` + `white-space:pre` | 横向滚动 | 不把 `overflow-wrap:anywhere` 用在 `pre` 上（会毁缩进） |
 | 表格 | 表头 2px `--ink` 下线，行 1px `--hair`；外层 `overflow-x:auto` | 无 | 真 `<table>` + `<th>`；表头 `white-space:nowrap` |
 | 正文图片 | 通栏（`--measure` 宽）；上下 `--sp-6` | 无 | **`alt` 必填且要写成人话**（基准：craigmod 那种整句描述） |

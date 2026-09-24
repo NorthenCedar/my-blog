@@ -76,12 +76,18 @@ function headingTree(headings: MarkdownHeading[]): Heading[];   // 只留 h2/h3
 
 ```ts
 function getVisiblePosts(): Promise<PostMeta[]>;
-function getPost(slug): Promise<{ meta: PostMeta; Content; headings: Heading[] }>;
+function getPost(slug): Promise<{ entry; meta: PostMeta; adjacent: {prev?, next?} } | undefined>;
 function getAllTags(): Promise<{ tag: string; count: number }[]>;
 function getPostsByTag(tag): Promise<PostMeta[]>;
 function getArchive(): Promise<{ year: string; posts: PostMeta[] }[]>;
-function getAdjacent(slug): Promise<{ prev?: PostMeta; next?: PostMeta }>;
 ```
+
+**规划后修订（实现时发现的两处）**：
+1. `getPost` **不返回标题树**。`deferRender: true` 之后 `entry.rendered` 在查询期不可用，
+   标题树改由 `layouts/Post.astro` 在 `render(entry)` 之后取得并用 `headingTree()` 转换。
+   代价是布局层多认识一个 Astro 类型；换来的是「草稿素材不会因为同步期渲染而产出」。
+2. `validateEntries()` 没有实现，也**不应该**实现：六条校验规则已经全部落在 `schema.ts` 的 zod 里
+   （标签注册表成了 TS 常量，所以跨文件的规则也能表达）。再写一个校验函数就是第二份事实来源。
 
 **接口背后藏着什么**（深度来源，全部在 `post-meta.ts` 里）：
 
@@ -103,7 +109,7 @@ function getAdjacent(slug): Promise<{ prev?: PostMeta; next?: PostMeta }>;
 | 页面 | 路由 | 取数 |
 |---|---|---|
 | 首页 | `/` | `getVisiblePosts()` |
-| 文章详情 | `/posts/[slug]/` | `getPost()` + `getAdjacent()` |
+| 文章详情 | `/posts/[slug]/` | `getPost()`（相邻文章含在返回值里） |
 | 标签总览 | `/tags/` | `getAllTags()` |
 | 单标签 | `/tags/[tag]/` | `getPostsByTag()` |
 | 归档 | `/archive/` | `getArchive()` |
@@ -111,14 +117,17 @@ function getAdjacent(slug): Promise<{ prev?: PostMeta; next?: PostMeta }>;
 | 404 | `/404` | 无 |
 | RSS | `/rss.xml` | `getVisiblePosts()` |
 
-每个页面 ≤ 40 行：**取数 → 传给组件**。页面里不允许出现环境判断、`filter(draft)`、日期格式化。
+每个页面只做**取数 → 传给组件**。页面里不允许出现环境判断、`filter(draft)`、日期格式化。
+（原来是"每页 ≤ 40 行"的硬数字，改成上面这条更有意义的要求 —— 行数是伪指标。）
 
 ### 1.5 `src/components/*`（表现层，只接 props）
 
 `SiteHeader` `SiteFooter` `PostBand`（黑带标题）`PostIndex`（超大标题堆叠）`Toc` `TagChips` `DraftBadge` `ReadTime` `ProseStyles`
 
 - **接口**：只有 props，没有取数、没有全局状态。所以同一个 `PostIndex` 能同时服务首页 / 标签页 / 归档页 —— 这是深度带来的杠杆。
-- **唯一的例外**：`CodeCopyButton` —— 一个约 15 行的渐进增强脚本。它不改 DOM 结构，只给已有节点加行为，**JS 关闭时必须完全退化**（按钮不出现，代码照样可复制）。
+- **唯一的例外**：`src/scripts/copy-code.ts` —— 约 30 行的渐进增强脚本。
+  它在代码块**外面**套一条工具栏（语言标注 + 复制按钮），不改代码本身，**JS 关闭时工具栏不出现、代码照样可选可复制**。
+  （设计初稿写的是"不改 DOM 结构"，实现时发现要放工具栏就得加一层包裹 —— 改的是这份文档，不是偷偷越界。）
 
 ### 1.6 `src/styles/`（三个文件，换主题的唯一入口）
 
@@ -164,7 +173,7 @@ function getAdjacent(slug): Promise<{ prev?: PostMeta; next?: PostMeta }>;
 | 包 | 加不加 | 理由 |
 |---|---|---|
 | `astro` | ✅ | 框架本体 |
-| `sharp` | ✅ | 图片优化，Astro 默认图片服务依赖它 |
+| `sharp` | ✅ | 图片优化。**由 astro 作为 optionalDependency 传递安装**，本机实测可用（`@esbuild/win32-x64` 同理）；不需要在 package.json 里显式声明 |
 | `@astrojs/rss` | ✅ | 你选了要 RSS；官方包，比手写 XML 省事 |
 | `@astrojs/sitemap` | ✅ | SEO。2026-09-25 站主同意加入（构建期依赖，不进浏览器） |
 | `@astrojs/mdx` | ❌ | 你选了纯 Markdown |
