@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>北杉札记 — 首页</title>
+<meta name="description" content="你好，我是郑云嘉，合肥人，安徽大学大一在读。学过钢琴、街舞、跆拳道、围棋……大部分半途而废，这个博客存放留下来的那些：随笔、照片，以及用 AI 折腾项目的记录。写得好不好另说，先写。">
+<style>
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0}
+img,svg{max-width:100%;height:auto;display:block}
+button{font:inherit;color:inherit}
+
+:root{
+  --ink:#0E0E0E;            /* 对白 19.3:1 */
+  --paper:#FFFFFF;
+  --muted:#5C5C5C;          /* 对白 6.4:1，可做正文级灰 */
+  --hair:#D6D6D6;           /* 只做装饰线，不承载文字 */
+  --accent:#E4572E;         /* 对白 3.68:1 —— 只允许 >=24px 大字 / hover / 图形 / 边框 */
+  --accent-ink:#C2410C;     /* 对白 5.18:1 —— 小字专用 */
+  --font:"Archivo","Space Grotesk","Public Sans","IBM Plex Sans","Segoe UI Variable Display","Segoe UI",Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;
+  --mono:"Ubuntu Sans Mono","JetBrains Mono",Consolas,"Lucida Console","Courier New",monospace;
+  --fs-body:1.0625rem;
+  --lh-body:1.75;
+}
+
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--font);
+  font-size:var(--fs-body);
+  line-height:var(--lh-body);
+  text-rendering:optimizeLegibility;
+}
+
+/* ---------- 无障碍 ---------- */
+:focus-visible{outline:3px solid var(--accent-ink);outline-offset:3px}
+.skip{position:absolute;left:-9999px;top:0;background:var(--ink);color:var(--paper);padding:.6rem 1rem;z-index:99}
+.skip:focus{left:0}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* ---------- 正文 ---------- */
+.prose{max-width:var(--measure)}
+.prose p{margin:0 0 1.15em}
+.prose h1,.prose h2,.prose h3,.prose h4{line-height:1.18;letter-spacing:-.012em;margin:2.2em 0 .55em;font-weight:700}
+.prose h2{font-size:clamp(1.45rem,1.05rem + 1.5vw,2.1rem)}
+.prose h3{font-size:clamp(1.15rem,1rem + .7vw,1.4rem)}
+.prose h2:first-child,.prose h3:first-child{margin-top:0}
+.prose a{color:inherit;text-decoration:underline;text-underline-offset:.18em;text-decoration-thickness:1px}
+.prose a:hover{color:var(--accent-ink);text-decoration-thickness:2px}
+.prose ul,.prose ol{margin:0 0 1.15em;padding-left:1.35em}
+.prose li{margin:.4em 0}
+.prose li>ul,.prose li>ol{margin:.4em 0}
+.prose blockquote{margin:1.9em 0;padding:.1em 0 .1em 1.15em;border-left:4px solid var(--ink);color:var(--ink)}
+.prose blockquote p:last-child{margin-bottom:0}
+.prose hr{border:0;border-top:1px solid var(--hair);margin:2.4em 0}
+.prose img{margin:1.7em 0;width:100%}
+.prose code{font-family:var(--mono);font-size:.88em;background:#F2F1EF;padding:.12em .38em;border-radius:2px;overflow-wrap:break-word}
+.prose strong{font-weight:700}
+.prose em{font-style:italic}
+
+/* ---------- 表格 ---------- */
+.tablewrap{margin:1.9em 0;overflow-x:auto}
+.prose table{border-collapse:collapse;width:100%;font-size:.95rem;line-height:1.55}
+.prose th,.prose td{border-bottom:1px solid var(--hair);padding:.6em .8em .6em 0;text-align:left;vertical-align:top}
+.prose th{font-weight:700;border-bottom:2px solid var(--ink);white-space:nowrap}
+
+/* ---------- 代码块（阶段 2 决策：黑底白字）---------- */
+.codeblock{margin:1.9em 0;background:var(--ink);color:#EDEDED;overflow:hidden}
+.codeblock-bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.45rem .8rem;border-bottom:1px solid #333}
+.codeblock-lang{font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:#B4B4B4}
+.codeblock-copy{background:none;border:1px solid #4A4A4A;color:#EDEDED;font-size:.72rem;padding:.22rem .55rem;cursor:pointer;letter-spacing:.06em}
+.codeblock-copy:hover{background:#242424;border-color:#EDEDED}
+.codeblock pre{margin:0;padding:1rem 1.1rem 1.15rem;overflow-x:auto}
+.codeblock code{
+  font-family:var(--mono);font-size:.85rem;line-height:1.72;color:#EDEDED;
+  background:none;padding:0;border-radius:0;
+  white-space:pre;            /* 块级用横向滚动（阶段 2 调研结论）*/
+  display:block;
+}
+
+/* ---------- 通用零件 ---------- */
+.badge-draft{
+  display:inline-block;font-size:.68rem;letter-spacing:.16em;line-height:1.5;
+  border:1px solid var(--accent-ink);color:var(--accent-ink);padding:0 .4em;vertical-align:.08em;
+}
+.taglist{display:flex;flex-wrap:wrap;gap:.45rem;list-style:none;margin:0;padding:0}
+.taglist a{
+  font-size:.78rem;letter-spacing:.04em;color:var(--muted);text-decoration:none;
+  border:1px solid var(--hair);padding:.1em .5em;
+}
+.taglist a:hover{color:var(--accent-ink);border-color:var(--accent-ink)}
+
+/* ---------- 原型自身的外壳（最终站点不会有这两条）---------- */
+.protonote{
+  border-bottom:1px solid var(--ink);background:var(--paper);color:var(--muted);
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.04em;padding:.5rem 1rem;text-align:center;
+}
+.protonote strong{color:var(--ink)}
+.protopbar{
+  position:fixed;left:0;right:0;bottom:0;z-index:50;
+  display:flex;flex-wrap:wrap;gap:.4rem 1rem;align-items:center;justify-content:center;
+  background:var(--ink);color:#EDEDED;font-size:.74rem;letter-spacing:.06em;padding:.55rem 1rem;
+}
+.protopbar a{color:#EDEDED;text-decoration:none;border-bottom:1px solid #5A5A5A;padding-bottom:1px}
+.protopbar a:hover{border-color:var(--accent);color:#fff}
+.protopbar a[aria-current="page"]{border-bottom-color:var(--accent);color:#fff}
+.protopbar .pgroup{display:flex;gap:.6rem;align-items:center}
+.protopbar .pgroup+.pgroup::before{content:"";width:1px;height:.9em;background:#5A5A5A;margin-right:.4rem}
+body{padding-bottom:3.4rem}
+
+.wrap{max-width:78rem;margin:0 auto;padding:0 clamp(1rem,4vw,3rem)}
+
+.masthead{border-bottom:1px solid var(--ink)}
+.masthead-inner{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap;padding:1.05rem 0}
+.wordmark{display:flex;align-items:baseline;gap:.7rem;text-decoration:none;color:var(--ink);font-weight:800;letter-spacing:-.01em;font-size:1.05rem}
+.wordmark-sub{font-family:var(--mono);font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);font-weight:400}
+.nav a{font-size:.8rem;letter-spacing:.06em;color:var(--muted);text-decoration:none;margin-left:1.15rem}
+.nav a:hover,.nav a[aria-current="page"]{color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}
+
+.hero{padding:clamp(2.6rem,9vw,7rem) 0 clamp(1.6rem,4vw,3.2rem);border-bottom:1px solid var(--ink)}
+.hero-title{font-size:clamp(2.6rem,11vw,7rem);line-height:.92;letter-spacing:-.035em;margin:0;font-weight:800}
+.hero-sub{font-family:var(--mono);font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin:.9rem 0 0}
+.hero-intro{max-width:34em;margin:2.2rem 0 0;font-size:1.05rem}
+
+.listwrap{padding-top:clamp(2rem,5vw,3.5rem);padding-bottom:clamp(3rem,8vw,6rem)}
+.section-label{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:0 0 1.2rem;font-weight:400}
+.index{list-style:none;margin:0;padding:0;border-top:1px solid var(--ink)}
+.index li{border-bottom:1px solid var(--hair)}
+.entry{display:grid;grid-template-columns:8rem minmax(0,1fr) 11rem;gap:1.4rem;align-items:baseline;padding:1.5rem 0;text-decoration:none;color:inherit}
+.entry-date{font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+.entry-title{display:block;font-size:clamp(1.15rem,1rem + .9vw,1.7rem);font-weight:700;letter-spacing:-.018em;line-height:1.25}
+.entry:hover .entry-title{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.14em}
+.entry-summary{display:block;margin-top:.5rem;font-size:.92rem;color:var(--muted);max-width:38em}
+.entry-tags{font-size:.78rem;color:var(--muted);text-align:right}
+
+.post-head{padding:clamp(2rem,5vw,3.4rem) 0 0}
+.post-title{font-size:clamp(1.9rem,1.1rem + 3.4vw,3.6rem);line-height:1.02;letter-spacing:-.03em;margin:0 0 1rem;font-weight:800}
+.post-meta{font-family:var(--mono);font-size:.75rem;letter-spacing:.06em;color:var(--muted);margin:0 0 2.2rem}
+.post-layout{display:grid;grid-template-columns:11rem minmax(0,1fr);gap:clamp(1.5rem,5vw,4.5rem);padding:0 0 clamp(3rem,8vw,5rem)}
+.post-aside{position:sticky;top:1.4rem;align-self:start;font-size:.8rem;color:var(--muted)}
+.aside-block{margin-bottom:1.3rem}
+.aside-label{display:block;font-family:var(--mono);font-size:.66rem;letter-spacing:.18em;text-transform:uppercase;color:var(--ink);margin-bottom:.35rem}
+.toc ol{list-style:none;margin:0;padding:0;font-size:.8rem;line-height:1.5}
+.toc li{margin:.25rem 0}
+.toc li.lv3{padding-left:.9rem;color:var(--muted)}
+.toc a{color:inherit;text-decoration:none}
+.toc a:hover{color:var(--accent-ink);text-decoration:underline}
+
+.foot{border-top:1px solid var(--ink);padding:1.6rem 0 2.4rem}
+.foot-inner{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;font-size:.8rem;color:var(--muted)}
+.foot a{color:var(--muted)}
+.foot a:hover{color:var(--accent-ink)}
+
+@media (max-width:860px){
+  .entry{grid-template-columns:1fr;gap:.55rem}
+  .entry-tags{text-align:left}
+  .post-layout{grid-template-columns:1fr;gap:1.6rem}
+  .post-aside{position:static;display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:1rem}
+  .toc{grid-column:1/-1}
+}
+
+</style>
+</head>
+<body>
+<div class="protonote">原型草案 <strong>A · 索引式</strong> · 一次性原型，不是最终站点 · 三套草案共用同一份真草稿</div>
+<header class="masthead"><div class="wrap masthead-inner">
+<a class="wordmark" href="index.html">北杉札记<span class="wordmark-sub">North_Cedar's notes</span></a>
+<nav class="nav" aria-label="主导航">
+<a href="index.html" aria-current="page">文章</a><a href="#">标签</a><a href="#">关于</a><a href="#">RSS</a>
+</nav>
+</div></header>
+<main id="main">
+<section class="hero"><div class="wrap">
+<h1 class="hero-title">北杉札记</h1>
+<p class="hero-sub">North_Cedar's notes</p>
+<p class="hero-intro">你好，我是郑云嘉，合肥人，安徽大学大一在读。小学把钢琴弹到了八级，跳过几年 locking，高三开始拍照，中途还学过跆拳道、游泳、围棋、机器人和一段无疾而终的 C++——学过的东西很多，真正留下的不多，这个博客就用来存放留下来的那些。我在这里写随笔、放照片、记一些用 AI 折腾项目的经历。写得好不好另说，先写。</p>
+</div></section>
+<section class="listwrap"><div class="wrap">
+<h2 class="section-label">最近写的</h2>
+<ul class="index">
+<li><a class="entry" href="post-camera-in-gaosan.html">
+<span class="entry-date"><time datetime="2026-09-24">2026-09-24</time></span>
+<span><span class="entry-title">高三那年我买了台相机 <span class="badge-draft">草稿</span></span><span class="entry-summary">高三最忙的那年，我买了人生第一台相机，从此看世界多了一个借口。</span></span>
+<span class="entry-tags">摄影</span>
+</a></li>
+<li><a class="entry" href="post-ai-built-this-blog.html">
+<span class="entry-date"><time datetime="2026-09-16">2026-09-16</time></span>
+<span><span class="entry-title">我用手机 AI 指挥电脑 AI，从零搭了这个博客 <span class="badge-draft">草稿</span></span><span class="entry-summary">一行代码没手写：把电脑里的 skills 列表发给手机上的 DeepSeek，让它生成提示词去指挥 Codex，从 0 搭了一个个人博客。</span></span>
+<span class="entry-tags">AI · 建站</span>
+</a></li>
+<li><a class="entry" href="post-piano-eight-level-and-after.html">
+<span class="entry-date"><time datetime="2026-09-08">2026-09-08</time></span>
+<span><span class="entry-title">钢琴八级之后：我学了那么多东西，为什么只有几样留在了我身上 <span class="badge-draft">草稿</span></span><span class="entry-summary">从合肥金湖小学的琴房到安徽大学的机房，一个学东西很快、放弃得也很快的普通学生，回头清点自己十八年的业余爱好。</span></span>
+<span class="entry-tags">成长 · 随笔 · 钢琴</span>
+</a></li>
+</ul>
+</div></section>
+</main>
+<footer class="foot"><div class="wrap foot-inner">
+<span>© 2026 北杉札记</span>
+<span><a href="mailto:a13655515876@163.com">a13655515876@163.com</a> · <a href="https://github.com/NorthenCedar" rel="me noopener">GitHub</a> · <a href="#">RSS</a></span>
+</div></footer>
+<nav class="protopbar" aria-label="原型切换"><span class="pgroup"><a href="../draft-a/index.html" aria-current="page">草案 A</a><a href="../draft-b/index.html">草案 B</a><a href="../draft-c/index.html">草案 C</a></span><span class="pgroup"><a href="index.html" aria-current="page">首页</a><a href="post-camera-in-gaosan.html">短文</a><a href="post-ai-built-this-blog.html">技术文</a><a href="post-piano-eight-level-and-after.html">长文</a></span></nav>
+<script>
+document.addEventListener('click', function (e) {
+  var btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  var code = btn.closest('.codeblock').querySelector('code');
+  navigator.clipboard.writeText(code.innerText).then(function () {
+    btn.textContent = '已复制';
+    setTimeout(function () { btn.textContent = '复制'; }, 1200);
+  });
+});
+</script>
+</body>
+</html>

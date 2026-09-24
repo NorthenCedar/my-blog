@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>阶段 3 · 三套视觉草案</title>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+body{
+  margin:0;background:#fff;color:#0E0E0E;
+  font-family:"Archivo","Public Sans","Segoe UI",Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;
+  line-height:1.75;
+}
+.wrap{max-width:72rem;margin:0 auto;padding:0 clamp(1rem,4vw,3rem)}
+.note{border-bottom:1px solid #0E0E0E;font-family:"Ubuntu Sans Mono",Consolas,monospace;font-size:.72rem;letter-spacing:.04em;color:#5C5C5C;padding:.5rem 1rem;text-align:center}
+.note strong{color:#0E0E0E}
+header{padding:clamp(2.2rem,7vw,4.5rem) 0 1.4rem;border-bottom:1px solid #0E0E0E}
+h1{font-size:clamp(1.8rem,1.1rem+3vw,3.2rem);line-height:1.05;letter-spacing:-.03em;margin:0 0 .5rem;font-weight:800}
+.sub{font-family:"Ubuntu Sans Mono",Consolas,monospace;font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:#5C5C5C;margin:0}
+.intro{max-width:36em;margin:1.6rem 0 0;font-size:1rem;color:#0E0E0E}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(20rem,1fr));gap:clamp(1.4rem,3vw,2.4rem);padding:clamp(1.8rem,5vw,3rem) 0 clamp(3rem,8vw,5rem)}
+.card{border-top:3px solid #0E0E0E;padding-top:1rem;display:flex;flex-direction:column}
+.card h2{font-size:1.25rem;margin:0 0 .3rem;letter-spacing:-.015em}
+.card .tag{font-family:"Ubuntu Sans Mono",Consolas,monospace;font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:#5C5C5C;margin:0 0 .9rem}
+.card p{margin:0 0 1rem;font-size:.92rem}
+.shot{border:1px solid #D6D6D6;display:block;margin:0 0 1rem;background:#FAFAF9}
+.shot img{display:block;width:100%;height:auto}
+.links{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:auto}
+.links a{
+  font-size:.8rem;text-decoration:none;color:#0E0E0E;border:1px solid #D6D6D6;padding:.25rem .6rem;
+}
+.links a:hover{border-color:#C2410C;color:#C2410C}
+.foot{border-top:1px solid #0E0E0E;padding:1.5rem 0 2.5rem;font-size:.82rem;color:#5C5C5C}
+.foot a{color:#5C5C5C}
+.foot a:hover{color:#C2410C}
+:focus-visible{outline:3px solid #C2410C;outline-offset:3px}
+</style>
+</head>
+<body>
+<div class="note">阶段 3 · <strong>一次性原型</strong> · 不是最终站点 · 三套草案共用同一份真草稿（你的三篇文章）</div>
+<div class="wrap">
+<header>
+<h1>三套视觉草案</h1>
+<p class="sub">direction C · high-contrast editorial</p>
+<p class="intro">三套都在「高对比编辑风」这个已定方向内，但走法完全不同。每套都排了你那三篇真草稿 —— 长文、技术文、短文（带 3 张照片），桌面和手机都能看。挑一套，或者说要哪套的哪部分。</p>
+</header>
+
+<div class="grid">
+
+<article class="card">
+<h2>A · 索引式</h2>
+<p class="tag">swiss grid / index</p>
+<a class="shot" href="draft-a/index.html"><img src="_shots/a-index-desktop.png" alt="草案 A 首页桌面截图：超大站名标题，下方是三列的文章索引列表"></a>
+<p>瑞士网格 + 目录感。列表是三列排布（日期 / 标题+摘要 / 标签），文章页左侧有 sticky 侧栏放目录和标签。信息密度最高，最适合「我有很多篇」的那种站。</p>
+<div class="links">
+<a href="draft-a/index.html">首页</a>
+<a href="draft-a/post-piano-eight-level-and-after.html">长文</a>
+<a href="draft-a/post-ai-built-this-blog.html">技术文</a>
+<a href="draft-a/post-camera-in-gaosan.html">短文</a>
+</div>
+</article>
+
+<article class="card">
+<h2>B · 海报式</h2>
+<p class="tag">poster / color band</p>
+<a class="shot" href="draft-b/index.html"><img src="_shots/b-index-desktop.png" alt="草案 B 首页桌面截图：满幅黑色首屏，白色超大站名，下方是超大标题的文章列表"></a>
+<p>满幅黑块 + 超大标题。首屏一整块黑，文字压底对齐；列表用超大标题堆叠，hover 时整条变橙。视觉冲击最大，代价是长文读到一半时页面会比较"吵"。</p>
+<div class="links">
+<a href="draft-b/index.html">首页</a>
+<a href="draft-b/post-piano-eight-level-and-after.html">长文</a>
+<a href="draft-b/post-ai-built-this-blog.html">技术文</a>
+<a href="draft-b/post-camera-in-gaosan.html">短文</a>
+</div>
+</article>
+
+<article class="card">
+<h2>C · 印刷品</h2>
+<p class="tag">restrained print</p>
+<a class="shot" href="draft-c/index.html"><img src="_shots/c-index-desktop.png" alt="草案 C 首页桌面截图：纯白页面，目录式的文章列表，日期在左列"></a>
+<p>极致克制。没有色块、没有超大标题、几乎没有橙色，靠细线和留白分层，列表像一本书的目录。最安静、最耐读，代价是「不像设计过」的风险。</p>
+<div class="links">
+<a href="draft-c/index.html">首页</a>
+<a href="draft-c/post-piano-eight-level-and-after.html">长文</a>
+<a href="draft-c/post-ai-built-this-blog.html">技术文</a>
+<a href="draft-c/post-camera-in-gaosan.html">短文</a>
+</div>
+</article>
+
+</div>
+
+<div class="foot">
+<p>三套都遵守已冻结的决策：黑底代码块 · 双 token 强调色（<code>#E4572E</code> 只给 ≥24px/hover/图形，<code>#C2410C</code> 给小字）· 无暗色模式 · 零第三方脚本 · 无网络字体。</p>
+<p>注意：原型用的是系统回退字体（本机没装 Archivo / Public Sans，实际落在 Segoe UI + Noto Sans SC），最终站点会自托管字体子集，字形观感会有变化。也还没有接代码高亮 —— 那是阶段 6 用 Astro 内置 Shiki 做的。</p>
+<p>细节说明见 <a href="README.md">README.md</a>；三套的手机版截图在 <a href="_shots/mobile-a.png">A</a> / <a href="_shots/mobile-b.png">B</a> / <a href="_shots/mobile-c.png">C</a>。</p>
+</div>
+</div>
+</body>
+</html>

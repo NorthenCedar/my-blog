@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>钢琴八级之后：我学了那么多东西，为什么只有几样留在了我身上 — 北杉札记</title>
+<meta name="description" content="你好，我是郑云嘉，合肥人，安徽大学大一在读。学过钢琴、街舞、跆拳道、围棋……大部分半途而废，这个博客存放留下来的那些：随笔、照片，以及用 AI 折腾项目的记录。写得好不好另说，先写。">
+<style>
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0}
+img,svg{max-width:100%;height:auto;display:block}
+button{font:inherit;color:inherit}
+
+:root{
+  --ink:#0E0E0E;            /* 对白 19.3:1 */
+  --paper:#FFFFFF;
+  --muted:#5C5C5C;          /* 对白 6.4:1，可做正文级灰 */
+  --hair:#D6D6D6;           /* 只做装饰线，不承载文字 */
+  --accent:#E4572E;         /* 对白 3.68:1 —— 只允许 >=24px 大字 / hover / 图形 / 边框 */
+  --accent-ink:#C2410C;     /* 对白 5.18:1 —— 小字专用 */
+  --font:"Archivo","Space Grotesk","Public Sans","IBM Plex Sans","Segoe UI Variable Display","Segoe UI",Arial,"Noto Sans SC","Microsoft YaHei",sans-serif;
+  --mono:"Ubuntu Sans Mono","JetBrains Mono",Consolas,"Lucida Console","Courier New",monospace;
+  --fs-body:1.0625rem;
+  --lh-body:1.75;
+}
+
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--font);
+  font-size:var(--fs-body);
+  line-height:var(--lh-body);
+  text-rendering:optimizeLegibility;
+}
+
+/* ---------- 无障碍 ---------- */
+:focus-visible{outline:3px solid var(--accent-ink);outline-offset:3px}
+.skip{position:absolute;left:-9999px;top:0;background:var(--ink);color:var(--paper);padding:.6rem 1rem;z-index:99}
+.skip:focus{left:0}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* ---------- 正文 ---------- */
+.prose{max-width:var(--measure)}
+.prose p{margin:0 0 1.15em}
+.prose h1,.prose h2,.prose h3,.prose h4{line-height:1.18;letter-spacing:-.012em;margin:2.2em 0 .55em;font-weight:700}
+.prose h2{font-size:clamp(1.45rem,1.05rem + 1.5vw,2.1rem)}
+.prose h3{font-size:clamp(1.15rem,1rem + .7vw,1.4rem)}
+.prose h2:first-child,.prose h3:first-child{margin-top:0}
+.prose a{color:inherit;text-decoration:underline;text-underline-offset:.18em;text-decoration-thickness:1px}
+.prose a:hover{color:var(--accent-ink);text-decoration-thickness:2px}
+.prose ul,.prose ol{margin:0 0 1.15em;padding-left:1.35em}
+.prose li{margin:.4em 0}
+.prose li>ul,.prose li>ol{margin:.4em 0}
+.prose blockquote{margin:1.9em 0;padding:.1em 0 .1em 1.15em;border-left:4px solid var(--ink);color:var(--ink)}
+.prose blockquote p:last-child{margin-bottom:0}
+.prose hr{border:0;border-top:1px solid var(--hair);margin:2.4em 0}
+.prose img{margin:1.7em 0;width:100%}
+.prose code{font-family:var(--mono);font-size:.88em;background:#F2F1EF;padding:.12em .38em;border-radius:2px;overflow-wrap:break-word}
+.prose strong{font-weight:700}
+.prose em{font-style:italic}
+
+/* ---------- 表格 ---------- */
+.tablewrap{margin:1.9em 0;overflow-x:auto}
+.prose table{border-collapse:collapse;width:100%;font-size:.95rem;line-height:1.55}
+.prose th,.prose td{border-bottom:1px solid var(--hair);padding:.6em .8em .6em 0;text-align:left;vertical-align:top}
+.prose th{font-weight:700;border-bottom:2px solid var(--ink);white-space:nowrap}
+
+/* ---------- 代码块（阶段 2 决策：黑底白字）---------- */
+.codeblock{margin:1.9em 0;background:var(--ink);color:#EDEDED;overflow:hidden}
+.codeblock-bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.45rem .8rem;border-bottom:1px solid #333}
+.codeblock-lang{font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:#B4B4B4}
+.codeblock-copy{background:none;border:1px solid #4A4A4A;color:#EDEDED;font-size:.72rem;padding:.22rem .55rem;cursor:pointer;letter-spacing:.06em}
+.codeblock-copy:hover{background:#242424;border-color:#EDEDED}
+.codeblock pre{margin:0;padding:1rem 1.1rem 1.15rem;overflow-x:auto}
+.codeblock code{
+  font-family:var(--mono);font-size:.85rem;line-height:1.72;color:#EDEDED;
+  background:none;padding:0;border-radius:0;
+  white-space:pre;            /* 块级用横向滚动（阶段 2 调研结论）*/
+  display:block;
+}
+
+/* ---------- 通用零件 ---------- */
+.badge-draft{
+  display:inline-block;font-size:.68rem;letter-spacing:.16em;line-height:1.5;
+  border:1px solid var(--accent-ink);color:var(--accent-ink);padding:0 .4em;vertical-align:.08em;
+}
+.taglist{display:flex;flex-wrap:wrap;gap:.45rem;list-style:none;margin:0;padding:0}
+.taglist a{
+  font-size:.78rem;letter-spacing:.04em;color:var(--muted);text-decoration:none;
+  border:1px solid var(--hair);padding:.1em .5em;
+}
+.taglist a:hover{color:var(--accent-ink);border-color:var(--accent-ink)}
+
+/* ---------- 原型自身的外壳（最终站点不会有这两条）---------- */
+.protonote{
+  border-bottom:1px solid var(--ink);background:var(--paper);color:var(--muted);
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.04em;padding:.5rem 1rem;text-align:center;
+}
+.protonote strong{color:var(--ink)}
+.protopbar{
+  position:fixed;left:0;right:0;bottom:0;z-index:50;
+  display:flex;flex-wrap:wrap;gap:.4rem 1rem;align-items:center;justify-content:center;
+  background:var(--ink);color:#EDEDED;font-size:.74rem;letter-spacing:.06em;padding:.55rem 1rem;
+}
+.protopbar a{color:#EDEDED;text-decoration:none;border-bottom:1px solid #5A5A5A;padding-bottom:1px}
+.protopbar a:hover{border-color:var(--accent);color:#fff}
+.protopbar a[aria-current="page"]{border-bottom-color:var(--accent);color:#fff}
+.protopbar .pgroup{display:flex;gap:.6rem;align-items:center}
+.protopbar .pgroup+.pgroup::before{content:"";width:1px;height:.9em;background:#5A5A5A;margin-right:.4rem}
+body{padding-bottom:3.4rem}
+
+.wrap{max-width:78rem;margin:0 auto;padding:0 clamp(1rem,4vw,3rem)}
+
+.masthead{border-bottom:1px solid var(--ink)}
+.masthead-inner{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap;padding:1.05rem 0}
+.wordmark{display:flex;align-items:baseline;gap:.7rem;text-decoration:none;color:var(--ink);font-weight:800;letter-spacing:-.01em;font-size:1.05rem}
+.wordmark-sub{font-family:var(--mono);font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);font-weight:400}
+.nav a{font-size:.8rem;letter-spacing:.06em;color:var(--muted);text-decoration:none;margin-left:1.15rem}
+.nav a:hover,.nav a[aria-current="page"]{color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent)}
+
+.hero{padding:clamp(2.6rem,9vw,7rem) 0 clamp(1.6rem,4vw,3.2rem);border-bottom:1px solid var(--ink)}
+.hero-title{font-size:clamp(2.6rem,11vw,7rem);line-height:.92;letter-spacing:-.035em;margin:0;font-weight:800}
+.hero-sub{font-family:var(--mono);font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin:.9rem 0 0}
+.hero-intro{max-width:34em;margin:2.2rem 0 0;font-size:1.05rem}
+
+.listwrap{padding-top:clamp(2rem,5vw,3.5rem);padding-bottom:clamp(3rem,8vw,6rem)}
+.section-label{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:0 0 1.2rem;font-weight:400}
+.index{list-style:none;margin:0;padding:0;border-top:1px solid var(--ink)}
+.index li{border-bottom:1px solid var(--hair)}
+.entry{display:grid;grid-template-columns:8rem minmax(0,1fr) 11rem;gap:1.4rem;align-items:baseline;padding:1.5rem 0;text-decoration:none;color:inherit}
+.entry-date{font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+.entry-title{display:block;font-size:clamp(1.15rem,1rem + .9vw,1.7rem);font-weight:700;letter-spacing:-.018em;line-height:1.25}
+.entry:hover .entry-title{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.14em}
+.entry-summary{display:block;margin-top:.5rem;font-size:.92rem;color:var(--muted);max-width:38em}
+.entry-tags{font-size:.78rem;color:var(--muted);text-align:right}
+
+.post-head{padding:clamp(2rem,5vw,3.4rem) 0 0}
+.post-title{font-size:clamp(1.9rem,1.1rem + 3.4vw,3.6rem);line-height:1.02;letter-spacing:-.03em;margin:0 0 1rem;font-weight:800}
+.post-meta{font-family:var(--mono);font-size:.75rem;letter-spacing:.06em;color:var(--muted);margin:0 0 2.2rem}
+.post-layout{display:grid;grid-template-columns:11rem minmax(0,1fr);gap:clamp(1.5rem,5vw,4.5rem);padding:0 0 clamp(3rem,8vw,5rem)}
+.post-aside{position:sticky;top:1.4rem;align-self:start;font-size:.8rem;color:var(--muted)}
+.aside-block{margin-bottom:1.3rem}
+.aside-label{display:block;font-family:var(--mono);font-size:.66rem;letter-spacing:.18em;text-transform:uppercase;color:var(--ink);margin-bottom:.35rem}
+.toc ol{list-style:none;margin:0;padding:0;font-size:.8rem;line-height:1.5}
+.toc li{margin:.25rem 0}
+.toc li.lv3{padding-left:.9rem;color:var(--muted)}
+.toc a{color:inherit;text-decoration:none}
+.toc a:hover{color:var(--accent-ink);text-decoration:underline}
+
+.foot{border-top:1px solid var(--ink);padding:1.6rem 0 2.4rem}
+.foot-inner{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;font-size:.8rem;color:var(--muted)}
+.foot a{color:var(--muted)}
+.foot a:hover{color:var(--accent-ink)}
+
+@media (max-width:860px){
+  .entry{grid-template-columns:1fr;gap:.55rem}
+  .entry-tags{text-align:left}
+  .post-layout{grid-template-columns:1fr;gap:1.6rem}
+  .post-aside{position:static;display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:1rem}
+  .toc{grid-column:1/-1}
+}
+
+</style>
+</head>
+<body>
+<div class="protonote">原型草案 <strong>A · 索引式</strong> · 一次性原型，不是最终站点 · 三套草案共用同一份真草稿</div>
+<header class="masthead"><div class="wrap masthead-inner">
+<a class="wordmark" href="index.html">北杉札记<span class="wordmark-sub">North_Cedar's notes</span></a>
+<nav class="nav" aria-label="主导航">
+<a href="index.html">文章</a><a href="#">标签</a><a href="#">关于</a><a href="#">RSS</a>
+</nav>
+</div></header>
+<main id="main">
+<div class="wrap post-head">
+<h1 class="post-title">钢琴八级之后：我学了那么多东西，为什么只有几样留在了我身上</h1>
+<p class="post-meta"><time datetime="2026-09-08">2026-09-08</time> · 2912 字 · 约 7 分钟 · <span class="badge-draft">草稿</span></p>
+</div>
+<div class="wrap post-layout">
+<aside class="post-aside">
+<div class="aside-block"><span class="aside-label">标签</span><ul class="taglist"><li><a href="#">成长</a></li><li><a href="#">随笔</a></li><li><a href="#">钢琴</a></li></ul></div>
+<nav class="toc" aria-label="本文目录"><span class="aside-label">目录</span><ol><li class="lv2"><a href="#sec-1">一、金湖小学：琴房、舞房和游泳班</a></li><li class="lv3"><a href="#sec-2">钢琴：八级是一张停下来的车票</a></li><li class="lv3"><a href="#sec-3">街舞：locking 是没考过级却留到现在的</a></li><li class="lv2"><a href="#sec-4">二、五十中西校：时间开始不够用了</a></li><li class="lv2"><a href="#sec-5">三、一六八中学：高三那年，我捡起了相机</a></li><li class="lv2"><a href="#sec-6">四、安徽大学：现在我天天和 AI 说话</a></li><li class="lv2"><a href="#sec-7">五、如果重来一次</a></li></ol></nav>
+</aside>
+<div class="post-body prose">
+<blockquote><p>写在前面：这不是一篇励志文，更像是一次清账。</p></blockquote>
+<p>我学东西很快，放弃得也很快。这句话是我妈总结的，原话比这难听一点，她说我是&quot;狗熊掰棒子，掰一个扔一个&quot;。我从小学钢琴，六年级考到八级；从小学跳街舞，跳的是 locking，现在偶尔还跳；跆拳道、游泳、围棋、机器人，都报过班，都停了；高中还学过一阵 C++，没学明白，最近又开始学 Python，这次身边多了一个叫 AI 的东西。前两天我表妹问我&quot;哥你学过这么多，现在还会啥&quot;，我竟然认真想了半天。所以有了这篇东西，权当给自己十八年的业余爱好做一次清算。</p>
+<h2 id="sec-1">一、金湖小学：琴房、舞房和游泳班</h2>
+<p>先说一下背景。我是合肥人，小学在金湖小学上的。那时候的合肥没有现在这么多商场和地铁，放学之后的时间长得用不完，家长们的想法也很朴素：时间不能浪费，得学点东西。于是我的课外时间表从一年级开始就是满的。二年级那段时间的课表，大概长这样：</p>
+<ul><li>周二、周四晚上：钢琴</li><li>周六上午：跆拳道</li><li>周日下午：游泳</li><li>穿插进行：围棋班、机器人班</li><li>见缝插针：在家唱歌，唱给全家人听</li></ul>
+<p>那时候我觉得这就是生活的常态，别人家小孩也这样。很多年后再回头看，才发现不是每个小孩都这样，也不是每个小孩都能把这么多东西同时塞进一个星期。但说实话，我塞进来了，而且大部分时候还挺快乐。这大概是我人生中第一次意识到，自己学新东西确实比别人快一点：钢琴老师教别人的东西要讲三遍，我讲一遍就能弹下来；跆拳道的品势我记性最好，总是第一个被叫出来示范；机器人班的新传感器，说明书我翻两页就能上手。这种&quot;快&quot;给了我一种错觉，让我以为学东西就等于会了，后来很多年我都卡在这个错觉里。</p>
+<h3 id="sec-2">钢琴：八级是一张停下来的车票</h3>
+<p>钢琴是我坚持最久的一项，从一年级学到六年级。我妈的要求很明确：考完十级。我的进度也很明确：一年一级多一点，到六年级暑假，考完了八级。按理说再有两年就能冲十级，但初中来了。</p>
+<p>考级这件事，现在我回想起来，有点像打卡。八级证书发下来那天我很高兴，我妈也很高兴，我们出去吃了顿饭。但我的心里其实悄悄松了口气——好像一张车票终于用完了，我可以下车了。初中的作业量和小学完全不是一个级别，练琴时间从每天一小时变成每周碰两次琴，再后来变成只在来客人时表演 <em>菊次郎的夏天</em>。我妈提过继续考级的事，我搪塞过去了，她也忙，就没再坚持。</p>
+<p>讽刺的是，琴没练了，手反而&quot;自由&quot;了。不用再抠考级曲目之后，我开始自己找谱子弹，流行歌、动漫插曲、电影原声，想弹什么弹什么。有段时间我能把 <em>克罗地亚狂想曲</em> 顺下来，虽然错音一堆。所以说钢琴留在我身上的，不是八级证书——证书现在不知道塞在哪个抽屉里——而是一种手感：看到谱子不怵，听到歌能大概猜到琴键上是什么位置。这种手感不声不响，但一直没走。</p>
+<h3 id="sec-3">街舞：locking 是没考过级却留到现在的</h3>
+<p>和钢琴正相反，街舞从来没人逼我考级，因为它根本没有级。小学二年级开始，我在舞房学 locking，一种七十年代就有的街舞风格，名字就来自它标志性的&quot;锁定&quot;动作，大臂、手腕的点动和突然的定格，配上 funky 的音乐，跳起来很像机器人抽筋——这个描述被我街舞老师批评过无数次，但我还是坚持这么认为。想正经了解这个舞种的话，维基上写得挺清楚：<a href="https://en.wikipedia.org/wiki/Locking_(dance">Locking</a>)。</p>
+<p>Locking 给我最重要的东西不是舞，是一群人。舞房里没有考级，但有演出和比赛，有固定的排练时间，有一帮每周都要见的大小孩。我到现在还记得第一次登台，音乐响起前我的手是抖的，音乐响起后肌肉比脑子先动。演出结束那晚我们一堆人去路边吃炸串，那种高兴和考过八级那种高兴完全不一样，前者是&quot;我做到了&quot;，后者是&quot;我们做到了&quot;。现在上了大一，系里迎新晚会我上去跳了一段，全场尖叫的那几秒，我又回到了小学那个舞台。</p>
+<h2 id="sec-4">二、五十中西校：时间开始不够用了</h2>
+<p>初中在合肥五十中西校，我的课外时间表开始塌方。最先砍掉的是围棋和机器人，然后是游泳，跆拳道在初二也停了——不是不想学，是真的没有时间。初中老师最常说的一句话是&quot;到了高中你们就轻松了&quot;，这句话后来被证明是本世纪最大的谎言之一，但至少在初中阶段，时间是真的不够用。</p>
+<p>但我必须坦白一件事：初中三年，我把省下来的时间，大部分没有给学习，而是给了唱歌。我从小觉得自己唱歌好听，这个自信来得没什么道理，就是爱唱、敢唱、到处唱。初中的时候我在洗澡的时候练歌，在骑车回家的路上练歌，给同学唱，给亲戚唱，班会帮老师唱。没有学过一天声乐，纯靠感觉。现在回头看，这大概是我所有&quot;学过的东西&quot;里唯一一项没有花过一分钱的，但也是自我感觉投入产出比最高的。直到现在我 KTV 还是麦霸，这项技能没证书、没考级、没法写进任何简历，但它真实地让我快乐了十几年，也帮我交到了不少朋友。</p>
+<p>钢琴和街舞在初中都降级成了&quot;偶尔为之&quot;。考级停在八级，就是在这几年发生的。</p>
+<h2 id="sec-5">三、一六八中学：高三那年，我捡起了相机</h2>
+<p>高中考进了合肥一六八中学。这所学校在合肥以管理严格出名，我的时间表重新被填满，这次填得更彻底。高中的叙事可以写很长，但那不是这篇的重点，我只说结果：高三那年，在所有大人都觉得最不该分心的时刻，我买了人生第一台相机。</p>
+<p>那是一台二手微单，用攒了很久的零花钱买的。第一次带着它在合肥的街上走的时候，我拍得很烂，全是废片。但我记得很清楚，在红星路附近的老巷子口，傍晚的光斜着打在墙上，一个老人推着车慢慢走过去，我举起相机按下去，快门&quot;咔哒&quot;一声。</p>
+<p>那是我第一次觉得，世界值得被再看一遍。</p>
+<p>摄影和之前所有东西都不一样。琴要考级，舞要演出，跆拳道要看腰带颜色，游泳要看秒表，机器人要比赛。只有相机什么都不问，你带它出门，它陪你回来，好坏全在你自己。高三的周末，我偶尔逃出卷子，去拍合肥的菜市场、公园里的风筝、车站的人流。这些照片没有任何用途，但它们是我高中三年留下的唯一一批&quot;证据&quot;。关于摄影的事我会另写一篇，这里不展开，只说结论：摄影是我至今仍在坚持的东西里，唯一一项从高一开始就没断过的。</p>
+<h2 id="sec-6">四、安徽大学：现在我天天和 AI 说话</h2>
+<p>高考之后，我进了安徽大学，计算机相关专业。顺理成章，我开始正经学编程。</p>
+<p>其实这不是我第一次接触代码。高中学过一阵 C++，那是竞赛取向的学法，上来就是语法、指针、刷题，我学得很痛苦，也很快放弃了，最后连一个像样的程序都没写出来。这次重新学 Python，我一度以为自己又要重蹈覆辙——直到我开始用 AI 帮我学。</p>
+<p>具体的过程我放在博客的技术文章里写，这里只说感受：以前学 C++ 的时候，我卡在&quot;不知道这玩意儿能干嘛&quot;；现在学 Python，我让 AI 直接给我一个小项目，写不出来就问它，它解释完我再自己改，改坏了它再帮我看。学的速度快得离谱，而且全程有反馈。最近我还在尝试一个更激进的做法：让 AI 帮我搭这个博客网站本身——我出主意，它写代码。你能看到的这个页面，就是这么来的。这在两年前我想都不敢想：一个编程只学了半年的人，居然可以拥有一个自己说了算的网站。</p>
+<p>顺便说一句，从 C++ 到 Python 我走了大概六年，但这六年里钢琴的手感、街舞的肌肉记忆、唱歌的嗓子，一样都没丢。学东西快但学不精，这个评价我听了很多年，曾经以为是缺点。现在我觉得它更像一种使用说明：<strong>我这台机器适合广撒网，不适合死磕。死磕的事，交给 AI 去干。</strong></p>
+<h2 id="sec-7">五、如果重来一次</h2>
+<p>写完上面这些，我表妹的问题其实已经有答案了。真正留在我身上的东西有四种：钢琴的手感、街舞的肌肉记忆、唱歌的自信，还有相机的眼睛。它们的共同点很有意思——都不是被考级、比赛、证书逼出来的，反而是那些&quot;没用了&quot;之后自己留下来的。</p>
+<p>如果真能跟小时候的自己说几句话，我大概会这么说：</p>
+<ol><li>别为了考级练琴，八级够了，省下时间去弹自己喜欢的。</li><li>舞房的演出一场都别缺席，炸串可以少吃，舞台必须上。</li><li>围棋和机器人停了就停了吧，你不欠它们一个坚持。</li><li>相机买早一点，真的。</li><li>至于那些你觉得自己&quot;学不精&quot;的焦虑，十八年后它会自己消失——因为它根本不是问题。</li></ol>
+<p>最后引用一段我钢琴老师在我考八级前说过的话，当时不以为然，现在越咂摸越对：</p>
+<blockquote><p>你们这个岁数的孩子，总觉得考完十级就是&quot;学完&quot;了。其实考级的曲子是最不重要的，重要的是你未来十年里，有没有一件不开心的事，是坐下来弹半小时琴就能缓过来的。</p>
+<p>十级证书一张纸，那个能力才是你自己的。纸会丢，能力丢不了。</p></blockquote>
+<p>老师，八级那张纸我真丢了，但琴我偶尔还弹。您看，您说的全对。</p>
+<p>这篇写到这差不多了。十八年的业余爱好清完账，发现没赔，还小赚。下一篇写我怎么用 AI 把这个博客搭起来的，那个更离谱一点。</p>
+</div>
+</div>
+</main>
+<footer class="foot"><div class="wrap foot-inner">
+<span>© 2026 北杉札记</span>
+<span><a href="mailto:a13655515876@163.com">a13655515876@163.com</a> · <a href="https://github.com/NorthenCedar" rel="me noopener">GitHub</a> · <a href="#">RSS</a></span>
+</div></footer>
+<nav class="protopbar" aria-label="原型切换"><span class="pgroup"><a href="../draft-a/post-piano-eight-level-and-after.html" aria-current="page">草案 A</a><a href="../draft-b/post-piano-eight-level-and-after.html">草案 B</a><a href="../draft-c/post-piano-eight-level-and-after.html">草案 C</a></span><span class="pgroup"><a href="index.html">首页</a><a href="post-camera-in-gaosan.html">短文</a><a href="post-ai-built-this-blog.html">技术文</a><a href="post-piano-eight-level-and-after.html" aria-current="page">长文</a></span></nav>
+<script>
+document.addEventListener('click', function (e) {
+  var btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  var code = btn.closest('.codeblock').querySelector('code');
+  navigator.clipboard.writeText(code.innerText).then(function () {
+    btn.textContent = '已复制';
+    setTimeout(function () { btn.textContent = '复制'; }, 1200);
+  });
+});
+</script>
+</body>
+</html>
