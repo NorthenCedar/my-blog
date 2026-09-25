@@ -78,3 +78,25 @@ export const KNOWN_FIELDS = [
 export function unknownFields(data: Record<string, unknown>): string[] {
   return Object.keys(data).filter((k) => !(KNOWN_FIELDS as readonly string[]).includes(k));
 }
+
+/**
+ * 相册契约（2026-09-26：B1 的 S3 需要它，提前于 P5 建好）。
+ * 与 content/gallery/<相册名>/index.md 的真实结构一致：title + date + images[{src,alt}]。
+ * **alt 必填**：相册整页都是图，缺 alt 就是无障碍缺口，不能靠"以后补"。
+ * 复用同一个 dateField —— 内容里的 `date: 2026-09-25` 会被 YAML 隐式解析成 Date，
+ * 归一化规则必须与文章一致，否则同一份内容两种写法会有两种行为。
+ */
+export const gallerySchema = z.object({
+  title: z.string().min(1),
+  date: dateField('date'),
+  images: z
+    .array(
+      z.object({
+        src: z.string().min(1),
+        alt: z.string().min(1, '每张图都必须有 alt'),
+      })
+    )
+    .min(1, '相册至少要有一张图'),
+});
+
+export type GalleryFrontmatter = z.infer<typeof gallerySchema>;

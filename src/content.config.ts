@@ -1,7 +1,7 @@
 import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
-import { postSchema } from './lib/schema';
+import { gallerySchema, postSchema } from './lib/schema';
 
 const posts = defineCollection({
   loader: glob({
@@ -42,7 +42,25 @@ const site = defineCollection({
     metaDescription: z.string().min(1).max(120),
     email: z.string().email(),
     github: z.string().url(),
+    // P2 前置件（站主 2026-09-25 定案「坐标行留」）：首页身份区那行坐标要这三个值。
+    // 刻意做成**可选** —— 不填就不渲染那一行，而不是让构建失败。
+    // 内容层是站主的，不该被主题逼着填字段。
+    lat: z.string().min(1).optional(),
+    lon: z.string().min(1).optional(),
+    status: z.string().min(1).optional(),
   }),
 });
 
-export const collections = { posts, pages, site };
+// 相册（2026-09-26 提前于 P5 建好）：content/gallery/<相册名>/index.md + 同目录图片。
+// 主题不持有任何图片路径 —— 首页 S3 的「一主图 + 两缩略」与将来的 /gallery 页都从这里读。
+const gallery = defineCollection({
+  loader: glob({
+    pattern: '**/index.md',
+    base: './content/gallery',
+    // 与 posts 同理：id 会被写进将来的 /gallery/<id> URL，不能赌默认行为
+    generateId: ({ entry }) => entry.replace(/\/index\.md$/, ''),
+  }),
+  schema: gallerySchema,
+});
+
+export const collections = { posts, pages, site, gallery };
