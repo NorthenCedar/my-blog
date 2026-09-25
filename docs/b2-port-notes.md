@@ -101,12 +101,58 @@ npx vitest run          # 72 passed | 1 skipped（B2 后若有新断言另计）
 
 1. **首页内联 JS 预算** → **给首页加一条独立预算断言，上限 7 KB**。文章页的 `≤4096 B`（`tests/build-output.test.ts:195`）**不动**；`:237`「产物里不得有独立 .js 文件」继续生效 → 动效**只能内联**，不得为了省体积拆外部文件。
 2. **`--dur-enter`** → **320ms 提到 640ms**（与原型 L54 对齐）。交互层 `--dur-fast` / 180ms **保持不变** —— 快反馈是这套语言的底色。
+   **站主 2026-09-26 明确接受它的可见影响**：`Band.astro:34` 的带子入场从 320ms 变 640ms、曲线更缓，**这是叙事层该有的长度，不是副作用**（全站只有这一处消费动效 token）。已提交 `fdc836f`。
 3. **背景装饰层** → **做**，B2 一起补上（±∞ 水印 / 扫描圆环 / 极淡绿底），纯装饰、`aria-hidden`。清单第 11、14 条因此保留。
 
 ## 7. 爆炸半径提醒（动手前必读）
-
 **B2 的 token 改动是全站的。** `src/styles/tokens.css` 被 9 个页面共享 —— 改 `--dur-enter` / `--ease` / 新增 token 会让**全部 14 页**的 `_astro/*.css` 重新哈希，于是：
 
 - B1 那条「13 个非首页页面归一化后**逐字节不变**」的 L2 判据**会合法地失效**，不是回归。
 - 所以 B2 开跑前要先**重建基线**（`_tmp-dist-b1-before` 是 B1 前的，不能再用），并且把「哪些页该变、变成什么」提前写清楚，否则真回归会混在预期变化里看不出来。
 - 建议顺序：**先只改 tokens → 构建 → 记录 14 页 CSS 的预期变化 → 再加动效**，把「token 的涟漪」与「动效的新增」分成两次可分辨的验证。
+
+## 8. 进度（2026-09-26 收尾，四个增量全做完）
+
+| 增量 | 内容 | 落地 |
+|---|---|---|
+| 1 | 重建基线（`_tmp-dist-b2-before`，51 文件 / 3,170,666 B）+ 动效 token 分层 + 橙信号 | `fdc836f`（+7 个自定义属性、改 2 个值，爆炸半径实测限于 `:root`） |
+| 2 | 背景装饰层 + 堆叠计划重排 + 两态门控（只落首页） | `f76bfc6` |
+| 3 | 16 条 CSS + 6 段 JS + 补回 B1 省掉的仪表与 `.bracket` | `aa3bdce` |
+| 3′ | 修：无 JS 下藏掉死读数（`html:not(.js)`，三态截图逼出来的） | `9bbf1d2` |
+| 4 | 首页内联 JS 预算断言（实测 **2887 B** = 2.82 KiB / 预算 7168） | `4cb7737` |
+| 4′ | 三态断言固化：正式脚本 + 静态契约测试 | `77be10e` |
+
+**收尾后的复跑入口（两条，各守各的）**：
+
+```powershell
+npm run build
+npx vitest run                              # 8 个文件 / 81 passed | 1 skipped
+node scripts/verify-home-states.mjs         # 三态（默认 / reduced-motion / 无 JS）10 条断言，退出码即结论
+```
+
+## 9. 待办（明确不在 B2 范围内，别顺手做）
+
+### 跨页 View Transitions（原型 L514–527）
+
+**为什么不在 B2**：B2 是**首页单页动效**；跨页过渡是**全站导航层**的事，要动 `Base.astro`，影响 14 个页面。混进来会让「首页动效」与「全站导航」互相掩盖问题。
+
+**原型的做法（实测行号，直接可用）**：
+
+```css
+@view-transition{ navigation: auto }
+::view-transition-old(root){ animation: vt-out 200ms ease both }   /* 出 200ms */
+::view-transition-new(root){ animation: vt-in  260ms ease both }   /* 进 260ms */
+@keyframes vt-out{ to{ opacity: 0 } }
+@keyframes vt-in { from{ opacity: 0 } }
+@media (prefers-reduced-motion: reduce){
+  ::view-transition-old(root), ::view-transition-new(root){ animation-duration: 1ms !important }
+}
+```
+
+**三个必须记住的点**：
+
+1. **每个页面都要有这段，缺一边就不触发**（原型的注释原话）。所以它天然属于 `Base.astro`（或一份被所有页面引用的全局样式），而不是首页。
+2. **`file://` 下浏览器不启用跨文档过渡** —— 直接双击打开产物是硬切，不是 bug。
+3. 时长属于**交互层**（200/260ms），与 `--dur-fast`(120ms) 同族；落地时用 token 而不是字面量。
+
+
