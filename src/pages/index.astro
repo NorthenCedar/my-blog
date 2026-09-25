@@ -37,8 +37,32 @@ const sectors = [
 ---
 
 <Base description={site.metaDescription} current="index" chrome="console">
+  {/* ===== 背景装饰层（B2）：四样全是装饰，不承载任何信息 =====
+      堆叠计划：0 装饰 < 1 正文 .tier < 2 扫描带 < 3 刻度尺 < 4 HUD < 5 OS 状态条
+      （装饰层是 position:fixed，若正文不给 z-index，定位元素会画在静态正文之上 —— 水印会盖到字上。） */}
+  <svg class="bg-mark" aria-hidden="true" focusable="false"><use href="#rhine-logo" /></svg>
+  <div class="bg-ring" aria-hidden="true"></div>
+  <div class="bg-orbit" aria-hidden="true"></div>
+  <div class="bg-green" aria-hidden="true"></div>
+
+  {/* 莱茵标志（＋∞−）：一处定义。注意外层**不要**再写 viewBox —— 符号自带，
+      外层再写会双重映射并把上下裁掉（原型里踩过）。 */}
+  <svg class="svg-defs" width="0" height="0" aria-hidden="true" focusable="false">
+    <symbol id="rhine-logo" viewBox="0 6 24 12">
+      <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2 2.67 4 4 6 4a4 4 0 0 0 2.83-6.83M19.04 8.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4" />
+        <path d="M4.7 12h2.6M6 10.7v2.6" stroke-width="1.8" />
+        <path d="M16.7 12h2.6" stroke-width="1.8" />
+      </g>
+    </symbol>
+  </svg>
+
   <!-- OS 状态条：只写能确证的东西（站点名 / 区段数）。不写 SAVED/INDEX 那类语义不明的数字。 -->
-  <div class="os-rail" slot="band" aria-hidden="true">
+  {/* 底 OS 状态条。**注意：这里不能写 slot="band"** —— console 外壳下 Base 不渲染
+      <slot name="band" />，Astro 会把指派给未渲染具名槽的子元素整个丢掉，
+      结果这条从 B1 起一直没进过产物（B2 增量 2 的探针把它逮出来的）。
+      它是 position:fixed，放在默认槽里同样贴在视口底部。 */}
+  <div class="os-rail" aria-hidden="true">
     <span>OS-01-H · {site.name}</span>
     <span>SECTORS {String(sectors.length).padStart(2, '0')} · POSTS {String(posts.length).padStart(2, '0')}</span>
   </div>
@@ -142,9 +166,79 @@ const sectors = [
       </ul>
     </div>
   </section>
+
 </Base>
 
 <style>
+  /* ===== 背景装饰层（B2）：四样全是装饰，不承载信息 =====
+     **堆叠计划（插入本层后重排，务必保持这个次序）**：
+       0 装饰 < 1 正文 .tier < 2 扫描带 < 3 刻度尺 < 4 HUD < 5 OS 状态条
+     装饰层是 position:fixed，若正文不显式给 z-index，定位元素会画在静态正文之上
+     —— 水印会盖到字上（原型靠给正文容器 z-index 解掉，这里同理）。 */
+  .bg-mark {
+    position: fixed;
+    top: 12vh;
+    right: 3vw;
+    width: min(46vw, 540px);
+    height: min(23vw, 270px);
+    color: var(--ink);
+    opacity: 0.055;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .bg-ring {
+    position: fixed;
+    left: -8vw;
+    bottom: -10vh;
+    width: min(52vw, 620px);
+    aspect-ratio: 1;
+    z-index: 0;
+    pointer-events: none;
+    background: repeating-radial-gradient(
+      circle at 50% 50%,
+      transparent 0 118px,
+      var(--deco-ring-line) 118px 119px
+    );
+  }
+  .bg-orbit {
+    position: fixed;
+    left: -8vw;
+    bottom: -10vh;
+    width: min(52vw, 620px);
+    aspect-ratio: 1;
+    z-index: 0;
+    pointer-events: none;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    border-top-color: var(--deco-orbit-strong);
+    border-right-color: var(--deco-orbit-soft);
+  }
+  .bg-orbit::after {
+    content: "";
+    position: absolute;
+    inset: 14%;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    border-bottom-color: var(--deco-orbit-inner);
+  }
+  .bg-green {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 26vh;
+    z-index: 0;
+    pointer-events: none;
+    background: var(--deco-wash-green);
+  }
+  /* 符号定义块：不占位、不显示，只提供 #rhine-logo 给 <use> */
+  .svg-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+  }
+
   /* ===== 外壳：左刻度尺 / 顶 HUD / 中扫描带 / 底 OS 条 =====
      数值取自已冻结的视觉规范；B1 只做静态，没有任何 transition / animation。 */
   .rail {
@@ -154,7 +248,7 @@ const sectors = [
     bottom: 0;
     width: 3rem;
     border-right: 1px solid var(--hair);
-    z-index: 2;
+    z-index: 3;
   }
   .rail-tick {
     position: absolute;
@@ -193,7 +287,7 @@ const sectors = [
     border-bottom: 1px solid var(--hair);
     font-size: var(--fs-xs);
     color: var(--muted);
-    z-index: 2;
+    z-index: 4;
   }
   .hud .site {
     letter-spacing: 0.06em;
@@ -204,7 +298,7 @@ const sectors = [
     left: 3rem;
     right: 0;
     height: 1px;
-    z-index: 1;
+    z-index: 2;
     pointer-events: none;
   }
   .band-line {
@@ -225,7 +319,7 @@ const sectors = [
     background: var(--paper);
     font-size: var(--fs-xs);
     color: var(--muted);
-    z-index: 3;
+    z-index: 5;
   }
 
   /* 版心：Base 的 .shell 已经把 main 排好，这里只补左右让位与上下留白 */
@@ -234,7 +328,10 @@ const sectors = [
     padding-bottom: 1.9rem;
   }
 
+  /* 正文层：必须显式抬到装饰层之上（理由见上面「堆叠计划」） */
   .tier {
+    position: relative;
+    z-index: 1;
     padding: var(--sp-8) 0;
   }
   .tier-head {
@@ -369,6 +466,20 @@ const sectors = [
     .rail {
       display: none;
     }
+    /* 小屏：水印缩小、同心环收掉（细环在小屏显脏 —— 原型实测结论），绿底也压矮 */
+    .bg-mark {
+      width: min(70vw, 300px);
+      height: min(35vw, 150px);
+      opacity: 0.045;
+      top: 9vh;
+      right: 0;
+    }
+    .bg-ring {
+      display: none;
+    }
+    .bg-green {
+      height: 18vh;
+    }
     .hud,
     .band {
       left: 0;
@@ -385,4 +496,6 @@ const sectors = [
       width: 100%;
     }
   }
+
+
 </style>

@@ -82,4 +82,12 @@
                      --signal-text 对纸 4.80:1 → 纸上小字可用（scripts/assert-tokens.mjs 守着）。 */
   --signal: #e87722;
   --signal-text: #b45309;
+
+  /* 背景装饰层（B2）：纯装饰，不承载任何信息，因此**不进对比度断言表**。
+     用 8 位 hex 承载 alpha，而不是在组件里写 rgba() 字面量 —— 颜色只许住在 tokens.css。 */
+  --deco-ring-line: #1a1a1a12;    /* 同心扫描环的线（--ink @ 7%） */
+  --deco-wash-green: #2d7d460b;   /* 底部极淡绿底（--accent @ 4.5%） */
+  --deco-orbit-strong: #2d7d4638; /* 环绕行圆环：外环上沿（--accent @ 22%） */
+  --deco-orbit-soft: #2d7d4617;   /* 环绕行圆环：外环右沿（--accent @ 9%） */
+  --deco-orbit-inner: #2d7d462e;  /* 环绕行圆环：内环下沿（--accent @ 18%） */
 }
