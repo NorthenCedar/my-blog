@@ -24,7 +24,10 @@ const { wordmark, current } = Astro.props;
   <div class="pb-noise"></div>
   <div class="pb-grid"></div>
   <div class="pb-green"></div>
-  <img class="pb-slice" src="/bg-slice.webp" alt="" width="720" height="755" decoding="async" />
+  {/* 切片素材走 CSS 背景而不是 <img>：原型本身就是背景层（post.html L162），
+      而且纯装饰图不该进 DOM —— 既有全局契约「所有图片的 alt 都非空」会（正确地）
+      拒绝 alt="" 的 <img>，而给装饰图编一个 alt 又是坏做法。背景图两头都不占。 */}
+  <div class="pb-slice"></div>
   <div class="pb-scrim"></div>
 </div>
 
@@ -101,7 +104,7 @@ const { wordmark, current } = Astro.props;
     aspect-ratio: 720 / 755;
   }
   body.chrome-page .pb-slice {
-    height: auto;
+    background: url('/bg-slice.webp') center / contain no-repeat;
     mix-blend-mode: multiply;
   }
   /* scrim：让照片退后，别和文字抢（**不是遮住照片** —— 10% 的纸色而已）。
