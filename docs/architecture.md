@@ -196,5 +196,8 @@ function getArchive(): Promise<{ year: string; posts: PostMeta[] }[]>;
 - 不做内容源抽象层 / 依赖注入容器 / repository 接口
 - 不做客户端路由、SPA、预取
 - 不引入 ESLint / Prettier 生态（阶段 6 如果发现确实需要再加，届时说明理由）
-- 不做暗色模式、站内搜索、评论（阶段 1 已定）
+- 不做暗色模式、站内搜索（阶段 1 已定）
+- ~~不做评论~~ → **2026-09-26 变更：评论改为自建**（Pages Functions + D1，同域名、无第三方）。
+  它不属于「内容层 / 表现层」这条主线上 —— 是一个**独立的边缘端点 + 一个客户端组件**，
+  接缝在 `functions/api/comments.ts`（HTTP 契约，见 `design-spec.md` §4.1）。内容层与它无关。
 - 不做 `content/` 的自动迁移脚本 —— 契约冻结后，内容文件是权威
