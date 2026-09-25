@@ -50,6 +50,11 @@ const { wordmark, current } = Astro.props;
 
   body.chrome-page {
     background: var(--paper);
+    /* 内页外壳提供的元信息配色（站主 2026-09-26 拍板 A）：
+       Meta 组件消费 --meta-color / --meta-sub，外壳只提供值 —— 颜色仍归组件声明，
+       不做跨组件覆盖。深色带外壳不设这两个变量，于是 Meta 落回它自己的默认值。 */
+    --meta-color: var(--muted);
+    --meta-sub: var(--muted);
   }
 
   /* 正文与页脚必须显式抬到装饰层之上。

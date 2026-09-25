@@ -16,13 +16,20 @@ const { entry, meta, adjacent } = Astro.props;
 const { Content, headings } = await render(entry);
 const toc = headingTree(headings);
 ---
-<Base title={meta.title} description={meta.summary}>
-  <Fragment slot="band">
-    <div>
-      <h1 class="hero-title">{meta.title}</h1>
-      <Meta post={meta} />
-    </div>
-  </Fragment>
+{
+  /* 文章页迁移（2026-09-26）：外壳从 chrome='band' 换成 chrome='page'（浅色顶栏 + 切片档案背景）。
+     **关键：'page' 不渲染 `<slot name="band" />`** —— 所以标题与 Meta 必须从那个槽搬进正文流
+     （放进外壳提供的 `.pagehead`），漏搬任何一块都会**静默消失且构建照常成功**。
+     版式照冻结原型 prototype/terminal/post.html L55-67：kicker（这里的 <Meta>）→ h1 → 导语。
+     另按站主拍板 B：导语用内容层的 summary —— 首页 S2 只显示标题，文章页是它唯一露脸的地方。
+     详见 docs/post-migration-notes.md。 */
+}
+<Base title={meta.title} description={meta.summary} chrome="page">
+  <header class="pagehead">
+    <Meta post={meta} />
+    <h1 class="hero-title">{meta.title}</h1>
+    <p class="standfirst">{meta.summary}</p>
+  </header>
 
   <article>
     <Toc headings={toc} />
@@ -39,13 +46,24 @@ const toc = headingTree(headings);
 </Base>
 
 <style>
+  /* 页头版心收成 --measure，与正文列对齐（站主拍板 D）—— 避免 1440 下那条下缘实线横跨 1312px。
+     四角定位点与页头内边距由外壳的 .pagehead 提供（内页外壳基础设施，各页复用）。 */
+  .pagehead {
+    max-width: var(--measure);
+  }
   .hero-title {
     font-size: var(--fs-title);
     line-height: var(--lh-title);
     letter-spacing: var(--ls-title);
-    margin: 0 0 var(--sp-4);
+    margin: var(--sp-4) 0 var(--sp-4);
     font-weight: 800;
     max-width: 24em;
+  }
+  .standfirst {
+    font-size: var(--fs-lede);
+    color: var(--muted);
+    max-width: 32em;
+    margin: 0;
   }
   .adj {
     display: flex;

@@ -25,10 +25,15 @@ const { post } = Astro.props;
     gap: var(--sp-2) var(--sp-4);
     margin: 0;
     font-size: var(--fs-xs);
-    color: var(--on-band-meta);
+    /* 颜色由外壳提供变量、组件自己声明（站主 2026-09-26 拍板 A：不跨组件覆盖）。
+       默认值仍是深色带那套，所以 chrome='band' 下行为完全不变；
+       内页外壳（Topbar）会把 --meta-color 设成 --muted。
+       为什么必须这么改：文章页迁到浅底后，若继续用 --on-band-meta（深色带专用浅色），
+       就是"浅灰压浅底"，肉眼一眼看得出、断言不一定覆盖。 */
+    color: var(--meta-color, var(--on-band-meta));
     font-variant-numeric: tabular-nums;
   }
   .tag {
-    color: var(--on-band-sub);
+    color: var(--meta-sub, var(--on-band-sub));
   }
 </style>
