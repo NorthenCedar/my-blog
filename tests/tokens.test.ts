@@ -17,14 +17,18 @@ describe('token 对比度', () => {
   });
 });
 
-describe('橙色越界（--accent 只允许出现在白名单选择器里）', () => {
-  // 这是"金名单"：新增一处裸 var(--accent) 就会失败，逼你回来确认它确实用在 ≥24px 的文字
-  // 或非文字图形上（design-spec.md §3.1）。
-  // 注意：白名单必须写**完整选择器**。曾经写成 'a:hover' 这种片段，
+describe('低对比 token 越界（--accent-bright 只许用在深色底上）', () => {
+  // 2026-09-25 P1 重写（站主定案：「前提失效的测试比没有测试更糟」）。
+  // 旧断言守的是「--accent（橙 #e4572e）只有 3.68:1，只能用于 ≥24px 文字或非文字图形」。
+  // P1 把 --accent 换成绿 #2d7d46 后是 4.86:1 —— 纸上小字也达标，**那条前提已经不存在了**。
+  // 现在真正需要守的是 --accent-bright：#4caf50 对纸只有 2.66:1，
+  // 只许出现在深色底（--ink / --code-bg）上。它今天唯一的用途是深色带里那条
+  // 2px 下划线（非文字图形，对 --ink 6.26:1）。
+  // 白名单必须写**完整选择器**。曾经写成 'a:hover' 这种片段，
   // 结果把页脚 13px 小字上的越界用法一起放行了 —— 断言过宽等于没有断言。
-  const ALLOWED = ['nav a[aria-current=page]', '.index a:hover .title'];
+  const ALLOWED = ['nav a:hover', 'nav a[aria-current=page]'];
 
-  it('构建产物的 CSS 里，裸 var(--accent) 只出现在白名单选择器里', () => {
+  it('构建产物的 CSS 里，裸 var(--accent-bright) 只出现在白名单选择器里', () => {
     const dist = 'dist';
     if (!existsSync(dist)) {
       console.warn('dist/ 不存在，先跑 npm run build');
@@ -45,16 +49,16 @@ describe('橙色越界（--accent 只允许出现在白名单选择器里）', (
     const offenders: string[] = [];
     for (const f of cssFiles) {
       const css = readFileSync(f, 'utf8');
-      // 只匹配裸 --accent)：--accent-ink 不算
+      // 只匹配裸 --accent-bright)：--accent 与 --accent-ink 不算
       for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
         const [, rawSel, body] = m;
-        if (!/var\(--accent\)/.test(body)) continue;
+        if (!/var\(--accent-bright\)/.test(body)) continue;
         // Astro 会把作用域属性插进选择器（a:hover → a[data-astro-cid-x]:hover），
         // 先剥掉它再比对，否则断言永远匹配不上。
         const sel = rawSel.replace(/\[data-astro-cid-[^\]]+\]/g, '').replace(/\s+/g, ' ').trim();
         if (!ALLOWED.some((a) => sel.includes(a))) offenders.push(sel);
       }
     }
-    expect(offenders, `这些选择器用了裸 --accent 但不在白名单：${offenders.join(' | ')}`).toEqual([]);
+    expect(offenders, `这些选择器用了裸 --accent-bright 但不在白名单：${offenders.join(' | ')}`).toEqual([]);
   });
 });

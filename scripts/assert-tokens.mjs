@@ -22,15 +22,16 @@ const ratio = (a, b) => {
 };
 
 // [前景, 背景, 规格值, 下限]
+// P1（2026-09-25）：配色换成莱茵方向后重算过。规格值不是"抄注释"，是用本文件同一个公式独立算出来的。
 const CASES = [
-  ['ink', 'paper', 19.3, 4.5],
-  ['muted', 'paper', 6.69, 4.5],
-  ['accent-ink', 'paper', 5.18, 4.5],
-  ['accent', 'paper', 3.68, 3.0], // 只承诺大字/图形门槛（≥24px）
-  ['on-band', 'ink', 19.3, 4.5],
-  ['on-band-sub', 'ink', 14.35, 4.5],
-  ['on-band-meta', 'ink', 9.31, 4.5],
-  ['accent', 'ink', 5.24, 4.5],
+  ['ink', 'paper', 16.64, 4.5],
+  ['muted', 'paper', 6.62, 4.5],
+  ['accent-ink', 'paper', 6.18, 4.5],
+  ['accent', 'paper', 4.86, 4.5], // 换绿后纸上小字也达标（旧橙 3.68，只承诺大字/图形）
+  ['on-band', 'ink', 17.4, 4.5],
+  ['on-band-sub', 'ink', 12.94, 4.5],
+  ['on-band-meta', 'ink', 8.39, 4.5],
+  ['accent-bright', 'ink', 6.26, 4.5], // 深色底上的绿。旧方向这里是 accent 橙（5.24）
   ['code-fg', 'code-bg', 16.49, 4.5],
 ];
 

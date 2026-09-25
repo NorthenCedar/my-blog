@@ -52,6 +52,8 @@ const links: { href: string; label: string; key: Props['current'] }[] = [
   nav a:hover,
   nav a[aria-current='page'] {
     color: var(--on-band);
-    box-shadow: inset 0 -2px 0 var(--accent);
+    /* 深色带上用亮绿：--accent 的深绿对 --ink 只有 3.43:1，
+       够非文字门槛但不够 4.5；--accent-bright 是 6.26:1 */
+    box-shadow: inset 0 -2px 0 var(--accent-bright);
   }
 </style>
