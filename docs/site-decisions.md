@@ -292,3 +292,17 @@ git -c credential.helper= ls-remote --heads https://github.com/NorthenCedar/pers
 同时基础技能源 `dsh-skill-filesystem` 处于 disabled —— 两边都断，等于没有任何技能供给源。
 用 `dev_install_package` 做 `loader.create` 热装配后恢复，免重启。
 （另有一个未解决的独立故障：`dsh-at-file` 加载失败。）
+
+---
+
+## 变更记录：新外壳排除「另造一份 Base」方案（2026-09-26 决策）
+
+**决策**：新外壳**不走**「另造一份 Base / 让首页不使用 Base」这条路（即方案 ③）。**该方案排除。**
+
+**理由**：那等于维护两份外壳（`head`、`canonical`、RSS、skip-link、页脚），短期省事、长期最贵，必然漂移。
+
+**替代出口（已批准的方案）**：给 `src/layouts/Base.astro` 加一个**可选** `chrome` 参数（默认 `'band'` = 现状，只有首页传 `'console'`）；
+同时把 Base 里那块**作用域样式**搬成全局样式并**改名 `.shell`**，好让 Base 不再生成 `data-astro-cid-*`，
+从而「以后改 Base 不动模板时产物逐字节不变」。
+
+**背景事实**：`src/layouts/Base.astro` 被 **9 个页面**共享；站点现有 **14 个 HTML 页面**。
