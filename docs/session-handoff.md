@@ -100,7 +100,9 @@
 
 ## 6. 边界与不变式（改代码前先读这一节）
 
-- **不推**任何提交（`ahead = 10`）；**`content/` 一个字节未动**（82 个 md + 82 张原图原样）
+- **推送状态**：**已推**（2026-09-26：`8b90f4e..57458c7` 共 29 个 commit 推到 `origin/main`，
+  线上验收 14/14 通过）。**`content/` 正文仍未被动过**（相册 82 帧原图 + 文章原样；
+  只有 `content/site.md` 在本轮加了站主批准的 `lat`/`lon`/`status`）
 - **已定决策**：相册**原图不部署**；**不用 `image()`**（它会让集合里全部源图进产物，实测 +30 MB）；
   首页只出 **两档 webp（1280 / 800）**；`public/gallery/` 生成物**不入库**
 - **B1 零动效**：`.field-item` / `data-label` 只是标记，**B2 才挂样式与脚本**
@@ -108,5 +110,24 @@
 - **本机约束**：`bash` 走 WSL、看不到 `<本机工作区>`（**用 pwsh**，路径 `<博客仓库>`）；
   **构建与 headless Chrome 必须提权**（沙箱挡 esbuild 的 pipe stdio 与 Chrome spawn），
   且 **不能委派给子代理** —— 子代理无法提权（已实测，一个代理卡死在这上面）
+- **推送必须先开 Steam++**（2026-09-26 实测，下次推照这条走，别重新踩）：
+  直连 GitHub 时 **TCP 443 是通的**（实测 `Test-NetConnection github.com -Port 443` 成功），
+  但 **TLS 握手被重置** —— `fatal: unable to access ... schannel: AcquireCredentialsHandle failed:
+  SEC_E_NO_CREDENTIALS`；换成 `-c http.sslBackend=openssl` 也一样是 `Recv failure: Connection was reset`。
+  **开 Steam++ 后**它会把 `github.com` 等域名写进 hosts 指向 `127.0.0.1` 的本地加速代理，
+  `git ls-remote` / `git push` 立刻可用（实测那一轮 29 个 commit 一次推成功）。
+  **推之前先核对远端**：`git ls-remote origin refs/heads/main` 必须等于本地 `git rev-parse origin/main`
+  —— 这既是「远端有没有被人动过」的判据，也是 `--force-with-lease` 的判断依据。
+  附带一条：开加速后 **PowerShell 的 `Invoke-WebRequest` 仍然失败**（`基础连接已经关闭: 接收时发生错误`，
+  连 `northcedar.top` 都抓不了），但 **node 的 `fetch` 正常** —— 抓线上页面做验证一律走 node，
+  别用 `Invoke-WebRequest`（更别据此判断"站点挂了"）
+- **相册图片生成：云端每次构建都重编码，缓存只在本机有效**（2026-09-26 步骤 2 量化，**已知成本，不是问题**）：
+  `public/gallery/` 是生成物、**不入库**，`scripts/gen-gallery-webp.mjs` 有「源图未变则跳过」的缓存
+  （指纹 = 版本 + 源图 size + mtime + 档位宽 + 质量），但缓存**只在本地有效** ——
+  Cloudflare Pages 每次构建都要从零编码全部 **164 个文件（82 帧 × 2 档）**。
+  实测：本机首轮 **47.3s**、命中 0；本机二次 **0.0s**、命中 164；产物 **14.3 MB**（dist 合计 16.5 MB）。
+  站主 2026-09-26 定案**档位不调**，理由三条：CF Pages 免费额度远大于此（单文件 25 MB / 文件数 20,000 /
+  构建 20 分钟）· 「生成物不入库」不能破（入库就是 164 个 webp 跟着 git 走、改脚本要重提全部生成物）·
+  800 档降体积的代价是**灯箱画质**，而灯箱是摄影展示的核心观赏场景，那 9.2 MB 换清晰度值。
 - **验证脚本的规矩**（台账 `21a5c66`）：每条断言都要打印**判据名 + 对象标识 + 实测值**，禁止裸 `PASS`
 - **渲染设计的规矩**（台账 `010af19`）：**从内容文件反推渲染方式，不从已写好的 schema 反推**
