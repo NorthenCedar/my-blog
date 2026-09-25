@@ -33,6 +33,9 @@ const CASES = [
   ['on-band-meta', 'ink', 8.39, 4.5],
   ['accent-bright', 'ink', 6.26, 4.5], // 深色底上的绿。旧方向这里是 accent 橙（5.24）
   ['code-fg', 'code-bg', 16.49, 4.5],
+  // B2（2026-09-26）：HUD 扫到新区段时那一下橙字。纸上小字必须达标才有资格当文字色。
+  // --signal（#e87722）只有 2.83:1，**不进此表** —— 它是图形色，不许承载文字。
+  ['signal-text', 'paper', 4.8, 4.5],
 ];
 
 let failed = 0;

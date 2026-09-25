@@ -65,8 +65,21 @@
   --gutter: clamp(1rem, 4vw, 3rem);
   --band-h: min(74vh, 42rem);
 
-  /* 动效 */
-  --dur-fast: 120ms;
-  --dur-enter: 320ms;
-  --ease: cubic-bezier(0.2, 0, 0, 1);
+  /* 动效（B2 2026-09-26 落 token，取值见 docs/rhinelab-spec.md §1.2）
+     分四层，**不要用一套时长打天下**：交互层要快（120/180ms），叙事层慢（640ms），
+     循环层 linear，光标/闪烁是硬切（steps）而不是呼吸灯。 */
+  --dur-fast: 120ms;                               /* 交互层：悬停 / 焦点 / 按压 */
+  --dur-enter: 640ms;                              /* 叙事层：区段入场 / 逐层展开（320 → 640） */
+  --dur-stagger: 320ms;                            /* 错位：逐条展开之间的 delay */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);           /* 叙事层主曲线 */
+  --ease-interact: cubic-bezier(0.22, 1, 0.36, 1); /* 交互层曲线（与叙事层分开，别混用） */
+  --dur-orbit: 8s;                                 /* 循环层基准时长（4/8/16s 按元素体量选） */
+  --dur-blink: 800ms;                              /* 硬切闪烁（配 steps(1)，不是淡入淡出） */
+  --focus-min: 0.65;                               /* 扫描带聚焦时，带外条目的弱化值 */
+
+  /* 橙信号（B2 起启用，唯一用途：HUD 扫到新区段时瞬时变色，160ms 后复原）
+     对比度为实测值：--signal 对纸只 2.83:1 → **图形色，不许承载任何文字**；
+                     --signal-text 对纸 4.80:1 → 纸上小字可用（scripts/assert-tokens.mjs 守着）。 */
+  --signal: #e87722;
+  --signal-text: #b45309;
 }
