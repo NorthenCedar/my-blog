@@ -139,12 +139,17 @@ const { wordmark, current } = Astro.props;
     flex-wrap: wrap;
   }
   body.chrome-page .topbar a {
+    /* 必须显式写颜色：UA 样式表的 `a:link { color: -webkit-link }` 是针对元素本身的声明，
+       会压过从 .topbar 继承来的 color —— 不写就是浏览器默认蓝（放大截图逮到的）。
+       深色带的 Brandline 显式声明了色所以没事，顶栏漏了。 */
+    color: var(--muted);
     text-decoration: none;
     border-bottom: 1px solid transparent;
     padding-bottom: 1px;
   }
   body.chrome-page .topbar a:hover,
   body.chrome-page .topbar a:focus-visible {
+    color: var(--ink);
     border-color: var(--accent-ink);
   }
   body.chrome-page .topbar a:focus-visible {

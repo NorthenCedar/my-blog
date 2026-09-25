@@ -8,12 +8,14 @@ import Band from '../components/Band.astro';
 import Topbar from '../components/Topbar.astro';
 import SiteFooter from '../components/SiteFooter.astro';
 import { getSite } from '../lib/site';
+import type { NavKey } from '../lib/nav';
 
 interface Props {
   /** 页面自己的标题（不含站名）。不传就是首页。 */
   title?: string;
   description?: string;
-  current?: 'index' | 'tags' | 'archive' | 'about';
+  /** 当前页在主导航里的位置（驱动 aria-current 高亮）。取值来源是 src/lib/nav.ts，不在这里另立一份。 */
+  current?: NavKey;
   /** 404 这类错误页不该有 canonical —— 它不是真实内容页 */
   noCanonical?: boolean;
   /**
