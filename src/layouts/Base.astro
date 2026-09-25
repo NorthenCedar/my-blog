@@ -5,6 +5,7 @@ import '../styles/base.css';
 import '../styles/prose.css';
 import Brandline from '../components/Brandline.astro';
 import Band from '../components/Band.astro';
+import Topbar from '../components/Topbar.astro';
 import SiteFooter from '../components/SiteFooter.astro';
 import { getSite } from '../lib/site';
 
@@ -16,18 +17,29 @@ interface Props {
   /** 404 这类错误页不该有 canonical —— 它不是真实内容页 */
   noCanonical?: boolean;
   /**
-   * 外壳形态。默认 'band' = 现状（深色带 + 品牌行 + 页脚），其余 8 个页面都在用。
-   * 'console' = 新版（刻度尺 / HUD / 扫描带 / OS 状态条），目前**只有首页**会传。
+   * 外壳形态（三选一）：
+   *   不传 / `'band'`  = 深色带 + 品牌行 + 页脚（旧外壳，其余 10 页在用）
+   *   `'console'`      = 首页专用：刻度尺 / HUD / 扫描带 / OS 状态条
+   *   `'page'`         = 内页（文章 / 相册 / 项目共用）：浅色顶栏 + 切片档案背景，
+   *                      无深色带、无仪器 —— 阅读与浏览优先。见 components/Topbar.astro
    *
-   * 为什么做成参数而不是直接换掉：Base.astro 被 9 个页面共享，直接换会同时改 9 页输出、
+   * 为什么做成参数而不是直接换掉：Base.astro 被全部 14 个页面共享，直接换会同时改 14 页输出、
    * 出问题分不清是哪一步。做成参数后，不传的页面输出**逐字节不变** —— 阶段 A 用
-   * 构建产物全量 SHA256 diff 证明过（0 处差异）。
+   * 构建产物全量 SHA256 diff 证明过（0 处差异），'page' 这一档同样是逐页可分辨的。
+   *
+   * 注意：`'page'` **不渲染 `<slot name="band" />`** —— 用它的页面不要把内容放 band 槽，
+   * 否则那部分会静默消失（首页当初就是被这个坑过一次，见台账 f919fa1）。
    */
-  chrome?: 'band' | 'console';
+  chrome?: 'band' | 'console' | 'page';
 }
 const { title, description, current, noCanonical, chrome } = Astro.props;
 // 站名/简介/联系方式来自 content/site.md —— 主题不持有任何文案
 const site = await getSite();
+// 关于「Topbar 静态 import 的成本」：Astro 的样式图按 import 收集（不是按 render），
+// 所以它的 ~2.6 KB CSS 会进共享包、被全部 14 页下载 —— 即使当前没有页面用 'page'。
+// 试过改成条件 `await import(...)`，结果**更差**：Vite 会产出异步 chunk，
+// 14 页 HTML 全变、产物反而 +42 KB（实测）。所以保持静态 import，接受这 2.6 KB；
+// 等 'page' 真有了消费者（P5 起），这笔 CSS 就是名正言顺的共享代码。
 const docTitle = title ? `${title} — ${site.name}` : site.name;
 // canonical 指向 site 配置里的正式域名。即使有人从 personal-br4.pages.dev 访问，
 // 也告诉搜索引擎「正式地址是 northcedar.top」，把两个域名的权重合到一起。
@@ -49,11 +61,13 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
     <link rel="alternate" type="application/rss+xml" title={`${site.name} — RSS`} href="/rss.xml" />
     <link rel="preload" href="/fonts/plex-sans-400.woff2" as="font" type="font/woff2" crossorigin />
   </head>
-  <body class={chrome === 'console' ? 'chrome-console' : undefined}>
+  <body class={chrome === 'console' ? 'chrome-console' : chrome === 'page' ? 'chrome-page' : undefined}>
     <a class="skip" href="#main">跳到正文</a>
-    {/* chrome='console' 的页面（目前只有首页会传）自带刻度尺 / HUD / 扫描带 / OS 状态条，
-        所以不渲染旧的深色 Band 与站点页脚。其余 13 页不传该参数 → 走原路径，产物不变。 */}
-    {chrome !== 'console' && (
+    {/* chrome='console'（首页）自带刻度尺 / HUD / 扫描带 / OS 状态条；
+        chrome='page'（内页）自带浅色顶栏 + 切片档案背景 —— 两者都不渲染旧的深色 Band。
+        不传 chrome 的 10 页走原路径，产物逐字节不变。 */}
+    {chrome === 'page' && <Topbar wordmark={site.wordmark} current={current} />}
+    {chrome !== 'console' && chrome !== 'page' && (
       <Band>
         <Brandline current={current} name={site.name} wordmark={site.wordmark} />
         <slot name="band" />

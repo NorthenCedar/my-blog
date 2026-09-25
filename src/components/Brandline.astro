@@ -1,16 +1,14 @@
 ---
+import { NAV_LINKS, type NavKey } from '../lib/nav';
+
 interface Props {
-  current?: 'index' | 'tags' | 'archive' | 'about';
+  current?: NavKey;
   name: string;
   wordmark: string;
 }
 const { current, name, wordmark } = Astro.props;
-const links: { href: string; label: string; key: Props['current'] }[] = [
-  { href: '/', label: '文章', key: 'index' },
-  { href: '/tags/', label: '标签', key: 'tags' },
-  { href: '/archive/', label: '归档', key: 'archive' },
-  { href: '/about/', label: '关于', key: 'about' },
-];
+// 链接清单在 src/lib/nav.ts（内页顶栏 Topbar 用的是同一份，避免两套外壳漂移）
+const links = NAV_LINKS;
 ---
 <div class="brandline">
   <a class="wm" href="/">{name}</a>

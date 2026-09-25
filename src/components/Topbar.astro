@@ -1,0 +1,210 @@
+---
+/**
+ * 内页外壳（chrome='page'）—— post / gallery / projects 共用。
+ *
+ * 规范来自冻结原型 prototype/terminal/post.html（L42-50 顶栏、L140-181 背景）。
+ * 与首页（chrome='console'）**刻意不同**，这是站主指定的：
+ *   · 没有刻度尺 / HUD / 扫描带 / 聚焦 —— 内页是阅读与浏览，不是"仪器正在扫描"
+ *   · 背景换母题：首页是「扫描视场」（±∞ 水印 + 同心环），
+ *     内页是「切片档案」（等距发丝横线 + 右下切片素材）；网格与纸纹是同一套底子
+ *
+ * 只用在本页渲染时才加载的样式（`is:global` + `body.chrome-page` 前缀），
+ * 所以其余页面既不会多背字节，也不会被这些规则碰到。
+ */
+import { NAV_LINKS, type NavKey } from '../lib/nav';
+
+interface Props {
+  wordmark: string;
+  current?: NavKey;
+}
+const { wordmark, current } = Astro.props;
+---
+
+<div class="page-bg" aria-hidden="true">
+  <div class="pb-noise"></div>
+  <div class="pb-grid"></div>
+  <div class="pb-green"></div>
+  <img class="pb-slice" src="/bg-slice.webp" alt="" width="720" height="755" decoding="async" />
+  <div class="pb-scrim"></div>
+</div>
+
+<div class="topbar">
+  <a class="site" href="/">{wordmark}</a>
+  <nav aria-label="主导航">
+    {NAV_LINKS.map((l) => (
+      <a href={l.href} aria-current={current === l.key ? 'page' : undefined}>{l.label}</a>
+    ))}
+    <a href="/rss.xml">RSS</a>
+  </nav>
+</div>
+
+<style is:global>
+  /* ============================================================
+     内页外壳（chrome='page'）—— 所有选择器都带 body.chrome-page 前缀。
+     样式只在本组件被渲染的页面加载（Astro 按页面切 CSS 包），
+     所以 band / console 那 13 页既不多背字节，也不会被这些规则影响。
+     ============================================================ */
+
+  body.chrome-page {
+    background: var(--paper);
+  }
+
+  /* 正文与页脚必须显式抬到装饰层之上。
+     背景层是 position:fixed，若正文不给 z-index，定位元素会画在静态正文之上
+     —— 这一条 B1 在首页水印上踩过，内页同理。 */
+  body.chrome-page main,
+  body.chrome-page footer {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ---------- 背景四层：全部 fixed + z-index:0 + 不拦指针 ---------- */
+  body.chrome-page .page-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  /* 纸纹（与首页同一套噪点，原型 L148） */
+  body.chrome-page .pb-noise {
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+    background-size: 160px 160px;
+  }
+  /* 「切片档案」母题：等距发丝横线（一层层切片） */
+  body.chrome-page .pb-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, var(--page-grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--page-grid-line) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+  /* 底部极淡绿带（内页比首页低一点，18vh → 14vh 见下面的手机分支） */
+  body.chrome-page .pb-green {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 18vh;
+    background: var(--page-wash-green);
+  }
+  /* 右下切片素材。素材底色已压到近白 → multiply 混合下近乎透明，
+     所以不需要 alpha，也就不会出现"没抠干净的一层雾"（原型 L153-156 的取舍）。 */
+  /* 切片与其纸色遮罩共用同一套几何（位置/宽度/宽高比），改一处两处一起动 */
+  body.chrome-page .pb-slice,
+  body.chrome-page .pb-scrim {
+    position: absolute;
+    right: -2vw;
+    bottom: -4vh;
+    width: min(44vw, 600px);
+    aspect-ratio: 720 / 755;
+  }
+  body.chrome-page .pb-slice {
+    height: auto;
+    mix-blend-mode: multiply;
+  }
+  /* scrim：让照片退后，别和文字抢（**不是遮住照片** —— 10% 的纸色而已）。
+     为什么必须加：文字可读性是硬底线，不能靠"肉眼看清晰"赌。
+     实测数字与它的边界写在 tokens.css 的 --page-slice-scrim 旁边。 */
+  body.chrome-page .pb-scrim {
+    background: var(--paper);
+    opacity: var(--page-slice-scrim);
+  }
+
+  /* ---------- 顶栏：极简，只有站名与主导航（原型 L42-50） ---------- */
+  body.chrome-page .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.7rem var(--gutter);
+    border-bottom: 1px solid var(--hair);
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+  }
+  body.chrome-page .topbar .site {
+    color: var(--ink);
+    letter-spacing: 0.14em;
+    text-decoration: none;
+  }
+  body.chrome-page .topbar nav {
+    display: flex;
+    align-items: center;
+    gap: 1.1rem;
+    flex-wrap: wrap;
+  }
+  body.chrome-page .topbar a {
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    padding-bottom: 1px;
+  }
+  body.chrome-page .topbar a:hover,
+  body.chrome-page .topbar a:focus-visible {
+    border-color: var(--accent-ink);
+  }
+  body.chrome-page .topbar a:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 3px;
+  }
+  body.chrome-page .topbar a[aria-current='page'] {
+    color: var(--ink);
+    border-color: var(--accent-ink);
+  }
+  /* 窄屏隐藏站名，只留导航（站主 2026-09-26 定案）：
+     390 下站名会折成两行、挤压导航，而顶栏的功能是导航、站名是装饰。
+     （核对过：首页 390 下其实**是**带站名的，所以这条不是"跟首页一致"，
+       而是它本身解决了折行问题 —— 如实记在这里，避免以后被当成依据引用。） */
+  @media (max-width: 767px) {
+    body.chrome-page .topbar .site {
+      display: none;
+    }
+  }
+
+  /* ---------- 内页页头（外壳提供，各页复用） ----------
+     规范来自原型 post.html `.posthead`（L55-59）与 gallery.html `.head`（L49-55）。
+     四角定位点用印刷 registration mark 的路数，标记页头起止。
+     **为什么放在外壳里**：五个内页的标题目前都渲染在 `<slot name="band" />` 里
+     （about / archive / tags / 404 / posts），而 chrome='page' 不渲染那个槽 ——
+     迁移时每页都要把标题挪进正文流，页头样式若各页各写一遍必然漂移。 */
+  body.chrome-page .pagehead {
+    position: relative;
+    padding: var(--sp-8) 0 var(--sp-7);
+    border-bottom: 1px solid var(--ink);
+  }
+  body.chrome-page .pagehead::before,
+  body.chrome-page .pagehead::after {
+    content: '';
+    position: absolute;
+    top: var(--sp-8);
+    width: 6px;
+    height: 6px;
+    background: var(--ink);
+  }
+  body.chrome-page .pagehead::before {
+    left: -3px;
+  }
+  body.chrome-page .pagehead::after {
+    right: -3px;
+  }
+
+  /* ---------- 手机：去噪点、网格收细、切片缩小（原型 L169-181） ---------- */
+  @media (max-width: 767px) {
+    body.chrome-page .pb-noise {
+      display: none;
+    }
+    body.chrome-page .pb-grid {
+      background-size: 64px 64px;
+    }
+    body.chrome-page .pb-green {
+      height: 14vh;
+    }
+    body.chrome-page .pb-slice,
+    body.chrome-page .pb-scrim {
+      right: -6vw;
+      bottom: -2vh;
+      width: min(86vw, 380px);
+    }
+  }
+</style>
