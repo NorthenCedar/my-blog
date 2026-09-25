@@ -6,10 +6,22 @@ import { getArchive } from '../lib/posts';
 
 const groups = await getArchive();
 ---
-<Base title="归档" current="archive">
-  <Fragment slot="band">
+{
+  /* 归档迁移（2026-09-26）：chrome='band' → 'page'（内页外壳）。
+     **'page' 不渲染 <slot name="band" />** ⇒ 标题必须搬进正文流（外壳的 .pagehead），
+     漏搬会静默消失且构建照常成功（前四页同一个坑）。
+     **刻意不写 `max-width: var(--measure)`** —— 这与 about/404 **不同**，理由值得写在这：
+     那两页的拍板 D 是"页头对齐**正文列**"，因为它们的内容列是 `.prose`（34em）；
+     归档没有正文列，它的内容列是 <PostIndex> 的**通栏列表**（`.index` 不限宽，
+     只有 `.title` 限 22em、`.summary` 限 40em）。页头若收成 34em，下缘实线会短于列表的上缘线，两条线错位。
+     **版心要对齐的是内容，不是习惯**（/gallery 当时同理：页头与网格同为通栏）。
+     另：`PostIndex` 无需主题化（已读全文：它只用 --hair/--ink/--muted/--accent，从未在深色底上渲染过），
+     所以本页虽然与 6 个 tags 页共用它，迁移不碰它一个字节。 */
+}
+<Base title="归档" current="archive" chrome="page">
+  <header class="pagehead">
     <PageTitle>归档</PageTitle>
-  </Fragment>
+  </header>
 
   {groups.map((g) => <PostIndex posts={g.posts} heading={g.year} />)}
 </Base>
