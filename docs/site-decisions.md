@@ -385,3 +385,38 @@ delivery_check({ file, url, requireSmoke: false, evidence: { items: [...] } })
 
 **建议修复（给预设，未改，仅记录）**：第 439 行不应推 `false` —— 要么改为 `pass: true` + detail「已委托模型自测」，要么把「必须有 reviewed 视觉证据」并入 evidence 检查块（490–493 行已经在做），并同步修正工具描述里那句与代码相反的「省略 url 会 FAIL」。
 
+
+---
+
+## 变更记录：Astro 具名 slot 未渲染时，子元素被整块丢弃（2026-09-26 记录）
+
+**判据名**：产物元素存在性（`dist/index.html` 里 `os-rail` / `OS-01-H` / `SECTORS` 的出现次数）
+
+**对象**：`src/layouts/Base.astro` 的条件具名槽（`{chrome !== 'console' && (<Band><slot name="band" /></Band>)}`）
+＋ `src/pages/index.astro` 里那个 `slot="band"` 属性
+
+**现象（实测，不是推断）**：B1 交付后，产物首页里 `os-rail`、`OS-01-H`、`SECTORS` 的出现次数
+**全是 0**。四件外壳（左刻度尺 / 顶 HUD / 中扫描带 / 底 OS 状态条）里的**底 OS 条**
+从 B1 起就没进过产物。B2 增量 2 的探针在查堆叠 z-index 时读到「`.os-rail` 缺」才暴露。
+
+**根因**：首页传 `chrome="console"`，于是 `Base.astro` 里 `<slot name="band" />` **根本不渲染**；
+而 `<div class="os-rail" slot="band">` 把自己指派给了这个具名槽。
+**Astro 对「指派给未渲染具名槽的子元素」的处理是直接丢弃 —— 不会回落到默认槽。**
+
+**为什么两天没被发现（这才是重点）**：
+1. B1 的验收只截了**首屏**，而 OS 条是 `position:fixed; bottom:0` —— 它本该出现在首屏截图里，
+   但当时没人盯页面底部（同一屏里更醒目的是大字标题和刻度尺）。
+2. L2 判据只比「13 页不变 + index.html 必须变」，**比不出"首页少了一个元素"**。
+   断言缺位，截图也缺位，两个漏洞正好叠在一起。
+
+**教训（可复用的两条）**：
+1. **截图必须覆盖所有区段，不能只盯首屏。** 固定定位的仪表（顶 HUD / 底 OS 条 / 左刻度尺）
+   恰恰都贴在首屏边缘，最容易被"看了但没看见"。
+2. **「构建成功 + 页面能打开」不等于「该有的元素都在」。** 凡是从原型移植的固定仪表，
+   都要有一条**元素存在性断言**（产物里计数 ≥ 1），不能只靠肉眼和"构建成功"。
+
+**修法**：去掉 `slot="band"`（console 外壳下默认槽就是正确位置；`position:fixed` 与 DOM 位置无关），
+并在同处写注释说明为什么不能写 slot。
+
+**判据（可复核）**：`dist/index.html` 中 `os-rail`、`OS-01-H`、`SECTORS` 出现次数各 = 1。
+
