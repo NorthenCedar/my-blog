@@ -738,6 +738,14 @@ const sectors = [
   .hud-progress {
     font-variant-numeric: tabular-nums;
   }
+  /* 仪表读数是 JS 驱动的：没有 JS 就不该显示死指针 / 假读数。
+     原型用的是 html.no-js 规则，本站走「默认=无 JS 安全、html.js=增强」的路线，
+     所以等价规则写成 html:not(.js)。（三态截图时发现漏了这条：无 JS 下 HUD 挂着 000%、
+     扫描带读数挂着「—」，都是没人在更新的死指针。） */
+  html:not(.js) .hud-progress,
+  html:not(.js) .band-readout {
+    display: none;
+  }
 
   .band-sweep {
     position: absolute;
