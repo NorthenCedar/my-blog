@@ -83,6 +83,17 @@
 两个域名都能访问，但页面里的 `canonical` 一律指向 `northcedar.top` —— 这是告诉搜索引擎「正式地址是哪个」，把权重合到一起而不是分成两份。
 **换域名只需改一处**：`astro.config.mjs` 的 `site`。
 
+### 搜索引擎提交（2026-09-25）
+
+- **百度站点验证已就位**：`src/layouts/Base.astro` 的 `<head>` 里有
+  `<meta name="baidu-site-verification" content="codeva-5aPQf9LUnL" />`。
+  它是**公开标识符不是密钥**，用来在 ziyuan.baidu.com 证明站点归属。
+  **不要删** —— 删掉后无法重新验证；将来换域名要在百度重新申请一个。
+- 已完成的部分：`robots.txt` 允许所有爬虫、`sitemap` 13 个 URL、`canonical` 指向正式域名。
+- **仍需站主手动做的一步**：登录 ziyuan.baidu.com → 验证站点 → **提交 sitemap**
+  （`https://northcedar.top/sitemap-index.xml`）。只放标签不提交，收录不会变快。
+- 老实说：新站被百度收录通常要**数天到数周**，且本站目前**外部链接数为 0** —— 这是慢的主因，不是配置问题。
+
 **线上实测（2026-09-25，从站主这台机器）**：
 
 | 项 | 结果 |

@@ -29,6 +29,10 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- 百度搜索资源平台的站点归属验证（公开标识符，不是密钥）。
+         用途：在 ziyuan.baidu.com 证明这个站是你的，之后才能提交 sitemap。
+         别删 —— 删了以后无法重新验证站点。换域名后需要在百度重新申请一个。 -->
+    <meta name="baidu-site-verification" content="codeva-5aPQf9LUnL" />
     <title>{docTitle}</title>
     {description && <meta name="description" content={description} />}
     {!noCanonical && <link rel="canonical" href={canonical} />}
