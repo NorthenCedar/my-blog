@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>草案 · 相册页 — 北杉札记</title>
+<style>
+/* ============================================================
+   研究终端 · 相册页
+   · 图片用站主的真实照片（相对路径引用 content/gallery/）
+   · alt 用站主自己在 index.md 里写的那一句
+   · 灯箱自写（无依赖），键盘可用：Esc 关闭 · ←/→ 切换 · Tab 不逃出
+   · 结构在 HTML 里静态渲染，JS 只做增强 —— 关掉 JS 仍能看完整瀑布流
+   ============================================================ */
+:root{
+  --paper:#FAFAF7; --panel:#EFEDE7; --ink:#1A1A1A; --muted:#5A5A56; --hair:#D8D5CE;
+  --accent:#2D7D46; --accent-deep:#266B3B; --accent-bright:#4CAF50; --signal:#E87722;
+  --band:#111111; --on-band:#fff; --on-band-sub:#DEDEDE;
+  --fs-display:clamp(1.9rem,4.6vw,3.2rem);
+  --fs-h2:clamp(1.2rem,1rem + 1vw,1.7rem);
+  --fs-body:1.0625rem; --fs-sm:.875rem; --fs-xs:.8125rem; --fs-mono:.85rem;
+  --sp-2:.5rem; --sp-3:.75rem; --sp-4:1rem; --sp-5:1.5rem; --sp-6:2rem; --sp-7:3rem;
+  --dur-fast:120ms; --ease:cubic-bezier(.2,0,0,1);
+}
+@font-face{font-family:'Archivo Var';src:url('../fonts/archivo-wdth.woff2') format('woff2-variations');font-weight:100 900;font-stretch:62% 125%;font-display:swap}
+@font-face{font-family:'Plex';src:url('../fonts/plex-sans-400.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Plex';src:url('../fonts/plex-sans-600.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'Plex Mono';src:url('../fonts/plex-mono-400.woff2') format('woff2');font-weight:400;font-display:swap}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:'Plex','Source Han Sans SC','Noto Sans SC','Microsoft YaHei',system-ui,sans-serif;
+  font-size:var(--fs-body);line-height:1.75;
+}
+a{color:inherit}
+button{font:inherit}
+:focus-visible{outline:2px solid var(--accent-deep);outline-offset:2px}
+
+.topbar{
+  display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;
+  padding:.7rem clamp(1rem,4vw,3rem);border-bottom:1px solid var(--hair);
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);
+}
+.topbar .site{color:var(--ink);letter-spacing:.14em;text-decoration:none}
+.topbar a{text-decoration:none}
+.topbar a:hover{border-bottom:1px solid var(--accent-deep)}
+
+main{padding:0 clamp(1rem,4vw,3rem) var(--sp-7);max-width:96rem;margin:0 auto}
+.head{padding:var(--sp-7) 0 var(--sp-5);border-bottom:2px solid var(--ink)}
+.head h1{
+  font-family:'Archivo Var',system-ui,sans-serif;font-stretch:114%;font-weight:700;
+  font-size:var(--fs-display);line-height:1;letter-spacing:-.035em;margin:0 0 var(--sp-4);
+}
+.readout{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);font-variant-numeric:tabular-nums;display:flex;gap:1.5rem;flex-wrap:wrap}
+.readout em{font-style:normal;color:var(--accent-deep)}
+
+/* 相册筛选：发丝线标签，不是圆角胶囊 */
+.filters{display:flex;gap:0;flex-wrap:wrap;margin:var(--sp-5) 0 var(--sp-6);border-bottom:1px solid var(--hair)}
+.filters button{
+  background:none;border:0;border-bottom:2px solid transparent;border-radius:0;
+  padding:.5rem .9rem;cursor:pointer;color:var(--muted);
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);font-variant-numeric:tabular-nums;
+}
+.filters button b{font-weight:400;margin-left:.4rem;opacity:.7}
+.filters button:hover{color:var(--ink)}
+.filters button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--accent-deep)}
+.filters button[aria-pressed="true"] b{color:var(--accent-deep);opacity:1}
+
+/* 瀑布流 */
+.wf{column-count:3;column-gap:var(--sp-4)}
+@media (max-width:1180px){.wf{column-count:2}}
+@media (max-width:680px){.wf{column-count:1}}
+.wf figure{
+  break-inside:avoid;margin:0 0 var(--sp-4);position:relative;
+  border:1px solid var(--hair);background:var(--panel);
+}
+.wf figure[hidden]{display:none}
+.wf img{display:block;width:100%;height:auto}
+.wf figcaption{
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);
+  padding:.5rem .7rem;border-top:1px solid var(--hair);
+  display:flex;justify-content:space-between;gap:.75rem;
+}
+.wf figcaption em{font-style:normal;color:var(--ink);font-family:'Plex','Source Han Sans SC',sans-serif;font-size:var(--fs-xs)}
+/* 整块可点，但结构上仍是一个增强按钮：无 JS 时它只是图 */
+.wf button.zoom{position:absolute;inset:0;width:100%;height:100%;background:none;border:0;cursor:zoom-in;border-radius:0}
+html.no-js .wf button.zoom{display:none}
+
+/* 灯箱 */
+.lb{position:fixed;inset:0;z-index:100;background:rgba(17,17,17,.96);color:var(--on-band);display:none}
+.lb[open],.lb.on{display:block}
+.lb-bar{
+  display:flex;justify-content:space-between;align-items:center;gap:1rem;
+  padding:.7rem clamp(1rem,3vw,2rem);border-bottom:1px solid #333;
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--on-band-sub);
+  font-variant-numeric:tabular-nums;
+}
+.lb-bar .alb{color:var(--accent-bright)} /* 黑带上亮绿达标 6.79:1 —— 与纸上规则相反 */
+.lb-close,.lb-nav{
+  background:none;border:1px solid #444;color:var(--on-band);cursor:pointer;
+  padding:.4rem .9rem;border-radius:0;font-family:'Plex Mono',monospace;font-size:var(--fs-xs);
+}
+.lb-close:hover,.lb-nav:hover{border-color:var(--accent-bright);color:var(--accent-bright)}
+.lb-stage{display:flex;align-items:center;justify-content:center;gap:1rem;height:calc(100vh - 7.5rem);padding:0 clamp(1rem,3vw,2rem)}
+.lb-stage figure{margin:0;max-width:100%;max-height:100%;display:flex;flex-direction:column;gap:.6rem;align-items:center}
+.lb-stage img{max-width:100%;max-height:calc(100vh - 11rem);object-fit:contain;border:1px solid #333}
+.lb-cap{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--on-band-sub);text-align:center}
+@media (max-width:640px){
+  .lb-stage{height:auto;padding:var(--sp-5) 1rem}
+  .lb-stage img{max-height:60vh}
+  .lb-prev,.lb-next{display:none}
+}
+footer{border-top:1px solid var(--hair);margin-top:var(--sp-7);padding:var(--sp-5) clamp(1rem,4vw,3rem);
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted)}
+  /* ============================================================
+     背景（站主指定：相册页与主页不一样）—— 圆环
+     取舍：取参考截图三里的圆拱 / 同心结构当母题，放到页面右下；
+     主页的圆环在左下 —— 两页不会看成同一张底。
+     ============================================================ */
+  :root{
+    --noise-size:160px;
+    --noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+    --grid:48px; --grid-line:rgba(26,26,26,.042);
+  }
+  body{
+    background-color:var(--paper);
+    background-image:
+      var(--noise),
+      linear-gradient(to right,var(--grid-line) 1px,transparent 1px),
+      linear-gradient(to bottom,var(--grid-line) 1px,transparent 1px),
+      repeating-radial-gradient(circle at 84% 92%, transparent 0 104px, rgba(26,26,26,.06) 104px 105px),
+      linear-gradient(to top,rgba(45,125,70,.045) 0 16vh,transparent 16vh);
+    background-size:var(--noise-size) var(--noise-size),var(--grid) var(--grid),var(--grid) var(--grid),100% 100%,100% 100%;
+    background-attachment:fixed;
+  }
+  @media (max-width:767px){
+    body{
+      background-image:
+        linear-gradient(to right,rgba(26,26,26,.036) 1px,transparent 1px),
+        linear-gradient(to bottom,rgba(26,26,26,.036) 1px,transparent 1px),
+        linear-gradient(to top,rgba(45,125,70,.04) 0 12vh,transparent 12vh);
+      background-size:64px 64px,64px 64px,100% 100%;
+    }
+  }
+
+  /* ===== 跨页面过渡（站主要求"点进去时简单过渡一下"）=====
+     Chrome 支持跨文档 View Transitions：从主页点进文章/相册/项目时整页淡入淡出。
+     直接双击打开（file://）时浏览器不启用跨文档过渡 —— 退化为瞬时切换，不影响可用性。 */
+  @view-transition{navigation:auto}
+  ::view-transition-old(root){animation:vt-out 200ms ease both}
+  ::view-transition-new(root){animation:vt-in 260ms ease both}
+  @keyframes vt-out{to{opacity:0}}
+  @keyframes vt-in{from{opacity:0}}
+  @media (prefers-reduced-motion:reduce){
+    ::view-transition-old(root),::view-transition-new(root){animation-duration:1ms !important}
+  }
+</style>
+</head>
+<body class="no-js">
+<script>document.body.className='js';</script>
+
+<div class="topbar">
+  <a class="site" href="home.html">NORTH_CEDAR'S NOTES</a>
+  <span>相册 · <a href="home.html">← 回首页草案</a> · <a href="post.html">文章页草案 →</a></span>
+</div>
+
+<main>
+  <div class="head">
+    <h1>相册</h1>
+    <div class="readout">
+      <span>FRAMES <em id="roTotal">0</em></span>
+      <span>ALBUMS <em>3</em></span>
+      <span>VIEWING <em id="roAlbum">全部</em></span>
+      <span>RULE <em>≤2MB / 张</em></span>
+    </div>
+  </div>
+
+  <div class="filters" role="group" aria-label="按相册筛选">
+    <button type="button" data-filter="all" aria-pressed="true">全部<b>0</b></button>
+    <button type="button" data-filter="一些风景" aria-pressed="false">一些风景<b>0</b></button>
+    <button type="button" data-filter="人像" aria-pressed="false">人像<b>0</b></button>
+    <button type="button" data-filter="直到大地变成一颗酸橙" aria-pressed="false">直到大地变成一颗酸橙<b>0</b></button>
+  </div>
+
+  <div class="wf" id="wf">
+    <!-- 静态渲染：关掉 JS 也能看完整瀑布流。alt 来自站主自己的 index.md -->
+    <figure data-album="一些风景" data-cap="天窗"><img src="../../content/gallery/一些风景/011.jpg" alt="天窗" loading="lazy"><figcaption><em>天窗</em><span>一些风景</span></figcaption><button class="zoom" type="button" aria-label="放大：天窗"></button></figure>
+    <figure data-album="一些风景" data-cap="上海的晚霞"><img src="../../content/gallery/一些风景/012.jpg" alt="上海的晚霞" loading="lazy"><figcaption><em>上海的晚霞</em><span>一些风景</span></figcaption><button class="zoom" type="button" aria-label="放大：上海的晚霞"></button></figure>
+    <figure data-album="人像" data-cap="通往夏天的隧道"><img src="../../content/gallery/人像/075.jpg" alt="通往夏天的隧道" loading="lazy"><figcaption><em>通往夏天的隧道</em><span>人像</span></figcaption><button class="zoom" type="button" aria-label="放大：通往夏天的隧道"></button></figure>
+    <figure data-album="一些风景" data-cap="竹影"><img src="../../content/gallery/一些风景/021.jpg" alt="竹影" loading="lazy"><figcaption><em>竹影</em><span>一些风景</span></figcaption><button class="zoom" type="button" aria-label="放大：竹影"></button></figure>
+    <figure data-album="直到大地变成一颗酸橙" data-cap="送快递捏"><img src="../../content/gallery/直到大地变成一颗酸橙/001.jpg" alt="送快递捏" loading="lazy"><figcaption><em>送快递捏</em><span>直到大地变成一颗酸橙</span></figcaption><button class="zoom" type="button" aria-label="放大：送快递捏"></button></figure>
+    <figure data-album="一些风景" data-cap="狗尾巴草"><img src="../../content/gallery/一些风景/019.jpg" alt="狗尾巴草" loading="lazy"><figcaption><em>狗尾巴草</em><span>一些风景</span></figcaption><button class="zoom" type="button" aria-label="放大：狗尾巴草"></button></figure>
+    <figure data-album="人像" data-cap="奔向乌托邦"><img src="../../content/gallery/人像/079.jpg" alt="奔向乌托邦" loading="lazy"><figcaption><em>奔向乌托邦</em><span>人像</span></figcaption><button class="zoom" type="button" aria-label="放大：奔向乌托邦"></button></figure>
+    <figure data-album="一些风景" data-cap="霓虹城市"><img src="../../content/gallery/一些风景/027.jpg" alt="霓虹城市" loading="lazy"><figcaption><em>霓虹城市</em><span>一些风景</span></figcaption><button class="zoom" type="button" aria-label="放大：霓虹城市"></button></figure>
+    <figure data-album="直到大地变成一颗酸橙" data-cap="绿色隧道"><img src="../../content/gallery/直到大地变成一颗酸橙/003.jpg" alt="绿色隧道" loading="lazy"><figcaption><em>绿色隧道</em><span>直到大地变成一颗酸橙</span></figcaption><button class="zoom" type="button" aria-label="放大：绿色隧道"></button></figure>
+    <figure data-album="一些风景" data-cap="梦中的夏"><img src="../../content/gallery/一些风景/029.jpg" alt="梦中的夏" loading="lazy"><figcaption><em>梦中的夏</em><span>一些风景</span></figcaption><button class="zoom" type="button" aria-label="放大：梦中的夏"></button></figure>
+    <figure data-album="人像" data-cap="青春的结束"><img src="../../content/gallery/人像/068.jpg" alt="青春的结束" loading="lazy"><figcaption><em>青春的结束</em><span>人像</span></figcaption><button class="zoom" type="button" aria-label="放大：青春的结束"></button></figure>
+    <figure data-album="一些风景" data-cap="言叶之庭"><img src="../../content/gallery/一些风景/051.jpg" alt="言叶之庭" loading="lazy"><figcaption><em>言叶之庭</em><span>一些风景</span></figcaption><button class="zoom" type="button" aria-label="放大：言叶之庭"></button></figure>
+    <figure data-album="直到大地变成一颗酸橙" data-cap="驶向夜晚"><img src="../../content/gallery/直到大地变成一颗酸橙/009.jpg" alt="驶向夜晚" loading="lazy"><figcaption><em>驶向夜晚</em><span>直到大地变成一颗酸橙</span></figcaption><button class="zoom" type="button" aria-label="放大：驶向夜晚"></button></figure>
+    <figure data-album="一些风景" data-cap="花墙"><img src="../../content/gallery/一些风景/060.jpg" alt="花墙" loading="lazy"><figcaption><em>花墙</em><span>一些风景</span></figcaption><button class="zoom" type="button" aria-label="放大：花墙"></button></figure>
+    <figure data-album="人像" data-cap="花海"><img src="../../content/gallery/人像/082.jpg" alt="花海" loading="lazy"><figcaption><em>花海</em><span>人像</span></figcaption><button class="zoom" type="button" aria-label="放大：花海"></button></figure>
+    <figure data-album="一些风景" data-cap="钢铁森林"><img src="../../content/gallery/一些风景/067.jpg" alt="钢铁森林" loading="lazy"><figcaption><em>钢铁森林</em><span>一些风景</span></figcaption><button class="zoom" type="button" aria-label="放大：钢铁森林"></button></figure>
+    <figure data-album="直到大地变成一颗酸橙" data-cap="草地读书"><img src="../../content/gallery/直到大地变成一颗酸橙/006.jpg" alt="草地读书" loading="lazy"><figcaption><em>草地读书</em><span>直到大地变成一颗酸橙</span></figcaption><button class="zoom" type="button" aria-label="放大：草地读书"></button></figure>
+    <figure data-album="一些风景" data-cap="回家的路"><img src="../../content/gallery/一些风景/063.jpg" alt="回家的路" loading="lazy"><figcaption><em>回家的路</em><span>一些风景</span></figcaption><button class="zoom" type="button" aria-label="放大：回家的路"></button></figure>
+  </div>
+</main>
+
+<!-- 灯箱：自写，无依赖 -->
+<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="照片查看">
+  <div class="lb-bar">
+    <span><span class="alb" id="lbAlbum">—</span> · <span id="lbCap">—</span></span>
+    <span><span id="lbIdx">0 / 0</span> <button class="lb-close" type="button" id="lbClose">关闭 ✕</button></span>
+  </div>
+  <div class="lb-stage">
+    <button class="lb-nav lb-prev" type="button" id="lbPrev" aria-label="上一张">←</button>
+    <figure><img id="lbImg" src="" alt=""><figcaption class="lb-cap" id="lbCap2"></figcaption></figure>
+    <button class="lb-nav lb-next" type="button" id="lbNext" aria-label="下一张">→</button>
+  </div>
+</div>
+
+<footer>北杉札记 · 相册草案 · 灯箱为自写实现（无依赖），键盘：Esc 关闭 · ←/→ 切换</footer>
+
+<script>
+(function(){
+  var wf = document.getElementById('wf');
+  var figs = Array.prototype.slice.call(wf.querySelectorAll('figure'));
+  var lb = document.getElementById('lb');
+  var lbImg = document.getElementById('lbImg');
+  var lbCap = document.getElementById('lbCap'), lbCap2 = document.getElementById('lbCap2');
+  var lbAlbum = document.getElementById('lbAlbum'), lbIdx = document.getElementById('lbIdx');
+  var lbClose = document.getElementById('lbClose'), lbPrev = document.getElementById('lbPrev'), lbNext = document.getElementById('lbNext');
+  var visible = figs.slice();
+  var i = 0, opener = null;
+
+  /* ---- 读数与筛选计数 ---- */
+  function refresh(){
+    visible = figs.filter(function(f){ return !f.hidden; });
+    var total = figs.length;
+    document.getElementById('roTotal').textContent = String(total).padStart(2,'0');
+    document.querySelectorAll('.filters button').forEach(function(b){
+      var key = b.dataset.filter;
+      var n = key === 'all' ? total : figs.filter(function(f){ return f.dataset.album === key; }).length;
+      b.querySelector('b').textContent = String(n).padStart(2,'0');
+    });
+  }
+  document.querySelectorAll('.filters button').forEach(function(b){
+    b.addEventListener('click', function(){
+      var key = b.dataset.filter;
+      figs.forEach(function(f){ f.hidden = !(key === 'all' || f.dataset.album === key); });
+      document.querySelectorAll('.filters button').forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+      document.getElementById('roAlbum').textContent = key === 'all' ? '全部' : key;
+      refresh();
+    });
+  });
+  refresh();
+
+  /* ---- 灯箱 ---- */
+  function open(fig){
+    opener = fig;
+    i = visible.indexOf(fig);
+    if (i < 0) i = 0;
+    paint();
+    lb.classList.add('on');
+    document.body.style.overflow = 'hidden';
+    lbClose.focus();
+  }
+  function paint(){
+    var f = visible[i];
+    if (!f) return;
+    var src = f.querySelector('img'), cap = f.dataset.cap, alb = f.dataset.album;
+    lbImg.src = src.currentSrc || src.src;
+    lbImg.alt = src.alt || '';
+    lbCap.textContent = cap; lbCap2.textContent = cap;
+    lbAlbum.textContent = alb;
+    lbIdx.textContent = String(i + 1).padStart(2,'0') + ' / ' + String(visible.length).padStart(2,'0');
+  }
+  function close(){
+    lb.classList.remove('on');
+    document.body.style.overflow = '';
+    if (opener) opener.querySelector('.zoom').focus();
+  }
+  function step(d){ i = (i + d + visible.length) % visible.length; paint(); }
+
+  wf.addEventListener('click', function(e){
+    var btn = e.target.closest('.zoom');
+    if (btn) open(btn.closest('figure'));
+  });
+  lbClose.addEventListener('click', close);
+  lbPrev.addEventListener('click', function(){ step(-1); });
+  lbNext.addEventListener('click', function(){ step(1); });
+  lb.addEventListener('click', function(e){ if (e.target === lb) close(); });
+  document.addEventListener('keydown', function(e){
+    if (!lb.classList.contains('on')) return;
+    if (e.key === 'Escape'){ e.preventDefault(); close(); }
+    else if (e.key === 'ArrowLeft'){ e.preventDefault(); step(-1); }
+    else if (e.key === 'ArrowRight'){ e.preventDefault(); step(1); }
+    else if (e.key === 'Tab'){
+      /* 焦点不逃出灯箱 */
+      var f = [lbClose, lbPrev, lbNext];
+      var idx = f.indexOf(document.activeElement);
+      e.preventDefault();
+      f[(idx + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+    }
+  });
+})();
+</script>
+</body>
+</html>

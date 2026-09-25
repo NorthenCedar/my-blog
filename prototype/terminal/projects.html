@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>草案 · 项目页 — 北杉札记</title>
+<style>
+/* ============================================================
+   研究终端 · 项目页
+   · 默认展示真实的【空态】—— 站主目前没有上线的项目
+   · 空态下方用 <details> 给出「有项目时卡片长什么样」的示意，方便审批卡片设计
+   · 卡片：不用圆角、不用阴影、不用渐变；层次由【线宽 + L 形角标 + 位置】承担
+   ============================================================ */
+:root{
+  --paper:#FAFAF7; --panel:#EFEDE7; --ink:#1A1A1A; --muted:#5A5A56; --hair:#D8D5CE;
+  --accent:#2D7D46; --accent-deep:#266B3B; --accent-bright:#4CAF50; --signal:#E87722;
+  --fs-display:clamp(1.9rem,4.6vw,3.2rem);
+  --fs-item:clamp(1.25rem,1rem + 1.4vw,1.9rem);
+  --fs-body:1.0625rem; --fs-sm:.875rem; --fs-xs:.8125rem; --fs-mono:.85rem;
+  --sp-2:.5rem; --sp-3:.75rem; --sp-4:1rem; --sp-5:1.5rem; --sp-6:2rem; --sp-7:3rem; --sp-8:4.5rem;
+  --dur-fast:120ms; --ease:cubic-bezier(.2,0,0,1);
+}
+@font-face{font-family:'Archivo Var';src:url('../fonts/archivo-wdth.woff2') format('woff2-variations');font-weight:100 900;font-stretch:62% 125%;font-display:swap}
+@font-face{font-family:'Plex';src:url('../fonts/plex-sans-400.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Plex';src:url('../fonts/plex-sans-600.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'Plex Mono';src:url('../fonts/plex-mono-400.woff2') format('woff2');font-weight:400;font-display:swap}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:'Plex','Source Han Sans SC','Noto Sans SC','Microsoft YaHei',system-ui,sans-serif;
+  font-size:var(--fs-body);line-height:1.75;
+}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--accent-deep);outline-offset:3px}
+.mono{font-family:'Plex Mono',ui-monospace,monospace;font-size:var(--fs-mono);font-variant-numeric:tabular-nums}
+
+.topbar{
+  display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;
+  padding:.7rem clamp(1rem,4vw,3rem);border-bottom:1px solid var(--hair);
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);
+}
+.topbar .site{color:var(--ink);letter-spacing:.14em;text-decoration:none}
+.topbar a{text-decoration:none}
+.topbar a:hover{border-bottom:1px solid var(--accent-deep)}
+
+main{padding:0 clamp(1rem,4vw,3rem) var(--sp-8);max-width:76rem;margin:0 auto}
+.head{padding:var(--sp-7) 0 var(--sp-5);border-bottom:2px solid var(--ink)}
+.head h1{
+  font-family:'Archivo Var',system-ui,sans-serif;font-stretch:114%;font-weight:700;
+  font-size:var(--fs-display);line-height:1;letter-spacing:-.035em;margin:0 0 var(--sp-4);
+}
+.readout{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);font-variant-numeric:tabular-nums;display:flex;gap:1.5rem;flex-wrap:wrap}
+.readout em{font-style:normal;color:var(--accent-deep)}
+
+/* ---------- 空态：是「邀请」，不是句号 ---------- */
+.empty{
+  position:relative;margin:var(--sp-8) 0;padding:var(--sp-7) 0;
+  border-top:1px solid var(--hair);border-bottom:1px solid var(--hair);
+  text-align:center;
+}
+/* 空槽的准星：四个角各一个定位点 + 中心十字 —— 用线条说明"这里将来放东西" */
+.empty .slot{position:relative;display:inline-block;padding:var(--sp-6) var(--sp-7);min-width:min(30rem,100%)}
+.empty .slot::before,.empty .slot::after{content:"";position:absolute;width:8px;height:8px;border:1px solid var(--hair)}
+.empty .slot::before{left:0;top:0;border-right:0;border-bottom:0}
+.empty .slot::after{right:0;bottom:0;border-left:0;border-top:0}
+.empty .cross{position:absolute;left:50%;top:50%;width:1.6rem;height:1.6rem;transform:translate(-50%,-50%);opacity:.5}
+.empty .cross::before,.empty .cross::after{content:"";position:absolute;background:var(--hair)}
+.empty .cross::before{left:50%;top:0;bottom:0;width:1px;transform:translateX(-.5px)}
+.empty .cross::after{top:50%;left:0;right:0;height:1px;transform:translateY(-.5px)}
+.empty p{
+  position:relative;margin:0;font-size:var(--fs-lede,1.125rem);color:var(--ink);
+}
+.empty p .heart{color:var(--accent-deep)}
+.empty .hint{display:block;margin-top:var(--sp-4);font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted)}
+
+/* ---------- 项目卡片（示意区） ---------- */
+.spec{max-width:52rem}
+.spec summary{
+  cursor:pointer;font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);
+  padding:.6rem 0;border-bottom:1px solid var(--hair);list-style:none;
+}
+.spec summary::-webkit-details-marker{display:none}
+.spec summary::before{content:"▸ ";color:var(--accent-deep)}
+.spec[open] summary::before{content:"▾ "}
+.spec summary:hover{color:var(--ink)}
+
+.plist{list-style:none;margin:var(--sp-6) 0 0;padding:0}
+.plist li+li{margin-top:var(--sp-5)}
+/* 卡片：硬边 + 单角 L 形角标；层级靠线宽，不靠阴影 */
+.pcard{
+  position:relative;border:1px solid var(--hair);background:var(--paper);
+  padding:var(--sp-5) var(--sp-5) var(--sp-5) calc(var(--sp-5) + 2px);
+  border-left:3px solid var(--hair);
+  transition:border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.pcard::after{
+  content:"";position:absolute;right:0;top:0;width:1.4rem;height:1rem;
+  border-right:1px solid var(--hair);border-top:1px solid var(--hair);
+  transition:border-color var(--dur-fast) var(--ease);
+}
+/* hover / focus：描边转实 + 位移 2px。不做 scale（密集列表里缩放会让相邻块抖动） */
+.pcard:hover,.pcard:focus-within{
+  border-color:var(--ink);border-left-color:var(--accent-deep);transform:translateX(2px);
+}
+.pcard:hover::after,.pcard:focus-within::after{border-color:var(--ink)}
+.prow{display:flex;align-items:baseline;gap:var(--sp-3);flex-wrap:wrap;margin-bottom:var(--sp-3)}
+.pstatus{
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);
+  border:1px solid var(--hair);padding:.1rem .5rem;color:var(--muted);white-space:nowrap;
+}
+.pstatus.live{border-color:var(--accent-bright);color:var(--accent-deep)}
+.pcard h3{
+  font-family:'Archivo Var',system-ui,sans-serif;font-stretch:106%;font-weight:700;
+  font-size:var(--fs-item);line-height:1.1;letter-spacing:-.025em;margin:0;
+}
+.pcard h3 a{text-decoration:none}
+.pcard h3 a:hover{color:var(--accent-deep)}
+.pcard .sum{margin:0 0 var(--sp-4);color:var(--muted);max-width:34em}
+.tech{display:flex;gap:.5rem;flex-wrap:wrap;margin:0 0 var(--sp-3);padding:0;list-style:none}
+.tech li{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);border-bottom:1px solid var(--hair)}
+.plinks{display:flex;gap:1.25rem;flex-wrap:wrap;margin:0;padding:0;list-style:none}
+.plinks a{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);text-decoration:none;border-bottom:1px solid var(--hair);padding-bottom:1px}
+.plinks a:hover{border-color:var(--accent-deep);color:var(--accent-deep)}
+.pyear{margin-left:auto;font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted)}
+.spec .note{
+  margin:var(--sp-5) 0 0;padding:.6rem .8rem;border-left:2px solid var(--signal);
+  color:var(--muted);font-size:var(--fs-sm);
+}
+footer{border-top:1px solid var(--hair);margin-top:var(--sp-8);padding:var(--sp-5) clamp(1rem,4vw,3rem);
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted)}
+  /* ============================================================
+     背景（站主指定：项目页与主页不一样）—— 档案槽
+     取舍：取参考截图三里那排"卡片目录槽"的竖向发丝线当母题（"FILE NUMBER: X-001"那屏），
+     配上底部极淡绿带。它和文章页的横向切片线正好成一对：竖=槽位，横=切片。
+     ============================================================ */
+  :root{
+    --noise-size:160px;
+    --noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+    --grid:48px; --grid-line:rgba(26,26,26,.042);
+    /* 磁带图案：立起来的磁带壳 + 顶部标签 + 两个卷轴 + 底带 ——
+       参考截图一里那排"一个个像磁带"的档案槽。用形状，不用线。 */
+    --p-tape:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='120'%3E%3Cg fill='none' stroke='%231A1A1A' stroke-opacity='.07'%3E%3Crect x='10.5' y='14.5' width='52' height='92' rx='4'/%3E%3Crect x='26.5' y='6.5' width='20' height='8' rx='1'/%3E%3Ccircle cx='27' cy='46' r='6'/%3E%3Ccircle cx='46' cy='46' r='6'/%3E%3Cpath d='M10.5 88.5h52'/%3E%3C/g%3E%3C/svg%3E");
+  }
+  body{
+    background-color:var(--paper);
+    background-image:
+      var(--noise),
+      linear-gradient(to right,var(--grid-line) 1px,transparent 1px),
+      linear-gradient(to bottom,var(--grid-line) 1px,transparent 1px),
+      var(--p-tape),
+      linear-gradient(to top,rgba(45,125,70,.045) 0 16vh,transparent 16vh);
+    background-size:var(--noise-size) var(--noise-size),var(--grid) var(--grid),var(--grid) var(--grid),96px 120px,100% 100%;
+    background-repeat:repeat,repeat,repeat,repeat,no-repeat;
+    background-attachment:fixed;
+  }
+  @media (max-width:767px){
+    body{
+      background-image:
+        linear-gradient(to right,rgba(26,26,26,.036) 1px,transparent 1px),
+        linear-gradient(to bottom,rgba(26,26,26,.036) 1px,transparent 1px),
+        linear-gradient(to top,rgba(45,125,70,.04) 0 12vh,transparent 12vh);
+      background-size:64px 64px,64px 64px,100% 100%;
+    }
+  }
+
+  /* ===== 跨页面过渡（站主要求"点进去时简单过渡一下"）=====
+     Chrome 支持跨文档 View Transitions：从主页点进文章/相册/项目时整页淡入淡出。
+     直接双击打开（file://）时浏览器不启用跨文档过渡 —— 退化为瞬时切换，不影响可用性。 */
+  @view-transition{navigation:auto}
+  ::view-transition-old(root){animation:vt-out 200ms ease both}
+  ::view-transition-new(root){animation:vt-in 260ms ease both}
+  @keyframes vt-out{to{opacity:0}}
+  @keyframes vt-in{from{opacity:0}}
+  @media (prefers-reduced-motion:reduce){
+    ::view-transition-old(root),::view-transition-new(root){animation-duration:1ms !important}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="site" href="home.html">NORTH_CEDAR'S NOTES</a>
+  <span>项目 · <a href="home.html">← 回首页草案</a> · <a href="gallery.html">相册草案 →</a></span>
+</div>
+
+<main>
+  <div class="head">
+    <h1>项目</h1>
+    <div class="readout">
+      <span>ENTRIES <em>00</em></span>
+      <span>STATUS <em>ALL PRIVATE</em></span>
+      <span>NOTE <em>练手，未上线</em></span>
+    </div>
+  </div>
+
+  <!-- 真实状态：站主目前没有上线的项目。这段就是最终要上线的内容 -->
+  <section class="empty" aria-label="项目列表为空">
+    <div class="slot">
+      <span class="cross" aria-hidden="true"></span>
+      <p>哎呀，目前还没有项目呢<span class="heart">&lt;3</span></p>
+      <span class="hint">写了个扫雷和一个坦克大战，都还躺在本地。等它们能跑起来再挂到这儿。</span>
+    </div>
+  </section>
+
+  <!-- 示意：有项目时卡片长什么样。标注清楚是示意，不是真实数据 -->
+  <details class="spec">
+    <summary>有项目时这页长什么样（示意，不是真实数据）</summary>
+
+    <p class="note">下面两张卡是**布局示意**，用来让你审批卡片设计。内容是我编的占位，上线前会删掉。</p>
+
+    <ol class="plist">
+      <li>
+        <article class="pcard">
+          <div class="prow">
+            <span class="pstatus live">已完成</span>
+            <h3><a href="#">扫雷</a></h3>
+            <span class="pyear">2026</span>
+          </div>
+          <p class="sum">用原生 JavaScript 写的扫雷，支持自定义棋盘尺寸与首点保护。写它是因为想搞明白递归展开怎么不把栈撑爆。</p>
+          <ul class="tech"><li>JavaScript</li><li>Canvas</li><li>无框架</li></ul>
+          <ul class="plinks">
+            <li><a href="#">源码 ↗</a></li>
+            <li><a href="#">在线玩 ↗</a></li>
+          </ul>
+        </article>
+      </li>
+      <li>
+        <article class="pcard">
+          <div class="prow">
+            <span class="pstatus">进行中</span>
+            <h3><a href="#">坦克大战</a></h3>
+            <span class="pyear">2026</span>
+          </div>
+          <p class="sum">经典坦克大战的复刻，目前卡在碰撞检测与地图编辑器的取舍上。没有仓库，也没部署。</p>
+          <ul class="tech"><li>TypeScript</li><li>Canvas</li></ul>
+          <ul class="plinks">
+            <li><a href="#">源码 ↗</a></li>
+          </ul>
+        </article>
+      </li>
+    </ol>
+  </details>
+</main>
+
+<footer>北杉札记 · 项目页草案 · 空态是真实状态，卡片是布局示意</footer>
+</body>
+</html>

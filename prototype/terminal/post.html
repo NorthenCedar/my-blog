@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>草案 · 文章页纯阅读 — 北杉札记</title>
+<style>
+/* ============================================================
+   研究终端 · 文章页（纯阅读）
+   与首页的区别是刻意的、结构性的：
+     · 没有扫描带、没有聚焦/散焦、没有钉住、没有滚动读数
+     · 装饰只出现在【外框】：标题区、目录、相邻导航、评论
+     · 正文流内不插任何装饰 —— 阅读是这一页的第一优先级
+   字体、配色、发丝线、角标、定位点与首页完全一致
+   ============================================================ */
+:root{
+  --paper:#FAFAF7; --panel:#EFEDE7; --ink:#1A1A1A; --muted:#5A5A56; --hair:#D8D5CE;
+  --accent:#2D7D46; --accent-deep:#266B3B; --accent-bright:#4CAF50; --signal:#E87722;
+  --code-bg:#1A1A1A; --code-fg:#EDEDED; --code-rule:#333;
+  --fs-display:clamp(2rem,5.4vw,3.8rem);
+  --fs-h2:clamp(1.35rem,1.05rem + 1.2vw,1.9rem);
+  --fs-h3:clamp(1.1rem,1rem + .5vw,1.3rem);
+  --fs-lede:1.125rem; --fs-body:1.0625rem; --fs-sm:.875rem; --fs-xs:.8125rem; --fs-mono:.85rem;
+  --sp-2:.5rem; --sp-3:.75rem; --sp-4:1rem; --sp-5:1.5rem; --sp-6:2rem; --sp-7:3rem; --sp-8:4.5rem;
+  --measure:34em; --rail:0px;
+  --dur-fast:120ms; --ease:cubic-bezier(.2,0,0,1);
+}
+@font-face{font-family:'Archivo Var';src:url('../fonts/archivo-wdth.woff2') format('woff2-variations');font-weight:100 900;font-stretch:62% 125%;font-display:swap}
+@font-face{font-family:'Plex';src:url('../fonts/plex-sans-400.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Plex';src:url('../fonts/plex-sans-600.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'Plex Mono';src:url('../fonts/plex-mono-400.woff2') format('woff2');font-weight:400;font-display:swap}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:'Plex','Source Han Sans SC','Noto Sans SC','Microsoft YaHei',system-ui,sans-serif;
+  font-size:var(--fs-body);line-height:1.75;
+}
+.mono{font-family:'Plex Mono',ui-monospace,monospace;font-size:var(--fs-mono);font-variant-numeric:tabular-nums}
+a{color:var(--accent-deep)}
+
+/* ---------- 顶栏：极简，只有站名与返回 ---------- */
+.topbar{
+  display:flex;justify-content:space-between;align-items:center;gap:1rem;
+  padding:.7rem clamp(1rem,4vw,3rem);border-bottom:1px solid var(--hair);
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);
+}
+.topbar .site{color:var(--ink);letter-spacing:.14em;text-decoration:none}
+.topbar a{text-decoration:none;border-bottom:1px solid transparent;padding-bottom:1px}
+.topbar a:hover,.topbar a:focus-visible{border-color:var(--accent-deep)}
+.topbar a:focus-visible{outline:2px solid var(--accent-deep);outline-offset:3px}
+
+.wrap{max-width:calc(var(--measure) + 12rem);margin:0 auto;padding:0 clamp(1rem,4vw,3rem)}
+
+/* ---------- 标题区（外框装饰在这里） ---------- */
+.posthead{padding:var(--sp-8) 0 var(--sp-7);border-bottom:1px solid var(--ink);position:relative}
+/* 四角定位点：印刷 registration mark 的路数，标记文章起止 */
+.posthead::before,.posthead::after{content:"";position:absolute;width:6px;height:6px;background:var(--ink)}
+.posthead::before{left:-3px;top:var(--sp-8)}
+.posthead::after{right:-3px;top:var(--sp-8)}
+.kicker{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);margin:0 0 var(--sp-4);display:flex;gap:1.25rem;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.kicker em{font-style:normal;color:var(--accent-deep)}
+h1{
+  font-family:'Archivo Var',system-ui,sans-serif;font-stretch:112%;font-weight:700;
+  font-size:var(--fs-display);line-height:1.02;letter-spacing:-.035em;margin:0 0 var(--sp-5);
+  max-width:22em;
+}
+.standfirst{font-size:var(--fs-lede);color:var(--muted);max-width:32em;margin:0}
+
+/* ---------- 目录：左侧固定，只在宽屏 ---------- */
+.toc{display:none}
+@media (min-width:1080px){
+  .toc{
+    display:block;position:fixed;top:9rem;left:2rem;width:11rem;
+    max-height:60vh;overflow:auto;border-left:1px solid var(--hair);padding-left:1rem;
+  }
+  .toc h2{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);font-weight:400;margin:0 0 .75rem;letter-spacing:.08em}
+  .toc ol{list-style:none;margin:0;padding:0;font-size:var(--fs-sm)}
+  .toc li{margin:0 0 .45rem}
+  .toc a{text-decoration:none;color:var(--muted);display:block;line-height:1.4}
+  .toc a:hover,.toc a:focus-visible{color:var(--ink)}
+  .toc a:focus-visible{outline:2px solid var(--accent-deep);outline-offset:2px}
+}
+
+/* ---------- 正文：纯净文档流，无装饰 ---------- */
+.prose{max-width:var(--measure);padding:var(--sp-7) 0 var(--sp-8)}
+.prose p{margin:0 0 var(--sp-5)}
+.prose h2{font-size:var(--fs-h2);font-weight:600;letter-spacing:-.012em;margin:var(--sp-7) 0 var(--sp-4);line-height:1.25}
+.prose h3{font-size:var(--fs-h3);font-weight:600;margin:var(--sp-6) 0 var(--sp-3)}
+.prose a{text-decoration:underline;text-decoration-color:var(--hair);text-underline-offset:3px}
+.prose a:hover{text-decoration-color:var(--accent-deep)}
+.prose blockquote{margin:var(--sp-6) 0;padding-left:var(--sp-5);border-left:4px solid var(--ink)}
+.prose blockquote p:last-child{margin-bottom:0}
+.prose img{display:block;width:100%;height:auto;margin:var(--sp-6) 0 var(--sp-3)}
+.prose figcaption{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);margin:0 0 var(--sp-6)}
+.prose code{font-family:'Plex Mono',monospace;font-size:.92em;background:var(--panel);padding:.1em .35em}
+.prose pre{
+  background:var(--code-bg);color:var(--code-fg);padding:var(--sp-5);
+  overflow-x:auto;margin:var(--sp-6) 0;border-top:3px solid var(--code-rule);
+}
+.prose pre code{background:none;padding:0;font-size:var(--fs-mono);line-height:1.6}
+.prose table{width:100%;border-collapse:collapse;margin:var(--sp-6) 0;font-size:var(--fs-sm);display:block;overflow-x:auto}
+.prose th{text-align:left;border-bottom:2px solid var(--ink);padding:.5rem .75rem .5rem 0;white-space:nowrap}
+.prose td{border-bottom:1px solid var(--hair);padding:.5rem .75rem .5rem 0}
+.prose hr{border:0;border-top:1px solid var(--hair);margin:var(--sp-7) 0}
+
+/* ---------- 相邻导航（外框装饰） ---------- */
+.adj{
+  display:flex;justify-content:space-between;gap:var(--sp-4);flex-wrap:wrap;
+  border-top:1px solid var(--ink);padding-top:var(--sp-5);max-width:var(--measure);
+  font-size:var(--fs-sm);
+}
+.adj a{text-decoration:none;color:inherit;font-family:'Plex Mono',monospace;font-size:var(--fs-mono)}
+.adj a:hover,.adj a:focus-visible{color:var(--accent-deep);border-bottom:1px solid var(--accent-deep)}
+.adj a:focus-visible{outline:2px solid var(--accent-deep);outline-offset:3px}
+.adj .next{margin-left:auto}
+
+/* ---------- 评论区（沿用既有设计语言） ---------- */
+.comments{max-width:var(--measure);margin-top:var(--sp-8);border-top:1px solid var(--ink);padding-top:var(--sp-5)}
+.comments h2{font-size:var(--fs-h2);font-weight:600;margin:0 0 var(--sp-4)}
+.comments h2 span{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);margin-left:.6rem;font-weight:400}
+.clist{list-style:none;margin:0 0 var(--sp-6);padding:0}
+.clist li{border-top:1px solid var(--hair);padding:var(--sp-5) 0}
+.cname{font-weight:600}
+.ctime{display:block;font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);margin:.2rem 0 .7rem;font-variant-numeric:tabular-nums}
+.cbody{margin:0;white-space:pre-wrap}
+.cform label{display:block;font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);margin-bottom:.3rem}
+.cform input,.cform textarea{
+  width:100%;font:inherit;color:var(--ink);background:var(--paper);
+  border:1px solid var(--hair);border-radius:0;padding:.55rem .75rem;margin-bottom:var(--sp-4);
+}
+.cform input:focus-visible,.cform textarea:focus-visible{border-color:var(--ink);outline:2px solid var(--accent-deep);outline-offset:1px}
+.cform button{
+  background:var(--ink);color:var(--paper);border:1px solid var(--ink);border-radius:0;
+  padding:.55rem 1.5rem;cursor:pointer;font:inherit;font-size:var(--fs-sm);
+}
+.cform button:hover{background:var(--accent-deep);border-color:var(--accent-deep)}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+footer{border-top:1px solid var(--hair);margin-top:var(--sp-8);padding:var(--sp-5) 0 var(--sp-7);
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted)}
+  /* ============================================================
+     背景（站主指定：文章页与主页不一样）—— 阅读态
+     取舍：收掉主页那套 ±∞ 水印与同心圆环，换成参考截图四「切片档案」的母题：
+     等距发丝横线（一层层切片）+ 底部极淡绿带。网格与纸纹沿用同一套，
+     所以换页时只有"母题"在变、底子不变。
+     ============================================================ */
+  :root{
+    --noise-size:160px;
+    --noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+    --grid:48px; --grid-line:rgba(26,26,26,.042);
+  }
+  body{
+    background-color:var(--paper);
+    /* 第 4 层是站主给的「切片档案」素材本体（bg-slice.webp）：
+       已经抠过图 —— 右下角那行 "SELECTED SLICE / 选择一张切片" 被切掉了，
+       底色压到近白。用 multiply 混合：接近白的底在 multiply 下等于透明，
+       所以不需要 alpha，也就不会出现"没抠干净的一层雾"。 */
+    background-image:
+      var(--noise),
+      linear-gradient(to right,var(--grid-line) 1px,transparent 1px),
+      linear-gradient(to bottom,var(--grid-line) 1px,transparent 1px),
+      linear-gradient(to top,rgba(45,125,70,.045) 0 18vh,transparent 18vh),
+      url('bg-slice.webp');
+    background-size:var(--noise-size) var(--noise-size),var(--grid) var(--grid),var(--grid) var(--grid),100% 100%,min(44vw,600px) auto;
+    background-position:0 0,0 0,0 0,0 100%,right -2vw bottom -4vh;
+    background-repeat:repeat,repeat,repeat,no-repeat,no-repeat;
+    background-attachment:fixed;
+    background-blend-mode:normal,normal,normal,normal,multiply;
+  }
+  @media (max-width:767px){
+    body{
+      background-image:
+        linear-gradient(to right,rgba(26,26,26,.036) 1px,transparent 1px),
+        linear-gradient(to bottom,rgba(26,26,26,.036) 1px,transparent 1px),
+        linear-gradient(to top,rgba(45,125,70,.04) 0 14vh,transparent 14vh),
+        url('bg-slice.webp');
+      background-size:64px 64px,64px 64px,100% 100%,min(86vw,380px) auto;
+      background-position:0 0,0 0,0 100%,right -6vw bottom -2vh;
+      background-repeat:repeat,repeat,no-repeat,no-repeat;
+      background-blend-mode:normal,normal,normal,multiply;
+    }
+  }
+
+  /* ===== 跨页面过渡（站主要求"点进去时简单过渡一下"）=====
+     Chrome 支持跨文档 View Transitions：从主页点进文章/相册/项目时整页淡入淡出。
+     直接双击打开（file://）时浏览器不启用跨文档过渡 —— 退化为瞬时切换，不影响可用性。 */
+  @view-transition{navigation:auto}
+  ::view-transition-old(root){animation:vt-out 200ms ease both}
+  ::view-transition-new(root){animation:vt-in 260ms ease both}
+  @keyframes vt-out{to{opacity:0}}
+  @keyframes vt-in{from{opacity:0}}
+  @media (prefers-reduced-motion:reduce){
+    ::view-transition-old(root),::view-transition-new(root){animation-duration:1ms !important}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="site" href="home.html">NORTH_CEDAR'S NOTES</a>
+  <span>文章 / 纯阅读模式 · <a href="home.html">← 回首页草案</a></span>
+</div>
+
+<!-- 正文内部的文字是占位（用来展示排版），不是站主的原文 -->
+<nav class="toc" aria-label="本文目录">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#h1">第一台相机</a></li>
+    <li><a href="#h2">我拍的其实不是风景</a></li>
+    <li><a href="#h3">设备清单与几个参数</a></li>
+  </ol>
+</nav>
+
+<div class="wrap">
+  <header class="posthead">
+    <p class="kicker"><span>2026-09-12</span><span><em>摄影</em></span><span>约 4 分钟</span><span>2,431 字</span></p>
+    <h1>高三那年我买了台相机</h1>
+    <p class="standfirst">高三最忙的那年，我买了人生第一台相机，从此看世界多了一个借口。</p>
+  </header>
+
+  <article class="prose">
+    <p>买相机这件事我准备了很久，久到后来我已经分不清我到底是想拍照，还是想给自己找一个从书桌前站起来走走的理由。那年冬天的教室很闷，窗玻璃上永远有一层雾。</p>
+
+    <h2 id="h1">第一台相机</h2>
+    <p>它不贵，也不是什么好机器。我第一次把它拿在手里的时候，甚至不确定快门在哪。但我记得那个下午的光，记得我按下的第一张照片——拍糊了，是一棵树的枝桠和一块过曝的天空。</p>
+    <p>后来我才明白，一张照片是不是"好"，和它有没有被拍糊关系不大。这件事我用了一年才想通。</p>
+
+    <figure>
+      <img src="../../content/gallery/一些风景/014.jpg" alt="苏州网师园的花窗与水中倒影" width="2400" height="1600">
+      <figcaption>苏州 · 网师园 · 那张之后我大概明白了什么叫"等"</figcaption>
+    </figure>
+
+    <h2 id="h2">我拍的其实不是风景</h2>
+    <p>有个说法是，拍照是为了留住时间。我一开始也这么以为，后来发现不是——照片留不住时间，它只留下你在那个时刻的注意力。</p>
+    <blockquote>
+      <p>你按下快门的那一秒，是你这一天里唯一一秒真正在看。</p>
+    </blockquote>
+    <p>所以我现在很少连拍。一张就好，拍不到就拍不到，明天再来。</p>
+
+    <h3 id="h3">设备清单与几个参数</h3>
+    <p>记在这里是给自己看的，省得每次都去翻设置。</p>
+    <table>
+      <thead><tr><th>项目</th><th>值</th><th>备注</th></tr></thead>
+      <tbody>
+        <tr><td>机身</td><td>入门级 APS-C</td><td>够用</td></tr>
+        <tr><td>常用焦段</td><td>35mm 等效</td><td>接近人眼，别想太多</td></tr>
+        <tr><td>导出</td><td>长边 2400px / JPEG q90</td><td>上线前统一处理</td></tr>
+      </tbody>
+    </table>
+
+    <p>导出这一步我写了个脚本，省得每次手动点：</p>
+    <pre><code>// 统一导出：长边 2400、质量 90
+for (const f of files) {
+  await sharp(f)
+    .rotate()                    // 先把 EXIF 方向烘焙进像素
+    .resize({ width: 2400, withoutEnlargement: true })
+    .jpeg({ quality: 90, mozjpeg: true })
+    .toFile(out(f));
+}</code></pre>
+
+    <hr>
+
+    <p>写到这儿其实没什么结论。相机没有让我变好，它只是让我多看了几眼。如果你也在高三，我建议你先别买 —— 除非你真的很想从书桌前站起来走走。</p>
+  </article>
+
+  <nav class="adj" aria-label="相邻文章">
+    <a href="post.html">← 我用 AI 做了这个博客</a>
+    <a class="next" href="post.html">八级之后，我和钢琴 →</a>
+  </nav>
+
+  <section class="comments" id="comments">
+    <h2>评论<span>2 条</span></h2>
+    <ol class="clist">
+      <li><span class="cname">小明</span><time class="ctime">2026-09-26 14:03</time><p class="cbody">这张照片的光真好。</p></li>
+      <li><span class="cname">小红</span><time class="ctime">2026-09-26 15:20</time><p class="cbody">我也在高三买过相机，看到这段有点想哭。</p></li>
+    </ol>
+    <form class="cform" onsubmit="return false">
+      <label for="cn">名字</label>
+      <input id="cn" type="text" maxlength="40">
+      <label for="cb">留言</label>
+      <textarea id="cb" rows="4" maxlength="1000"></textarea>
+      <button type="submit">发表</button>
+    </form>
+  </section>
+</div>
+
+<footer>北杉札记 · 草案文件，不是最终实现</footer>
+</body>
+</html>

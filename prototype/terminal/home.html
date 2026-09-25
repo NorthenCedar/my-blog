@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="zh-CN" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>草案 · 首页扫描视场 — 北杉札记</title>
+<!-- 无 JS 时不能有入场隐藏态：类名在 <head> 里立刻换掉，避免闪一下才显示 -->
+<script>document.documentElement.className = 'js';</script>
+<style>
+/* ============================================================
+   研究终端 · 扫描视场（首页草案）
+   单文件、零依赖（只引用 ../fonts/ 下的自托管字体与 ../../content/gallery/ 的真实照片）
+   设计约束见会话决策：
+     · 弱化下限 0.65（实测 5.33:1，正文仍达标）—— 不允许更低
+     · 窄屏取消弱化，全部 100%
+     · reduced-motion / 无 JS 时一切 100%
+     · 聚焦的主要载体是线宽与角标，透明度只做辅助
+   ============================================================ */
+:root{
+  /* 配色（每个值的对比度都实测过，见会话记录） */
+  --paper:#FAFAF7; --panel:#EFEDE7; --ink:#1A1A1A; --muted:#5A5A56; --hair:#D8D5CE;
+  --accent:#2D7D46;        /* 纸上小字绿   4.86:1 */
+  --accent-deep:#266B3B;   /* 面板上小字绿 5.52:1 */
+  --accent-bright:#4CAF50; /* 仅图形       2.66:1 */
+  --signal:#E87722;        /* 仅图形       2.83:1 —— 连大字号 3:1 都不够，不能承载文字 */
+  --signal-text:#B45309;   /* 文字级橙     4.8:1  —— 瞬时读数用它（见下方 #hudSec） */
+  /* 绿色是「仪器在工作」的活动层，不是背景装饰：它只出现在会动、会响应的位置
+     （扫描带 · 刻度填充 · 悬停与激活态 · 穿越时的端点闪光）。乳白仍是主背景。 */
+  --accent-wash:#EDF3EC;   /* 极淡绿底（悬停/激活态）—— 与纸的明度差极小，不动正文对比度 */
+  --band-glow:rgba(76,175,80,.40);
+  /* 底色结构：纸纹理 + 坐标网格。两样都极淡 —— 目的是消掉数字纯白的塑料感、
+     给出"技术图纸"的层次，不是让它变成图案或方格纸。 */
+  --noise-size:160px;
+  --noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+  --grid:48px;
+  --grid-line:rgba(26,26,26,.042);
+  /* 站主给的「档案盒」素材抠图（bg-case.webp）：只留中间两个环，外壳/标签/螺丝都切掉了。
+     放在右侧竖中段 —— 左上角是 ±∞ 水印、左下角是我画的圆环，三个错开不打架。 */
+  --case-size:min(40vw,540px);
+  --band:#111111; --on-band:#fff; --on-band-sub:#DEDEDE; --on-band-meta:#B4B4B4;
+  /* 弱化下限：实测 0.65 → 合成色 #686867 → 5.33:1，仍达标。禁止更低 */
+  --focus-min:.65;
+  /* 字级（沿用既有 11 档，不新造）—— 实测后收过一次：展示字与条目标题原本过大，
+     是页面总高的主要来源之一 */
+  --fs-display:clamp(2.1rem,5vw,4.1rem);
+  --fs-item:clamp(1.3rem,1rem + 1.5vw,1.85rem);
+  --fs-h2:clamp(1.25rem,1rem + 1.1vw,1.85rem);
+  --fs-lede:1.125rem; --fs-body:1.0625rem; --fs-sm:.875rem; --fs-xs:.8125rem; --fs-mono:.85rem;
+  --sp-2:.5rem; --sp-3:.75rem; --sp-4:1rem; --sp-5:1.5rem; --sp-6:2rem;
+  --rail:3rem;
+  /* 叙事层时长：320 → 640ms（站主 2026-09-25 定案）。
+     依据：参考实现 RhineLabUI 的叙事层是 0.6–1.6s、交互层是 180ms。
+     交互层保持 120ms 不动 —— 快反馈才是这套语言的底色。 */
+  --dur-fast:120ms; --dur-enter:640ms; --ease:cubic-bezier(.2,0,0,1);
+  /* 场域节奏 —— 实测后收紧。36vh 与 18vh 是站主指定的下限，不再动；
+     其余按同样逻辑收紧（砍间距，不砍内容） */
+  --gap-s1:36vh;    /* S1→S2 空走（站主定：36，保留呼吸感） */
+  --gap-post:18vh;  /* 文章篇间（站主定：18） */
+  --gap-s2:18vh;    /* S2→S3  原 24 */
+  --gap-s3:9vh;     /* S3→S4  原 12 */
+  --gap-s4:8vh;     /* S4→S5  原 10 */
+  /* 折线偏移（桌面） */
+  --off-0:0%; --off-1:6%; --off-2:-4%; --off-3:12%;
+}
+@font-face{font-family:'Archivo Var';src:url('../fonts/archivo-wdth.woff2') format('woff2-variations');font-weight:100 900;font-stretch:62% 125%;font-display:swap}
+@font-face{font-family:'Plex';src:url('../fonts/plex-sans-400.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Plex';src:url('../fonts/plex-sans-600.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'Plex Mono';src:url('../fonts/plex-mono-400.woff2') format('woff2');font-weight:400;font-display:swap}
+
+*{box-sizing:border-box}
+html{background:var(--paper)}
+body{
+  margin:0;background-color:var(--paper);color:var(--ink);
+  /* 三层底：噪点纸纹 → 纵线 → 横线。
+     全部 background-attachment:fixed —— 网格固定在视口上，滚动时像"仪表台"不动，
+     而不是印在纸上跟着内容走。 */
+  background-image:
+    var(--noise),
+    linear-gradient(to right,var(--grid-line) 1px,transparent 1px),
+    linear-gradient(to bottom,var(--grid-line) 1px,transparent 1px),
+    url('bg-case.webp');
+  background-size:var(--noise-size) var(--noise-size),var(--grid) var(--grid),var(--grid) var(--grid),var(--case-size) auto;
+  background-position:0 0,0 0,0 0,right -2vw top 44vh;
+  background-repeat:repeat,repeat,repeat,no-repeat;
+  background-attachment:fixed;
+  /* multiply：图里的近白底在纸上看不见，只有环的明暗与铜色留住 */
+  background-blend-mode:normal,normal,normal,multiply;
+  font-family:'Plex','Source Han Sans SC','Noto Sans SC','Microsoft YaHei',system-ui,sans-serif;
+  font-size:var(--fs-body);line-height:1.75;
+  padding-left:var(--rail);
+  padding-bottom:1.9rem;   /* 给底部 OS 状态条让位 */
+}
+a{color:inherit}
+.mono{font-family:'Plex Mono',ui-monospace,monospace;font-size:var(--fs-mono);font-variant-numeric:tabular-nums}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ---------- 左侧刻度尺（位置仪表 + 区段导航） ---------- */
+/* 两条判据：① 刻度间隔 = 真实区段间隔（是等比地图，不是等距装饰尺）
+             ② 真实 <nav> + 锚点链接 → 关掉 JS 仍是可用目录            */
+.rail{
+  position:fixed;left:0;top:0;bottom:0;width:var(--rail);
+  border-right:1px solid var(--hair);
+  display:flex;flex-direction:column;justify-content:center;
+  background:var(--paper);z-index:20;
+}
+.rail-track{position:relative;height:56vh;margin:0 auto;width:100%}
+.rail-fill{
+  position:absolute;left:50%;transform:translateX(-50%);top:0;width:2px;
+  /* 滚过的部分 = 仪器已经量到的地方，所以是绿的不是墨色的。
+     用 --accent(4.86:1) 而不是 --accent-bright(2.66:1)：2px 的线属于
+     「必须被看见的非文字图形」，按 WCAG 1.4.11 要 ≥3:1 */
+  background:var(--accent);height:0; /* JS 更新 */
+}
+.rail-tick{
+  position:absolute;left:50%;transform:translate(-50%,-50%);
+  display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;
+  text-decoration:none;color:var(--hair);
+}
+.rail-tick b{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);font-weight:400;font-variant-numeric:tabular-nums}
+.rail-tick i{
+  display:block;width:12px;height:1px;background:currentColor;transition:width var(--dur-fast) var(--ease);
+}
+/* 当前区段：由发丝灰转为全墨，且角标加长 */
+.rail-tick[aria-current="true"]{color:var(--ink)}
+.rail-tick[aria-current="true"] i{width:26px;background:var(--accent-deep)}
+.rail-tick:focus-visible{outline:2px solid var(--accent-deep);outline-offset:2px}
+/* 右端对齐：文字标签只在宽屏显示，窄屏只剩刻度 */
+.rail-name{display:none}
+
+/* ---------- 固定在视口中部的扫描带 ---------- */
+.band{position:fixed;left:var(--rail);right:0;top:50%;height:0;z-index:15;pointer-events:none}
+/* 扫描带 = 一道绿光，不是一条黑线：它是"仪器正在工作"的信号，不是分界线。
+   两端渐隐、中间最亮 —— 读起来像一段扫过的光，而不是一条边框。 */
+.band-line{
+  position:absolute;left:0;right:0;top:-.5px;height:1px;
+  background:linear-gradient(90deg,
+    rgba(45,125,70,0) 0%, var(--accent) 12%, var(--accent-bright) 50%,
+    var(--accent) 88%, rgba(45,125,70,0) 100%);
+  box-shadow:0 0 10px var(--band-glow);
+}
+/* 两端点：焦点切换时闪一下（120ms），这是"带子在说话"的瞬时反馈 */
+.band-cap{position:absolute;top:-3px;width:14px;height:7px;background:var(--hair);opacity:0}
+.band-cap.l{left:0} .band-cap.r{right:0}
+.band.is-tick .band-cap{opacity:1;background:var(--accent-bright);box-shadow:0 0 8px var(--band-glow)}
+.band-cap{transition:opacity var(--dur-fast) linear}
+/* 带上方的实时读数 */
+.band-readout{
+  position:absolute;left:0;top:-1.9rem;
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);
+  font-variant-numeric:tabular-nums;background:var(--paper);padding-right:.75rem;
+}
+.band-readout b{color:var(--accent-deep);font-weight:400}
+
+/* ---------- 莱茵生命仪器标识（SVG 重绘，不用官方图片）----------
+   形状依据：官方 PV「手术台」那一帧里，标志是「＋ ∞ −」横排 —— 左加号、中无穷、右减号；
+   9game 的考据也写着"为营造化学气息添加了 '+' 和 '－'"。无穷带回断点（右环顶部缺口）。
+   （fandom / NGA 本机不可达，与 docs/rhinelab-research.md §6 的记录一致 —— 这是唯一能核对到的来源。）
+   为什么重绘而不是贴图：SVG 跟随主题色（currentColor）、任意缩放不糊、以后要加线条动画
+   不用换资源；贴官方图片这三样都做不到，还踩版权。
+   只做「仪器上的小标识」（34×14），不做成大 logo。三个位置各有功能理由：
+     ① 扫描带读数之前 —— 标出"在扫的是哪台仪器"（带子的起点）
+     ② S1 舱体框角标 —— 标本标签
+     ③ S3 舱体框标签 —— 培养舱标签 */
+.rhine-mark{width:44px;height:22px;color:var(--accent-deep);display:inline-block;vertical-align:middle;overflow:visible}
+/* 扫描带读数里用小的那档：保持那一行的行高与原来一致（动态层不动） */
+.rhine-mark.sm{width:32px;height:16px}
+
+/* ---------- 培养舱（S3 相册预览）----------
+   「Rhine Experimental Culture Pod」= 培育梦想的舱体。
+   只用一道极细的绿框当观察窗：不做实心边框、不加阴影、不铺绿底。
+   框色 = --accent 32% 混纸，里面的正文对比度不受影响。 */
+.pod{
+  position:relative;margin-top:var(--sp-4);
+  border:1px solid color-mix(in srgb, var(--accent) 32%, var(--paper));
+  padding:1.4rem 1.25rem .6rem;
+}
+/* .frames 原本自带 margin-top，进舱后由舱体内边距负责 —— 不做双重间距把页面顶长 */
+.pod .frames{margin-top:0}
+/* S1 也用同一个舱体框：身份区是"标本"，框比 S3 收一点，少长 ~10px */
+.pod-s1{padding:1.1rem 1.25rem .7rem}
+/* 角标靠右的变体（S1 用右上角） */
+.pod-tag.right{left:auto;right:.9rem}
+.pod-tag{
+  position:absolute;top:-.6rem;left:.9rem;background:var(--paper);
+  padding:0 .4rem;font-family:'Plex Mono',monospace;font-size:var(--fs-xs);
+  color:var(--muted);display:inline-flex;align-items:center;gap:.4em;
+  letter-spacing:.08em;
+}
+/* 顶部 HUD：区段与百分比 */
+.hud{
+  position:fixed;top:0;left:var(--rail);right:0;z-index:25;
+  display:flex;justify-content:space-between;gap:1rem;
+  padding:.6rem 1rem;border-bottom:1px solid var(--hair);
+  background:var(--paper);
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);
+  font-variant-numeric:tabular-nums;
+}
+.hud .site{color:var(--ink);letter-spacing:.14em;font-size:var(--fs-xs)}
+/* 橙色只做一件事：区段刚被扫到时闪一下（160ms，reduced-motion 下不闪）。
+   它不参与任何静态配色，也不与绿色同处一个元素 —— 两种信号色不打架。
+   这里用 --signal-text 而不是 --signal：HUD 读数是 13px 文字，
+   而 #E87722 对纸只有 2.83:1（大字号的 3:1 都不到）。
+   按站点既定规则「达不到就加深、或只用于非文字元素」，文字态加深到 #B45309。 */
+#hudSec{transition:color var(--dur-fast) linear}
+#hudSec.is-scan{color:var(--signal-text)}
+
+/* ---------- 背景水印：一个大的极淡 ±∞ ----------
+   站主的提议（把标志调透明了直接放背景）+ 解决"大面积纯白没层次"。
+   3.5% 不承载任何信息，所以不参与对比度约束；正文永远画在它上面（.field z-index:1）。 */
+/* ---------- 背景层（站主指定：照参考截图二/三/四重做）----------
+   取舍后只留四样：① 大的 ±∞ 水印（截图二正中央那个标志）
+   ② 同心扫描圆环（视频简介点名的"扫描圆环"母题，截图三的圆拱形）
+   ③ 一条极淡的绿色底带（截图二那块绿屏；纯色，不用渐变 —— 保持扁平）
+   ④ 底部 OS 状态条（截图三/四角落的遥测排版：小号等宽 + 字距 + 发丝线 + 刻度尺）
+   全部 z-index:0，正文在它们之上（.field z-index:1），四样都不承载任何信息。
+   注意 .bg-mark 不要写 viewBox —— 符号自己带 viewBox，外层再写一次会双重映射并把上下裁掉（踩过）。 */
+.bg-mark{
+  position:fixed;top:12vh;right:3vw;width:min(46vw,540px);height:min(23vw,270px);
+  color:var(--ink);opacity:.055;z-index:0;pointer-events:none;
+}
+.bg-ring{
+  position:fixed;left:-8vw;bottom:-10vh;width:min(52vw,620px);aspect-ratio:1;
+  z-index:0;pointer-events:none;
+  background:repeating-radial-gradient(circle at 50% 50%,
+    transparent 0 118px, rgba(26,26,26,.07) 118px 119px);
+}
+/* 极淡绿底：纯色一块，4.5%（之前推迟的"第 3 项"） */
+.bg-green{
+  position:fixed;left:0;right:0;bottom:0;height:26vh;z-index:0;pointer-events:none;
+  background:rgba(45,125,70,.045);
+}
+/* 底部 OS 状态条 */
+.os-rail{
+  position:fixed;left:var(--rail);right:0;bottom:0;height:1.9rem;z-index:24;
+  display:flex;align-items:center;gap:1rem;padding:0 1rem;
+  background:var(--paper);border-top:1px solid var(--hair);
+  font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);
+  letter-spacing:.1em;text-transform:uppercase;
+}
+.os-rail .ticks{
+  flex:1 1 auto;height:.5rem;
+  background:repeating-linear-gradient(to right,var(--hair) 0 1px,transparent 1px 14px);
+}
+
+/* ---------- 信息场 ---------- */
+.field{position:relative;z-index:1;max-width:60rem;padding:0 1.5rem 6vh}
+/* 层级：用 data-tier 决定偏移与间距 */
+.tier{position:relative}
+.tier-1{padding-top:9vh;margin-left:var(--off-0)}
+.tier-2{margin-left:var(--off-1)}
+.tier-3{margin-left:var(--off-2)}
+.tier-4,.tier-5{margin-left:var(--off-3)}
+
+/* 层级标记：L 形角标 + 区段号（结构即信息，不做纯装饰） */
+.tier-head{display:flex;align-items:baseline;gap:.75rem;margin-bottom:var(--sp-4)}
+.tier-head .sec{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);font-variant-numeric:tabular-nums}
+.tier-head h2{font-size:var(--fs-h2);font-weight:600;margin:0;letter-spacing:-.01em}
+/* L 形角标：左下 + 右上对角（来自莱茵生命主题的实测手法） */
+.bracket{position:relative;padding:1rem}
+.bracket::before,.bracket::after{content:"";position:absolute;width:1.4rem;height:1rem;border:0 solid var(--hair);transition:border-color var(--dur-fast) var(--ease)}
+.bracket::before{left:0;bottom:0;border-left-width:1px;border-bottom-width:1px}
+.bracket::after{right:0;top:0;border-right-width:1px;border-top-width:1px}
+
+/* 展示字：Archivo 的 wdth 轴（OFL，零许可风险） */
+.display{
+  font-family:'Archivo Var',system-ui,sans-serif;
+  font-stretch:118%;font-weight:700;font-size:var(--fs-display);
+  line-height:.92;letter-spacing:-.04em;margin:0 0 var(--sp-5);
+  text-transform:uppercase;
+}
+.lede{font-size:var(--fs-lede);color:var(--muted);max-width:40em;margin:0 0 var(--sp-5)}
+.coord{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);font-variant-numeric:tabular-nums;display:flex;gap:1.25rem;flex-wrap:wrap}
+.coord span{white-space:nowrap}
+.coord em{font-style:normal;color:var(--accent-deep)}
+
+/* S2 文章列表 —— 不是卡片网格，是逐层的条目 */
+.posts{list-style:none;margin:0;padding:0}
+.posts li+li{margin-top:var(--gap-post)}
+.post{margin-left:calc(var(--off-1) * -1)} /* 让条目回到自己的层级缩进 */
+.post a{text-decoration:none;display:block}
+.post h3{
+  font-family:'Archivo Var',system-ui,sans-serif;font-stretch:105%;font-weight:700;
+  font-size:var(--fs-item);line-height:1.05;letter-spacing:-.03em;margin:0 0 var(--sp-3);
+  transition:color var(--dur-fast) var(--ease);
+}
+/* 摘要样式：首页暂时用不到（站主 2026-09-25 定案首页只留标题）。
+   规则留着 —— 内容层里每篇文章的 summary 字段一个字没删，
+   将来首页想显示摘要，把 <p> 加回去就行。 */
+.post p{
+  margin:0 0 var(--sp-3);color:var(--muted);max-width:34em;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.post .meta{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);font-variant-numeric:tabular-nums;display:flex;gap:1.25rem}
+/* 悬停/激活态底色：极淡绿 —— 绿色是"这里有响应"的活动层，不是装饰。
+   只加底色、不加内边距，版面一点不动。 */
+.post a{transition:background var(--dur-fast) var(--ease)}
+.post a:hover,.post a:focus-visible{background:var(--accent-wash)}
+.post a:hover h3,.post a:focus-visible h3{color:var(--accent-deep)}
+.post a:focus-visible{outline:2px solid var(--accent-deep);outline-offset:4px}
+
+/* S3 相册预览 —— 三张图竖直错位、宽度不同、不共基线（反网格的关键一手）
+   实测后收窄：原本 46/38/54% 渲染出来三张加起来约 185vh，是页面最高的单块 */
+.frames{display:flex;gap:1.2rem;align-items:flex-start;margin-top:var(--sp-4)}
+.frame{display:block;border:1px solid var(--hair);background:var(--panel)}
+/* 每条给一个高度上限，避免竖幅照片把页面拉长 */
+.frame img{display:block;width:100%;height:auto;max-height:44vh;object-fit:cover}
+.frame figcaption{font-family:'Plex Mono',monospace;font-size:var(--fs-xs);color:var(--muted);padding:.5rem .75rem;border-top:1px solid var(--hair)}
+/* 一主图 + 两缩略（站主 2026-09-25 定案）：主图占宽、缩略列偏右。
+   仍然不是网格 —— 一大一小的比例本身就打破了等宽感；
+   但高度比"三张错位堆叠"（约 900px）砍掉一半以上。 */
+.f-main{flex:1 1 auto;min-width:0}
+.f-main img{max-height:40vh}   /* 站主要求把长度往回加：34vh → 40vh */
+.f-thumbs{flex:0 0 31%;display:flex;flex-direction:column;gap:1.1rem}
+.f-thumbs .frame{background:var(--panel)}
+.f-thumbs img{max-height:13vh}
+.frames a:hover .frame,.frames a:focus-visible .frame{background:var(--accent-wash)}
+.frames a:focus-visible{outline:2px solid var(--accent-deep);outline-offset:3px}
+
+/* S4 / S5 −− 终端读数收尾，密度最高、最安静 */
+.empty{
+  border-left:2px solid var(--accent-bright);padding:.35rem 0 .35rem .9rem;
+  color:var(--muted);font-size:var(--fs-body);margin:0;
+}
+.links{display:flex;gap:1.5rem;flex-wrap:wrap;margin:0;padding:0;list-style:none}
+.links a{font-family:'Plex Mono',monospace;font-size:var(--fs-mono);text-decoration:none;border-bottom:1px solid var(--hair);padding-bottom:2px}
+.links a:hover,.links a:focus-visible{border-color:var(--accent-deep);background:var(--accent-wash)}
+.links a:focus-visible{outline:2px solid var(--accent-deep);outline-offset:3px}
+
+/* 间距预算 */
+.gap-s1{height:var(--gap-s1)} .gap-s2{height:var(--gap-s2)}
+.gap-s3{height:var(--gap-s3)} .gap-s4{height:var(--gap-s4)}
+
+/* ============================================================
+   聚焦：JS 打开时才生效。焦点由「滚动位置」驱动 —— 屏幕中心是什么就聚焦什么。
+   带外的卡片【不禁用】，只是视觉弱化：它照样可点、可 Tab。
+   ============================================================ */
+html.js .field-item{
+  opacity:var(--focus-min);
+  transition:opacity var(--dur-enter) var(--ease);
+}
+html.js .field-item.is-revealed{opacity:var(--focus-min)}
+html.js .field-item.is-focused{opacity:1}
+/* 聚焦时线宽与角标升级 —— 这才是聚焦的主要载体，透明度只是辅助 */
+html.js .field-item .bracket::before,
+html.js .field-item .bracket::after{border-color:var(--paper)}
+html.js .field-item.is-focused .bracket::before,
+html.js .field-item.is-focused .bracket::after{border-color:var(--ink)}
+
+/* 无 JS：没有带、没有刻度填充、没有聚焦 —— 但结构完整、内容全在、顺序不变 */
+html.no-js .band,html.no-js .rail-fill,html.no-js .hud-progress{display:none}
+html.no-js .rail-tick{color:var(--muted)}
+
+/* ============================================================
+   扫描带穿字时的"让位"（站主指定）
+   问题：带子在视口中部横穿正文，读者会以为那行被划掉了 —— 视觉上是 bug。
+   解法：带中心 ±12px 内的文字朝纸的方向退一点点（颜色的 18% 混纸），
+        不是遮罩、不是隐藏、不动字重与布局；带子离开后 100ms 内回位。
+   退让后正文仍有 ~11:1，远高于 4.5:1。.post h3 自带 120ms 过渡，不重复声明。
+   ============================================================ */
+.display,.lede,.coord span,.post p,.post .meta,.frame figcaption,.empty,.links a,.tier-head h2,.tier-head .sec,.pod-tag{
+  transition:color 100ms linear;
+}
+/* 分两档让位，因为两类文字的可退空间差很多（都是算过的，不是估的）：
+   墨色 #1A1A1A 退 18% → #424242，对纸 9.6:1（原本 16.6:1），让得多也安全；
+   灰色 #5A5A56 只能退 10% → #6A6A67，对纸 5.2:1 —— 退 18% 会掉到 4.3:1，不达标。
+   注意这里必须写 var(--ink)/var(--muted)，不能用 currentColor：
+   实测在 color 属性里 currentColor 取的是"继承来的"墨色，
+   写 currentColor 会让灰色文字反而变深（从 5.9:1 变成 20:1），方向相反。 */
+.display.is-yielding,.post h3.is-yielding,.links a.is-yielding,.tier-head h2.is-yielding{
+  color:color-mix(in srgb,var(--ink) 82%,var(--paper));
+}
+.lede.is-yielding,.coord span.is-yielding,.post p.is-yielding,.post .meta.is-yielding,
+.frame figcaption.is-yielding,.empty.is-yielding,.tier-head .sec.is-yielding,.pod-tag.is-yielding{
+  color:color-mix(in srgb,var(--muted) 90%,var(--paper));
+}
+
+/* ============================================================
+   点击绿色闪烁（参考视频里的"点击时短暂绿色闪烁"，180ms）
+   只改底色与描边，不动布局。这里必须用 !important：
+   点击时元素必然处于 hover 态，而 hover 规则的特异性(0,2,1)高过本规则，
+   不加就会被吃掉 —— 这一层是"点击已登记"的瞬时反馈，理应盖在状态色之上。
+   ============================================================ */
+a.is-flash,button.is-flash{
+  background:var(--accent-wash) !important;
+  outline:1px solid var(--accent) !important;
+  outline-offset:2px;
+}
+
+/* ============================================================
+   断点
+   ≥1024 桌面：折线偏移全量 · 弱化 0.65→1.0 · 带高 25vh
+   768–1023 平板：偏移 ×0.6 · 弱化 0.72→1.0（视口更矮，少弱化更安全）· 侧栏变窄且去掉百分比
+   <768 手机：偏移归零 · 完全取消弱化 · 刻度尺变顶部横条 · 带退化为顶部进度线
+   ============================================================ */
+@media (max-width:1023px){
+  :root{--focus-min:.72; --rail:2.25rem;
+        --off-1:3.6%; --off-2:-2.4%; --off-3:7.2%;
+        --gap-s1:30vh; --gap-post:14vh; --gap-s2:18vh; --gap-s3:10vh}
+  .rail-name{display:none}
+  .f2{margin-top:-8vh}
+}
+@media (max-width:767px){
+  :root{--rail:0px;
+        --off-0:0%; --off-1:0%; --off-2:0%; --off-3:0%;
+        --gap-s1:22vh; --gap-post:12vh; --gap-s2:16vh; --gap-s3:10vh; --gap-s4:8vh;
+        /* 小屏：纸纹关掉（细噪点在手机上容易显脏），网格放宽到 64px 并再淡一点 */
+        --noise:none; --grid:64px; --grid-line:rgba(26,26,26,.036); --case-size:min(64vw,290px)}
+  body{padding-left:0;padding-top:2.1rem;padding-bottom:1.9rem}   /* 上让刻度横条；下让 OS 状态条 */
+  /* 手机端不再收起 OS 条：把扫描进度线挪到它的顶边上，两者共线不打架 */
+  .os-rail{display:flex;justify-content:space-between;padding:0 .8rem;gap:.5rem;font-size:.68rem;letter-spacing:.04em}
+  .os-rail .ticks{display:none}
+  .bg-green{height:18vh}
+  /* 刻度尺 → 顶部横向刻度条 */
+  .rail{
+    left:0;right:0;top:0;bottom:auto;width:auto;height:2.1rem;
+    flex-direction:row;border-right:0;border-bottom:1px solid var(--hair);
+    align-items:center;
+  }
+  .rail-track{position:relative;height:100%;width:100%;margin:0}
+  .rail-fill{left:0;top:auto;bottom:0;transform:none;width:0;height:2px}
+  .rail-tick{top:50%;transform:translate(0,-50%);left:auto;padding:.3rem .7rem}
+  .rail-tick i{display:none}
+  .rail-tick[aria-current="true"] i{display:none}
+  /* 手机：取消聚焦弱化，一切 100% */
+  html.js .field-item,html.js .field-item.is-revealed{opacity:1;transition:none}
+  .band{left:0;top:auto;bottom:1.9rem;height:2px}   /* 进度线落在 OS 条的顶边上 */
+  .band-line{background:var(--accent);box-shadow:none}   /* 手机退化成 2px 进度线，仍是绿的 */
+  .band-readout,.band-cap{display:none}
+  .hud{left:0;top:2.1rem}
+  /* 手机：主图通栏，两缩略并排、整列右移 —— 保住"不回到网格"的错位感 */
+  .frames{display:block}
+  .f-main img{max-height:34vh}
+  .f-thumbs{flex-direction:row;width:84%;margin-left:16%;margin-top:5vh}
+  .f-thumbs img{max-height:12vh}
+  .field{padding:0 1.25rem 8vh}
+  .tier-1{padding-top:8vh}
+  /* 小屏：水印缩小、圆环收掉（细环在小屏容易显脏） */
+  .bg-mark{width:min(70vw,300px);height:min(35vw,150px);opacity:.045;top:9vh;right:0}
+  .bg-ring{display:none}
+}
+/* ============================================================
+   动效层（站主 2026-09-25：「看不到什么动效，做花一点」）
+   分四层，时长与曲线照参考实现 RhineLabUI 的 src/style.css 真实值：
+     交互层 120–180ms · cubic-bezier(.22,1,.36,1)
+     叙事层 600–1000ms · cubic-bezier(.16,1,.3,1)，错位 90ms
+     循环层 4s / 16s linear infinite
+     硬切层 800ms steps(1)
+   全是 CSS（不加 JS），所以内联 JS 预算没动。
+   ============================================================ */
+:root{
+  --ease-quint:cubic-bezier(.22,1,.36,1);
+  --ease-expo:cubic-bezier(.16,1,.3,1);
+}
+
+/* ---- 开场①：扫描线从左划过（0.8s，一次性）---- */
+@keyframes sweep-in{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.band-line{transform-origin:0 50%;animation:sweep-in 800ms var(--ease-expo) both}
+
+/* ---- 开场②：顶栏站名逐字硬切输入（steps 而非淡入 —— 仪器是打字机）---- */
+@keyframes type-in{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.hud .site{animation:type-in 700ms steps(19,end) 150ms both}
+
+/* ---- 开场③：±∞ 水印左右擦入（Logo 笔画感；真·描边动画要 <use> 内逐 path，先留近似）---- */
+@keyframes wipe-in{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.bg-mark{animation:wipe-in 1200ms var(--ease-expo) 100ms both}
+
+/* ---- 开场④：S1 舱体逐层展开（错位 90ms，叙事层 800ms）---- */
+@keyframes rise-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.pod-s1 > *{animation:rise-in 800ms var(--ease-expo) both}
+.pod-s1 > *:nth-child(1){animation-delay:200ms}
+.pod-s1 > *:nth-child(2){animation-delay:290ms}
+.pod-s1 > *:nth-child(3){animation-delay:380ms}
+.pod-s1 > *:nth-child(4){animation-delay:470ms}
+
+/* ---- 常驻①：高光沿线划过（4s linear，永不停）——这才是"扫描线在扫" ---- */
+@keyframes sweep-x{from{transform:translateX(-16rem)}to{transform:translateX(calc(100vw + 16rem))}}
+.band-sweep{
+  position:absolute;top:-1px;left:0;width:16rem;height:2px;
+  background:linear-gradient(90deg,transparent,var(--accent-bright) 42%,#F2FBF4 50%,var(--accent-bright) 58%,transparent);
+  animation:sweep-x 4s linear infinite;
+}
+
+/* ---- 常驻②：圆环绕行（16s / 8s 反向叠加）---- */
+@keyframes orbit{from{transform:rotate(0)}to{transform:rotate(1turn)}}
+.bg-orbit{
+  position:fixed;left:-8vw;bottom:-10vh;width:min(52vw,620px);aspect-ratio:1;
+  z-index:0;pointer-events:none;border-radius:50%;
+  border:1px solid transparent;
+  border-top-color:rgba(45,125,70,.22);border-right-color:rgba(45,125,70,.09);
+  animation:orbit 16s linear infinite;
+}
+.bg-orbit::after{
+  content:"";position:absolute;inset:14%;border-radius:50%;
+  border:1px solid transparent;border-bottom-color:rgba(45,125,70,.18);
+  animation:orbit 8s linear infinite reverse;
+}
+
+/* ---- 常驻③：硬切闪烁（800ms steps(1)，不是呼吸灯）---- */
+@keyframes blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}
+.hud .rec{display:inline-block;width:.45rem;height:.45rem;background:var(--accent);margin-right:.5rem;animation:blink 800ms steps(1) infinite}
+
+/* ---- 交互层：悬停微亮 + 位移，按压缩一下（180ms，参考实现的曲线）---- */
+.post a,.frames a,.links a,.rail-tick{
+  transition:background 180ms var(--ease-quint),transform 180ms var(--ease-quint),
+             border-color 180ms var(--ease-quint),color 180ms var(--ease-quint);
+}
+.post a:hover,.frames a:hover,.post a:focus-visible,.frames a:focus-visible{transform:translateY(-2px)}
+.post a:active,.frames a:active,.links a:active,.rail-tick:active{transform:scale(.995)}
+
+@media (prefers-reduced-motion:reduce){
+  html.js .field-item{opacity:1 !important;transform:none !important}
+  *{transition-duration:1ms !important;animation:none !important}
+}
+/* ============================================================
+   跨页面过渡（站主要求"点进去时简单过渡一下"）
+   Chrome 支持跨文档 View Transitions：主页点进文章/相册/项目时整页淡入淡出。
+   直接双击打开（file://）时浏览器不启用跨文档过渡 —— 退化为瞬时切换，不影响可用性。
+   四个页面都写了这一段，缺一边就不会触发。
+   ============================================================ */
+@view-transition{navigation:auto}
+::view-transition-old(root){animation:vt-out 200ms ease both}
+::view-transition-new(root){animation:vt-in 260ms ease both}
+@keyframes vt-out{to{opacity:0}}
+@keyframes vt-in{from{opacity:0}}
+@media (prefers-reduced-motion:reduce){
+  ::view-transition-old(root),::view-transition-new(root){animation-duration:1ms !important}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== 背景层（纯装饰，正文永远画在它们之上）=====
+     ±∞ 水印（右上）· 扫描圆环（左下）· 极淡绿底（页脚区） -->
+<svg class="bg-mark" aria-hidden="true" focusable="false"><use href="#rhine-logo"/></svg>
+<div class="bg-ring" aria-hidden="true"></div>
+<div class="bg-orbit" aria-hidden="true"></div>
+<div class="bg-green" aria-hidden="true"></div>
+
+<!-- ===== 底部 OS 状态条（参考截图三/四的角落遥测排版）===== -->
+<div class="os-rail" aria-hidden="true">
+  <span>OS-01-H · IDENTITY ARCHIVE</span>
+  <span class="ticks"></span>
+  <span>SAVED 00 · INDEX 05</span>
+</div>
+
+<!-- ===== 莱茵标志（SVG 重绘）：＋ ∞ − 横排，无穷右环顶部有断点 =====
+     一处定义、三处 <use>；描边用 currentColor，跟随主题色与字号 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="rhine-logo" viewBox="0 6 24 12">
+    <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <!-- ∞：左环 → 交叉 → 右环。右环顶部留 30° 缺口（用 M 断开）= 官方标志的断点 -->
+      <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2 2.67 4 4 6 4a4 4 0 0 0 2.83-6.83M19.04 8.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4"/>
+      <!-- ＋ 在左环里 -->
+      <path d="M4.7 12h2.6M6 10.7v2.6" stroke-width="1.8"/>
+      <!-- − 在右环里 -->
+      <path d="M16.7 12h2.6" stroke-width="1.8"/>
+    </g>
+  </symbol>
+</svg>
+
+<!-- ===== 左侧刻度尺：位置仪表 + 区段导航 =====
+     刻度位置是【真实区段间隔】的等比映射，不是等距装饰：
+     S1 0% · S2 28% · S3 71% · S4 90% · S5 97% -->
+<nav class="rail" aria-label="页面区段">
+  <div class="rail-track">
+    <div class="rail-fill" id="railFill"></div>
+    <a class="rail-tick" href="#s1" style="top:0%"   data-sec="s1"><i></i><b>01</b><span class="rail-name">身份</span></a>
+    <a class="rail-tick" href="#s2" style="top:28%"  data-sec="s2"><i></i><b>02</b><span class="rail-name">文章</span></a>
+    <a class="rail-tick" href="#s3" style="top:71%"  data-sec="s3"><i></i><b>03</b><span class="rail-name">相册</span></a>
+    <a class="rail-tick" href="#s4" style="top:90%"  data-sec="s4"><i></i><b>04</b><span class="rail-name">项目</span></a>
+    <a class="rail-tick" href="#s5" style="top:97%"  data-sec="s5"><i></i><b>05</b><span class="rail-name">联系</span></a>
+  </div>
+</nav>
+
+<!-- ===== 顶部 HUD ===== -->
+<div class="hud">
+  <span class="site">NORTH_CEDAR'S NOTES</span>
+  <span><i class="rec" aria-hidden="true"></i><span id="hudSec">01</span> / 05 · <span class="hud-progress" id="hudPct">000%</span></span>
+</div>
+
+<!-- ===== 扫描带（固定在视口 50%，纯视觉焦点指示，不拦截指针） ===== -->
+<div class="band" id="band" aria-hidden="true">
+  <div class="band-line"></div>
+  <span class="band-sweep"></span>
+  <span class="band-cap l"></span><span class="band-cap r"></span>
+  <div class="band-readout">
+    <svg class="rhine-mark sm" aria-hidden="true"><use href="#rhine-logo"/></svg>
+    扫描：<b id="bandTitle">—</b>
+  </div>
+</div>
+
+<!-- ===== 信息场 ===== -->
+<main class="field">
+
+  <!-- S1 身份 -->
+  <section class="tier tier-1" id="s1">
+    <div class="field-item" data-label="身份 · 郑云嘉">
+      <div class="pod pod-s1">
+        <span class="pod-tag right"><svg class="rhine-mark" aria-hidden="true"><use href="#rhine-logo"/></svg> POD 01 · 身份</span>
+        <h1 class="display">North<br>Cedar's<br>Notes</h1>
+        <p class="lede">郑云嘉，合肥人，安徽大学大一在读。学过钢琴、街舞、跆拳道、围棋……大部分半途而废，这个博客存放留下来的那些。写得好不好另说，先写。</p>
+        <div class="coord">
+          <span>SITE <em>北杉札记</em></span>
+          <span>LAT <em>31.82°N</em></span>
+          <span>LON <em>117.22°E</em></span>
+          <span>STATUS <em>ONLINE</em></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="gap-s1" aria-hidden="true"></div>
+
+  <!-- S2 文章 -->
+  <section class="tier tier-2" id="s2">
+    <div class="tier-head"><span class="sec">SECTOR 02</span><h2>最近写的</h2></div>
+    <ol class="posts">
+      <li class="field-item" data-label="文章 · 高三那年我买了台相机">
+        <div class="bracket">
+          <article class="post">
+            <a href="post.html">
+              <h3>高三那年我买了台相机</h3>
+              <div class="meta"><span>2026-09-12</span><span>摄影</span><span>约 4 分钟</span></div>
+            </a>
+          </article>
+        </div>
+      </li>
+      <li class="field-item" data-label="文章 · 我用 AI 做了这个博客">
+        <div class="bracket">
+          <article class="post">
+            <a href="post.html">
+              <h3>我用 AI 做了这个博客</h3>
+              <div class="meta"><span>2026-09-16</span><span>AI · 建站</span><span>约 9 分钟</span></div>
+            </a>
+          </article>
+        </div>
+      </li>
+      <li class="field-item" data-label="文章 · 八级之后，我和钢琴">
+        <div class="bracket">
+          <article class="post">
+            <a href="post.html">
+              <h3>八级之后，我和钢琴</h3>
+              <div class="meta"><span>2026-09-20</span><span>钢琴 · 成长</span><span>约 7 分钟</span></div>
+            </a>
+          </article>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <div class="gap-s2" aria-hidden="true"></div>
+
+  <!-- S3 相册预览 -->
+  <section class="tier tier-3" id="s3">
+    <div class="tier-head"><span class="sec">SECTOR 03</span><h2>相册</h2></div>
+    <div class="field-item" data-label="相册 · 一些风景 · 57 帧">
+      <div class="pod">
+        <span class="pod-tag"><svg class="rhine-mark" aria-hidden="true"><use href="#rhine-logo"/></svg> CULTURE POD · 标本 82 帧</span>
+        <div class="frames">
+          <a class="frame f-main" href="gallery.html"><img src="../../content/gallery/一些风景/014.jpg" alt="苏州网师园的花窗与倒影" width="2400" height="1600"><figcaption>一些风景 · 57 帧</figcaption></a>
+          <div class="f-thumbs">
+            <a class="frame" href="gallery.html"><img src="../../content/gallery/人像/075.jpg" alt="通往夏天的隧道" width="1600" height="2133"><figcaption>人像 · 15 帧</figcaption></a>
+            <a class="frame" href="gallery.html"><img src="../../content/gallery/直到大地变成一颗酸橙/001.jpg" alt="送快递的人与橙色夕阳" width="2500" height="1882"><figcaption>直到大地变成一颗酸橙 · 10 帧</figcaption></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="gap-s3" aria-hidden="true"></div>
+
+  <!-- S4 项目 -->
+  <section class="tier tier-4" id="s4">
+    <div class="tier-head"><span class="sec">SECTOR 04</span><h2>项目</h2></div>
+    <div class="field-item" data-label="项目 · 空态">
+      <p class="empty">哎呀，目前还没有项目呢&lt;3 —— 写了个扫雷和一个坦克大战，都还躺在本地。</p>
+    </div>
+  </section>
+
+  <div class="gap-s4" aria-hidden="true"></div>
+
+  <!-- S5 联系 -->
+  <section class="tier tier-5" id="s5">
+    <div class="tier-head"><span class="sec">SECTOR 05</span><h2>找到我</h2></div>
+    <div class="field-item" data-label="联系 · 找到我">
+      <ul class="links">
+        <li><a href="https://github.com/NorthenCedar">GITHUB ↗</a></li>
+        <li><a href="/rss.xml">RSS ↗</a></li>
+        <li><a href="mailto:a13655515876@163.com">EMAIL ↗</a></li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var items = Array.prototype.slice.call(document.querySelectorAll('.field-item'));
+  var band = document.getElementById('band');
+  var bandTitle = document.getElementById('bandTitle');
+  var railFill = document.getElementById('railFill');
+  var hudPct = document.getElementById('hudPct');
+  var hudSec = document.getElementById('hudSec');
+  var ticks = Array.prototype.slice.call(document.querySelectorAll('.rail-tick'));
+
+  /* ---- 1. 入场揭示：每个条目第一次进入视口时显形（只做一次，不来回） ---- */
+  if ('IntersectionObserver' in window){
+    var reveal = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (e.isIntersecting){
+          e.target.classList.add('is-revealed');
+          reveal.unobserve(e.target);
+        }
+      });
+    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.01 });
+    items.forEach(function(el){ reveal.observe(el); });
+  } else {
+    items.forEach(function(el){ el.classList.add('is-revealed'); });
+  }
+
+  /* ---- 2. 聚焦：屏幕中部 25vh 就是"扫描带"。焦点由滚动位置驱动 ---- */
+  var current = null;
+  function setFocus(el){
+    if (el === current) return;
+    items.forEach(function(i){ i.classList.toggle('is-focused', i === el); });
+    current = el;
+    bandTitle.textContent = el ? (el.dataset.label || '—') : '—';
+    /* 端点闪一下：120ms，用户在动，给出"带子响应了"的反馈 */
+    if (!reduce){
+      band.classList.add('is-tick');
+      setTimeout(function(){ band.classList.remove('is-tick'); }, 120);
+    }
+  }
+  /* rootMargin 上下各 -37.5% → 只留中间 25vh 的判定带 */
+  if ('IntersectionObserver' in window){
+    var focus = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (e.isIntersecting){ setFocus(e.target); }
+        else if (e.target === current){
+          /* 还在带内的其它条目会立刻把它顶掉；没有就清空 */
+          var still = items.filter(function(i){
+            var r = i.getBoundingClientRect();
+            return r.top < innerHeight * 0.625 && r.bottom > innerHeight * 0.375;
+          });
+          setFocus(still[0] || null);
+        }
+      });
+    }, { rootMargin: '-37.5% 0px -37.5% 0px', threshold: 0 });
+    items.forEach(function(el){ focus.observe(el); });
+  }
+
+  /* ---- 3. 刻度尺填充 + HUD 读数（passive，不阻塞滚动） ---- */
+  var secTops = [];
+  function measure(){
+    secTops = ticks.map(function(t){
+      var el = document.getElementById(t.dataset.sec);
+      return { t: t, top: el ? el.getBoundingClientRect().top + scrollY : 0 };
+    });
+  }
+  function onScroll(){
+    var max = document.documentElement.scrollHeight - innerHeight;
+    var p = max > 0 ? Math.min(1, Math.max(0, scrollY / max)) : 0;
+    railFill.style.height = (p * 100) + '%';
+    setPct(p * 100);
+    var mid = scrollY + innerHeight / 2;
+    var active = secTops[0];
+    secTops.forEach(function(s){ if (s.top <= mid) active = s; });
+    ticks.forEach(function(t){ t.setAttribute('aria-current', t === (active && active.t) ? 'true' : 'false'); });
+    if (active && hudSec){
+      var txt = active.t.querySelector('b').textContent;
+      if (hudSec.textContent !== txt){
+        hudSec.textContent = txt;
+        /* 橙色唯一的用武之地：刚扫到新的区段（160ms）。reduced-motion 下不闪 */
+        if (!reduce){
+          hudSec.classList.add('is-scan');
+          setTimeout(function(){ hudSec.classList.remove('is-scan'); }, 160);
+        }
+      }
+    }
+    queueYield();
+  }
+  /* ---- 4. 扫描带附近的文字"让位" ----
+     不是遮罩、不是隐藏：带中心 ±12px 内的文字只把颜色朝纸退 18%，
+     带子离开后 100ms 回位。reduced-motion 下由全局规则压成 1ms，不做补间。 */
+  var yieldEls = Array.prototype.slice.call(document.querySelectorAll(
+    '.display,.lede,.coord span,.post p,.post .meta,.frame figcaption,.empty,.links a,.tier-head h2,.tier-head .sec,.pod-tag'
+  ));
+  var yieldQueued = false;
+  function updateYield(){
+    yieldQueued = false;
+    var cy = innerHeight / 2, half = 12;
+    for (var i = 0; i < yieldEls.length; i++){
+      var el = yieldEls[i], r = el.getBoundingClientRect();
+      if (!r.height) continue;
+      var hit = r.bottom >= cy - half && r.top <= cy + half;
+      if (hit !== el.classList.contains('is-yielding')) el.classList.toggle('is-yielding', hit);
+    }
+  }
+  function queueYield(){
+    if (yieldQueued) return;
+    yieldQueued = true;
+    requestAnimationFrame(updateYield);
+  }
+
+  /* ---- 5. 数字跳动：HUD 百分比在 ~180ms 内插值到目标 ----
+     直接赋值是"跳"，参考实现里数字是连续滚动的。这里用指数逼近近似：
+     每帧补 28% 的差额，60fps 下约 10 帧（≈170ms）收敛。
+     CSS 里已有 tabular-nums，所以字宽不会抖。reduced-motion 下直接落值。 */
+  var pctTarget = 0, pctShown = 0, pctRaf = 0, pctInit = false;
+  function paintPct(v){ if (hudPct) hudPct.textContent = String(Math.round(v)).padStart(3, '0') + '%'; }
+  function tweenPct(){
+    pctRaf = 0;
+    var diff = pctTarget - pctShown;
+    pctShown = Math.abs(diff) < 0.5 ? pctTarget : pctShown + diff * 0.28;
+    paintPct(pctShown);
+    if (pctShown !== pctTarget) pctRaf = requestAnimationFrame(tweenPct);
+  }
+  function setPct(v){
+    if (!hudPct) return;
+    /* 首次与 reduced-motion：直接落值，不做补间 */
+    if (!pctInit || reduce){ pctInit = true; pctShown = pctTarget = v; paintPct(v); return; }
+    pctTarget = v;
+    if (!pctRaf) pctRaf = requestAnimationFrame(tweenPct);
+  }
+
+  /* ---- 6. 点击绿色闪烁（参考视频：点击时短暂绿色闪烁，180ms）---- */
+  document.addEventListener('pointerdown', function(e){
+    var t = e.target && e.target.closest ? e.target.closest('a,button') : null;
+    if (!t) return;
+    t.classList.add('is-flash');
+    setTimeout(function(){ t.classList.remove('is-flash'); }, 180);
+  }, true);
+
+  measure();
+  addEventListener('scroll', onScroll, { passive: true });
+  addEventListener('resize', function(){ measure(); onScroll(); });
+  onScroll();
+  updateYield();
+})();
+</script>
+</body>
+</html>
