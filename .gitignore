@@ -10,3 +10,6 @@ prototype/_shots/
 # wrangler types 生成的 Cloudflare 运行时类型（604 KB）。
 # 需要编辑器类型提示时跑 `npx wrangler types` 重新生成；不进仓库，避免每次升级 wrangler 都产生巨型 diff。
 worker-configuration.d.ts
+# 会话档案：从 DSH 会话日志解出来的原始 JSONL（16 MB，含思考过程与工具原始输出）。
+# 可读版是 docs/session-log-9addf212.md（这个进仓库）；原始档只留本地。
+.session-archive/
