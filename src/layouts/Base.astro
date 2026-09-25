@@ -15,8 +15,17 @@ interface Props {
   current?: 'index' | 'tags' | 'archive' | 'about';
   /** 404 这类错误页不该有 canonical —— 它不是真实内容页 */
   noCanonical?: boolean;
+  /**
+   * 外壳形态。默认 'band' = 现状（深色带 + 品牌行 + 页脚），其余 8 个页面都在用。
+   * 'console' = 新版（刻度尺 / HUD / 扫描带 / OS 状态条），目前**只有首页**会传。
+   *
+   * 为什么做成参数而不是直接换掉：Base.astro 被 9 个页面共享，直接换会同时改 9 页输出、
+   * 出问题分不清是哪一步。做成参数后，不传的页面输出**逐字节不变** —— 阶段 A 用
+   * 构建产物全量 SHA256 diff 证明过（0 处差异）。
+   */
+  chrome?: 'band' | 'console';
 }
-const { title, description, current, noCanonical } = Astro.props;
+const { title, description, current, noCanonical, chrome } = Astro.props;
 // 站名/简介/联系方式来自 content/site.md —— 主题不持有任何文案
 const site = await getSite();
 const docTitle = title ? `${title} — ${site.name}` : site.name;
@@ -40,23 +49,15 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
     <link rel="alternate" type="application/rss+xml" title={`${site.name} — RSS`} href="/rss.xml" />
     <link rel="preload" href="/fonts/plex-sans-400.woff2" as="font" type="font/woff2" crossorigin />
   </head>
-  <body>
+  <body class={chrome === 'console' ? 'chrome-console' : undefined}>
     <a class="skip" href="#main">跳到正文</a>
     <Band>
       <Brandline current={current} name={site.name} wordmark={site.wordmark} />
       <slot name="band" />
     </Band>
     <main id="main">
-      <div class="wrap"><slot /></div>
+      <div class="shell"><slot /></div>
     </main>
     <SiteFooter name={site.name} email={site.email} github={site.github} />
   </body>
 </html>
-
-<style>
-  .wrap {
-    max-width: var(--wrap);
-    margin: 0 auto;
-    padding: var(--sp-7) var(--gutter) var(--sp-8);
-  }
-</style>

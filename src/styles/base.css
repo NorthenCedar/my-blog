@@ -65,3 +65,14 @@ button {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* 主内容容器：原先是 Base.astro 里的作用域样式 .wrap。
+   搬到这里（全局）并改名 .shell，是为了让 Base 不再生成 data-astro-cid-* ——
+   那样以后改 Base 只要不动模板，构建产物就逐字节不变，可验证。
+   改名还避开了另外两处同名容器：SiteFooter 与 Band 各自的 .wrap 仍是它们自己的作用域样式，未动。
+   声明与原来逐字相同，搬迁不改视觉。 */
+.shell {
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: var(--sp-7) var(--gutter) var(--sp-8);
+}
