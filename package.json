@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build && node scripts/prune-draft-assets.mjs",
+    "build": "node scripts/gen-gallery-webp.mjs && astro build && node scripts/prune-draft-assets.mjs",
     "preview": "astro preview",
     "test": "vitest run",
     "verify": "npm run build && vitest run",

@@ -86,6 +86,18 @@ export function unknownFields(data: Record<string, unknown>): string[] {
  * 复用同一个 dateField —— 内容里的 `date: 2026-09-25` 会被 YAML 隐式解析成 Date，
  * 归一化规则必须与文章一致，否则同一份内容两种写法会有两种行为。
  */
+export type GalleryFrontmatter = z.infer<typeof gallerySchema>;
+
+/**
+ * 相册契约（2026-09-26）。
+ * `src` 是**字符串**（相对 markdown 的路径，如 `./011.jpg`），不是 `image()`。
+ * 原因：用 `image()` 会让集合里**每一张图都成为构建资产**，源图被原样产出 ——
+ * 实测 82 张图里只渲染 3 张，产物仍多出 76 个原图 jpg、体积 +30 MB。
+ * 决定「原图不部署」，所以改回字符串 + 由 `scripts/gen-gallery-webp.mjs` 在构建前
+ * 生成两档 webp 到 public/gallery/；**引用的图缺失时那个脚本会让构建失败**，
+ * 这就是这里放弃 ImageMetadata 类型保证后补上的那一层。
+ * alt 仍然必填 —— 那与图片管线无关，是无障碍要求。
+ */
 export const gallerySchema = z.object({
   title: z.string().min(1),
   date: dateField('date'),
@@ -98,5 +110,3 @@ export const gallerySchema = z.object({
     )
     .min(1, '相册至少要有一张图'),
 });
-
-export type GalleryFrontmatter = z.infer<typeof gallerySchema>;

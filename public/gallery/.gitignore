@@ -1,0 +1,4 @@
+# 这里的东西是 scripts/gen-gallery-webp.mjs 在构建前生成的，不入库。
+# 理由（2026-09-26 决定）：相册原图不部署 —— 生成的 webp 也一样，
+# 它们随时可以从 content/gallery/ 的原图重算出来，进 Git 只会让仓库膨胀。
+*

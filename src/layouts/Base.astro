@@ -51,13 +51,17 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
   </head>
   <body class={chrome === 'console' ? 'chrome-console' : undefined}>
     <a class="skip" href="#main">跳到正文</a>
-    <Band>
-      <Brandline current={current} name={site.name} wordmark={site.wordmark} />
-      <slot name="band" />
-    </Band>
+    {/* chrome='console' 的页面（目前只有首页会传）自带刻度尺 / HUD / 扫描带 / OS 状态条，
+        所以不渲染旧的深色 Band 与站点页脚。其余 13 页不传该参数 → 走原路径，产物不变。 */}
+    {chrome !== 'console' && (
+      <Band>
+        <Brandline current={current} name={site.name} wordmark={site.wordmark} />
+        <slot name="band" />
+      </Band>
+    )}
     <main id="main">
       <div class="shell"><slot /></div>
     </main>
-    <SiteFooter name={site.name} email={site.email} github={site.github} />
+    {chrome !== 'console' && <SiteFooter name={site.name} email={site.email} github={site.github} />}
   </body>
 </html>
