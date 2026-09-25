@@ -4,3 +4,6 @@ dist/
 .npm-cache/
 prototype/_shots/
 *.log
+# wrangler 的本地状态（含本地 D1 数据库文件）—— 绝不能提交
+.wrangler/
+.dev.vars
