@@ -165,14 +165,51 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
 describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一篇已发布文章）', () => {
   const page = join(DIST, 'posts', PUBLISHED[0]?.slug ?? '', 'index.html');
 
-  it('文章页恰好一处 <script>，且内联内容 < 1 KB', () => {
+  // 2026-09-26 修订（加评论后）：
+  // 计划里预测「加评论会让 script 从 1 个变 2 个」—— **实测是错的**：
+  // Astro 会把同一个 <script> 块里的多个 import 合并成一个模块脚本，
+  // 所以标签数仍是 1，变的是体积（587 → 2534 字节）。
+  // 断言因此改成「表达意图」而不是写死数字：数量给 2 的余量，真正守住的是**总字节数**。
+  it('文章页脚本数量与体积都在预算内', () => {
     const html = readFileSync(page, 'utf8');
     const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
-    expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBe(1);
+    expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBeLessThanOrEqual(2);
 
-    const bytes = Buffer.byteLength(scripts[0][1], 'utf8');
-    console.log(`内联脚本 ${bytes} 字节`);
-    expect(bytes, `内联脚本 ${bytes} 字节，超过 1 KB 预算`).toBeLessThan(1024);
+    const sizes = scripts.map((s) => Buffer.byteLength(s[1], 'utf8'));
+    const total = sizes.reduce((a, b) => a + b, 0);
+    console.log(`内联脚本体积: ${sizes.join(' + ')} = ${total} 字节（预算 4096）`);
+    expect(total, `内联脚本合计 ${total} 字节，超过 4 KB 预算`).toBeLessThan(4096);
+  });
+
+  it('评论脚本不使用 innerHTML（XSS 头号风险）', () => {
+    const html = readFileSync(page, 'utf8');
+    const inline = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)]
+      .map((m) => m[1])
+      .join('\n');
+    const external = walk(DIST, (n) => n.endsWith('.js') || n.endsWith('.mjs'))
+      .map((f) => readFileSync(f, 'utf8'))
+      .join('\n');
+    const all = inline + external;
+
+    expect(all).not.toContain('innerHTML');
+    expect(all).not.toContain('outerHTML');
+    expect(all).not.toContain('insertAdjacentHTML');
+    expect(all, '评论脚本应当用 textContent 写 DOM').toContain('textContent');
+  });
+
+  it('评论区不引入任何第三方域名', () => {
+    const html = readFileSync(page, 'utf8');
+    const start = html.indexOf('data-comments');
+    expect(start, '评论容器不在页面里').toBeGreaterThan(-1);
+
+    // 精确切到 </section> —— 之前切 4000 字符会越过评论区，把页脚的 GitHub 外链
+    // （那是 <a> 链接，不是资源加载）也算进来，是个假阳性。
+    const end = html.indexOf('</section>', start);
+    const block = html.slice(start, end === -1 ? start + 2000 : end);
+
+    expect(/https?:\/\//.test(block), '评论区区块里出现了外部 URL').toBe(false);
+    // 端点调用在页尾的内联脚本里，不在 section 内部
+    expect(html, '评论应当打自己的端点').toContain('/api/comments');
   });
 
   it('没有独立 JS 文件（预算的另一种表达）', () => {
