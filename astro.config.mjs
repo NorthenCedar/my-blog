@@ -2,8 +2,9 @@ import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 
 export default defineConfig({
-  // Cloudflare Pages 实际地址（2026-09-25 站主确认）。换域名时只改这一行。
-  site: 'https://personal-br4.pages.dev',
+  // 站点正式地址（2026-09-25 绑定自有域名 northcedar.top）。
+  // 换域名时只改这一行 —— robots.txt、sitemap、canonical 全都从它派生。
+  site: 'https://northcedar.top',
   integrations: [sitemap()],
   markdown: {
     // 用 CSS 变量接管代码块配色（design-spec.md：黑底白字），

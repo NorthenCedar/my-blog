@@ -77,7 +77,11 @@
 1. ✅ 本地 `<博客仓库>` 已建独立 git 仓库（10 个提交，91 个跟踪文件）
 2. ✅ **已推送到 https://github.com/NorthenCedar/personal（`main` 分支）** —— 2026-09-25 经站主明确同意后执行
 3. ✅ Cloudflare Pages 已连接该仓库并自动部署（build `npm run build` / output `dist`）—— 推送 `main` 触发构建，实测约 1 分钟内上线
-4. ✅ 站点地址 **https://personal-br4.pages.dev**（2026-09-25 站主确认，已写进 `astro.config.mjs` 的 `site` 与 `public/robots.txt`）
+4. ✅ 站点正式地址 **https://northcedar.top**（2026-09-25 站主购入并绑定；已写进 `astro.config.mjs` 的 `site`，`robots.txt` / `sitemap` / `canonical` 全部从它派生）
+
+**域名变更记录（2026-09-25）**：原用免费子域 `personal-br4.pages.dev`，站主购入 `northcedar.top` 后绑到同一个 Pages 项目。
+两个域名都能访问，但页面里的 `canonical` 一律指向 `northcedar.top` —— 这是告诉搜索引擎「正式地址是哪个」，把权重合到一起而不是分成两份。
+**换域名只需改一处**：`astro.config.mjs` 的 `site`。
 
 **线上实测（2026-09-25，从站主这台机器）**：
 

@@ -122,13 +122,35 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     }
   });
 
-  it('零第三方资源加载（只允许正文里作者手写的 <a> 外链）', () => {
+  it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
+    // 2026-09-25 修订：加了 <link rel="canonical"> 之后，这条断言需要区分
+    // 「加载外部资源」（script/style/font/img —— 真实网络请求，必须禁止）
+    // 与「指向自家域名的元数据」（canonical —— 不产生请求，是 SEO 必需）。
     for (const f of htmlFiles()) {
       const html = readFileSync(f, 'utf8');
       for (const m of html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)) {
-        const before = html.slice(Math.max(0, m.index! - 40), m.index!);
-        expect(before.trimEnd().endsWith('<a'), `发现外部资源加载：${m[1]}（在 ${f}）`).toBe(true);
+        const before = html.slice(Math.max(0, m.index! - 60), m.index!).trimEnd();
+        const isAnchor = before.endsWith('<a');
+        const isCanonical = before.endsWith('<link rel="canonical"');
+        expect(isAnchor || isCanonical, `发现外部资源加载：${m[1]}（在 ${f}）`).toBe(true);
       }
+    }
+  });
+
+  it('每个真实页面都有 canonical，且指向正式域名；错误页刻意不加', () => {
+    const pages = htmlFiles();
+    expect(pages.some((f) => f.endsWith('404.html')), '找不到 404 页，断言可能空转').toBe(true);
+
+    for (const f of pages) {
+      const html = readFileSync(f, 'utf8');
+      const canonical = html.match(/<link rel="canonical" href="([^"]+)"/);
+
+      if (f.endsWith('404.html')) {
+        expect(canonical, '404 页不该有 canonical').toBeNull();
+        continue;
+      }
+      expect(canonical, `${f} 缺少 canonical`).toBeTruthy();
+      expect(canonical![1], `${f} 的 canonical 不是正式域名`).toMatch(/^https:\/\/northcedar\.top\//);
     }
   });
 

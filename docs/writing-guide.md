@@ -9,7 +9,7 @@
 >    https://github.com/NorthenCedar/personal/blob/main/docs/writing-guide.md
 >    —— **仓库已私有，未登录的人是 404**，所以这一条只对你自己有效
 >
-> 想在任何设备上不登录就能查？把它发布成 `personal-br4.pages.dev/guide/` 页面即可（那是个独立决定，需要时告诉我）。
+> 想在任何设备上不登录就能查？把它发布成 `northcedar.top/guide/` 页面即可（那是个独立决定，需要时告诉我）。
 
 ---
 
@@ -190,7 +190,7 @@ git push
 约 1 分钟后上线。确认：
 
 ```powershell
-curl.exe -sI https://personal-br4.pages.dev/posts/my-new-post/ | Select-String "HTTP/"
+curl.exe -sI https://northcedar.top/posts/my-new-post/ | Select-String "HTTP/"
 ```
 
 ### 2.7 撤回一篇文章
@@ -311,7 +311,7 @@ export const TAGS = ['AI', '建站', '摄影', '成长', '随笔', '钢琴', '�
 
 ### 5.1 规则
 
-- 文件夹名就是网址：`content/posts/my-new-post/` → `https://personal-br4.pages.dev/posts/my-new-post/`
+- 文件夹名就是网址：`content/posts/my-new-post/` → `https://northcedar.top/posts/my-new-post/`
 - 只允许小写字母、数字、单个连字符，最长 60
 - **构建期硬校验**，不合法直接失败
 
@@ -375,7 +375,7 @@ title: 关于
 正文随便写。图片也是放在同目录、用 `./` 引用。
 ```
 
-网址固定是 `https://personal-br4.pages.dev/about/`。
+网址固定是 `https://northcedar.top/about/`。
 
 ---
 
@@ -698,7 +698,7 @@ npx wrangler d1 execute beishan-comments --remote --command "DELETE FROM comment
 
 ## 16. 这个网站容不容易打开
 
-**线上地址：https://personal-br4.pages.dev**
+**线上地址：https://northcedar.top**
 
 它是**纯静态站点**，托管在 Cloudflare 的全球 CDN 上 —— 没有服务器进程、没有数据库，所以**不存在"服务器挂了"这回事**。只要 Cloudflare 在，网站就在。
 

@@ -183,6 +183,7 @@ coverAlt: 新首页在桌面端的截图
 | v1.1 | 2026-09-25 | 标签体系从草稿提炼补齐（6 个，全部有文章）；slug 示例换成三篇真实文章；Astro 版本表述 5 → 7 | 三篇真草稿到位 + 技术栈定为 Astro 7 |
 | v1.2 | 2026-09-25 | 短文 `camera-in-gaosan` 转正（`draft: false`）；新增「改 draft 是站主决定，代理不得代办」的约束 | 阶段 7 需要一个非空的生产站点才能真跑验收 |
 | v1.3 | 2026-09-25 | 另外两篇也转正 —— 三篇全部上线；`site` 定为 `personal-br4.pages.dev` | 站主决定全部发布并部署到 Cloudflare Pages |
+| v1.4 | 2026-09-25 | 站点换上自有域名 `northcedar.top`（只改 `site` 一行；robots / sitemap / canonical 全部从它派生） | 站主购入域名并绑定，不再依赖免费子域 |
 
 ---
 

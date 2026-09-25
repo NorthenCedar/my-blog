@@ -13,11 +13,16 @@ interface Props {
   title?: string;
   description?: string;
   current?: 'index' | 'tags' | 'archive' | 'about';
+  /** 404 这类错误页不该有 canonical —— 它不是真实内容页 */
+  noCanonical?: boolean;
 }
-const { title, description, current } = Astro.props;
+const { title, description, current, noCanonical } = Astro.props;
 // 站名/简介/联系方式来自 content/site.md —— 主题不持有任何文案
 const site = await getSite();
 const docTitle = title ? `${title} — ${site.name}` : site.name;
+// canonical 指向 site 配置里的正式域名。即使有人从 personal-br4.pages.dev 访问，
+// 也告诉搜索引擎「正式地址是 northcedar.top」，把两个域名的权重合到一起。
+const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
 ---
 <!doctype html>
 <html lang="zh-CN">
@@ -26,6 +31,7 @@ const docTitle = title ? `${title} — ${site.name}` : site.name;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{docTitle}</title>
     {description && <meta name="description" content={description} />}
+    {!noCanonical && <link rel="canonical" href={canonical} />}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="alternate" type="application/rss+xml" title={`${site.name} — RSS`} href="/rss.xml" />
     <link rel="preload" href="/fonts/plex-sans-400.woff2" as="font" type="font/woff2" crossorigin />
