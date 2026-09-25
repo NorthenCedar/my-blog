@@ -122,6 +122,23 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     }
   });
 
+  it('目录锚点真的能跳（href 与正文标题 id 一一对应）', () => {
+    // **「看起来存在」不等于「测过它在工作」。** 目录渲染出来了、有 5 条链接、构建与测试全绿，
+    // 但从没有人验过它们跳不跳得动 —— 实测事故：headingTree 读的是 h.id，而 Astro render() 给的是
+    // h.slug ⇒ 5 条 href 全是字符串 "#undefined"，点了一条也跳不动。
+    // 这条断言就是那次事故的回归网：静态可查（不需要浏览器），所以在 CI 上也守得住。
+    for (const f of htmlFiles()) {
+      const html = readFileSync(f, 'utf8');
+      const toc = (html.match(/<nav class="toc"[\s\S]*?<\/nav>/) ?? [''])[0];
+      const hrefs = [...toc.matchAll(/href="#([^"]+)"/g)].map((m) => m[1]);
+      if (hrefs.length === 0) continue; // 这页没有目录，跳过
+      expect(hrefs, `${f} 的目录里有 "#undefined" 之类的死链`).not.toContain('undefined');
+      const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+      const dangling = hrefs.filter((h) => !ids.has(h));
+      expect(dangling, `${f} 的目录锚点悬空（href 找不到对应 id）：${dangling.join(', ')}`).toEqual([]);
+    }
+  });
+
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
     // 2026-09-25 修订：加了 <link rel="canonical"> 之后，这条断言需要区分
     // 「加载外部资源」（script/style/font/img —— 真实网络请求，必须禁止）

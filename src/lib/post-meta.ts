@@ -8,8 +8,9 @@ export type RawEntry = {
   /** 字段形状来自 schema —— 唯一事实来源，不在这里手抄一遍（那会漂移）。 */
   data: PostFrontmatter;
   body: string;
-  /** 标题树由页面在 render(entry) 之后取得，查询期不保证可用（deferRender） */
-  headings?: { depth: number; text: string; id: string }[];
+  /** 标题树由页面在 render(entry) 之后取得，查询期不保证可用（deferRender）。
+      字段名照 Astro 的 MarkdownHeading：是 slug 不是 id（曾因写成 id 导致目录全是死链）。 */
+  headings?: { depth: number; text: string; slug?: string; id?: string }[];
 };
 
 export type PostMeta = {
@@ -109,10 +110,20 @@ export function adjacentOf(posts: PostMeta[], slug: string): { prev?: PostMeta; 
   return { prev: posts[i - 1], next: posts[i + 1] };
 }
 
-export function headingTree(headings: { depth: number; text: string; id: string }[]): Heading[] {
+/**
+ * 从 Astro `render()` 的 headings 里挑出 h2/h3 做成目录条。
+ *
+ * **注意字段名**：Astro 的 `MarkdownHeading` 是 `{ depth, slug, text }` —— 没有 `id`。
+ * 这里曾经写 `h.id`，于是每一条都取到 undefined，渲染成 `href="#undefined"`：
+ * 目录照样显示、照样有 5 条链接，**但一条都跳不动**，而且构建、测试、截图全绿。
+ * 「看起来存在」不等于「测过它在工作」—— 这条事故记在 docs/site-decisions.md。
+ *
+ * 取不到 slug 的标题直接丢掉，而不是留一条死链（宁可目录少一条，不要一条跳不动的）。
+ */
+export function headingTree(headings: { depth: number; text: string; slug?: string; id?: string }[]): Heading[] {
   return headings
-    .filter((h) => h.depth === 2 || h.depth === 3)
-    .map((h) => ({ depth: h.depth as 2 | 3, text: h.text, id: h.id }));
+    .filter((h) => (h.depth === 2 || h.depth === 3) && (h.slug ?? h.id))
+    .map((h) => ({ depth: h.depth as 2 | 3, text: h.text, id: (h.slug ?? h.id)! }));
 }
 
 /** 契约 §3：URL 片段只允许小写字母、数字、单个连字符，长度 1–60。 */
