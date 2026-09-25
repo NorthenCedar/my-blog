@@ -500,9 +500,15 @@ https://dash.cloudflare.com → Workers & Pages → personal → Deployments
 cd <博客仓库>          # 每次开工先做这个
 
 npm run dev                # 本地预览（草稿也可见）→ http://localhost:4321
+                           #   注意：它【不跑评论】，评论要调时用下面两条
 npm run verify             # 构建 + 全部测试 ← 推送前必跑
 npm test                   # 只跑测试
 node scripts/assert-tokens.mjs   # 单独复算颜色对比度
+
+# 评论相关（只在调评论时才用）
+npm run comments:init      # 首次：建本地评论表
+npm run build ; npm run dev:cf   # 起带 Functions 的本地运行时 → http://127.0.0.1:8788
+npx wrangler d1 execute beishan-comments --local --command "SELECT * FROM comments LIMIT 10"   # 看本地评论
 
 git status                 # 看当前改了哪些文件
 git add -A                 # 标记全部改动
@@ -585,7 +591,79 @@ git push
 
 ---
 
-## 14. 常见问题
+## 14. 评论（自建，2026-09-26 上线）
+
+评论区在每篇文章底部。读者填**名字 + 留言**即可发表，**不用登录、不用邮箱、没有验证码**。
+数据存在你自己的 Cloudflare D1 里，**不经过任何第三方**。
+
+### 14.1 本地怎么调评论（**和写文章不一样**）
+
+```powershell
+cd <博客仓库>
+npm run build
+npx wrangler pages dev dist --port 8788
+```
+
+然后浏览器打开 `http://127.0.0.1:8788/posts/camera-in-gaosan/`。
+
+> ⚠️ **`npm run dev` 不跑评论** —— 它是 Astro 的静态预览，不会执行 Cloudflare Functions，
+> 所以评论会显示「留言没能加载出来」。**日常写文章照旧用 `npm run dev`；只有要调评论时才用上面这条。**
+
+首次使用要先建本地表：
+
+```powershell
+npm run comments:init
+```
+
+（本地数据库存在 `.wrangler/` 下，已在 `.gitignore` 里，不会被提交。）
+
+### 14.2 怎么删一条评论
+
+先看有哪些（本地用 `--local`，线上用 `--remote`）：
+
+```powershell
+npx wrangler d1 execute beishan-comments --local --command "SELECT id, slug, name, substr(body,1,40) AS body, created_at FROM comments ORDER BY id DESC LIMIT 20"
+```
+
+删掉指定的一条：
+
+```powershell
+npx wrangler d1 execute beishan-comments --remote --command "DELETE FROM comments WHERE id = 42"
+```
+
+删掉某篇文章下的全部（比如被灌了）：
+
+```powershell
+npx wrangler d1 execute beishan-comments --remote --command "DELETE FROM comments WHERE slug = 'my-post'"
+```
+
+### 14.3 线上首次上线要做的三步
+
+1. `npx wrangler login`（打开浏览器点同意）
+2. `npx wrangler d1 create beishan-comments` → 记下返回的 `database_id`
+3. Cloudflare 控制台 → Workers & Pages → `personal` → Settings → Functions → **D1 bindings**：
+   变量名填 **`COMMENTS_DB`**，选中刚才那个库；**生产环境和预览环境各绑一次**
+
+绑完再 `git push` 一次，评论就能用了。
+
+### 14.4 反垃圾是怎么做的
+
+| 机制 | 说明 |
+|---|---|
+| **蜜罐字段** | 表单里有个真人看不见的「网站」输入框。机器人会填，一填就**假装成功但扔掉**（返回 201，不写库）—— 让它以为得手，不来重试 |
+| **频率限制** | 同一个 IP **每分钟最多 2 条**，超了返回 429「发表太频繁」 |
+| **隐私** | 数据库里**只存 IP 的哈希**，不存原始 IP |
+
+挡不住的：**人工发的广告**。看到就用 14.2 的命令删掉。
+
+### 14.5 评论的边界（明确不做）
+
+无头像（头像要请求外部服务）、无邮箱、无嵌套回复、无验证码、无表情、无「点赞」。
+**评论功能依赖 JavaScript** —— 站点是静态的，评论只能运行时取；关掉 JS 只会看到表单骨架。
+
+---
+
+## 15. 常见问题
 
 **Q：我没装 Node，能用吗？**
 需要 Node ≥ 22.12（这台机器上是 v24.21，已装好）。
@@ -613,7 +691,7 @@ git push
 
 ---
 
-## 15. 这个网站容不容易打开
+## 16. 这个网站容不容易打开
 
 **线上地址：https://personal-br4.pages.dev**
 
