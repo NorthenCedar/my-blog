@@ -2,13 +2,28 @@
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
 ---
-<Base title="页面不存在" noCanonical>
-  <Fragment slot="band">
+{
+  /* 404 迁移（2026-09-26）：chrome='band' → 'page'（内页外壳）。
+     **'page' 不渲染 <slot name="band" />** ⇒ 标题必须搬进正文流（外壳的 .pagehead），
+     漏搬会静默消失且构建照常成功（文章页与 about 两遍同一个坑）。
+     **`noCanonical` 不能丢** —— 那是本页与其它页唯一的语义差别：404 不是真实内容页，
+     有 canonical 等于让搜索引擎收录一个空页，而且删了不会报任何错（所以验收里有一条断言守着）。
+     PageTitle 无颜色、靠继承（about 那轮已读源码 + 实图双重确认）⇒ 无需主题化。 */
+}
+<Base title="页面不存在" noCanonical chrome="page">
+  <header class="pagehead">
     <PageTitle size="display">404</PageTitle>
-  </Fragment>
+  </header>
 
   <p class="prose">
     这个地址没有内容。可能是链接写错了，或者这篇文章还没写完。
   </p>
   <p><a href="/">回到首页</a></p>
 </Base>
+
+<style>
+  /* 拍板 D：页头版心收成 --measure，与正文列左对齐（与文章页 / about 同一条）。 */
+  .pagehead {
+    max-width: var(--measure);
+  }
+</style>
