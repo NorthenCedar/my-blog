@@ -29,7 +29,10 @@
 - **frontmatter 9 字段**：`title` `date` `summary` `tags` `draft` 必填（`updated` `cover` `coverAlt` `slug` 可选）。`tags` 1–3 个且必须在注册表内；`summary` ≤ 80 字；`cover` 有则 `coverAlt` 必须有。
 - **对比度**：`--ink` 对白 19.3:1；`--muted` 6.69:1；`--accent-ink` 5.18:1；`--accent`（3.68:1）**只允许出现在 ≥24px 的文字或非文字图形上**。黑带上的小字橙必须用 `--accent`（5.24:1），不能用 `--accent-ink`（3.73:1 不达标）。
 - **视觉 token**：见 `design-spec.md` §3，值逐字抄，不许自创间距或字号。
-- **禁止的设计手法**：紫蓝渐变、Inter、圆角卡片堆砌、三列 feature grid、玻璃拟态、卡片阴影、编号装饰（除非内容真是序列）。
+- **禁止的设计手法**：紫蓝渐变、Inter、卡片阴影、编号装饰（除非内容真是序列）。
+  > **2026-09-26 修订（视觉方向改为莱茵生命风格）**：解冻三项 —— ~~圆角卡片堆砌~~、~~三列 feature grid~~、~~玻璃拟态~~。
+  > 理由与新边界见 `site-decisions.md` 的「变更记录：视觉方向改为莱茵生命风格」。
+  > **仍然禁止**：紫蓝渐变、Inter、卡片阴影、编号装饰。
 - **提交规范**：Conventional Commits（`feat:` / `test:` / `chore:` / `fix:` / `docs:`），每个任务至少一次提交。
 - **不 push、不部署、不动 DNS**，除非站主明确同意。
 
