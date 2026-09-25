@@ -7,10 +7,25 @@ import PageTitle from '../components/PageTitle.astro';
 const entry = await getEntry('pages', 'about');
 const Content = entry ? (await render(entry)).Content : null;
 ---
-<Base title="关于" current="about">
-  <Fragment slot="band">
+{
+  /* 关于页迁移（2026-09-26）：chrome='band' → 'page'（内页外壳：浅色顶栏 + 切片档案背景）。
+     **'page' 不渲染 <slot name="band" />** —— 所以标题必须从那个槽搬进正文流（外壳提供的 .pagehead），
+     漏搬会静默消失且构建照常成功（文章页同一个坑）。
+     PageTitle 本身不写任何颜色（只有 margin/font-weight + 字号类 token），**靠继承取色** ——
+     搬进浅底后自动继承外壳的 --ink，所以**无需主题化**（已读源码确认，见 docs/about-migration-notes.md）。
+     版式依据不是原型：prototype/terminal/ 里没有关于页，依据是既有内页外壳的实测实现（/gallery 与文章页）。 */
+}
+<Base title="关于" current="about" chrome="page">
+  <header class="pagehead">
     <PageTitle>关于</PageTitle>
-  </Fragment>
+  </header>
 
   <div class="prose">{Content && <Content />}</div>
 </Base>
+
+<style>
+  /* 拍板 D：页头版心收成 --measure，与正文列左对齐（与文章页同一条）。 */
+  .pagehead {
+    max-width: var(--measure);
+  }
+</style>
