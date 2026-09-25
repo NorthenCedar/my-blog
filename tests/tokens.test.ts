@@ -26,7 +26,16 @@ describe('低对比 token 越界（--accent-bright 只许用在深色底上）',
   // 2px 下划线（非文字图形，对 --ink 6.26:1）。
   // 白名单必须写**完整选择器**。曾经写成 'a:hover' 这种片段，
   // 结果把页脚 13px 小字上的越界用法一起放行了 —— 断言过宽等于没有断言。
-  const ALLOWED = ['nav a:hover', 'nav a[aria-current=page]'];
+  //
+  // 2026-09-26 P5 追加深色灯箱里的按钮态：灯箱遮罩是 rgb(26 26 26 / 92%)（近 --ink），
+  // 那里的 hover/focus 文字正好是 --accent-bright 的**正当用途**（对 --ink 6.26:1，
+  // 远高于 AA 的 4.5:1）。它与上面两条同属「深色底上用亮绿」这一情形，故一并登记。
+  const ALLOWED = [
+    'nav a:hover',
+    'nav a[aria-current=page]',
+    '.lb button:hover',
+    '.lb button:focus-visible',
+  ];
 
   it('构建产物的 CSS 里，裸 var(--accent-bright) 只出现在白名单选择器里', () => {
     const dist = 'dist';
