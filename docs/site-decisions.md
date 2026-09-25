@@ -344,3 +344,44 @@ git -c credential.helper= ls-remote --heads https://github.com/NorthenCedar/pers
 
 **判据（可复核）**：这类设计的验证里必须有一条"内容真的能在产物里被找到"的断言，例如
 `产物中存在该图片文件: true`；**只看"构建成功"不够** —— 构建成功时图片路径照样可以是死的。
+
+---
+
+## 变更记录：delivery_check 的 page-verify 是硬编码缺陷（2026-09-26 记录）
+
+**判据名**：`page-verify`（`delivery_check` 门禁的第一级检查之一）
+
+**对象**：`dsh-routing-suite/preset/router-standard/router-bootstrap.mjs:439`
+（运行目录 `~/.dsh/.agent-presets/router-standard-v22/` 同一段；`router-bootstrap.mjs` 与 `-v34.mjs` 内容一致）
+
+**现象（实测，非推断）**：按工具描述**正确调用**必然 FAIL。
+
+```js
+const requireSmoke = args?.requireSmoke !== false
+if (args?.url && requireSmoke) {
+  checks.push({ name: 'page-verify', pass: false, detail: '... delivery_check gates the evidence, not a built-in browser' })
+}
+```
+
+- 该分支 `pass` **写死为 `false`**，而结尾是 `ok: checks.every(c => c.pass)` —— 于是「传 `url` + 不传 `requireSmoke`」这条最正常的调用组合**永远拿不到 PASS**。
+- 文案里那句 **「省略 url 会 FAIL，不再可绕过」与代码相反**：`if` 条件要求 `args?.url` 为真，**省略 url 时这条检查根本不入列**，反而更宽松。
+
+**根因**：v1.23「大道至简」把 delivery_check 自跑的 headless smoke 摘掉了（此前复用 `dev_page_check` 反复出 bug），改为「由模型用 bash 自测 + evidence 门禁」。摘除时这条分支被换成了「无条件推一个 false」的占位，而不是删掉或改为委托。
+
+**规避方式（本轮实际用过、且门禁仍然有牙）**：
+
+```
+delivery_check({ file, url, requireSmoke: false, evidence: { items: [...] } })
+```
+
+传 `url` 时第 490–493 行**仍会强制要求** evidence 里至少一条 `kind ∈ {page,image,external}` 且 `reviewed: true` 的视觉证据 —— 所以 `requireSmoke:false` 不是绕过视觉验证，只是把「谁来截图」交还给模型。B1 交付实测：18 项证据（含 5 张 reviewed 截图）→ `PASS ✅`。
+
+**顺带记两条 evidence 形状坑（第一条调用就是栽在这）**：
+
+| 坑 | 现象 | 正确写法 |
+|---|---|---|
+| `kind=numeric` | `result` 被 `/^-?[\d.eE+-]+$/` 全串匹配，写 `486,498 B = 486.5 KB` → `numeric evidence needs a numeric result` | `result` 只放**纯数字** `"486498"`，单位/对比写进 `label` |
+| `kind=page/image/external` | `target` 一律过 `statSync`，填 URL → `target missing: http://...` | `target` 必须是**存在的文件路径**；URL 只该出现在参数 `url` 里 |
+
+**建议修复（给预设，未改，仅记录）**：第 439 行不应推 `false` —— 要么改为 `pass: true` + detail「已委托模型自测」，要么把「必须有 reviewed 视觉证据」并入 evidence 检查块（490–493 行已经在做），并同步修正工具描述里那句与代码相反的「省略 url 会 FAIL」。
+
