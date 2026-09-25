@@ -7,13 +7,16 @@
 import Base from '../layouts/Base.astro';
 import { getVisiblePosts } from '../lib/posts';
 import { getSite } from '../lib/site';
-// 由 scripts/gen-gallery-webp.mjs 在构建前生成（原图不部署，只部署两档 webp）
+// 由 scripts/gen-gallery-webp.mjs 在构建前生成（原图不部署，只部署两档 webp）。
+// manifest v2（2026-09-26）：顶层是全量 `albums[]`，首页只依赖 `home` 这一段 ——
+// 首页不需要理解全量结构，将来相册页也不用迁就首页。
 import galleryManifest from '../../public/gallery/manifest.json';
 
 const site = await getSite();
 const posts = await getVisiblePosts();
 
-const album = galleryManifest;
+if (!galleryManifest.home) throw new Error('manifest.json 缺 home 段 —— 跑一下 node scripts/gen-gallery-webp.mjs');
+const album = galleryManifest.home;
 const shots = album.shots;
 
 // 主图 srcset 从 manifest 反推（唯一真源 = gen-gallery-webp.mjs 的 WIDTHS），
