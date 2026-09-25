@@ -5,6 +5,8 @@ import PostIndex from '../../components/PostIndex.astro';
 import { getAllTags, getPostsByTag } from '../../lib/posts';
 
 // 只产出「已登记且有文章」的标签页 —— 0 篇文章的标签不会生成空页面。
+// 注意：这条 filter 让下面那条「空态」分支在产品数据下**不可达**（collectTags 也已 filter count>0）。
+// 它仍然必须迁到新外壳：将来若放开"空标签也出页"，它会带着旧外壳上线。
 export async function getStaticPaths() {
   const tags = await getAllTags();
   return tags.map((t) => ({ params: { tag: t.tag } }));
@@ -13,18 +15,26 @@ export async function getStaticPaths() {
 const { tag } = Astro.params;
 const posts = await getPostsByTag(tag!);
 ---
+{
+  /* 标签详情迁移（2026-09-26）：chrome='band' → 'page'，**两条渲染路径都要搬** ——
+     路径 A（正常）与路径 B（空态）各有自己的 <Base> 与 <Fragment slot="band">，
+     'page' 外壳不渲染 band 槽 ⇒ 漏搬任何一条，那条路径的标题会静默消失且构建照常成功。
+     两条路径的页头都**不收 --measure**：同一页不该因分支不同而版心不同（站主 2026-09-26 拍板）；
+     路径 B 的段落由 .prose 自然收窄。
+     PageTitle 无颜色、靠继承 ⇒ 无需主题化。 */
+}
 {posts.length > 0 ? (
-  <Base title={tag} current="tags">
-    <Fragment slot="band">
+  <Base title={tag} current="tags" chrome="page">
+    <header class="pagehead">
       <PageTitle>{tag}</PageTitle>
-    </Fragment>
+    </header>
     <PostIndex posts={posts} />
   </Base>
 ) : (
-  <Base title="没有这个标签" current="tags">
-    <Fragment slot="band">
+  <Base title="没有这个标签" current="tags" chrome="page">
+    <header class="pagehead">
       <PageTitle>没有这个标签</PageTitle>
-    </Fragment>
+    </header>
     <p class="prose">
       这个标签没有文章，或者它还没登记。<a href="/tags/">看看全部标签</a>
     </p>

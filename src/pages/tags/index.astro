@@ -5,10 +5,16 @@ import { getAllTags } from '../../lib/posts';
 
 const tags = await getAllTags();
 ---
-<Base title="标签" current="tags">
-  <Fragment slot="band">
+{
+  /* 标签总览迁移（2026-09-26）：chrome='band' → 'page'。
+     **'page' 不渲染 <slot name="band" />** ⇒ 标题必须搬进正文流（外壳的 .pagehead）。
+     **刻意不写 max-width: var(--measure)** —— 本页的内容列是 .chips 的通栏 flex 列表，不是 .prose 正文列；
+     页头收成 34em 会让下缘实线短于内容、两条线错位（同归档那轮的"版心要对齐的是内容，不是习惯"）。 */
+}
+<Base title="标签" current="tags" chrome="page">
+  <header class="pagehead">
     <PageTitle>标签</PageTitle>
-  </Fragment>
+  </header>
 
   <ul class="chips">
     {tags.map((t) => (
