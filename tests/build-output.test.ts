@@ -239,6 +239,28 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
   });
 });
 
+describe.skipIf(!hasDist)('首页 JS 预算（B2 动效层）', () => {
+  // 2026-09-26 站主拍板：首页动效内联脚本**另立一条**预算，上限 7 KB。
+  // 文章页仍守 4096 B（上面的「JS 预算」），且产物里不得有独立 .js 文件
+  // → 动效只能内联，不许为了过预算拆成外部文件（那会同时打破上面那条）。
+  //
+  // 为什么不复用文章页那条：两者是不同的东西。文章页跑的是复制按钮 + 评论；
+  // 首页跑的是刻度/HUD/聚焦/揭示这套动效。混成一条会让「放宽首页」顺手放宽文章页。
+  //
+  // 实测（2026-09-26）：45（门控）+ 2842（动效）= 2887 字节，余量 4281。
+  // 参考：原型 home.html 的同功能内联 JS 是 6286 字节（ES5 写法 + 冗余），这里更紧凑。
+  it('首页内联脚本总量 ≤ 7 KB', () => {
+    const page = join(DIST, 'index.html');
+    expect(existsSync(page), 'dist/index.html 不存在，先跑 npm run build').toBe(true);
+    const html = readFileSync(page, 'utf8');
+    const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
+    const sizes = scripts.map((s) => Buffer.byteLength(s[1], 'utf8'));
+    const total = sizes.reduce((a, b) => a + b, 0);
+    console.log(`首页内联脚本体积: ${sizes.join(' + ')} = ${total} 字节（预算 7168）`);
+    expect(total, `首页内联脚本合计 ${total} 字节，超过 7 KB 预算`).toBeLessThan(7168);
+  });
+});
+
 describe.skipIf(hasDist)('构建产物（未构建）', () => {
   it('dist/ 不存在，先跑 npm run build 再跑测试', () => {
     console.warn('dist/ 不存在：集成断言被跳过。正确顺序是 npm run build && npm test');
