@@ -619,7 +619,12 @@ npm run comments:init
 
 ### 14.2 怎么删一条评论
 
-先看有哪些（本地用 `--local`，线上用 `--remote`）：
+> ⚠️ **最容易踩的坑：`wrangler d1 execute` 默认打的是【本地】数据库。**
+> 不加 `--remote` 时，你的命令作用在 `.wrangler/` 里的本地副本上 —— **看起来成功，但线上什么都没变**。
+> 我上线时就踩过：以为把表建到线上了，结果线上库一直空着，评论 API 报 500。
+> 判据：加上 `--remote` 后输出里会出现 `"served_by": "v3-prod"` 和真实的 `num_tables`。
+
+先看有哪些（**本地**用 `--local`，**线上**用 `--remote`）：
 
 ```powershell
 npx wrangler d1 execute beishan-comments --local --command "SELECT id, slug, name, substr(body,1,40) AS body, created_at FROM comments ORDER BY id DESC LIMIT 20"
