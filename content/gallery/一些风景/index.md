@@ -22,7 +22,7 @@ images:
     alt: 狗尾巴草
   - src: ./020.jpg
     alt: 苏州的美
-  - src: ./021.png
+  - src: ./021.jpg
     alt: 竹影
   - src: ./022.jpg
     alt: 网师园的花桥
