@@ -261,6 +261,25 @@ describe.skipIf(!hasDist)('首页 JS 预算（B2 动效层）', () => {
   });
 });
 
+describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
+  // 2026-09-26 站主拍板 E：/gallery 独立一条预算，上限 6144。
+  // 与首页同理，不跟文章页那条合并 —— 合并会让「放宽某一页」顺手放宽其它页。
+  //
+  // 实测（2026-09-26）：1971 字节（筛选 + 灯箱，零依赖）。余量 4173。
+  // 灯箱刻意走**渐进增强**：图包在 <a href="1280档"> 里，JS 到位才拦截点击开灯箱 ——
+  // 所以无 JS 时页面完整可用（点图直接开大图），也不需要第二个 `html.js` 门控脚本。
+  it('相册页内联脚本总量 ≤ 6 KB', () => {
+    const page = join(DIST, 'gallery', 'index.html');
+    expect(existsSync(page), 'dist/gallery/index.html 不存在，先跑 npm run build').toBe(true);
+    const html = readFileSync(page, 'utf8');
+    const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
+    const sizes = scripts.map((s) => Buffer.byteLength(s[1], 'utf8'));
+    const total = sizes.reduce((a, b) => a + b, 0);
+    console.log(`相册页内联脚本体积: ${sizes.join(' + ')} = ${total} 字节（预算 6144）`);
+    expect(total, `相册页内联脚本合计 ${total} 字节，超过 6 KB 预算`).toBeLessThan(6144);
+  });
+});
+
 describe.skipIf(hasDist)('构建产物（未构建）', () => {
   it('dist/ 不存在，先跑 npm run build 再跑测试', () => {
     console.warn('dist/ 不存在：集成断言被跳过。正确顺序是 npm run build && npm test');

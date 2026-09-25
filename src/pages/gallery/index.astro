@@ -1,0 +1,384 @@
+---
+/**
+ * 相册页（P5）—— 瀑布流 + 相册筛选 + 自写灯箱。
+ *
+ * 规范来自冻结原型 prototype/terminal/gallery.html（308 行）。三处刻意偏离原型，理由如下：
+ *  ① **不用 `body.no-js` 门控**（原型 L159-160 用两态类来隐藏「放大」按钮）：
+ *     改成渐进增强 —— 图片包在 `<a href="1280档">` 里，JS 到位才拦截点击开灯箱。
+ *     于是无 JS 时点图直接开大图，页面完整可用，且**不需要第二个门控脚本**
+ *     （首页那条「门控只落首页」的静态契约因此不必改，见 tests/b2-motion.test.ts）。
+ *  ② **灯箱取图走 manifest 的 1280 档**，不用 `img.currentSrc` —— 网格图是 800 档，
+ *     照抄原型那句会把灯箱也钉在 800 档（原型 L232 的写法在真站点是错的）。
+ *  ③ **不印 `RULE ≤2MB`**：那条规则的真身在 docs/writing-guide.md:258，没有任何测试守它。
+ *     规范禁止"没有验证过的数字"，所以要么量出来再印、要么不印 —— 这里选不印。
+ *
+ * 数据全部来自 public/gallery/manifest.json（由 scripts/gen-gallery-webp.mjs 从 content/ 生成）：
+ * 相册清单、每帧 alt、两档 URL 与尺寸。**相册个数不写死** —— 有几个相册就有几个筛选按钮。
+ */
+import Base from '../../layouts/Base.astro';
+import manifest from '../../../public/gallery/manifest.json';
+
+type File = { w: number; h: number; url: string };
+type Frame = { alt: string; src: string; files: File[] };
+type Album = { id: string; title: string; date: string; total: number; frames: Frame[] };
+
+const albums = manifest.albums as Album[];
+const total = albums.reduce((n, a) => n + a.total, 0);
+
+// 档位不写死：从 manifest 登记的 widths 里挑网格档（最窄）与灯箱档（最宽）
+const GRID_W = Math.min(...manifest.widths);
+const LIGHT_W = Math.max(...manifest.widths);
+const at = (f: Frame, w: number) => f.files.find((x) => x.w === w) ?? f.files[0];
+
+// 灯箱那只 <img> 服务端就带上第一帧的地址与说明：不留空 src（空 src 会去请求页面自己），
+// 也不留空 alt（既有全局契约「所有图片的 alt 都非空」）。容器 display:none + loading="lazy"
+// ⇒ 打开灯箱之前不会产生这次请求（有探针断言守着）。
+const firstFrame = albums[0].frames[0];
+const firstBig = at(firstFrame, LIGHT_W);
+---
+
+<Base title="相册" chrome="page">
+  <header class="pagehead">
+    <h1 class="pagehead-title">相册</h1>
+    <p class="readout">
+      <span>FRAMES <em>{total}</em></span>
+      <span>ALBUMS <em>{albums.length}</em></span>
+      <span>VIEWING <em id="viewing">{total}</em></span>
+    </p>
+  </header>
+
+  <div class="filters" role="group" aria-label="按相册筛选">
+    <button type="button" data-filter="all" aria-pressed="true">全部 <b>{total}</b></button>
+    {albums.map((a) => (
+      <button type="button" data-filter={a.id} aria-pressed="false">{a.title} <b>{a.total}</b></button>
+    ))}
+  </div>
+
+  <div class="wf">
+    {albums.map((a) =>
+      a.frames.map((f) => {
+        const g = at(f, GRID_W);
+        const big = at(f, LIGHT_W);
+        return (
+          <figure data-album={a.id} data-cap={f.alt}>
+            <a class="frame" href={big.url}>
+              <img src={g.url} width={g.w} height={g.h} alt={f.alt} loading="lazy" decoding="async" />
+              <span class="zoom" aria-hidden="true">放大</span>
+            </a>
+            <figcaption>
+              <em>{f.alt}</em>
+              <span>{a.title}</span>
+            </figcaption>
+          </figure>
+        );
+      })
+    )}
+  </div>
+
+  <div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="图片查看">
+    <div class="lb-bar">
+      <span class="lb-meta"><b id="lbAlbum"></b> · <span id="lbCap"></span></span>
+      <span class="lb-pos"><span id="lbPos">1</span> / <span id="lbTotal">{total}</span></span>
+      <button type="button" id="lbClose" aria-label="关闭（Esc）">关闭 ✕</button>
+    </div>
+    <div class="lb-stage">
+      <button type="button" id="lbPrev" aria-label="上一张（←）">←</button>
+      <figure><img id="lbImg" src={firstBig.url} alt={firstFrame.alt} loading="lazy" decoding="async" /></figure>
+      <button type="button" id="lbNext" aria-label="下一张（→）">→</button>
+    </div>
+  </div>
+</Base>
+
+<style>
+  /* ===== 页头读数 ===== */
+  .pagehead-title {
+    font-size: var(--fs-title);
+    line-height: var(--lh-title);
+    letter-spacing: var(--ls-title);
+    font-weight: 800;
+    margin: 0 0 var(--sp-4);
+  }
+  .readout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-5);
+    margin: 0;
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .readout em {
+    font-style: normal;
+    color: var(--accent-ink);
+  }
+
+  /* ===== 筛选：发丝线标签，不是圆角胶囊（原型 L57-67） ===== */
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    margin: var(--sp-5) 0 var(--sp-6);
+    border-bottom: 1px solid var(--hair);
+  }
+  .filters button {
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 0.5rem 0.9rem;
+    cursor: pointer;
+    color: var(--muted);
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    font-variant-numeric: tabular-nums;
+    transition: color var(--dur-fast) var(--ease-interact), border-color var(--dur-fast) var(--ease-interact);
+  }
+  .filters button b {
+    font-weight: 400;
+    margin-left: 0.4rem;
+    opacity: 0.7;
+  }
+  .filters button:hover {
+    color: var(--ink);
+  }
+  .filters button[aria-pressed='true'] {
+    color: var(--ink);
+    border-bottom-color: var(--accent-ink);
+  }
+  .filters button[aria-pressed='true'] b {
+    color: var(--accent-ink);
+    opacity: 1;
+  }
+
+  /* ===== 瀑布流（原型 L69-87） ===== */
+  .wf {
+    column-count: 3;
+    column-gap: var(--sp-4);
+  }
+  @media (max-width: 1180px) {
+    .wf { column-count: 2; }
+  }
+  @media (max-width: 680px) {
+    .wf { column-count: 1; }
+  }
+  .wf figure {
+    break-inside: avoid;
+    margin: 0 0 var(--sp-5);
+  }
+  /* 筛选靠 [hidden]；显式写一条，免得上游给 figure 加了 display 后被覆盖 */
+  .wf figure[hidden] {
+    display: none;
+  }
+  .wf .frame {
+    position: relative;
+    display: block;
+    line-height: 0;
+    text-decoration: none;
+  }
+  .wf img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .wf .zoom {
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    padding: 0.15rem 0.5rem;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    line-height: 1.6;
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-interact);
+  }
+  .wf .frame:hover .zoom,
+  .wf .frame:focus-visible .zoom {
+    opacity: 1;
+  }
+  .wf figcaption {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    margin-top: var(--sp-2);
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+  }
+  .wf figcaption em {
+    font-style: normal;
+    color: var(--ink);
+  }
+
+  /* ===== 灯箱（原型 L89-112 / JS L223-306） ===== */
+  .lb {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgb(26 26 26 / 92%);
+    flex-direction: column;
+    color: var(--paper);
+  }
+  .lb.on {
+    display: flex;
+  }
+  .lb-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: 0.7rem var(--gutter);
+    border-bottom: 1px solid rgb(250 250 247 / 18%);
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+  }
+  .lb-meta {
+    color: rgb(250 250 247 / 72%);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .lb-meta b {
+    color: var(--paper);
+    font-weight: 400;
+  }
+  .lb-pos {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: rgb(250 250 247 / 72%);
+  }
+  .lb button {
+    background: none;
+    border: 1px solid rgb(250 250 247 / 30%);
+    border-radius: 0;
+    color: var(--paper);
+    font: inherit;
+    padding: 0.25rem 0.7rem;
+    cursor: pointer;
+  }
+  .lb button:hover,
+  .lb button:focus-visible {
+    border-color: var(--accent-bright);
+    color: var(--accent-bright);
+  }
+  .lb-stage {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-4);
+    padding: var(--sp-4) var(--gutter);
+    min-height: 0;
+  }
+  .lb-stage figure {
+    margin: 0;
+    max-width: min(92vw, 1600px);
+    max-height: 100%;
+    line-height: 0;
+  }
+  .lb-stage img {
+    max-width: 100%;
+    max-height: calc(100vh - 8rem);
+    width: auto;
+    height: auto;
+  }
+  .lb-stage > button {
+    font-size: var(--fs-body);
+    padding: 0.5rem 0.9rem;
+    flex-shrink: 0;
+  }
+</style>
+
+<script>
+  // 相册页的两个行为：筛选 + 灯箱。零依赖，不引任何包。
+  (() => {
+    const figs = Array.from(document.querySelectorAll<HTMLElement>('.wf figure'));
+    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('.filters button'));
+    const lb = document.getElementById('lb')!;
+    const lbImg = document.getElementById('lbImg') as HTMLImageElement;
+    const lbAlbum = document.getElementById('lbAlbum')!;
+    const lbCap = document.getElementById('lbCap')!;
+    const lbPos = document.getElementById('lbPos')!;
+    const lbTotal = document.getElementById('lbTotal')!;
+    const lbClose = document.getElementById('lbClose') as HTMLButtonElement;
+    const lbPrev = document.getElementById('lbPrev') as HTMLButtonElement;
+    const lbNext = document.getElementById('lbNext') as HTMLButtonElement;
+    const viewing = document.getElementById('viewing')!;
+
+    let visible = figs.slice();
+    let cur = 0;
+    let lastFocus: HTMLElement | null = null;
+
+    const paint = () => {
+      const fig = visible[cur];
+      if (!fig) return;
+      const a = fig.querySelector('a.frame') as HTMLAnchorElement;
+      lbImg.src = a.getAttribute('href')!;      // 灯箱用 href 指的大档（不是 currentSrc —— 网格是 800 档）
+      lbImg.alt = fig.dataset.cap ?? '';
+      lbAlbum.textContent = fig.querySelector('figcaption span')?.textContent ?? '';
+      lbCap.textContent = fig.dataset.cap ?? '';
+      lbPos.textContent = String(cur + 1);
+      lbTotal.textContent = String(visible.length);
+    };
+    const step = (d: number) => {
+      if (visible.length === 0) return;
+      cur = (cur + d + visible.length) % visible.length;
+      paint();
+    };
+    const open = (fig: HTMLElement) => {
+      const i = visible.indexOf(fig);
+      if (i < 0) return;
+      cur = i;
+      lastFocus = document.activeElement as HTMLElement;
+      paint();
+      lb.classList.add('on');
+      document.body.style.overflow = 'hidden';
+      lbClose.focus();
+    };
+    const close = () => {
+      lb.classList.remove('on');
+      document.body.style.overflow = '';
+      lbImg.removeAttribute('src');
+      lastFocus?.focus();
+    };
+
+    // 点击开灯箱 —— 只在 JS 到位时拦截；无 JS 时这个链接直接打开大图
+    for (const fig of figs) {
+      (fig.querySelector('a.frame') as HTMLAnchorElement).addEventListener('click', (e) => {
+        e.preventDefault();
+        open(fig);
+      });
+    }
+
+    // 筛选：只动 hidden，不重建 DOM。开着灯箱时切筛选 → 灯箱跟着切到该集合第一张
+    for (const b of buttons) {
+      b.addEventListener('click', () => {
+        const f = b.dataset.filter!;
+        for (const x of buttons) x.setAttribute('aria-pressed', String(x === b));
+        for (const fig of figs) fig.hidden = !(f === 'all' || fig.dataset.album === f);
+        visible = figs.filter((fig) => !fig.hidden);
+        viewing.textContent = String(visible.length);
+        if (lb.classList.contains('on')) { cur = 0; paint(); }
+      });
+    }
+
+    lbClose.addEventListener('click', close);
+    lbPrev.addEventListener('click', () => step(-1));
+    lbNext.addEventListener('click', () => step(1));
+    lb.addEventListener('click', (e) => { if (e.target === lb) close(); });
+    document.addEventListener('keydown', (e) => {
+      if (!lb.classList.contains('on')) return;
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+      else if (e.key === 'Tab') {
+        // 焦点不逃出灯箱：只在 关闭/上一张/下一张 之间循环
+        const f = [lbClose, lbPrev, lbNext];
+        const i = f.indexOf(document.activeElement as HTMLButtonElement);
+        e.preventDefault();
+        f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+      }
+    });
+  })();
+</script>
