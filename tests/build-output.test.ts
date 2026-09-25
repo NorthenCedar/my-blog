@@ -139,6 +139,27 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     }
   });
 
+  it('存在全站链接配色兜底（防止链接掉回浏览器默认蓝）', () => {
+    // 根因：站点若没有全局 `a` 颜色规则，任何落在未定色容器里的链接都会掉回
+    // UA 的 a:link { color: -webkit-link }（默认蓝）—— UA 声明压过继承值。
+    // 这个根因出现过两次（内页顶栏 / 404 的「回到首页」），所以加了一层兜底（src/styles/links.css），
+    // 这条断言守着那层兜底**别被当成无用样式清掉**。
+    const cssFiles: string[] = [];
+    const walk = (d: string) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (e.endsWith('.css')) cssFiles.push(p);
+      }
+    };
+    walk(DIST);
+    const all = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
+    // 匹配一条「裸 a」选择器且带 color 的规则（不含后代/复合选择器）
+    const globalLinkRule = /(?:^|[}\s,])a\s*(?:,[^{}]*)?\{[^}]*\bcolor\s*:/.test(all);
+    expect(globalLinkRule, '产物 CSS 里找不到全局 a 颜色规则 —— 链接兜底被删了？').toBe(true);
+    console.log('判据 链接兜底 产物 CSS 含全局 a 颜色规则: true');
+  });
+
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
     // 2026-09-25 修订：加了 <link rel="canonical"> 之后，这条断言需要区分
     // 「加载外部资源」（script/style/font/img —— 真实网络请求，必须禁止）
