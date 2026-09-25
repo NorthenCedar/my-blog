@@ -1,0 +1,39 @@
+---
+import '../styles/comments.css';
+
+interface Props {
+  slug: string;
+}
+const { slug } = Astro.props;
+---
+<section class="comments" id="comments" data-comments data-slug={slug}>
+  <h2>评论<span class="comment-count" data-count></span></h2>
+
+  <p class="comment-empty" data-empty>还没有人留言。你可以是第一个。</p>
+  <ol class="comment-list" data-list hidden></ol>
+  <p class="comment-error" role="alert" data-error hidden></p>
+
+  <h2 id="comment-form-title">留个言</h2>
+  <form class="comment-form" data-form aria-labelledby="comment-form-title" novalidate>
+    <label for="comment-name">名字</label>
+    <input
+      id="comment-name"
+      name="name"
+      type="text"
+      maxlength="40"
+      autocomplete="nickname"
+      required
+    />
+
+    <label for="comment-body">留言</label>
+    <textarea id="comment-body" name="body" rows="4" maxlength="1000" required></textarea>
+
+    <!-- 蜜罐：真人看不见，也不会进入 Tab 序 -->
+    <div class="hp" aria-hidden="true">
+      <label for="comment-website">网站（请留空）</label>
+      <input id="comment-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+    </div>
+
+    <button type="submit" data-submit>发表</button>
+  </form>
+</section>

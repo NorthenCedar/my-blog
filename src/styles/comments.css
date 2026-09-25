@@ -1,0 +1,101 @@
+/* 评论组件。只使用 tokens.css 里已有的变量 —— 不新增颜色、不新增间距档位。
+   设计依据：docs/design-spec.md §4.1 */
+
+.comments {
+  max-width: var(--measure);
+  margin-top: var(--sp-8);
+  border-top: 1px solid var(--ink);
+  padding-top: var(--sp-5);
+}
+.comments h2 {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  margin: 0 0 var(--sp-4);
+}
+.comment-count {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-left: var(--sp-3);
+  font-weight: 400;
+}
+.comment-list {
+  list-style: none;
+  margin: 0 0 var(--sp-6);
+  padding: 0;
+  border-bottom: 1px solid var(--ink);
+}
+.comment-list li {
+  border-top: 1px solid var(--hair);
+  padding: var(--sp-5) 0;
+}
+.comment-name {
+  font-weight: 700;
+}
+.comment-time {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin: var(--sp-1) 0 var(--sp-3);
+}
+.comment-body {
+  margin: 0;
+  max-width: var(--measure);
+  white-space: pre-wrap; /* 保留换行，但不解析 HTML */
+}
+.comment-empty {
+  color: var(--muted);
+  margin: 0 0 var(--sp-5);
+}
+.comment-form label {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  margin-bottom: var(--sp-1);
+}
+.comment-form input,
+.comment-form textarea {
+  width: 100%;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.comment-form input:focus-visible,
+.comment-form textarea:focus-visible {
+  border-color: var(--ink);
+}
+.comment-form button {
+  background: var(--ink);
+  color: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  padding: var(--sp-2) var(--sp-5);
+  cursor: pointer;
+}
+/* hover 用 --accent-ink（5.18:1 达标）；--accent 只有 3.68:1，按钮文字是小字，刻意不用 */
+.comment-form button:hover:not(:disabled) {
+  background: var(--accent-ink);
+  border-color: var(--accent-ink);
+}
+.comment-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.comment-error {
+  color: var(--accent-ink);
+  font-size: var(--fs-sm);
+  margin: 0 0 var(--sp-3);
+}
+/* 蜜罐：移出视口而不是 display:none —— 有些机器人会跳过隐藏元素 */
+.hp {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}

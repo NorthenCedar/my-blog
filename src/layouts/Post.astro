@@ -3,6 +3,7 @@ import { render, type CollectionEntry } from 'astro:content';
 import Base from './Base.astro';
 import Meta from '../components/Meta.astro';
 import Toc from '../components/Toc.astro';
+import CommentSection from '../components/CommentSection.astro';
 import { headingTree, type PostMeta } from '../lib/post-meta';
 
 interface Props {
@@ -32,6 +33,9 @@ const toc = headingTree(headings);
     {adjacent.prev && <a href={adjacent.prev.url}>← {adjacent.prev.title}</a>}
     {adjacent.next && <a class="next" href={adjacent.next.url}>{adjacent.next.title} →</a>}
   </nav>
+
+  <!-- 评论放在「上一篇/下一篇」之后：让导航紧贴正文，评论在页面最底部 -->
+  <CommentSection slug={meta.slug} />
 </Base>
 
 <style>

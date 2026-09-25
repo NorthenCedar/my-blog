@@ -7,3 +7,6 @@ prototype/_shots/
 # wrangler 的本地状态（含本地 D1 数据库文件）—— 绝不能提交
 .wrangler/
 .dev.vars
+# wrangler types 生成的 Cloudflare 运行时类型（604 KB）。
+# 需要编辑器类型提示时跑 `npx wrangler types` 重新生成；不进仓库，避免每次升级 wrangler 都产生巨型 diff。
+worker-configuration.d.ts
