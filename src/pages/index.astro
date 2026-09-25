@@ -37,6 +37,13 @@ const sectors = [
 ---
 
 <Base description={site.metaDescription} current="index" chrome="console">
+  {/* ===== 两态门控（B2）=====
+      默认（无 JS）= 页面完整可读：正文不弱化、仪表不显示死指针；
+      JS 到位后给 <html> 挂 .js，才有聚焦弱化与扫描仪表。
+      放在槽内最前面：脚本同步执行，等 .field-item 被解析时类已就位，不会闪。
+      只落在首页 —— 不动 Base，其余 13 页产物逐字节不变。 */}
+  <script is:inline>document.documentElement.classList.add('js');</script>
+
   {/* ===== 背景装饰层（B2）：四样全是装饰，不承载任何信息 =====
       堆叠计划：0 装饰 < 1 正文 .tier < 2 扫描带 < 3 刻度尺 < 4 HUD < 5 OS 状态条
       （装饰层是 position:fixed，若正文不给 z-index，定位元素会画在静态正文之上 —— 水印会盖到字上。） */}
@@ -68,19 +75,35 @@ const sectors = [
   </div>
 
   <nav class="rail" aria-label="页面区段">
-    {sectors.map((s) => (
-      <a class="rail-tick" href={`#${s.id}`} style={`top:${s.top}`}>
-        <i></i><b>{s.n}</b><span class="rail-name">{s.name}</span>
-      </a>
-    ))}
+    {/* .rail-track 用 100% 高而不是原型的 56vh 居中 —— 否则 5 个刻度的 top% 换基准、
+        整体位置会漂移。这里只是给 .rail-fill 一个定位父级，几何与 B1 完全一致。 */}
+    <div class="rail-track">
+      <div class="rail-fill" id="railFill"></div>
+      {sectors.map((s) => (
+        <a class="rail-tick" href={`#${s.id}`} style={`top:${s.top}`} data-sec={s.id}>
+          <i></i><b>{s.n}</b><span class="rail-name">{s.name}</span>
+        </a>
+      ))}
+    </div>
   </nav>
 
   <div class="hud">
     <span class="site">{site.wordmark}</span>
-    <span>01 / {String(sectors.length).padStart(2, '0')}</span>
+    <span class="readout">
+      <i class="rec" aria-hidden="true"></i>
+      <span id="hudSec">01</span> / {String(sectors.length).padStart(2, '0')} · <span class="hud-progress" id="hudPct">000%</span>
+    </span>
   </div>
 
-  <div class="band" aria-hidden="true"><div class="band-line"></div></div>
+  <div class="band" id="band" aria-hidden="true">
+    <div class="band-line"></div>
+    <span class="band-sweep"></span>
+    <span class="band-cap l"></span><span class="band-cap r"></span>
+    <div class="band-readout">
+      <svg class="rhine-mark sm" aria-hidden="true"><use href="#rhine-logo" /></svg>
+      扫描：<b id="bandTitle">—</b>
+    </div>
+  </div>
 
   <section class="tier" id="s1">
     <div class="field-item" data-label={`身份 · ${site.name}`}>
@@ -105,11 +128,14 @@ const sectors = [
     <ul class="index">
       {posts.map((p) => (
         <li class="field-item" data-label={`文章 · ${p.title}`}>
-          <a href={p.url}>
-            <span class="date"><time datetime={p.date}>{p.date}</time></span>
-            <span class="title">{p.title}</span>
-            <span class="tags">{p.tags.join(' / ')}</span>
-          </a>
+          {/* .bracket：L 形角标（左下 + 右上对角）。它是聚焦的主要载体 —— 透明度只是辅助。 */}
+          <div class="bracket">
+            <a href={p.url}>
+              <span class="date"><time datetime={p.date}>{p.date}</time></span>
+              <span class="title">{p.title}</span>
+              <span class="tags">{p.tags.join(' / ')}</span>
+            </a>
+          </div>
         </li>
       ))}
     </ul>
@@ -167,6 +193,157 @@ const sectors = [
     </div>
   </section>
 
+  {/* ===== 动效层（B2）：6 段行为，零依赖 =====
+       规矩：只读 DOM + 写 class/style，不动布局；reduced-motion 下不补间、不位移。
+       元素缺失时全部短路（B1 的标记里没有这些仪器时页面照样能用）。 */}
+  <script>
+    (() => {
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const items = Array.from(document.querySelectorAll('.field-item'));
+      const band = document.getElementById('band');
+      const bandTitle = document.getElementById('bandTitle');
+      const railFill = document.getElementById('railFill');
+      const hudPct = document.getElementById('hudPct');
+      const hudSec = document.getElementById('hudSec');
+      const ticks = Array.from(document.querySelectorAll('.rail-tick'));
+
+      /* 1) 入场揭示：每个条目第一次进入视口时显形，只播一次。
+            揭示的载体是 transform（不是 opacity）—— 基准 opacity 恒为 --focus-min，
+            所以最坏情况只是「没动画」，绝不会「内容永久不可见」。 */
+      if ('IntersectionObserver' in window) {
+        const reveal = new IntersectionObserver((entries) => {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            e.target.classList.add('is-revealed');
+            reveal.unobserve(e.target);
+          }
+        }, { rootMargin: '0px 0px -12% 0px', threshold: 0.01 });
+        items.forEach((el, i) => {
+          // 同屏一起揭示的条目做 90ms 错位（spec §1.1：层间错位 80–120ms）
+          if (!reduce) el.style.transitionDelay = (i % 3) * 90 + 'ms';
+          reveal.observe(el);
+        });
+      } else {
+        items.forEach((el) => el.classList.add('is-revealed'));
+      }
+
+      /* 2) 聚焦：屏幕中部 25vh 就是「扫描带」，焦点由滚动位置驱动。带外不禁用，只弱化。 */
+      let current = null;
+      const setFocus = (el) => {
+        if (el === current) return;
+        items.forEach((i) => i.classList.toggle('is-focused', i === el));
+        current = el;
+        if (bandTitle) bandTitle.textContent = el ? (el.dataset.label || '—') : '—';
+        if (!reduce && band) {
+          // 端点闪一下 120ms：用户在动，给「带子响应了」的反馈
+          band.classList.add('is-tick');
+          setTimeout(() => band.classList.remove('is-tick'), 120);
+        }
+      };
+      if ('IntersectionObserver' in window) {
+        const focus = new IntersectionObserver((entries) => {
+          for (const e of entries) {
+            if (e.isIntersecting) setFocus(e.target);
+            else if (e.target === current) {
+              // 还在带内的其它条目会立刻把它顶掉；没有就清空
+              const still = items.filter((i) => {
+                const r = i.getBoundingClientRect();
+                return r.top < innerHeight * 0.625 && r.bottom > innerHeight * 0.375;
+              });
+              setFocus(still[0] || null);
+            }
+          }
+        }, { rootMargin: '-37.5% 0px -37.5% 0px', threshold: 0 });
+        items.forEach((el) => focus.observe(el));
+      }
+
+      /* 3) 刻度填充 + HUD 读数（passive，不阻塞滚动；仪器读数不加缓动） */
+      let secTops = [];
+      const measure = () => {
+        secTops = ticks.map((t) => {
+          const el = document.getElementById(t.dataset.sec);
+          return { t, top: el ? el.getBoundingClientRect().top + scrollY : 0 };
+        });
+      };
+      const onScroll = () => {
+        const max = document.documentElement.scrollHeight - innerHeight;
+        const p = max > 0 ? Math.min(1, Math.max(0, scrollY / max)) : 0;
+        if (railFill) railFill.style.height = p * 100 + '%';
+        setPct(p * 100);
+        const mid = scrollY + innerHeight / 2;
+        let active = secTops[0];
+        for (const s of secTops) if (s.top <= mid) active = s;
+        if (active) {
+          ticks.forEach((t) => t.setAttribute('aria-current', t === active.t ? 'true' : 'false'));
+          const b = active.t.querySelector('b');
+          const txt = b ? b.textContent : '';
+          if (hudSec && txt && hudSec.textContent !== txt) {
+            hudSec.textContent = txt;
+            if (!reduce) {
+              // 橙色唯一的用武之地：刚扫到新区段（160ms）
+              hudSec.classList.add('is-scan');
+              setTimeout(() => hudSec.classList.remove('is-scan'), 160);
+            }
+          }
+        }
+        queueYield();
+      };
+
+      /* 4) 穿字让位：带中心 ±12px 内的文字朝纸退一档，带子离开后回位。
+            选择器按 index.astro 的真实类名重列 —— 原型的 .post/.frame 在这边不存在。 */
+      const yieldEls = Array.from(document.querySelectorAll(
+        '.display,.lede,.coord span,.index .date,.index .title,.index .tags,.pod-tag,.tier-head h2,.tier-head .sec,.empty,.links a'
+      ));
+      let yieldQueued = false;
+      const updateYield = () => {
+        yieldQueued = false;
+        const cy = innerHeight / 2, half = 12;
+        for (const el of yieldEls) {
+          const r = el.getBoundingClientRect();
+          if (!r.height) continue;
+          const hit = r.bottom >= cy - half && r.top <= cy + half;
+          if (hit !== el.classList.contains('is-yielding')) el.classList.toggle('is-yielding', hit);
+        }
+      };
+      const queueYield = () => {
+        if (yieldQueued) return;
+        yieldQueued = true;
+        requestAnimationFrame(updateYield);
+      };
+
+      /* 5) 数字跳动：HUD 百分比在 ~180ms 内插值到目标（每帧补 28% 差额，约 10 帧收敛）。
+            首次与 reduced-motion 直接落值；tabular-nums 已保证字宽不抖。 */
+      let pctTarget = 0, pctShown = 0, pctRaf = 0, pctInit = false;
+      const paintPct = (v) => { if (hudPct) hudPct.textContent = String(Math.round(v)).padStart(3, '0') + '%'; };
+      const tweenPct = () => {
+        pctRaf = 0;
+        const diff = pctTarget - pctShown;
+        pctShown = Math.abs(diff) < 0.5 ? pctTarget : pctShown + diff * 0.28;
+        paintPct(pctShown);
+        if (pctShown !== pctTarget) pctRaf = requestAnimationFrame(tweenPct);
+      };
+      const setPct = (v) => {
+        if (!hudPct) return;
+        if (!pctInit || reduce) { pctInit = true; pctShown = pctTarget = v; paintPct(v); return; }
+        pctTarget = v;
+        if (!pctRaf) pctRaf = requestAnimationFrame(tweenPct);
+      };
+
+      /* 6) 点击绿色闪烁：pointerdown（捕获阶段）命中 a/button → .is-flash 180ms */
+      document.addEventListener('pointerdown', (e) => {
+        const t = e.target && e.target.closest ? e.target.closest('a,button') : null;
+        if (!t) return;
+        t.classList.add('is-flash');
+        setTimeout(() => t.classList.remove('is-flash'), 180);
+      }, true);
+
+      measure();
+      addEventListener('scroll', onScroll, { passive: true });
+      addEventListener('resize', () => { measure(); onScroll(); });
+      onScroll();
+      updateYield();
+    })();
+  </script>
 </Base>
 
 <style>
@@ -494,6 +671,310 @@ const sectors = [
     .f-thumbs {
       flex-direction: row;
       width: 100%;
+    }
+  }
+
+  /* ============================================================
+     B2 动效层（2026-09-26 站主批准移植；清单与原型行号见 docs/b2-port-notes.md）
+     四层：交互 120ms · 叙事 640ms · 循环 8/16s linear · 硬切 800ms steps(1)
+     时长与曲线一律走 tokens.css，这里不写字面量。
+     硬约束：只动 transform / opacity / color / background-color，**不动 layout**。
+     ============================================================ */
+
+  /* ---- 仪表（B1 省略、B2 补回）：刻度填充 / HUD 读数 / 扫描带两端与读数 ---- */
+  .rail-track {
+    position: relative;
+    height: 100%;
+  }
+  .rail-fill {
+    position: absolute;
+    top: 0;
+    left: 0.5rem;
+    width: 2px;
+    height: 0; /* JS 更新 */
+    /* 滚过的部分 = 仪器已量到处。用 --accent(4.86:1) 而不是 --accent-bright(2.66:1)：
+       2px 线属于「必须被看见的非文字图形」，按 WCAG 1.4.11 要 ≥3:1 ——
+       这正是 tests/tokens.test.ts 白名单守的那条线，所以这里**不能**用 --accent-bright。 */
+    background: var(--accent);
+  }
+  .rail-tick[aria-current='true'] {
+    color: var(--ink);
+  }
+  .rail-tick[aria-current='true'] i {
+    width: 26px;
+    background: var(--accent-ink);
+  }
+  /* 清单第 1 条：角标变长要有过渡，否则 aria-current 切换时是硬跳。
+     原型用的是 --ease（叙事曲线），但这属于交互层（120ms 的即时反馈）
+     → 按 spec §1.1 的分层改用 --ease-interact。 */
+  .rail-tick i {
+    transition: width var(--dur-fast) var(--ease-interact);
+  }
+  .rail-tick:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px;
+  }
+
+  .hud .readout {
+    display: inline-flex;
+    align-items: center;
+  }
+  .hud .rec {
+    display: inline-block;
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-right: 0.5rem;
+    background: var(--accent);
+    /* 硬切，不是呼吸灯 —— 仪器是硬切的 */
+    animation: blink var(--dur-blink) steps(1) infinite;
+  }
+  #hudSec {
+    transition: color var(--dur-fast) linear;
+  }
+  /* 橙色唯一的用武之地：刚扫到新区段时闪一下（JS 160ms 后摘掉类） */
+  #hudSec.is-scan {
+    color: var(--signal-text);
+  }
+  .hud-progress {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .band-sweep {
+    position: absolute;
+    top: -1px;
+    left: 0;
+    width: 16rem;
+    height: 2px;
+    /* 端点高光同样只能用 --accent：这是压在纸上的图形，
+       白名单测试不许裸 var(--accent-bright) 出现在这个选择器里。 */
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--accent) 42%,
+      var(--accent-wash) 50%,
+      var(--accent) 58%,
+      transparent
+    );
+    animation: sweep-x 4s linear infinite;
+  }
+  .band-cap {
+    position: absolute;
+    top: -3px;
+    width: 14px;
+    height: 7px;
+    background: var(--hair);
+    opacity: 0;
+    transition: opacity var(--dur-fast) linear;
+  }
+  .band-cap.l {
+    left: 0;
+  }
+  .band-cap.r {
+    right: 0;
+  }
+  .band.is-tick .band-cap {
+    opacity: 1;
+    background: var(--accent);
+  }
+  .band-readout {
+    position: absolute;
+    left: 0;
+    top: -1.9rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    padding-right: 0.75rem;
+    background: var(--paper);
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .band-readout b {
+    color: var(--accent-ink);
+    font-weight: 400;
+  }
+  .rhine-mark {
+    width: 44px;
+    height: 22px;
+    color: var(--accent-ink);
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .rhine-mark.sm {
+    width: 32px;
+    height: 16px;
+  }
+
+  /* ---- 聚焦：JS 打开时才生效。带外条目不禁用，只是弱化；聚焦回到 1 ---- */
+  html.js .field-item {
+    opacity: var(--focus-min);
+    transform: translateY(12px);
+    transition: opacity var(--dur-enter) var(--ease), transform var(--dur-enter) var(--ease);
+  }
+  /* 揭示的真正载体是 transform —— 基准 opacity 恒为 --focus-min，
+     所以最坏情况只是「没动画」，绝不会出现「内容永久不可见」 */
+  html.js .field-item.is-revealed {
+    transform: none;
+  }
+  html.js .field-item.is-focused {
+    opacity: 1;
+  }
+  /* 聚焦时角标升级（原型：这才是聚焦的主要载体，透明度只是辅助） */
+  html.js .field-item .bracket::before,
+  html.js .field-item .bracket::after {
+    border-color: var(--hair);
+  }
+  html.js .field-item.is-focused .bracket::before,
+  html.js .field-item.is-focused .bracket::after {
+    border-color: var(--ink);
+  }
+
+  /* L 形角标：左下 + 右上对角 */
+  .bracket {
+    position: relative;
+    padding: 1rem;
+  }
+  .bracket::before,
+  .bracket::after {
+    content: '';
+    position: absolute;
+    width: 1.4rem;
+    height: 1rem;
+    border: 0 solid var(--hair);
+    transition: border-color var(--dur-fast) var(--ease-interact);
+  }
+  .bracket::before {
+    left: 0;
+    bottom: 0;
+    border-left-width: 1px;
+    border-bottom-width: 1px;
+  }
+  .bracket::after {
+    right: 0;
+    top: 0;
+    border-right-width: 1px;
+    border-top-width: 1px;
+  }
+
+  /* ---- 交互层：悬停微亮 + 位移，按压缩一下（走 token，不写字面量） ---- */
+  .index a,
+  .links a,
+  .rail-tick {
+    transition:
+      background var(--dur-fast) var(--ease-interact),
+      transform var(--dur-fast) var(--ease-interact),
+      border-color var(--dur-fast) var(--ease-interact),
+      color var(--dur-fast) var(--ease-interact);
+  }
+  .index a:hover,
+  .index a:focus-visible {
+    transform: translateY(-2px);
+    background: var(--accent-wash);
+  }
+  .index a:active,
+  .links a:active,
+  .rail-tick:active {
+    transform: scale(0.995);
+  }
+  /* 点击绿色闪烁（JS 加 180ms）—— 只改背景与描边，不动布局 */
+  a.is-flash,
+  button.is-flash {
+    background: var(--accent-wash);
+    outline: 1px solid var(--accent);
+  }
+
+  /* ---- 穿字让位：扫描带中心 ±12px 内的文字朝纸退一档 ----
+     原型用 color-mix 调色，这里改用 opacity（同样只动 paint，
+     且不引入 color-mix 的兼容面；"退 18%" 的观感一致）。 */
+  .display.is-yielding,
+  .tier-head h2.is-yielding,
+  .links a.is-yielding,
+  .index .title.is-yielding {
+    opacity: 0.82;
+  }
+  .lede.is-yielding,
+  .coord span.is-yielding,
+  .index .date.is-yielding,
+  .index .tags.is-yielding,
+  .empty.is-yielding,
+  .tier-head .sec.is-yielding,
+  .pod-tag.is-yielding {
+    opacity: 0.82;
+  }
+
+  /* ---- 开场一次性（错位用 nth-child，与原型一致） ---- */
+  @keyframes sweep-in {
+    from { transform: scaleX(0) }
+    to { transform: scaleX(1) }
+  }
+  .band-line {
+    transform-origin: 0 50%;
+    animation: sweep-in 800ms var(--ease) both;
+  }
+  @keyframes type-in {
+    from { clip-path: inset(0 100% 0 0) }
+    to { clip-path: inset(0 0 0 0) }
+  }
+  .hud .site {
+    animation: type-in 700ms steps(19, end) 150ms both;
+  }
+  @keyframes wipe-in {
+    from { clip-path: inset(0 100% 0 0) }
+    to { clip-path: inset(0 0 0 0) }
+  }
+  .bg-mark {
+    animation: wipe-in 1200ms var(--ease) 100ms both;
+  }
+  @keyframes rise-in {
+    from { opacity: 0; transform: translateY(10px) }
+    to { opacity: 1; transform: none }
+  }
+  .pod-s1 > * {
+    animation: rise-in 800ms var(--ease) both;
+  }
+  .pod-s1 > *:nth-child(1) { animation-delay: 200ms }
+  .pod-s1 > *:nth-child(2) { animation-delay: 290ms }
+  .pod-s1 > *:nth-child(3) { animation-delay: 380ms }
+  .pod-s1 > *:nth-child(4) { animation-delay: 470ms }
+
+  /* ---- 常驻循环：扫描线横移 / 圆环绕行 / 硬切闪烁 ---- */
+  @keyframes sweep-x {
+    from { transform: translateX(-16rem) }
+    to { transform: translateX(calc(100vw + 16rem)) }
+  }
+  @keyframes orbit {
+    from { transform: rotate(0) }
+    to { transform: rotate(1turn) }
+  }
+  .bg-orbit {
+    animation: orbit calc(var(--dur-orbit) * 2) linear infinite;
+  }
+  .bg-orbit::after {
+    animation: orbit var(--dur-orbit) linear infinite reverse;
+  }
+  @keyframes blink {
+    0%, 49.9% { opacity: 1 }
+    50%, 100% { opacity: 0 }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html.js .field-item {
+      opacity: 1 !important;
+      transform: none !important;
+    }
+    * {
+      transition-duration: 1ms !important;
+      animation: none !important;
+    }
+  }
+
+  @media (max-width: 767px) {
+    /* 小屏取消聚焦弱化与入场位移：带子在窄屏覆盖比例大，弱化反而看不懂（与原型一致） */
+    html.js .field-item,
+    html.js .field-item.is-revealed {
+      opacity: 1;
+      transform: none;
+      transition: none;
     }
   }
 
