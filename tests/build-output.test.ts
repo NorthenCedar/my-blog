@@ -7,7 +7,7 @@ const DIST = 'dist';
 const hasDist = existsSync(DIST);
 const POSTS_DIR = 'content/posts';
 
-type PostInfo = { slug: string; draft: boolean; images: string[] };
+type PostInfo = { slug: string; draft: boolean; images: string[]; date: string };
 
 /**
  * 从内容层推导草稿/已发布，**不硬编码**。
@@ -25,7 +25,8 @@ function readPosts(): PostInfo[] {
       const fm = text.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
       if (!fm) return [];
       const images = [...fm[2].matchAll(/!\[[^\]]*\]\(\.\/([^)\s]+)\)/g)].map((m) => m[1].split('/').pop()!);
-      return [{ slug: d.name, draft: /^draft:\s*true\s*$/m.test(fm[1]), images }];
+      const date = (fm[1].match(/^date:\s*(\d{4}-\d{2}-\d{2})\s*$/m) ?? [, ''])[1];
+      return [{ slug: d.name, draft: /^draft:\s*true\s*$/m.test(fm[1]), images, date }];
     });
 }
 
@@ -458,6 +459,52 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       windows.some((w) => /nav[^{}]*\{display:none\}/.test(w)),
       '≤1023px 没有隐藏横排导航（会和抽屉同时出现）',
     ).toBe(true);
+  });
+
+  it('归档：年份分组与筛选选项都从内容推导（明年发文会自动多出那一年）', () => {
+    // 站主 2026-09-26 问："我明年发了个文章，他会在上面出现并有 2027 的字样出现吗？"
+    // 这条断言就是那个问题的**常驻答案** —— 归档的年月分组与下拉选项都由文章日期推导，不写死。
+    // （当时已用一篇临时 2027 文章端到端验证过：分组顺序变成 ["2027","2026"]、选项多出 2027、按 2027 能筛出来。）
+    const html = readFileSync(join(DIST, 'archive', 'index.html'), 'utf8');
+    const groupYears = [...html.matchAll(/class="yeargroup"[^>]*data-year="(\d{4})"/g)].map((m) => m[1]);
+    // 别绑 Astro 的作用域属性（产物是 `<option value="2026" data-astro-cid-…>2026</option>`）
+    const optionYears = [...html.matchAll(/<option value="(\d{4})"[^>]*>\d{4}<\/option>/g)].map((m) => m[1]);
+    const contentYears = [...new Set(PUBLISHED.map((p) => p.date.slice(0, 4)).filter(Boolean))].sort().reverse();
+
+    expect(contentYears.length, '没有已发布文章，断言可能空转').toBeGreaterThan(0);
+    expect(groupYears, '归档的年份分组与文章日期对不上（有写死的年份？）').toEqual(contentYears);
+    expect(optionYears, '年份下拉选项与文章日期对不上').toEqual(contentYears);
+    expect(groupYears, '年份分组不是倒序（新的应当在上面）').toEqual([...groupYears].sort().reverse());
+
+    // 筛选要有东西可筛：每行都得带 data-*（搜索/年月都靠它）+ 筛选条在位
+    const rows = [...html.matchAll(/<li\s+data-date="([^"]+)"\s+data-year="(\d{4})"\s+data-month="(\d{2})"\s+data-q="([^"]*)"/g)];
+    expect(rows.length, '归档的行没有 data-date/data-year/data-month/data-q（筛选会失效）').toBe(PUBLISHED.length);
+    expect(html, '筛选条不在产物里').toContain('data-filters');
+    expect(html, '筛选条默认应当隐藏（无 JS 时不显示）').toMatch(/<form class="filters" data-filters hidden/);
+    // 月份选项也必须来自内容
+    const contentMonths = [...new Set(PUBLISHED.map((p) => p.date.slice(5, 7)).filter(Boolean))].sort();
+    const optionMonths = [...html.matchAll(/<option value="(\d{2})"[^>]*>\d+ 月<\/option>/g)].map((m) => m[1]);
+    expect(optionMonths, '月份下拉选项与文章日期对不上').toEqual(contentMonths);
+    console.log(`判据 归档筛选 对象 年份分组/下拉/月份/data 属性 实测: ${groupYears.join(' ')} · ${rows.length} 行带筛选属性 · 选项 ${optionYears.join('/')} 与 ${optionMonths.join('/')}`);
+  });
+
+  it('关于页：头像（圆形 + 名字）与社交卡片都在，图标是本站内联 SVG', () => {
+    // 站主 2026-09-26：右侧空白放圆形头像、下面写「北杉」；加社交账号（GitHub/邮箱/RSS/抖音/哔哩哔哩）带图标。
+    const html = readFileSync(join(DIST, 'about', 'index.html'), 'utf8');
+    expect(html, '头像没渲染出来').toMatch(/class="[^"]*avatar/);
+    expect(html, '头像没有 alt 文本').toContain('alt="北杉的头像"');
+    expect(html, '头像下面没有名字').toContain('profile-name');
+    expect(html, '社交区块标题不在').toContain('我的一些社交账号');
+    for (const name of ['GitHub', '邮箱', 'RSS', '抖音', '哔哩哔哩']) {
+      expect(html, `社交卡片缺 ${name}`).toContain(`>${name}</span>`);
+    }
+    // 图标必须是**本站内联 SVG**（站上零第三方：不许引图标库）
+    expect((html.match(/<svg class="[^"]*ic[^"]*"/g) ?? []).length, '内联图标数量不对').toBe(5);
+    expect(html, '引了第三方图标资源').not.toMatch(/(unpkg|jsdelivr|cdnjs|fontawesome|googleapis)/i);
+    // 抖音与哔哩哔哩的链接必须是站主给的那两条
+    expect(html).toContain('douyin.com/user/MS4wLjABAAAA_s1DtB8crLmTepK0rZPjJr7U8W2Lm7EGWVti1q4Zwlgp52SGKtZsqL-1_U7_HOK_');
+    expect(html).toContain('space.bilibili.com/515563135');
+    console.log('判据 关于页 对象 头像 + 名字 + 5 张社交卡片 + 内联图标 实测: 全部在位');
   });
 
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {

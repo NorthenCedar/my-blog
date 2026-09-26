@@ -1,31 +1,154 @@
 ---
 import { getEntry, render } from 'astro:content';
+import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
+import SocialIcon from '../components/SocialIcon.astro';
 
 // 关于页正文来自 content/pages/about.md —— 主题不持有任何正文（content-model.md §7）
 const entry = await getEntry('pages', 'about');
 const Content = entry ? (await render(entry)).Content : null;
+
+/** 头像与社交账号（站主 2026-09-26 要求）也走内容层：文件在 src/assets/about/，配置在 about.md 的 frontmatter。
+ *  头像必须放 src/ 才能参与构建期优化（转 WebP + 出 srcset）—— 与「说说配图」同一条例外。 */
+interface Social {
+  icon: string;
+  name: string;
+  href: string;
+}
+interface AboutData {
+  avatar?: string;
+  avatarName?: string;
+  social?: Social[];
+}
+const d = (entry?.data ?? {}) as unknown as AboutData;
+const assets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/about/*.{jpg,jpeg,png,webp,avif}', { eager: true });
+const avatar = d.avatar ? assets[`/src/assets/about/${d.avatar}`]?.default : undefined;
+const social = d.social ?? [];
+const isExternal = (h: string) => /^https?:/i.test(h);
 ---
 {
   /* 关于页迁移（2026-09-26）：chrome='band' → 'page'（内页外壳：浅色顶栏 + 切片档案背景）。
      **'page' 不渲染 <slot name="band" />** —— 所以标题必须从那个槽搬进正文流（外壳提供的 .pagehead），
      漏搬会静默消失且构建照常成功（文章页同一个坑）。
      PageTitle 本身不写任何颜色（只有 margin/font-weight + 字号类 token），**靠继承取色** ——
-     搬进浅底后自动继承外壳的 --ink，所以**无需主题化**（已读源码确认，见 docs/about-migration-notes.md）。
-     版式依据不是原型：prototype/terminal/ 里没有关于页，依据是既有内页外壳的实测实现（/gallery 与文章页）。 */
+      搬进浅底后自动继承外壳的 --ink，所以**无需主题化**（已读源码确认，见 docs/about-migration-notes.md）。
+      版式依据不是原型：prototype/terminal/ 里没有关于页，依据是既有内页外壳的实测实现（/gallery 与文章页）。 */
 }
 <Base title="关于" current="about" chrome="page">
   <header class="pagehead">
     <PageTitle>关于</PageTitle>
   </header>
 
+  {/* 头像（站主 2026-09-26）：桌面放正文右侧的空白处（固定，不随滚动跑掉），
+      窄屏挪到标题下方居中 —— 右侧在手机上根本没有位置。 */}
+  {avatar && (
+    <div class="profile">
+      <Image class="avatar" src={avatar} alt={`${d.avatarName ?? '站主'}的头像`} widths={[96, 192]} sizes="128px" />
+      <p class="profile-name">{d.avatarName}</p>
+    </div>
+  )}
+
   <div class="prose">{Content && <Content />}</div>
+
+  {social.length > 0 && (
+    <section class="social-block" aria-labelledby="social-title">
+      <h2 id="social-title">我的一些社交账号</h2>
+      <ul class="social">
+        {social.map((s) => (
+          <li>
+            <a
+              href={s.href}
+              {...(isExternal(s.href) ? { rel: 'noopener' } : {})}
+              {...(isExternal(s.href) ? { target: '_blank' } : {})}
+            >
+              <SocialIcon name={s.icon} />
+              <span>{s.name}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
 </Base>
 
 <style>
   /* 拍板 D：页头版心收成 --measure，与正文列左对齐（与文章页同一条）。 */
   .pagehead {
     max-width: var(--measure);
+  }
+  /* ---- 头像 ---- */
+  .profile {
+    margin: var(--sp-6) 0 0;
+    text-align: center;
+  }
+  .avatar {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--hair);
+    background: var(--panel);
+  }
+  .profile-name {
+    margin: var(--sp-2) 0 0;
+    font-size: var(--fs-sm);
+    letter-spacing: 0.12em;
+    color: var(--muted);
+  }
+  /* 宽屏：挪到正文右侧的空白处并固定（正文列只有 34em，右边本来就是空的） */
+  @media (min-width: 1024px) {
+    .profile {
+      position: fixed;
+      top: 22vh;
+      right: 6vw;
+      margin: 0;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .avatar {
+      width: 128px;
+      height: 128px;
+      box-shadow: 0 6px 24px rgb(26 26 26 / 10%);
+    }
+  }
+  /* ---- 社交账号 ---- */
+  .social-block {
+    margin: var(--sp-8) 0 0;
+    max-width: var(--measure);
+  }
+  .social-block h2 {
+    margin: 0 0 var(--sp-4);
+    font-size: var(--fs-lg);
+    font-weight: 800;
+  }
+  .social {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+    gap: var(--sp-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .social a {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    padding: var(--sp-3) var(--sp-4);
+    border: 1px solid var(--hair);
+    background: var(--panel);
+    color: var(--ink);
+    text-decoration: none;
+    font-size: var(--fs-sm);
+  }
+  .social a:hover,
+  .social a:focus-visible {
+    border-color: var(--accent);
+    background: var(--accent-wash);
+  }
+  @media (max-width: 767px) {
+    .social {
+      grid-template-columns: 1fr 1fr;
+    }
   }
 </style>

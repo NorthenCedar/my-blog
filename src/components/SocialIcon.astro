@@ -1,0 +1,35 @@
+---
+/**
+ * 社交账号图标（手绘内联 SVG，零第三方请求 —— 站上不允许引图标库/CDN）。
+ *
+ * 每个图标都是**装饰**：可读的名字写在卡片文字里（GitHub / 邮箱 / …），所以图标 `aria-hidden`。
+ * 形状都是自己画的简笔（抖音是"音符"、哔哩哔哩是"带天线的电视"），不求像素级还原官方商标，
+ * 只要在那个名字旁边一眼能认出来即可 —— 这样也不必处理商标素材的自托管问题。
+ */
+interface Props {
+  name: string;
+}
+const { name } = Astro.props;
+
+const PATHS: Record<string, string> = {
+  github:
+    '<path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.36 1.09 2.94.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/>',
+  mail: '<path d="M3 5.5h18v13H3z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m3.6 6.3 8.4 6.2 8.4-6.2" fill="none" stroke="currentColor" stroke-width="1.6"/>',
+  rss: '<circle cx="6" cy="18" r="2"/><path d="M4 11a9 9 0 0 1 9 9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 5a15 15 0 0 1 15 15" fill="none" stroke="currentColor" stroke-width="2"/>',
+  // 抖音：音符（一条竖线 + 右上角的小旗 + 左下符头）
+  douyin:
+    '<path d="M14.5 3h2.2c.2 1.6 1.2 3 2.9 3.5v2.3c-1.1 0-2.1-.3-3-.9v5.9a5.4 5.4 0 1 1-5.4-5.4c.3 0 .5 0 .8.1v2.4a3 3 0 1 0 2.2 2.9V3Z"/>',
+  // 哔哩哔哩：带天线的电视（两只"眼睛"）
+  bilibili:
+    '<path d="M6.6 3.4 9 6h6l2.4-2.6" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="6" width="18" height="13" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9 11v3.2M15 11v3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+};
+const body = PATHS[name] ?? PATHS.mail;
+---
+<svg class="ic" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" set:html={body} />
+
+<style>
+  .ic {
+    flex: none;
+    color: var(--accent-ink);
+  }
+</style>

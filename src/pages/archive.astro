@@ -5,6 +5,15 @@ import PostIndex from '../components/PostIndex.astro';
 import { getArchive } from '../lib/posts';
 
 const groups = await getArchive();
+/* 搜索/年月筛选/排序（站主 2026-09-26 要求，参考图是「搜索框 + 年份 + 月份 + 排序(倒序/正序/清空)」）。
+   两条关键设计：
+   ① **年份与月份的选项从内容推导**，不硬编码 —— 明年写了 2027 的文章，
+      这里自动多出「2027」选项、页面顶部自动多出一个 2027 分组（站主问的就是这个）；
+   ② 分组与行都渲染在服务端（无 JS 也能看全），客户端**只做显示/隐藏与重排** ——
+      所以关掉 JS 时页面仍然完整可读，不会白屏。 */
+const years = groups.map((g) => g.year);
+const months = [...new Set(groups.flatMap((g) => g.posts.map((p) => p.date.slice(5, 7))))].sort();
+const total = groups.reduce((n, g) => n + g.posts.length, 0);
 ---
 {
   /* 归档迁移（2026-09-26）：chrome='band' → 'page'（内页外壳）。
@@ -21,7 +30,203 @@ const groups = await getArchive();
 <Base title="归档" current="archive" chrome="page">
   <header class="pagehead">
     <PageTitle>归档</PageTitle>
+    <p class="lede">共 {total} 篇。可以按关键词、年份、月份筛。</p>
   </header>
 
-  {groups.map((g) => <PostIndex posts={g.posts} heading={g.year} />)}
+  {/* 筛选条。无 JS 时它不出现（`html.js` 才显示）—— 没有脚本时一排放着也点不动，不如不显示。 */}
+  <form class="filters" data-filters hidden>
+    <label class="f f-q">
+      <span class="f-label">搜索</span>
+      <input type="search" name="q" data-q placeholder="标题 / 描述关键词" autocomplete="off" />
+    </label>
+    <label class="f">
+      <span class="f-label">年份</span>
+      <select name="year" data-year>
+        <option value="all">全部</option>
+        {years.map((y) => <option value={y}>{y}</option>)}
+      </select>
+    </label>
+    <label class="f">
+      <span class="f-label">月份</span>
+      <select name="month" data-month>
+        <option value="all">全部</option>
+        {months.map((m) => <option value={m}>{String(Number(m))} 月</option>)}
+      </select>
+    </label>
+    <div class="f f-sort" role="group" aria-label="排序">
+      <span class="f-label">排序</span>
+      <button type="button" data-sort="desc" aria-pressed="true">倒序</button>
+      <button type="button" data-sort="asc" aria-pressed="false">正序</button>
+      <button type="button" data-clear>清空</button>
+    </div>
+    <p class="f-count" data-count role="status" aria-live="polite"></p>
+  </form>
+
+  <div data-groups>
+    {groups.map((g) => (
+      <section class="yeargroup" data-year={g.year}>
+        <PostIndex posts={g.posts} heading={g.year} />
+      </section>
+    ))}
+  </div>
+  <p class="f-empty" data-empty hidden>没有匹配的文章。</p>
 </Base>
+
+<script>
+  // 归档筛选：纯客户端显示/隐藏 + 重排（不改数据、不请求接口）。
+  // 缩小到 1.4 KB 左右是有意的：这个页面本来没有脚本，加的是"读列表"的工具，不该比内容还重。
+  const bar = document.querySelector<HTMLFormElement>('[data-filters]');
+  const groupsBox = document.querySelector<HTMLElement>('[data-groups]');
+  if (bar && groupsBox) {
+    bar.hidden = false;
+    const q = bar.querySelector<HTMLInputElement>('[data-q]')!;
+    const yearSel = bar.querySelector<HTMLSelectElement>('[data-year]')!;
+    const monthSel = bar.querySelector<HTMLSelectElement>('[data-month]')!;
+    const countEl = bar.querySelector<HTMLElement>('[data-count]')!;
+    const emptyEl = document.querySelector<HTMLElement>('[data-empty]')!;
+    const rows = [...groupsBox.querySelectorAll<HTMLLIElement>('.index li')];
+    const groups = [...groupsBox.querySelectorAll<HTMLElement>('.yeargroup')];
+    const desc = bar.querySelector<HTMLButtonElement>('[data-sort="desc"]')!;
+    const asc = bar.querySelector<HTMLButtonElement>('[data-sort="asc"]')!;
+    let dir: 1 | -1 = -1; // 默认倒序（新的在上面）
+
+    const apply = () => {
+      const needle = q.value.trim().toLowerCase();
+      const y = yearSel.value;
+      const m = monthSel.value;
+      let shown = 0;
+      for (const li of rows) {
+        const ok =
+          (!needle || (li.dataset.q ?? '').includes(needle)) &&
+          (y === 'all' || li.dataset.year === y) &&
+          (m === 'all' || li.dataset.month === m);
+        li.hidden = !ok;
+        if (ok) shown++;
+      }
+      for (const g of groups) {
+        g.hidden = ![...g.querySelectorAll<HTMLElement>('.index li')].some((li) => !li.hidden);
+      }
+      // 排序：组按年份、组内按日期；用 append 移动节点（不重渲染、不丢已挂的事件）
+      [...groups]
+        .sort((a, b) => (Number(a.dataset.year) - Number(b.dataset.year)) * dir)
+        .forEach((g) => groupsBox.append(g));
+      for (const g of groups) {
+        const ul = g.querySelector('.index')!;
+        [...ul.children].sort((a, b) => String((a as HTMLElement).dataset.date).localeCompare(String((b as HTMLElement).dataset.date)) * dir).forEach((li) => ul.append(li));
+      }
+      countEl.textContent = shown === rows.length ? `共 ${shown} 篇` : `筛出 ${shown} / ${rows.length} 篇`;
+      emptyEl.hidden = shown > 0;
+      desc.setAttribute('aria-pressed', String(dir === -1));
+      asc.setAttribute('aria-pressed', String(dir === 1));
+    };
+
+    q.addEventListener('input', apply);
+    yearSel.addEventListener('change', apply);
+    monthSel.addEventListener('change', apply);
+    desc.addEventListener('click', () => { dir = -1; apply(); });
+    asc.addEventListener('click', () => { dir = 1; apply(); });
+    bar.querySelector('[data-clear]')!.addEventListener('click', () => {
+      q.value = '';
+      yearSel.value = 'all';
+      monthSel.value = 'all';
+      dir = -1;
+      apply();
+      q.focus();
+    });
+    apply();
+  }
+</script>
+
+<style>
+  .lede {
+    margin: var(--sp-3) 0 0;
+    color: var(--muted);
+    font-size: var(--fs-sm);
+  }
+  /* 筛选条：站上是纸底 + 发丝线 + 直角的语言，所以不用圆角胶囊，用细边框的直方块 */
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-4);
+    margin: var(--sp-6) 0 0;
+    padding: var(--sp-3) 0;
+    border-top: 1px solid var(--hair);
+    border-bottom: 1px solid var(--hair);
+  }
+  .f {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    margin: 0;
+  }
+  .f-label {
+    font-size: var(--fs-xs);
+    color: var(--muted);
+  }
+  .f-q {
+    flex: 1 1 260px;
+  }
+  .filters input[type='search'] {
+    flex: 1;
+    min-width: 0;
+    padding: 0.4em 0.6em;
+    font: inherit;
+    font-size: var(--fs-sm);
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--hair);
+  }
+  .filters input[type='search']:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 1px;
+  }
+  .filters select {
+    padding: 0.35em 0.5em;
+    font: inherit;
+    font-size: var(--fs-sm);
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--hair);
+  }
+  .f-sort button {
+    padding: 0.35em 0.7em;
+    font: inherit;
+    font-size: var(--fs-xs);
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--hair);
+    cursor: var(--cursor-default);
+  }
+  .f-sort button:hover {
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+  .f-sort button[aria-pressed='true'] {
+    border-color: var(--accent);
+    background: var(--accent-wash);
+    color: var(--accent-ink);
+  }
+  .f-count {
+    margin: 0 0 0 auto;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .yeargroup + .yeargroup {
+    margin-top: var(--sp-8);
+  }
+  .f-empty {
+    margin: var(--sp-8) 0 0;
+    color: var(--muted);
+  }
+  @media (max-width: 767px) {
+    .f-q {
+      flex-basis: 100%;
+    }
+    .f-count {
+      margin-left: 0;
+      flex-basis: 100%;
+    }
+  }
+</style>
