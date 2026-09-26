@@ -516,6 +516,25 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log(`判据 说说互动 + 页脚统计 对象 产物挂点 实测: ${likes.length} 条带赞/评论 · ${pages.length} 页有统计 · since 在内容层`);
   });
 
+  it('仓库里不许混进临时探针（_tmp*）—— 2026-09-27 事故的护栏', () => {
+    // 事故经过：站主用 `git add -A` 提交一条友链（content/pages/links.md），
+    // 结果把 **239 个临时文件 + 一个嵌套仓库 gitlink（_tmp-arknights-cursor，mode 160000）**
+    // 一起提交了 ⇒ Cloudflare 那次构建 Failure ⇒ 线上停在上一个成功版本 ⇒ "友链加了但线上没上"。
+    // （诊断链：wrangler pages deployment list 看到 8092786 → Failure，而工作区当时其实是干净的。）
+    //
+    // 这条守两处：
+    //  ① `.gitignore` 里必须有 `/_tmp*`（护栏被删掉就等于事故可重演）；
+    //  ② `src/` 与 `content/` 里不许出现 _tmp 前缀的文件（它们只该留在本地）。
+    // 注：没有测得动"git 索引里有没有 _tmp"的干净接缝（测试跑在文件系统上、不跑 git），
+    //     这是本次诊断记下的**接缝缺失**；可替代的护栏就是下面这两条 + 我这边提交前逐条 add 路径。
+    const ignore = readFileSync('.gitignore', 'utf8');
+    expect(ignore, '.gitignore 里的 /_tmp* 护栏丢了（事故可重演）').toMatch(/^\/_tmp\*/m);
+    const junk = [...walk('src', () => true), ...walk('content', () => true)].filter((f) =>
+      f.split(/[\\/]/).some((p) => p.startsWith('_tmp')),
+    );
+    expect(junk, `这些临时文件不该在仓库里：${junk.slice(0, 5).join(', ')}`).toEqual([]);
+  });
+
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
     // 2026-09-25 修订：加了 <link rel="canonical"> 之后，这条断言需要区分
     // 「加载外部资源」（script/style/font/img —— 真实网络请求，必须禁止）
