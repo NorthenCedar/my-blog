@@ -108,7 +108,10 @@ anim(
   [chan(T.LOGO_LEFT_EDGE, 'px')],
   (vals) => `translate(calc(${vals[0]} - ${T.LOGO_LEFT_BASE}px), 1px)`,
 );
-// 轮廓：dasharray + dashoffset 同源于 LOGO_DRAW / LOGO_CUT（上游 `boot.ts:138-139`）
+// 轮廓：dasharray + dashoffset 同源于 LOGO_DRAW / LOGO_CUT（上游 `boot.ts:138-139`）。
+// ⚠️ 段隙必须是 `1 − length`（**不是**常量 1）：只有"段长 + 段隙 = 1"时图案才恰好等于一个路径长、
+// 才会环绕覆盖整条路径，只留一处 `1 − length` 的缺口。写成常量 1 的话图案总长 > 1、不环绕，
+// 路径起点附近那段永远画不出来 —— 实测就是 ∞ 的交叉处整块缺失（图一是错的、图二是对的）。
 kf(
   'boot-logo-dash',
   frameUnion(
@@ -116,7 +119,7 @@ kf(
     [419],
   ).map((f) => {
     const { length, offset } = T.logoDash(f);
-    return { f, v: `stroke-dasharray:${n(length)} 1;stroke-dashoffset:${n(offset)}` };
+    return { f, v: `stroke-dasharray:${n(length)} ${n(1 - length)};stroke-dashoffset:${n(offset)}` };
   }),
 );
 // 描边宽 0.25→26 按比例映到我们的坐标空间，末值 = 我们现有 symbol 的 2.2（工单 §3.2）

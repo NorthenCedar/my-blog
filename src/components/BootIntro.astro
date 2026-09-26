@@ -41,12 +41,23 @@ const dotFrames = authDotFrames();
 const sats = Array.from({ length: SATELLITE_COUNT }, (_, i) => i);
 
 /**
- * 我们自己的标志（与 `index.astro` 的 `#rhine-logo` 同源），y 方向整体 −6
- * 以贴合 `viewBox="0 0 24 12"`。**必须内联一份**：`<use>` 出来的实例内部无法逐路径动画，
- * 而开场要的是"轮廓单独描边 → 加减号单独进入"（决策 #12）。
+ * 我们自己的标志（与 `index.astro` 的 `#rhine-logo` 同源），y 方向整体 −6 以贴合 `viewBox="0 0 24 12"`。
+ * **必须内联一份**：`<use>` 出来的实例内部无法逐路径动画，而开场要的是"轮廓单独描边 → 加减号单独进入"（#12）。
+ *
+ * 两个版本，别混用：
+ *   · `MARK_CONTOUR`   —— 与站上标志逐字节相同的**两段**子路径（印刷版的小缺口烘在路径里），给**静态**用（欢迎段）。
+ *   · `MARK_CONTINUOUS` —— **单段连续**轮廓：把印刷缺口用一小段直线桥掉。给**描边动画**用。
+ *     为什么描边必须用连续的：dash 图案在子路径边界上不能可靠地环绕，两段路径会让第二段起点附近多出一处缺口
+ *     —— 现象就是 ∞ 的交叉处画不出来（前端那版就是这么错的）。上游为此专门造了 `bootMarkContour`
+ *     单段路径（见其 `brand.ts` 注释："continuous for the opening's moving draw/erase ends"）。
+ *     缺口不丢：动画终态本来就留 `1 − length`（≈2.75%）的缺口，正好是那个印刷缺口的位置。
  */
 const MARK_CONTOUR =
   'M12 6c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2 2.67 4 4 6 4a4 4 0 0 0 2.83-6.83M19.04 2.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4';
+// 起点必须落在**印刷缺口那一端**（站点标志里第二段子路径的起点 `M19.04 2.14`）：dash 的接缝就是路径起点，
+// 接缝放在缺口原位，画满时的样子才与静态标志一致（上游 `bootMarkContour` 同理，它从 M295 73 起步）。
+const MARK_CONTINUOUS =
+  'M19.04 2.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2 2.67 4 4 6 4a4 4 0 0 0 2.83-6.83L19.04 2.14';
 const MARK_PLUS = 'M-1.3 0h2.6M0 -1.3v2.6';
 const MARK_MINUS = 'M-1.3 0h2.6';
 ---
@@ -97,7 +108,7 @@ const MARK_MINUS = 'M-1.3 0h2.6';
     {/* ===== 3. Logo：连续轮廓描边 → 加减号进入 → 整体左移（229–294 帧） ===== */}
     <div class="boot-logo">
       <svg class="boot-mark" viewBox="0 0 24 12">
-        <path class="boot-contour" pathLength="1" d={MARK_CONTOUR} fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+        <path class="boot-contour" pathLength="1" d={MARK_CONTINUOUS} fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
         <g class="boot-plus-pos">
           <path class="boot-plus" d={MARK_PLUS} fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
         </g>

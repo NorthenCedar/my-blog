@@ -210,6 +210,10 @@ const SAMPLES = [
   // [帧, 选择器, 计算属性, 期望值, 依据]
   [226, '.boot-access', 'opacity', '0.25', 'boot-motion.ts:64 —— 226 帧闪 0.25'],
   [280, '.boot-logo', 'transform', 'matrix(1, 0, 0, 1, 36, 1)', 'boot-logo-tracks.ts:59-94 —— 280 帧左边缘 556，offset = 556−520'],
+  // 这两条是"∞ 交叉处画不出来"那个 bug 的浏览器级回归网（本地测试里另有一条纯静态的同义断言）：
+  // 上游 boot.ts:138 是 `${length} ${1 - length}`，段长+段隙必须 = 1（图案才等于一个路径长、才会环绕）。
+  [280, '.boot-contour', 'strokeDasharray', '0.9725 0.0275', 'boot.ts:138 —— 终态 length 0.9725 + 段隙 0.0275 = 1'],
+  [280, '.boot-contour', 'strokeDashoffset', '-0.211', 'boot.ts:139 —— dashoffset = −start'],
   [520, '.boot-arc-outer', 'r', '320.5px', 'boot-tracks.ts:91-110 —— 外环 520 帧 320.5'],
   [560, '.boot-arc-white', 'r', '227.5px', 'boot-tracks.ts:111-136 —— 白环 560 帧 227.5'],
   [520, '.boot-permission', 'letterSpacing', '0.5px', 'boot-motion.ts:88-102 —— 字距收拢到 520 帧 0.5'],

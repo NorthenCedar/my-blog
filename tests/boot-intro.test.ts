@@ -18,6 +18,21 @@ const COMPONENT = 'src/components/BootIntro.astro';
 const SRC = readFileSync(COMPONENT, 'utf8');
 
 const count = (re: RegExp) => (CSS.match(re) ?? []).length;
+/** 按花括号配对抠出某条 @keyframes 的规则体（keyframes 内部有嵌套花括号，正则捞不全） */
+const kfBody = (name: string): string => {
+  const at = CSS.indexOf(`@keyframes ${name}{`);
+  if (at < 0) return '';
+  const open = CSS.indexOf('{', at);
+  let depth = 0;
+  for (let i = open; i < CSS.length; i++) {
+    if (CSS[i] === '{') depth++;
+    else if (CSS[i] === '}') {
+      depth--;
+      if (depth === 0) return CSS.slice(open, i + 1);
+    }
+  }
+  return '';
+};
 
 describe('开场动画：生成器产出', () => {
   it('产出了一份包含全部关键帧的 CSS（记录条数与字节数）', () => {
@@ -125,23 +140,44 @@ describe('开场动画：生成器产出', () => {
     }
   });
 
+  it('Logo 描边的 dash 图案必须恰好等于一个路径长（段隙 = 1 − 段长）', () => {
+    // 这条是"∞ 交叉处画不出来"那个 bug 的回归网：
+    // 段隙写成常量 1 ⇒ 图案总长 1+length > 1 ⇒ 不环绕 ⇒ 路径起点附近（= 交叉处）永远画不出来。
+    // 上游写法：`${length} ${1 - length}`（boot.ts:138）。
+    const body = kfBody('boot-logo-dash');
+    const pairs = [...body.matchAll(/stroke-dasharray:([\d.]+) ([\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
+    expect(pairs.length, 'boot-logo-dash 里没抠到 dasharray').toBeGreaterThan(10);
+    const bad = pairs.filter(([a, b]) => Math.abs(a + b - 1) > 1e-6);
+    console.log(
+      `判据 dash 图案 对象 ${pairs.length} 个停点的 (段长 + 段隙) 实测: 全部 = 1（异常 ${bad.length} 个）· 终态 = ${pairs[pairs.length - 1].join(' + ')}`,
+    );
+    expect(bad, `这些停点的 段长+段隙 ≠ 1：${JSON.stringify(bad)}`).toEqual([]);
+  });
+
+  it('描边用的轮廓必须是**单段连续**路径（两段会让第二段起点多一处缺口）', () => {
+    // 静态标志（欢迎段）保留站上原样的两段子路径（印刷缺口烘在路径里）；
+    // 描边动画必须用桥掉缺口的那一版单段路径 —— 上游为此专门造了 bootMarkContour。
+    const grab = (name: string) => (SRC.match(new RegExp(`const ${name} =\\s*'([^']+)'`)) ?? [, ''])[1];
+    const continuous = grab('MARK_CONTINUOUS');
+    const printed = grab('MARK_CONTOUR');
+    const subpaths = (d: string) => (d.match(/[Mm]/g) ?? []).length;
+    expect(continuous, '模板里找不到 MARK_CONTINUOUS').not.toBe('');
+    console.log(
+      `判据 轮廓子路径 对象 MARK_CONTINUOUS / MARK_CONTOUR 实测: ${subpaths(continuous)} 段 / ${subpaths(printed)} 段`,
+    );
+    expect(subpaths(continuous), 'MARK_CONTINUOUS 必须是单段').toBe(1);
+    expect(subpaths(printed), '静态那份应保留站上原样的两段（印刷缺口）').toBe(2);
+    // 接缝要落在印刷缺口那一端：否则画满时缺口会跑到别处，与静态标志长得不一样
+    expect(printed, '印刷版第二段子路径的起点变了？').toContain('M19.04 2.14');
+    expect(continuous.startsWith('M19.04 2.14'), `MARK_CONTINUOUS 应从缺口端起步，实际是 ${continuous.slice(0, 14)}`).toBe(true);
+    expect(SRC, '描边的那条 path 必须用 MARK_CONTINUOUS').toContain(
+      'class="boot-contour" pathLength="1" d={MARK_CONTINUOUS}',
+    );
+  });
+
   it('错峰走"每行/每颗一条绝对时间轴规则"，且不残留 delay 机制（整层必须能被 seek 到任意绝对帧）', () => {
     // 这条是实测逼出来的：用 animation-delay 错峰会把品牌/卫星放到"相对自己的时间轴"上，
     // 于是"一个 currentTime = 一个绝对帧"就不成立（截图验收到 268 帧会看见本该 278 帧才入场的字）。
-    const kfBody = (name: string): string => {
-      const at = CSS.indexOf(`@keyframes ${name}{`);
-      if (at < 0) return '';
-      const open = CSS.indexOf('{', at);
-      let depth = 0;
-      for (let i = open; i < CSS.length; i++) {
-        if (CSS[i] === '{') depth++;
-        else if (CSS[i] === '}') {
-          depth--;
-          if (depth === 0) return CSS.slice(open, i + 1);
-        }
-      }
-      return '';
-    };
     const want = ['boot-brand-1-op', 'boot-brand-1-x', 'boot-brand-2-op', 'boot-brand-3-op', 'boot-sat-t'];
     for (let i = 0; i < T.SATELLITE_COUNT; i++) want.push(`boot-sat-${i}-r`);
     const missing = want.filter((n) => !kfBody(n));
