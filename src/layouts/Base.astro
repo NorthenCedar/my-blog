@@ -6,6 +6,7 @@ import '../styles/tokens.css';
 import '../styles/base.css';
 import '../styles/prose.css';
 import '../styles/links.css';
+import '../styles/transition.css';
 import Brandline from '../components/Brandline.astro';
 import CursorRing from '../components/CursorRing.astro';
 import Band from '../components/Band.astro';
@@ -66,6 +67,18 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="alternate" type="application/rss+xml" title={`${site.name} — RSS`} href="/rss.xml" />
     <link rel="preload" href="/fonts/plex-sans-400.woff2" as="font" type="font/woff2" crossorigin />
+    {/* 页面过渡的**首帧保险**（2026-09-27）：上一页在点击时把 pt 写进 sessionStorage 并盖上蒙版；
+        这里必须在**首次绘制之前**把蒙版补上，否则会先闪一下目标页的内容再盖上（站主要求"严禁首帧闪烁"）。
+        必须是 inline + 同步（classic）脚本：type=module 会被 defer 到绘制之后，那就晚了。
+        代价约 110 字节，进每一页的内联脚本预算。 */}
+    <script is:inline>
+      try {
+        if (sessionStorage.getItem('pt')) {
+          sessionStorage.removeItem('pt');
+          document.documentElement.classList.add('pt-on', 'pt-play');
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body class={chrome === 'console' ? 'chrome-console' : chrome === 'page' ? 'chrome-page' : undefined}>
     <a class="skip" href="#main">跳到正文</a>
@@ -83,7 +96,18 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
       <div class="shell"><slot /></div>
     </main>
     {chrome !== 'console' && <SiteFooter name={site.name} email={site.email} github={site.github} since={site.since ?? '2026-09-25'} />}
+    {/* 页面过渡的蒙版：两块毛玻璃 + 正中那根轴线。标记由 JS 加（见 <head> 与 src/scripts/transition），
+        没 JS 时 `.pt` 是 display:none —— 完全不存在，导航照旧。 */}
+    <div class="pt" data-transition aria-hidden="true">
+      <div class="pt-pane pt-top"></div>
+      <div class="pt-pane pt-bottom"></div>
+      <div class="pt-line"></div>
+    </div>
     {/* 跟手光标环 + 点击涟漪：纯装饰，z-index 55（在内容与灯箱之上、开场覆盖层 60 之下） */}
     <CursorRing />
+    <script>
+      // 页面过渡的点击拦截（每一页都加载 ⇒ Astro 会抽成同源共享 chunk）。
+      import '../scripts/transition';
+    </script>
   </body>
 </html>

@@ -591,20 +591,24 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
   it('文章页脚本数量与体积都在预算内', () => {
     const html = readFileSync(page, 'utf8');
     const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
-    // 2026-09-26 修订（两处，都记在这，别以后当成"本来就宽松"）：
-    //   ① 标签数 2 → 3：站主加了页脚统计（每页一块）。原写"≤2"是"别让页面堆脚本"的代理指标，
-    //      不是目的本身 —— 目的是**体积**，所以标签数放宽、体积仍守实数。
-    //   ② 预算 4096 → 4608：这一页现在同时跑三件事（跟手光标 1027 + 评论脚本闭包 2569 + 页脚统计 526）。
-    //      统计那段已压到近乎最短（用 ISO 时间片代替三个 Math.floor + 补零助手，省了 ~80 字节），
-    //      仍差 30 字节 ⇒ 按站上既有先例（首页动效预算"站主拍板另立一条"）**明着调**，
-    //      不靠偷偷少算（预算按"内联 + 同源外链闭包"实数统计）。再涨就要重新拍板。
-    const BUDGET = 4608;
-    expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBeLessThanOrEqual(3);
 
     const inline = scripts.map((s) => Buffer.byteLength(s[1], 'utf8'));
     const inlineTotal = inline.reduce((a, b) => a + b, 0);
     const full = Buffer.byteLength(jsLoadedBy(page), 'utf8');
-    console.log(`内联脚本体积: ${inline.join(' + ')} = ${inlineTotal} 字节 · 含同源外链合计 ${full} 字节（预算 ${BUDGET}）`);
+
+    // 2026-09-26/27 三次修订，全记在这，别以后当成"本来就宽松"：
+    //   ① 标签数 2 → 3：站主加了页脚统计（每页一块）。
+    //   ② 预算 4096 → 4608：文章页同时跑三件事（光标 1027 + 评论闭包 2569 + 统计 526 = 4126）。
+    //   ③ 预算 4608 → 5632、标签数 3 → 5：站主加了**页面过渡**（每页都需要）：
+    //      · <head> 里的 inline 首帧保险（防止换页时先闪内容）= 205 字节；
+    //      · src/scripts/transition.ts 主模块（Astro 抽成同源共享 chunk）= 690 字节；
+    //      合计 895 字节。预算仍按"内联 + 同源外链 import 闭包"的**实数**统计（不靠少算通过）。
+    // 标签数那条只是"别让页面无限堆脚本"的粗筛，真正的约束是下面的字节数；
+    // 现在 5 处 = head 保险 + 光标 + 统计 + 评论 loader + 过渡 loader。
+    const BUDGET = 5632;
+    console.log(`内联脚本体积: ${inline.join(' + ')} = ${inlineTotal} 字节 · 含同源外链合计 ${full} 字节（预算 ${BUDGET}）· ${scripts.length} 处 <script>`);
+
+    expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBeLessThanOrEqual(5);
     expect(full, `文章页 JS 合计 ${full} 字节，超过 ${BUDGET} 预算`).toBeLessThan(BUDGET);
   });
 
