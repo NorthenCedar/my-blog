@@ -297,6 +297,11 @@ describe.skipIf(!existsSync(DIST_INDEX) || !existsSync(BASELINE))('B3 交付：�
     // ③ h1 的 tabindex
     after = after.replace(/(<h1 class="display") tabindex="-1"/, '$1');
 
+    // ④ 磁带背景层（2026-09-26 站主后加的首页装饰，与本轮开场工作无关 ⇒ 也算"非本轮的增量"）
+    //    不摘的话这条基线比对会把新功能当成"开场动了正文"，那是误报。
+    //    注意 Astro 会给元素加作用域属性（data-astro-cid-…）⇒ 正则要容忍额外属性。
+    after = after.replace(/<div class="bg-cassette"[^>]*><\/div>/, '');
+
     const now = mainOf(after);
     console.log(
       `判据 纯增量 对象 首页 <main>（摘掉覆盖层/门控脚本/tabindex 后）实测: 与基线${now === before ? '逐字节相同' : '存在差异'} · ${before.length} → ${now.length} 字节`,

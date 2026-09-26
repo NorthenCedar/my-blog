@@ -199,6 +199,53 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log('判据 跟手光标 对象 每页三元素 + 守卫 + cursor:none 的可控性 + innerHTML 扫描 实测: 缺元素 0 页 · 全部通过');
   });
 
+  it('主页磁带背景：只在首页、是装饰、窄屏隐藏，资源在位', () => {
+    // 2026-09-26 站主给了一张「RHINE LAB, LLC. NO.001」磁带渲染图，要求抠下来放主页背景。
+    // 守四件事：① 资源真的在产物里（构建期从 assets/homepage-art 抠底生成）；
+    //          ② 它是**装饰**（alt 空 + aria-hidden + pointer-events:none + z-index 0）；
+    //          ③ 只挂首页（内页不该多这张图）；④ 窄屏不显示（手机上背景装饰会反复被正文压过）。
+    const art = join(DIST, 'art', 'cassette.webp');
+    expect(existsSync(art), 'dist/art/cassette.webp 不在产物里（生成器没跑？）').toBe(true);
+    const artBuf = readFileSync(art);
+    expect(artBuf.length, `cassette.webp 只有 ${artBuf.length} 字节`).toBeGreaterThan(10 * 1024);
+    // WebP 头：RIFF....WEBP
+    expect(artBuf.subarray(0, 4).toString('latin1'), 'cassette.webp 不是 WebP').toBe('RIFF');
+    expect(artBuf.subarray(8, 12).toString('latin1'), 'cassette.webp 不是 WebP').toBe('WEBP');
+
+    const home = readFileSync(join(DIST, 'index.html'), 'utf8');
+    // 用 CSS 背景而不是 <img>：装饰图不该给"所有图片 alt 非空"那条硬约束开口子。
+    // 因此 HTML 里只该有那个装饰 div，图片引用在 CSS 里（下面断言 CSS 接上了背景）。
+    expect(home, '首页没有磁带装饰层').toMatch(/<div class="bg-cassette"[^>]*aria-hidden="true"[^>]*>/);
+
+    const cssFiles: string[] = [];
+    const walk = (d: string) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (e.endsWith('.css')) cssFiles.push(p);
+      }
+    };
+    walk(DIST);
+    const all = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
+    expect(all, '.bg-cassette 没走装饰层约定（pointer-events:none + z-index:0）').toMatch(
+      /\.bg-cassette[^{}]*\{[^}]*pointer-events:\s*none[^}]*\}/,
+    );
+    expect(all, '.bg-cassette 没把磁带图作为背景接上').toMatch(/\.bg-cassette[^{}]*\{[^}]*background:[^;}]*\/art\/cassette\.webp/);
+    // 压缩器会把 `max-width: 767px` 改写成 `(width<=767px)` ⇒ 只按 767px 这个数去认，别写死语法
+    expect(all, '.bg-cassette 缺少窄屏隐藏').toMatch(/@media[^{]*767px[^{]*\{[^}]*\.bg-cassette[^}]*display:\s*none/);
+
+    const others = htmlFiles().filter((f) => f !== join(DIST, 'index.html'));
+    // 图在 CSS 里 ⇒ "只有首页用"要按**每个页面实际引用的 CSS bundle** 查：
+    // Astro 把 CSS 放在 dist/_astro/，页面用 <link> 指过去；非首页不该引到含这张图的那份。
+    const leaked = others.filter((f) => {
+      const html = readFileSync(f, 'utf8');
+      const hrefs = [...html.matchAll(/href="(\/_astro\/[^"]+\.css)"/g)].map((m) => m[1]);
+      return hrefs.some((h) => readFileSync(join(DIST, h.replace(/^\//, '')), 'utf8').includes('cassette.webp'));
+    });
+    expect(leaked, `这些非首页也引到了磁带图所在的 CSS：${leaked.join(', ')}`).toEqual([]);
+    console.log(`判据 主页磁带 对象 产物资源 + 装饰属性 + 仅首页 + 窄屏隐藏 实测: ${(artBuf.length / 1024).toFixed(1)} KB · 其余 ${others.length} 页未引到`);
+  });
+
   it('光标：只剩一枚无 JS 兜底，删掉的两枚不留残迹', () => {
     // 2026-09-26 站主最终决定：**全站只有一个白色中心点**（跟手光标，见 components/CursorRing.astro）。
     // 链接选择与文本选择两枚连同 token / 位图 / 源图一起删了 ⇒ 这里守四件事：

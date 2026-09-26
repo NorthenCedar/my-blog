@@ -21,3 +21,5 @@ src/styles/boot.css
 public/cursors/
 # 光标 token（构建期生成）：URL 里带图片内容指纹 ?v=<sha1>，图一改 URL 就变，浏览器才会重取光标图。
 src/styles/cursors.css
+# 主页背景美术（从 assets/homepage-art 抠底生成，同 public/cursors 的理由）
+public/art/
