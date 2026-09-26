@@ -179,13 +179,15 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     const all = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
 
     const flat = all.replace(/\s+/g, ' ');
-    // ① token 定义：url + 热点 + 关键字兜底（压缩后引号会被去掉，所以按实际形态断言）
-    for (const [name, url, hot, kw] of [
-      ['--cursor-default', '/cursors/normal.png', '2 2', 'default'],
-      ['--cursor-text', '/cursors/text.png', '16 16', 'text'],
-      ['--cursor-link', '/cursors/link.png', '2 2', 'pointer'],
+    // ① 三级链：主图 64 + 兜底 32（Safari 上限）+ 关键字兜底。压缩后引号会被去掉，按实际形态断言。
+    for (const [name, big, small, hotBig, hotSmall, kw] of [
+      ['--cursor-default', '/cursors/normal.png', '/cursors/normal-32.png', '3 0', '2 0', 'default'],
+      ['--cursor-text', '/cursors/text.png', '/cursors/text-32.png', '32 32', '16 16', 'text'],
+      ['--cursor-link', '/cursors/link.png', '/cursors/link-32.png', '2 0', '1 0', 'pointer'],
     ] as const) {
-      expect(flat, `${name} 丢了 url / 热点 / 兜底关键字`).toContain(`${name}:url(${url}) ${hot}, ${kw}`);
+      expect(flat, `${name} 主图/热点不对`).toContain(`${name}:url(${big}) ${hotBig}`);
+      expect(flat, `${name} 缺 32px 兜底（Safari 忽略 >32 的光标）`).toContain(`url(${small}) ${hotSmall}`);
+      expect(flat, `${name} 缺关键字兜底（图取不到时光标不能消失）`).toContain(`, ${kw};`);
     }
     // 三条规则分工：默认挂 html、链接与按钮用链接光标、文字上用主题 I 型
     expect(flat, 'html 上没有默认光标').toContain('html{cursor:var(--cursor-default)}');
@@ -193,13 +195,14 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(flat, '文字容器上没用主题 I 型').toContain('cursor:var(--cursor-text)');
     expect(flat, '文字规则没包在 :where() 里（会被链接规则反过来压掉或压掉链接）').toContain(':where(');
 
-    // ② 位图本体：PNG 的 IHDR 在字节 16..24（宽高）、25（颜色类型，6 = RGBA）
-    for (const name of ['normal.png', 'text.png', 'link.png']) {
+    // ② 位图本体：PNG 的 IHDR 在字节 16..24（宽高）、25（颜色类型，6 = RGBA）；主图 64、兜底 32
+    for (const name of ['normal.png', 'text.png', 'link.png', 'normal-32.png', 'text-32.png', 'link-32.png']) {
+      const expected = name.endsWith('-32.png') ? 32 : 64;
       const buf = readFileSync(join(DIST, 'cursors', name));
       const w = buf.readUInt32BE(16);
       const h = buf.readUInt32BE(20);
       const colorType = buf.readUInt8(25);
-      expect([w, h], `dist/cursors/${name} 不是 32×32（Safari 会忽略大图）`).toEqual([32, 32]);
+      expect([w, h], `dist/cursors/${name} 应为 ${expected}×${expected}`).toEqual([expected, expected]);
       expect(colorType, `dist/cursors/${name} 没有 alpha 通道`).toBe(6);
     }
 
@@ -223,7 +226,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       }
     }
     console.log(
-      `判据 光标 对象 3 条 cursor 声明 + 3 张 32×32 位图 + ${srcFiles.length + 1} 个源文件扫描 实测: 越权声明 ${offenders.length} 处`,
+      `判据 光标 对象 3 条 cursor 声明 + 6 张位图（64 主 / 32 兜底）+ ${srcFiles.length + 1} 个源文件扫描 实测: 越权声明 ${offenders.length} 处`,
     );
     expect(offenders, `这些声明会以更高特异性顶掉主题光标：${offenders.join(' | ')}`).toEqual([]);
   });

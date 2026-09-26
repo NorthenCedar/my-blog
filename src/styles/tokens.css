@@ -24,12 +24,13 @@
   --code-keyword: #6fcf8f; /* 代码里唯一的强调色；对 --code-bg 实测 10.11:1（旧橙 #ff8a66 是 8.35） */
 
   /* 光标（2026-09-26 站主定：PRTS 原版三件套，与浏览器语义一一对应）。
-     为什么是 url + 关键字兜底、而不是只写关键字：图没加载出来时光标不能消失（缺失/被拦时回落系统指针）。
-     为什么位图不是 SVG：Safari 直接忽略 SVG 光标；位图统一 32×32（Safari 的上限）。
-     素材由 scripts/gen-cursors.mjs 从矢量源生成，改形状/配色改那个脚本，不要手改 PNG。 */
-  --cursor-default: url('/cursors/normal.png') 2 2, default;  /* 正常选择（热点 = 刀刃尖端） */
-  --cursor-text: url('/cursors/text.png') 16 16, text;        /* 文本选择（热点 = I 型正中） */
-  --cursor-link: url('/cursors/link.png') 2 2, pointer;       /* 链接选择（热点 = 刀刃尖端） */
+     每个 token 是「主图 64 + 兜底 32 + 关键字」三级：Safari 忽略 >32×32 的光标 ⇒ 它取 32 那张；
+     两张都取不到时落回关键字（系统光标），光标不会消失。热点按各自尺寸分别给。
+     为什么位图不是 SVG：Safari 直接忽略 SVG 光标。
+     素材由 scripts/gen-cursors.mjs 生成（正常/链接从 assets/cursors-source 抠图，文本是矢量 I 型）。 */
+  --cursor-default: url('/cursors/normal.png') 3 0, url('/cursors/normal-32.png') 2 0, default; /* 正常选择（热点 = 指尖） */
+  --cursor-text: url('/cursors/text.png') 32 32, url('/cursors/text-32.png') 16 16, text;        /* 文本选择（热点 = 正中） */
+  --cursor-link: url('/cursors/link.png') 2 0, url('/cursors/link-32.png') 1 0, pointer;         /* 链接选择（热点 = 指尖） */
 
   /* 字号（11 档） */
   --fs-display: clamp(2.8rem, 13vw, 8.5rem);
