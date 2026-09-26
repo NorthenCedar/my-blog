@@ -889,8 +889,14 @@ node scripts/verify-boot-intro.mjs                  # 本轮新增，退出码�
 4. **不做"JS 跟随的 div 光标"**：那要 `pointermove` 每帧改 transform（性能、延迟、可访问性都更差），
    CSS 光标是原生延迟、零 JS、不占首页那 7168 B 预算。
 5. **素材**：真源是 `assets/cursors-source/{normal,link}.png`（站主给的参考图，进仓库）+ 生成器里的矢量 I 型；
-   `scripts/gen-cursors.mjs` 产出 6 张位图到 `public/cursors/`（gitignore，构建/开发前生成）。
-   `--check` 两侧冒烟：同步 exit 0、改一字节 exit 1。
+   `scripts/gen-cursors.mjs` 产出 6 张位图到 `public/cursors/`（gitignore，构建/开发前生成）
+   **并生成 `src/styles/cursors.css`（三个 token，Base.astro 引入）**。
+   `--check` 两侧冒烟：同步 exit 0、改一字节 exit 1、token 文件一致性一起查。
+7. **URL 必须带内容指纹 `?v=<sha1 前 8 位>`**（token 之所以要"生成"就是为了这个）：
+   光标图文件名固定、内容会变（本站从手画稿换成过抠图稿），而浏览器按 URL 缓存图片 ⇒
+   不带指纹时站主刷新后取到的还是旧图，看起来就是"**跟上次没变化**"（2026-09-26 实际发生）。
+   指纹写进查询串后：图一改 URL 就变，浏览器必然重取；热点也由生成器一起写，不会与图片漂移。
+   断言从"三条 token 有指纹"升级成"**产物 CSS 里每一条 `/cursors/` 引用都带指纹**"——防的是整类漂移。
 6. **白结晶 + 深描边**：原版是深底网页上的纯白结晶（无描边），本站是**纸白底** ⇒ 直接照搬会看不见。
    抠图时给每个图形补一圈 **1px 深色描边（`--ink`，透明度 0.6）**并轻微提亮（幂曲线 0.72）。
    描边要薄 —— 厚了会把结晶压成"灰贴纸"（第一版就是 0.85 的 3×3 膨胀，太沉）。

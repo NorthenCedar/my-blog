@@ -194,6 +194,14 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       // 压缩后最后一条声明可能没有尾分号（直接跟 `}`），所以 [;}] 都收
       expect(flat, `${name} 缺关键字兜底（图取不到时光标不能消失）`).toMatch(new RegExp(`, ${kw}[;}]`));
     }
+    // ①b 兜住整类漂移：产物 CSS 里**每一条** /cursors/ 引用都必须带指纹。
+    //     站主 2026-09-26 撞过一次：换了光标图但文件名没变 ⇒ 浏览器用缓存里的旧图，页面"跟上次没变化"。
+    {
+      const refs = [...all.matchAll(/url\((\/cursors\/[^)]*)\)/g)].map((m) => m[1]);
+      const unfingerprinted = refs.filter((u) => !/\?v=[0-9a-f]{8}$/.test(u));
+      expect(refs.length, '产物 CSS 里一条 /cursors/ 引用都没有').toBeGreaterThan(0);
+      expect(unfingerprinted, `这些光标 URL 没带内容指纹（改图后浏览器会用缓存里的旧光标）：${unfingerprinted.join(', ')}`).toEqual([]);
+    }
     // 三条规则分工：默认挂 html、链接与按钮用链接光标、文字上用主题 I 型
     expect(flat, 'html 上没有默认光标').toContain('html{cursor:var(--cursor-default)}');
     expect(flat, '链接与按钮没用主题链接光标').toMatch(/\{[^}]*cursor:var\(--cursor-link\)/);
