@@ -29,9 +29,14 @@ export type NavKey =
  * 顺序按站主截图（首页 关于 归档 友链 说说 留言 相册 日志），原有的「标签」放在最后。
  * 两点说明：① 站主截图里的「首页」对应本站的「文章」（都指向 /），所以没有再加一项同地址的；
  * ② 参考站的 GitHub 与 管理端两项按站主要求**不加**。
+ *
+ * 2026-09-26 二次调整（站主："右上角加个主页 / 把文章删了 / 进文章后显示在归档"）：
+ * ① 第一项由「文章」改名**「主页」**（地址不变仍指向 /）——"删文章 + 加主页"合起来就是改名；
+ * ② 文章详情页（src/layouts/Post.astro）现在传 `current="archive"` ⇒ 进具体文章时高亮**归档**
+ *   （原来是没传 current，整个导航一个都不高亮）；手机抽屉用的是同一份 `current`，所以同步生效。
  */
 export const NAV_LINKS: { href: string; label: string; key: NavKey }[] = [
-  { href: '/', label: '文章', key: 'index' },
+  { href: '/', label: '主页', key: 'index' },
   { href: '/about/', label: '关于', key: 'about' },
   { href: '/archive/', label: '归档', key: 'archive' },
   { href: '/links/', label: '友链', key: 'links' },

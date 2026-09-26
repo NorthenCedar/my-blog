@@ -45,6 +45,35 @@ function walk(dir: string, filter: (name: string) => boolean): string[] {
 
 const htmlFiles = () => (hasDist ? walk(DIST, (n) => n.endsWith('.html')) : []);
 
+/**
+ * 一个页面**实际加载的全部 JS 代码**：页内内联 + 它引用的同源外部脚本**及其 import 闭包**。
+ * 2026-09-26 加：留言页也用同一个评论脚本之后，Astro 把多页共用的脚本抽成 `/_astro/*.js`，
+ * 而且会拆成两层（页面 → loader chunk → 共享 chunk，`import"./comments.xxx.js"`）。
+ * 只读页面 HTML（或只跟一层）会漏代码 —— 预算少算、端点找不到、产物被当成孤儿。
+ * 凡是查"页面里的 JS"的地方都走这里。
+ */
+function jsClosure(pagePath: string): { code: string; files: string[] } {
+  const html = readFileSync(pagePath, 'utf8');
+  const inline = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
+  const files: string[] = [];
+  const seen = new Set<string>();
+  const load = (href: string) => {
+    const rel = href.replace(/^\//, '').replace(/^\.\//, '');
+    const f = join(DIST, rel.startsWith('_astro/') ? rel : join('_astro', rel));
+    if (seen.has(f) || !existsSync(f)) return;
+    seen.add(f);
+    files.push(f);
+    const code = readFileSync(f, 'utf8');
+    for (const m of code.matchAll(/(?:import|from)\s*"([^"]+\.js)"/g)) load(m[1]);
+  };
+  for (const m of html.matchAll(/<script[^>]+src="(\/_astro\/[^"]+\.js)"/g)) load(m[1]);
+  const code = inline + '\n' + files.map((f) => readFileSync(f, 'utf8')).join('\n');
+  return { code, files };
+}
+
+/** 页面实际加载的 JS 代码文本（见 jsClosure 的说明） */
+const jsLoadedBy = (pagePath: string) => jsClosure(pagePath).code;
+
 describe.skipIf(!hasDist)('草稿三态：第三态（直链不产出）', () => {
   it('内容层里确实存在草稿（否则本组断言是空转）', () => {
     if (DRAFTS.length === 0) {
@@ -384,7 +413,8 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(dead, `这些导航项点进去是死链：${dead.join(', ')}`).toEqual([]);
 
     // ② 每页（含新增四页）都得有完整清单；抽屉元素也要在
-    const labels = ['文章', '关于', '归档', '友链', '说说', '留言', '相册', '日志', '标签'];
+    //    首项 2026-09-26 由「文章」改名「主页」（站主："右上角加个主页 / 把文章删了"）
+    const labels = ['主页', '关于', '归档', '友链', '说说', '留言', '相册', '日志', '标签'];
     const missing: string[] = [];
     for (const f of pages) {
       const html = readFileSync(f, 'utf8');
@@ -508,10 +538,13 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
     expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBeLessThanOrEqual(2);
 
-    const sizes = scripts.map((s) => Buffer.byteLength(s[1], 'utf8'));
-    const total = sizes.reduce((a, b) => a + b, 0);
-    console.log(`内联脚本体积: ${sizes.join(' + ')} = ${total} 字节（预算 4096）`);
-    expect(total, `内联脚本合计 ${total} 字节，超过 4 KB 预算`).toBeLessThan(4096);
+    // 2026-09-26 修订：评论脚本现在被文章页与留言页共用 ⇒ Astro 抽成同源 chunk（外链），
+    // 所以预算必须把**外链脚本的字节也算进来**（否则预算被绕过：内联只算一半）。
+    const inline = scripts.map((s) => Buffer.byteLength(s[1], 'utf8'));
+    const inlineTotal = inline.reduce((a, b) => a + b, 0);
+    const full = Buffer.byteLength(jsLoadedBy(page), 'utf8');
+    console.log(`内联脚本体积: ${inline.join(' + ')} = ${inlineTotal} 字节 · 含同源外链合计 ${full} 字节（预算 4096）`);
+    expect(full, `文章页 JS 合计 ${full} 字节，超过 4 KB 预算`).toBeLessThan(4096);
   });
 
   it('评论脚本不使用 innerHTML（XSS 头号风险）', () => {
@@ -541,12 +574,30 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     const block = html.slice(start, end === -1 ? start + 2000 : end);
 
     expect(/https?:\/\//.test(block), '评论区区块里出现了外部 URL').toBe(false);
-    // 端点调用在页尾的内联脚本里，不在 section 内部
-    expect(html, '评论应当打自己的端点').toContain('/api/comments');
+    // 端点调用可能在页内内联脚本里，也可能在 Astro 抽出的**同源**外部脚本里 ——
+    // 2026-09-26：留言页也用同一个评论脚本后，Astro 把它抽成了共享 chunk（/_astro/*.js），
+    // 所以原来"只查页面 HTML"的写法会假阳性。判据不变：**评论代码里必须打自己的端点**。
+    const code = jsLoadedBy(page);
+    expect(code, '评论应当打自己的端点').toContain('/api/comments');
+    expect(/https?:\/\//.test(code), '评论脚本里出现了外部 URL').toBe(false);
   });
 
-  it('没有独立 JS 文件（预算的另一种表达）', () => {
-    expect(walk(DIST, (n) => n.endsWith('.js') || n.endsWith('.mjs'))).toEqual([]);
+  it('产物 JS 只在预算内，且都是本站产物（原"不许有独立 JS"的修订版）', () => {
+    // 2026-09-26 修订：留言页也用同一个评论脚本之后，Astro 把它抽成了**共享 chunk**
+    // （/_astro/*.js）—— 那是更省的做法（两页共用一份、可长期缓存），
+    // 但原来那条"产物里不许有任何 .js 文件"就变成假阳性了。
+    // 判据换成它的**原意**：① 产物里的 .js 必须是本站构建出来的（都在 dist/_astro 下）；
+    //                    ② 逐页把「内联 + 该页引用的外部脚本」算进预算（见上面的 JS 预算那条，已同步改）。
+    const jsFiles = walk(DIST, (n) => n.endsWith('.js') || n.endsWith('.mjs'));
+    for (const f of jsFiles) {
+      expect(f.replace(/\\/g, '/'), `产物 JS 出现在 _astro 之外（可能被手拷进来）：${f}`).toMatch(/^dist\/_astro\//);
+    }
+    // 每个 .js 都必须被某个页面**可达**（孤儿产物 = 白搭的体积；可达性要跟着 import 走）
+    const referenced = new Set<string>();
+    for (const f of htmlFiles()) for (const g of jsClosure(f).files) referenced.add(g);
+    const orphans = jsFiles.filter((f) => !referenced.has(f));
+    expect(orphans, `这些 JS 产物没被任何页面引用：${orphans.join(', ')}`).toEqual([]);
+    console.log(`判据 产物 JS 对象 dist/**/*.js 实测: ${jsFiles.length} 个，全部在 _astro 下且被页面（含 import 闭包）引用`);
   });
 });
 

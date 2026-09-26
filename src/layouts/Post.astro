@@ -24,7 +24,10 @@ const toc = headingTree(headings);
      另按站主拍板 B：导语用内容层的 summary —— 首页 S2 只显示标题，文章页是它唯一露脸的地方。
      详见 docs/post-migration-notes.md。 */
 }
-<Base title={meta.title} description={meta.summary} chrome="page">
+{/* current="archive"（站主 2026-09-26："以后点进具体文章后右上角显示在归档"）：
+    文章属于归档这份清单 ⇒ 进详情页时高亮「归档」。以前这里没传 current，整个导航一个都不高亮。
+    手机抽屉用同一个 current 值，所以索引同步（无需另改）。 */}
+<Base title={meta.title} description={meta.summary} chrome="page" current="archive">
   <header class="pagehead">
     <Meta post={meta} />
     <h1 class="hero-title">{meta.title}</h1>

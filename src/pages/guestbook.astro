@@ -28,6 +28,13 @@ const d = (entry?.data ?? {}) as unknown as GuestbookData;
   </div>
 </Base>
 
+{/* ⚠️ 这一行不能少：CommentSection 只提供**标记**，取列表/提交都在这个脚本里。
+    第一版漏了它 ⇒ 表单走原生提交 ⇒ 页面刷新一下、留言也没保存（站主 2026-09-26 报的就是这个）。
+    写法与文章页 src/layouts/Post.astro 完全一致。 */}
+<script>
+  import '../scripts/comments';
+</script>
+
 <style>
   .lede {
     margin: var(--sp-4) 0 0;
