@@ -1533,6 +1533,57 @@ t≈420 时内容已经全清晰）。改成 **`animations.pause()` + `currentTi
 逐阶段定格几何（24.1 表）、首帧不闪（像素对比）、结束态（蒙版 hidden、内容归位）、减少动态效果降级。
 全量 **118 passed | 2 skipped**；人眼：`pt-150.png`（对焦中：整屏重度模糊）、`pt-500.png`（撕裂中：只剩顶部一条薄纱、内容已在浮现）。
 
+---
+
+## 25. 事故：友链加了但线上没上 —— 一次误提交让 CF 构建失败（2026-09-27）
+
+### 25.1 诊断链（一次网络查询就定位）
+
+站主按手册 §19 加了 `WillowXI的小站` 到 `content/pages/links.md`，线上没有。按诊断纪律先建**能红的回路**
+（`_tmp-friendlink-check.mjs`：读本地清单 → 逐条查线上 `/links/` 在不在）：
+
+| 检查 | 结果 |
+|---|---|
+| 这次改动提交/推送了吗 | **推了**（远端 main = `8092786`，就是站主的提交） |
+| 本地构建产物里有它吗 | **有**（`dist/links/index.html` 里有 `WillowXI`）⇒ 内容没问题 |
+| 线上 HTML 是缓存的旧版吗 | **不是**（`cache-control: max-age=0, must-revalidate` + `cf-cache-status: DYNAMIC`） |
+| **Cloudflare 的部署状态**（`wrangler pages deployment list`） | **`8092786` → Failure** ✗；上一个成功的 `b72844e` 仍是线上版本 |
+
+⇒ 结论：**那次 CF 构建失败了**，线上停在上一个成功部署。**根因在提交内容本身**。
+
+### 25.2 根因：`git add -A` 把 250 个临时产物扫进了提交
+
+`git show --stat 8092786` 显示那次提交动了 **251 个文件**，其中 **250 个是临时产物**：
+
+- `_tmp-*.mjs` / `_tmp-ref/` / `_tmp-boot-shots/`（**239 个路径、约 20 MB**，大半是截图）；
+- **`_tmp-arknights-cursor` —— 一个嵌套仓库的 gitlink**（`git ls-files -s` 显示 mode **160000**）：
+  它指向 `6ebb646…`，而那个提交在 CI 侧根本拿不到 ⇒ 克隆/构建失败。
+- 真正的改动只有 **1 个**：`content/pages/links.md`。
+
+（提交前我这边工作区是干净的 —— 只动了 links.md 一个文件；是 `git add -A` 把它们一起扫了进去。
+站上一直有"提交前逐条 add 路径"的约定，这次没有遵守。）
+
+### 25.3 修法
+
+1. **239 个 `_tmp` 路径从索引移除**（`git rm -r --cached`，**文件留在磁盘上** —— 探针照常可用）；
+2. **`.gitignore` 加 `/_tmp*`** —— 从根上堵住，不再靠"提交时小心"（那条 gitlink 目录同样被忽略）；
+3. 顺手修掉一个**我自己埋的兼容 bug**：仓库没有 `.gitattributes`、Windows 上 `core.autocrlf=true`
+   ⇒ **新克隆出来是 CRLF**，而四处 frontmatter 正则只认 `\n`：
+   - `gen-gallery-webp.mjs` → 直接构建失败（干净克隆实测 `build exit=1`，报"相册 一些风景/index.md 没有 frontmatter"）；
+   - `prune-draft-assets.mjs` → **静默 `continue`**（更阴：草稿隔离失效而不是报错）；
+   - 两个测试文件同理。
+   四处统一改成 `\r?\n`。
+4. **护栏断言**：`.gitignore` 里必须有 `/_tmp*`、`src/` 与 `content/` 里不许有 `_tmp*` 文件。
+   **接缝缺失如实记**：测试跑在文件系统上、不跑 git，所以"索引里有没有 `_tmp`"没有干净接缝可测 ——
+   可替代的就是上面两条 + 提交时逐条 add。
+
+### 25.4 恢复与验证
+
+- 推送 `ea1048a` → 盯 `wrangler pages deployment list`：**SUCCESS（19 秒后）** ✓；
+- 重跑那条当初变红的回路：**绿** ✓ —— 线上友链卡片 **5 张**，`WillowXI的小站 → https://lwsblog.github.io/` 已在线上；
+- 本地 `npm run build` 通过、全量 **119 passed | 2 skipped**（含新护栏 1 条）；
+- 临时复现克隆已删除。
+
 ### 18.4 验证
 
 - 静态：新增一条断言 —— `.band-readout` 的底色**必须半透明**（rgba 的 alpha<1 或 8 位 hex 且非 ff）、

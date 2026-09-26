@@ -501,6 +501,35 @@ https://dash.cloudflare.com → Workers & Pages → personal → Deployments
 
 构建失败时，那里有完整日志。
 
+### 9.4 「我 push 了，但线上没变化」怎么办（2026-09-27 真事）
+
+**先别怀疑缓存**，按这三步查（一分钟内能定位）：
+
+1. **看部署状态**（最直接，一条命令）：
+
+   ```powershell
+   npx wrangler pages deployment list --project-name=personal
+   ```
+
+   看第一行的 `Status`：是 **Failure** 就是**构建失败**了 ——
+   这时候线上还是**上一个成功版本**，所以你新加的内容当然看不到。
+
+2. **确认内容本身没坏**：本地 `npm run build`。**本地能构建 ≠ Cloudflare 能构建**，
+   但本地构建失败就一定是内容/代码的问题（报错会指到哪个文件）。
+
+3. **提交内容有没有混进奇怪的东西**：
+
+   ```powershell
+   git show --stat HEAD     # 这一条提交到底动了哪些文件
+   ```
+
+   **每次提交前养成习惯**：`git status` 看一眼，`git add` **逐条写路径**（例如
+   `git add content/pages/links.md`），**别用 `git add -A` / `git add .`**。
+   上一次事故就是这么来的：一条友链的提交被 `git add -A` 卷进 **239 个临时文件 + 一个嵌套仓库**，
+   Cloudflare 构建直接失败（现在 `.gitignore` 已经挡住 `_tmp*`，但别的临时东西仍可能被扫进去）。
+
+> 想让我查也行 —— 把"我 push 了但没变化"告诉我，我这边能直接读部署状态。
+
 ---
 
 ## 10. 命令速查表
