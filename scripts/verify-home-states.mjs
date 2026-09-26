@@ -131,7 +131,7 @@ console.log('\n=== ① 默认态（html.js）===');
 await send('Emulation.setScriptExecutionDisabled', { value: false });
 await send('Emulation.setEmulatedMedia', { features: [] });
 await load(1440, 900);
-check('D-1 <html> 挂上了 js 门控类', 'document.documentElement.className', await evalJs('document.documentElement.className'), 'js');
+check('D-1 <html> 挂上了 js 门控类', "document.documentElement.classList.contains('js')", await evalJs(`document.documentElement.classList.contains('js')`), 'true');
 check('D-2 两个仪表可见', '#hudPct / .band-readout 的 display',
   await evalJs(`[getComputedStyle(document.getElementById('hudPct')).display, getComputedStyle(document.querySelector('.band-readout')).display].join(',')`),
   // 期望值不是 CSS 里写的 inline/inline-flex：浏览器会块化 —— #hudPct 是 flex 项 → block；.band-readout 是 absolute → flex
