@@ -1,25 +1,30 @@
 ---
 /**
- * 跟手光标环 + 点击涟漪（参考 Ocautator/arknights-cursor 的做法，用本站的 token 与更省的写法重写）
+ * 跟手光标：白色中心点 + 半透明圆盘 + 点击涟漪（站主 2026-09-26 定的形态）
  *
- * 为什么是"环"而不是又换一张光标图：站主给的那份参考实现里，真正的重点是
- * **一个 36px 的圆环跟手移动 + 悬停到可点元素时缩小并填色 + 点击时一圈涟漪扩散**；
- * 它自己的光标图只是一张 6×6 的小箭头。所以这里只取"环"这件事，光标本体沿用站上已有的三件套。
+ * 形态（对应站主给的那张参考图）：**半透明圆盘**跟着指针缓动，盘心是**白色小点**（点不缓动，它就是指针本身）；
+ * 原生光标隐藏（`cursor:none`），所以"光标"= 这个白点。悬停可点元素时圆盘缩小、变稠、描边转绿。
  *
- * 几个刻意的取舍：
- *   · 用 transform 而不是 left/top 做跟手（原实现改 left/top 会每帧触发布局）
- *   · z-index 55：在正文与相册灯箱（50）之上、开场覆盖层（60）之下 ⇒ 开场 20 秒里它自动不出现
- *   · pointer-events:none + aria-hidden：纯装饰，不拦点击、不进无障碍树
- *   · 触摸设备（hover:none）与 prefers-reduced-motion 都不做 —— CSS 藏起来，JS 也直接不注册监听
- *   · 零第三方请求：不引 CDN，不引外部字体，元素与样式都在本站
+ * 三个刻意的处理，都是为了本站是**纸白底**（参考图那套是在深蓝底上做的，白给白会看不见）：
+ *   · 白点与圆盘都带一圈极细的深色描边（否则纸面上"白上白"直接消失）
+ *   · 圆盘用半透明白（`rgba(255,255,255,.5)`）+ 发丝描边：纸面上读得出、深色区也不突兀
+ *   · 文字上让位给主题 I 型光标（站主先前明确要保留文本光标），同时把点与盘藏起来 —— 否则双重光标
+ *
+ * `cursor:none` 由 **JS 加类**（`html.cursor-none`）而不是写死在 CSS：脚本没跑/被拦时，
+ * 站上原有的三件套光标仍然在，不会出现"一个字都没有的光标"。
+ *
+ * 层级 66/65/64：在开场覆盖层（60）之上 —— 因为原生光标被隐藏了，指针标记必须始终可见，
+ * 不能像上一版那样藏在开场层下面。
  */
 ---
 
-<div class="cr-ring" aria-hidden="true"></div>
+<div class="cr-disc" aria-hidden="true"></div>
+<div class="cr-dot" aria-hidden="true"></div>
 <div class="cr-ripple" aria-hidden="true"></div>
 
 <style>
-  .cr-ring,
+  .cr-disc,
+  .cr-dot,
   .cr-ripple {
     position: fixed;
     top: 0;
@@ -29,46 +34,86 @@
     opacity: 0;
     will-change: transform;
   }
-  .cr-ring {
-    z-index: 55;
+  .cr-disc {
+    z-index: 65;
     width: 34px;
     height: 34px;
-    border: 1px solid var(--accent);
+    /* 盘用**极淡墨色纱**而不是半透明白：本站是纸白底，白盘在白底上看不见，
+       而白点又需要"比盘更亮"才读得出来（参考图那种关系：盘偏暗、点亮）。 */
+    border: 1px solid rgb(26 26 26 / 22%);
+    background: rgb(26 26 26 / 8%);
     transition:
       width 0.25s,
       height 0.25s,
       background-color 0.25s,
       border-color 0.25s;
   }
-  /* 悬停到可点元素：缩小 + 填一层绿洗底（原实现的 hold 状态） */
-  .cr-ring.is-hot {
+  /* 悬停到可点元素：缩小 + 变稠 + 描边转绿（参考实现的 hold 状态） */
+  .cr-disc.is-hot {
     width: 22px;
     height: 22px;
     border-color: var(--accent-ink);
-    background-color: var(--accent-wash);
+    background: rgb(26 26 26 / 16%);
+  }
+  .cr-dot {
+    z-index: 66;
+    width: 8px;
+    height: 8px;
+    /* 白点 + 发丝深色边：纸面上"白上白"会消失，这圈边只是保证它读得出来 */
+    background: #fff;
+    box-shadow: 0 0 0 1px rgb(26 26 26 / 35%);
   }
   .cr-ripple {
-    z-index: 54;
+    z-index: 64;
     width: 68px;
     height: 68px;
-    border: 2px solid var(--accent);
+    border: 2px solid rgb(255 255 255 / 90%);
+    box-shadow: 0 0 0 1px rgb(26 26 26 / 25%);
+    /* 位置走 --x/--y，scale 写在同一串 transform 里 —— 见文件底部注释：把 scale 当独立属性会连位移一起放大 */
+    transform: translate3d(var(--x, 0px), var(--y, 0px), 0) translate(-50%, -50%) scale(1);
   }
   .cr-ripple.is-on {
     animation: cr-ripple 0.5s cubic-bezier(0.22, 0.61, 0.21, 1) forwards;
   }
+  /* ⚠️ scale 必须写在 transform 串里（不能当独立属性）：独立属性与 transform 合成时位移会被一起放大，
+     实测点击在 (500,300) 的涟漪圆心会一路飞到 (1152,672) —— 站主肉眼看到的就是"往右下角飞"。 */
   @keyframes cr-ripple {
     from {
       opacity: 0.85;
-      scale: 1;
+      transform: translate3d(var(--x, 0px), var(--y, 0px), 0) translate(-50%, -50%) scale(1);
     }
     to {
       opacity: 0;
-      scale: 2.4;
+      transform: translate3d(var(--x, 0px), var(--y, 0px), 0) translate(-50%, -50%) scale(2.4);
     }
   }
-  /* 减少动态效果 / 触摸设备：整个效果不出现（JS 侧也不再注册监听） */
+  /* 原生光标隐藏（类由 JS 加）：全站都换成白点…… */
+  html.cursor-none,
+  html.cursor-none * {
+    cursor: none;
+  }
+  /* ……但文字上还给主题 I 型光标（.cr-text 时点与盘让位，避免双重光标） */
+  html.cursor-none :where(
+    p, li, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, td, th, figcaption,
+    pre, code, kbd, samp, textarea, article, .prose,
+    input[type='text'], input[type='search'], input[type='email'], input[type='url'], input[type='password']
+  ) {
+    cursor: var(--cursor-text);
+  }
+  /* 有 JS 且在动鼠标时才显形（用类控制，别用内联 opacity —— 内联会压过下面 .cr-text 的让位规则） */
+  html.cursor-live .cr-disc,
+  html.cursor-live .cr-dot {
+    opacity: 1;
+  }
+  /* 文字上：点与盘让位给主题 I 型光标。这条**必须写在上面那条之后**（同特异性，靠顺序取胜） */
+  html.cr-text .cr-disc,
+  html.cr-text .cr-dot {
+    opacity: 0;
+  }
+  /* 减少动态效果 / 触摸设备：整个效果不出现，也不加 cursor-none（JS 侧直接返回） */
   @media (prefers-reduced-motion: reduce), (hover: none) {
-    .cr-ring,
+    .cr-disc,
+    .cr-dot,
     .cr-ripple {
       display: none;
     }
@@ -77,51 +122,60 @@
 
 <script>
   (() => {
-    const ring = document.querySelector('.cr-ring');
+    const root = document.documentElement;
+    const disc = document.querySelector('.cr-disc');
+    const dot = document.querySelector('.cr-dot');
     const ripple = document.querySelector('.cr-ripple');
-    if (!ring || !ripple) return;
+    if (!disc || !dot || !ripple) return;
+    // 触摸设备与减少动态效果：不做（也**不加** cursor-none —— 那样会把原生光标藏掉却没有替代品）
     if (!matchMedia('(hover: hover)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    root.classList.add('cursor-none');
 
     const HOT = 'a,button,input,textarea,select,summary,[role="button"],[role="tab"]';
+    const TXT = 'p,li,blockquote,h1,h2,h3,h4,h5,h6,td,th,pre,code,kbd,samp,article,.prose';
     let x = 0;
     let y = 0;
     let tx = 0;
     let ty = 0;
     let raf = 0;
     let seen = false;
-
+    const put = (el, a, b) => { el.style.transform = `translate3d(${a}px,${b}px,0) translate(-50%,-50%)`; };
     const step = () => {
       x += (tx - x) * 0.3;
       y += (ty - y) * 0.3;
-      ring.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%)`;
+      put(disc, x, y);
       raf = Math.abs(tx - x) > 0.2 || Math.abs(ty - y) > 0.2 ? requestAnimationFrame(step) : 0;
     };
-    const hit = (e) => e.target instanceof Element && e.target.closest(HOT);
-
     addEventListener(
       'pointermove',
       (e) => {
         tx = e.clientX;
         ty = e.clientY;
+        put(dot, tx, ty); // 白点不缓动：它就是指针本身
         if (!seen) {
-          // 第一次移动前不给它定位：否则环会从左上角滑过来
           seen = true;
           x = tx;
           y = ty;
-          ring.style.opacity = '1';
+          root.classList.add('cursor-live'); // 第一次移动前不显形，否则会从左上角滑过来
+        }
+        // 悬停/文字两种状态都在这里算：比 pointerover 可靠（内容在光标下变化时也能跟上）
+        if (e.target instanceof Element) {
+          const hot = !!e.target.closest(HOT);
+          disc.classList.toggle('is-hot', hot);
+          // 文字上把点与盘让给 I 型光标（否则白点叠在 I 型上，双重光标）
+          root.classList.toggle('cr-text', !hot && !!e.target.closest(TXT));
         }
         if (!raf) raf = requestAnimationFrame(step);
       },
       { passive: true },
     );
-    addEventListener('pointerover', (e) => { if (hit(e)) ring.classList.add('is-hot'); }, { passive: true });
-    addEventListener('pointerout', (e) => { if (hit(e)) ring.classList.remove('is-hot'); }, { passive: true });
     addEventListener(
       'pointerdown',
       (e) => {
-        ripple.style.transform = `translate3d(${e.clientX}px,${e.clientY}px,0) translate(-50%,-50%)`;
+        ripple.style.setProperty('--x', e.clientX + 'px');
+        ripple.style.setProperty('--y', e.clientY + 'px');
         ripple.classList.remove('is-on');
-        void ripple.offsetWidth; // 强制回流：同一位置连点也能重放动画
+        void ripple.offsetWidth; // 强制回流：同一位置连点也能重放
         ripple.classList.add('is-on');
       },
       { passive: true },

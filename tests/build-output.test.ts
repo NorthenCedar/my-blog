@@ -161,19 +161,21 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log('判据 链接兜底 产物 CSS 含全局 a 颜色规则: true');
   });
 
-  it('跟手光标环：每页都有、且触摸设备与减少动态效果下都藏起来', () => {
-    // 2026-09-26：站主给了 Ocautator/arknights-cursor 的参考实现 ⇒ 加了「圆环跟手 + 悬停缩小 + 点击涟漪」。
-    // 这条守三件容易在后续改动里丢掉的事：
-    //  ① 环与涟漪是**全站**的（Base.astro 引入）⇒ 每个产物页面都得有这两个元素；
-    //  ② 触摸设备（没有指针）与 prefers-reduced-motion（用户明确要求少动）下必须 display:none；
-    //  ③ 脚本不许用 innerHTML —— 本站的硬约束（这条也顺手守住新加的那段内联脚本）。
+  it('跟手光标：每页都有、且触摸设备与减少动态效果下都藏起来', () => {
+    // 2026-09-26：站主给了 Ocautator/arknights-cursor 的参考实现 ⇒ 加了「跟手 + 悬停缩小 + 点击涟漪」，
+    // 之后按站主要求改成「白色中心点 + 半透明圆盘」（原生光标隐藏，点就是光标）。
+    // 这条守几件容易在后续改动里丢掉的事：
+    //  ① 三个元素是全站的（Base.astro 引入）⇒ 每个产物页面都得有；
+    //  ② 触摸设备（没有指针）与 prefers-reduced-motion 下必须 display:none；
+    //  ③ `cursor:none` 只能由 JS 加类（脚本没跑时不能把光标藏掉却没有替代品）；
+    //  ④ 脚本不许用 innerHTML —— 本站的硬约束。
     const pages = htmlFiles();
     expect(pages.length, '产物里没有 HTML 页面').toBeGreaterThan(0);
     const missing = pages.filter((f) => {
       const h = readFileSync(f, 'utf8');
-      return !/class="cr-ring"/.test(h) || !/class="cr-ripple"/.test(h);
+      return !/class="cr-disc"/.test(h) || !/class="cr-dot"/.test(h) || !/class="cr-ripple"/.test(h);
     });
-    expect(missing, `这些页面缺跟手环元素：${missing.join(', ')}`).toEqual([]);
+    expect(missing, `这些页面缺跟手光标元素：${missing.join(', ')}`).toEqual([]);
 
     const cssFiles: string[] = [];
     const walk = (d: string) => {
@@ -185,13 +187,16 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     };
     walk(DIST);
     const all = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
-    expect(all, '缺少「减少动态效果 / 触摸设备」的守卫（环应在这两种情况下 display:none）').toMatch(
-      /@media\s*\(prefers-reduced-motion:\s*reduce\),\s*\(hover:\s*none\)\s*\{[^}]*\.cr-ring[^}]*display:\s*none/,
+    expect(all, '缺少「减少动态效果 / 触摸设备」的守卫').toMatch(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\),\s*\(hover:\s*none\)\s*\{[^}]*\.cr-disc[^}]*display:\s*none/,
     );
-    expect(all, '环与涟漪没有 pointer-events:none（会拦住点击）').toMatch(/\.cr-ring[^{}]*\{[^}]*pointer-events:\s*none/);
+    expect(all, '三个元素都没 pointer-events:none（会拦住点击）').toMatch(/\.cr-disc[^{}]*\{[^}]*pointer-events:\s*none/);
+    // cursor:none 必须挂在 html.cursor-none（JS 加的类）上，而不是裸 html —— 否则脚本没跑时没有光标
+    expect(all, 'cursor:none 没挂在 JS 可控的类上').toMatch(/cursor-none[^{}]*\{[^}]*cursor:\s*none/);
+    expect(all, '文字上没保留主题 I 型（被 cursor:none 一起吃掉了）').toMatch(/cursor-none[^{}]*\{[^}]*cursor:\s*var\(--cursor-text\)/);
     const scripts = pages.map((f) => readFileSync(f, 'utf8')).join('\n');
     expect(scripts, '内联脚本里出现了 innerHTML —— 本站硬约束不允许').not.toMatch(/innerHTML/);
-    console.log('判据 跟手环 对象 每页元素 + 两条守卫 + innerHTML 扫描 实测: 缺元素 0 页 · 守卫齐 · 无 innerHTML');
+    console.log('判据 跟手光标 对象 每页三元素 + 守卫 + cursor:none 的可控性 + innerHTML 扫描 实测: 缺元素 0 页 · 全部通过');
   });
 
   it('光标：三个主题光标在产物里可用，且没有裸关键字把主题光标顶掉', () => {
@@ -262,7 +267,9 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       }
     };
     walkSrc('src');
-    const ALLOW = /^(var\(--cursor-(default|link|text)\)|text|default|auto|inherit|not-allowed)$/;
+    // 白名单：主题 token；text/default/auto/inherit/not-allowed 这些不会顶掉主题光标；
+    // none 是跟手光标专用的（挂在 html.cursor-none 上、由 JS 加类 —— 上面那条断言守着它的可控性）。
+    const ALLOW = /^(var\(--cursor-(default|link|text)\)|text|default|auto|inherit|not-allowed|none)$/;
     const offenders: string[] = [];
     for (const f of [...srcFiles, 'src/lib/boot-css.ts']) {
       const text = f.endsWith('boot-css.ts') ? bootCss() : readFileSync(f, 'utf8');
