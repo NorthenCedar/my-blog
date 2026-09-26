@@ -6,6 +6,8 @@
  */
 import Base from '../layouts/Base.astro';
 import BootIntro from '../components/BootIntro.astro';
+import NavDrawer from '../components/NavDrawer.astro';
+import { NAV_LINKS } from '../lib/nav';
 import { getVisiblePosts } from '../lib/posts';
 import { getSite } from '../lib/site';
 // 由 scripts/gen-gallery-webp.mjs 在构建前生成（原图不部署，只部署两档 webp）。
@@ -116,10 +118,22 @@ const sectors = [
 
   <div class="hud">
     <span class="site">{site.wordmark}</span>
-    <span class="readout">
-      <i class="rec" aria-hidden="true"></i>
-      <span id="hudSec">01</span> / {String(sectors.length).padStart(2, '0')} · <span class="hud-progress" id="hudPct">000%</span>
+    {/* 导航（2026-09-26 站主追加）：**首页也要有** —— 站主说"PC 端右上角加这几项"，
+        而首页是最自然的入口页；我第一版按"console 外壳没有导航"的旧定案没加，站主打开首页就以为没生效。
+        位置贴着 HUD 读数（右上角），≤1023px 换成与内页同一个抽屉组件。 */}
+    <span class="hud-right">
+      <nav class="hud-nav" aria-label="主导航">
+        {NAV_LINKS.map((l) => (
+          <a href={l.href} aria-current={l.key === 'index' ? 'page' : undefined}>{l.label}</a>
+        ))}
+        <a href="/rss.xml">RSS</a>
+      </nav>
+      <span class="readout">
+        <i class="rec" aria-hidden="true"></i>
+        <span id="hudSec">01</span> / {String(sectors.length).padStart(2, '0')} · <span class="hud-progress" id="hudPct">000%</span>
+      </span>
     </span>
+    <NavDrawer current="index" />
   </div>
 
   <div class="band" id="band" aria-hidden="true">
@@ -529,6 +543,33 @@ const sectors = [
   }
   .hud .site {
     letter-spacing: 0.06em;
+  }
+  /* 导航贴着读数放在右上角；≤1023px 收起（换成抽屉，与内页同一个组件） */
+  .hud-right {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+  }
+  .hud-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+  }
+  .hud-nav a {
+    color: var(--muted);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    padding-bottom: 1px;
+  }
+  .hud-nav a:hover,
+  .hud-nav a[aria-current='page'] {
+    color: var(--ink);
+    border-color: var(--accent);
+  }
+  @media (max-width: 1023px) {
+    .hud-nav {
+      display: none;
+    }
   }
   .band {
     position: fixed;

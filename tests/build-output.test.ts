@@ -365,9 +365,10 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     //  ② 两套外壳（Brandline 深色带 / Topbar 浅色顶栏）渲染的是同一份清单，逐页都在；
     //  ③ 移动端抽屉在每个页面里都有（≤1023px 才显示），且**不含任何脚本**（文章页 JS 预算是 4096，只有 3561 余量）；
     //  ④ 新增的四个页面确实产出了。
-    const pages = htmlFiles().filter((f) => !f.endsWith('404.html') && f !== join(DIST, 'index.html'));
-    // 首页（chrome='console' 控制台外壳）**刻意没有导航**：右上角是 HUD 读数、底部是 OS 状态条，
-    // 这是站上既有定案（见 src/lib/nav.ts 的注释）。站主 2026-09-26 说"不同界面放不同元素" ⇒ 保持原样。
+    const pages = htmlFiles().filter((f) => !f.endsWith('404.html'));
+    // 2026-09-26 修正：首页**也**要有导航。第一版按"console 外壳没有导航"的旧定案没加，
+    // 站主打开首页（最自然的入口）就以为整件事没生效（"我手机电脑都没变化啊"）⇒ 现在首页
+    // 的 HUD 里也有横排导航 + 同一个抽屉组件，所以这条不再排除首页。
     expect(pages.length, '产物页面太少，断言可能空转').toBeGreaterThan(10);
 
     // ① 链接可达：把 nav 清单从产物里读回来（不 import 源码，避免"自证"）。

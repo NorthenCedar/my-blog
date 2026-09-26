@@ -302,6 +302,22 @@ describe.skipIf(!existsSync(DIST_INDEX) || !existsSync(BASELINE))('B3 交付：�
     //    注意 Astro 会给元素加作用域属性（data-astro-cid-…）⇒ 正则要容忍额外属性。
     after = after.replace(/<div class="bg-cassette"[^>]*><\/div>/, '');
 
+    // ⑤ 首页 HUD 里的导航 + 移动端抽屉（2026-09-26 站主后加；同上，不是开场的产物）。
+    //    站主："我手机电脑都没变化啊" —— 起因是我第一版没给首页加导航（只加了内页），
+    //    所以现在首页的 HUD 里也有导航；这条基线比对必须把这几块摘掉，否则会把新功能当成"开场动了正文"。
+    //    顺序很重要：**先剥抽屉、再剥 wrapper**。抽屉三件在 .hud 内、紧随 .hud-right 之后，
+    //    所以"三连闭标签 + </div><div class=band"这个上下文只有在抽屉被拿掉之后才成立
+    //    （实测第一次写成反的 ⇒ 正则根本不匹配，差 7 字节）。
+    after = after.replace(/<input type="checkbox" id="nav-toggle"[^>]*>/, '');
+    after = after.replace(/<label for="nav-toggle"[^>]*>[\s\S]*?<\/label>/g, '');
+    after = after.replace(/<nav class="navpanel"[^>]*>[\s\S]*?<\/nav>/, '');
+    //    ① 去掉 HUD 右半段的 wrapper 开标签；② 它那一对闭标签里去掉一个
+    //       （原结构：读数 </span> + hud-right </span> + hud </div> ⇒ 现在多了一层，变成三连闭标签）。
+    after = after.replace(/<span class="hud-right"[^>]*>/, '');
+    after = after.replace(/<\/span><\/span><\/div><div class="band"/, '</span></div><div class="band"');
+    //    ③ 去掉新加的横排导航
+    after = after.replace(/<nav class="hud-nav"[^>]*>[\s\S]*?<\/nav>/, '');
+
     const now = mainOf(after);
     console.log(
       `判据 纯增量 对象 首页 <main>（摘掉覆盖层/门控脚本/tabindex 后）实测: 与基线${now === before ? '逐字节相同' : '存在差异'} · ${before.length} → ${now.length} 字节`,
