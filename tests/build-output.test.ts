@@ -161,6 +161,39 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log('判据 链接兜底 产物 CSS 含全局 a 颜色规则: true');
   });
 
+  it('跟手光标环：每页都有、且触摸设备与减少动态效果下都藏起来', () => {
+    // 2026-09-26：站主给了 Ocautator/arknights-cursor 的参考实现 ⇒ 加了「圆环跟手 + 悬停缩小 + 点击涟漪」。
+    // 这条守三件容易在后续改动里丢掉的事：
+    //  ① 环与涟漪是**全站**的（Base.astro 引入）⇒ 每个产物页面都得有这两个元素；
+    //  ② 触摸设备（没有指针）与 prefers-reduced-motion（用户明确要求少动）下必须 display:none；
+    //  ③ 脚本不许用 innerHTML —— 本站的硬约束（这条也顺手守住新加的那段内联脚本）。
+    const pages = htmlFiles();
+    expect(pages.length, '产物里没有 HTML 页面').toBeGreaterThan(0);
+    const missing = pages.filter((f) => {
+      const h = readFileSync(f, 'utf8');
+      return !/class="cr-ring"/.test(h) || !/class="cr-ripple"/.test(h);
+    });
+    expect(missing, `这些页面缺跟手环元素：${missing.join(', ')}`).toEqual([]);
+
+    const cssFiles: string[] = [];
+    const walk = (d: string) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (e.endsWith('.css')) cssFiles.push(p);
+      }
+    };
+    walk(DIST);
+    const all = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
+    expect(all, '缺少「减少动态效果 / 触摸设备」的守卫（环应在这两种情况下 display:none）').toMatch(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\),\s*\(hover:\s*none\)\s*\{[^}]*\.cr-ring[^}]*display:\s*none/,
+    );
+    expect(all, '环与涟漪没有 pointer-events:none（会拦住点击）').toMatch(/\.cr-ring[^{}]*\{[^}]*pointer-events:\s*none/);
+    const scripts = pages.map((f) => readFileSync(f, 'utf8')).join('\n');
+    expect(scripts, '内联脚本里出现了 innerHTML —— 本站硬约束不允许').not.toMatch(/innerHTML/);
+    console.log('判据 跟手环 对象 每页元素 + 两条守卫 + innerHTML 扫描 实测: 缺元素 0 页 · 守卫齐 · 无 innerHTML');
+  });
+
   it('光标：三个主题光标在产物里可用，且没有裸关键字把主题光标顶掉', () => {
     // 2026-09-26 站主指定：PRTS 原版三件套 —— 正常选择(default) / 文本选择(text) / 链接选择(pointer)。
     // 三条断言，每条对应一种真实的失效方式：
