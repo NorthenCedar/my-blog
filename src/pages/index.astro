@@ -894,12 +894,24 @@ const sectors = [
     align-items: center;
     gap: 0.4em;
     padding-right: 0.75rem;
-    background: var(--paper);
+    /* 毛玻璃而不是不透明纸底（站主 2026-09-26："改成半透明（毛玻璃）的，别挡字"）：
+       读数固定在扫描带上、扫描带又在视口中央，滚动时必然压到正文 ⇒ 底色必须透。
+       55% 纸色 + 7px 模糊：底下的字看得出轮廓（不再被"挖掉"），读数自己仍读得清。 */
+    background: rgb(250 250 247 / 55%);
+    -webkit-backdrop-filter: blur(7px) saturate(1.05);
+    backdrop-filter: blur(7px) saturate(1.05);
+    /* 读数内容是**整条标题**，手机上会折成两行、把标题盖掉大半 ⇒ 一律单行截断 */
+    max-width: min(72vw, 52ch);
+    white-space: nowrap;
     font-size: var(--fs-xs);
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
+  /* 让 <b>（标题那一段）可以被压缩并省略，而不是把整块撑宽 */
   .band-readout b {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     color: var(--accent-ink);
     font-weight: 400;
   }

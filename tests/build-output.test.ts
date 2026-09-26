@@ -246,6 +246,39 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log(`判据 主页磁带 对象 产物资源 + 装饰属性 + 仅首页 + 窄屏隐藏 实测: ${(artBuf.length / 1024).toFixed(1)} KB · 其余 ${others.length} 页未引到`);
   });
 
+  it('首页扫描读数：毛玻璃（半透明 + 模糊）单行截断，不再用不透明纸底挡字', () => {
+    // 站主 2026-09-26：「把扫描那个框改成半透明（毛玻璃）的，别挡字」。
+    // 背景：读数固定在扫描带上、扫描带在视口中央 ⇒ 滚动时必然压到正文；
+    // 原来底色是**不透明的 --paper**，等于把标题中间几行挖掉（站主截图里就是这样）。
+    // 这条守三件：① 底色必须半透明（不许再出现不透明 background）；② 有 backdrop-filter；
+    //            ③ 单行截断（读数是整条标题，手机上会折行、把标题盖掉大半）。
+    const cssFiles: string[] = [];
+    const walk = (d: string) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (e.endsWith('.css')) cssFiles.push(p);
+      }
+    };
+    walk(DIST);
+    const all = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
+    // 有多条 .band-readout 规则（如 html:not(.js) 那条只有 display）⇒ 取带背景的那条
+    const rules = [...all.matchAll(/\.band-readout[^{}]*\{[^}]*\}/g)].map((m) => m[0]);
+    const rule = rules.find((r) => r.includes('background:')) ?? '';
+    expect(rule, '产物里找不到带背景的 .band-readout 规则').not.toBe('');
+    const bg = (rule.match(/background:([^;}]+)/) ?? ['', ''])[1].trim();
+    // 半透明判定：rgba(...,<1) 或 8 位 hex 且 alpha 字节不是 ff
+    const hex8 = bg.match(/^#([0-9a-f]{6})([0-9a-f]{2})$/);
+    const rgba = bg.match(/^rgba?\([^)]*,\s*(0?\.\d+|0|1)\)$/);
+    const translucent = (hex8 && hex8[2] !== 'ff') || (rgba && Number(rgba[1]) < 1);
+    expect(translucent, `.band-readout 的底色不是半透明（实测 background:${bg}）—— 这会挡字`).toBe(true);
+    expect(rule, '.band-readout 缺 backdrop-filter（毛玻璃）').toContain('backdrop-filter');
+    expect(rule, '.band-readout 没做单行截断（会有换行把标题盖掉）').toContain('white-space:nowrap');
+    const bRule = (all.match(/\.band-readout[^{}]*b[^{}]*\{[^}]*\}/) ?? [''])[0];
+    expect(bRule, '.band-readout b 没有省略号截断').toContain('text-overflow:ellipsis');
+    console.log(`判据 扫描读数 对象 .band-readout 实测: background:${bg} · 有 backdrop-filter · 单行截断`);
+  });
+
   it('光标：只剩一枚无 JS 兜底，删掉的两枚不留残迹', () => {
     // 2026-09-26 站主最终决定：**全站只有一个白色中心点**（跟手光标，见 components/CursorRing.astro）。
     // 链接选择与文本选择两枚连同 token / 位图 / 源图一起删了 ⇒ 这里守四件事：
