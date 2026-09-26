@@ -34,7 +34,9 @@ async function collect() {
     } catch {
       continue;
     }
-    const fm = text.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+    // ⚠️ \r?\n：仓库没有 .gitattributes，Windows 上 core.autocrlf=true ⇒ 新克隆出来是 CRLF，
+    //    只认 \n 的话这里会静默 continue（草稿隔离失效，而不是报错 —— 更危险）。
+    const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
     if (!fm) continue;
     const isDraft = /^draft:\s*true\s*$/m.test(fm[1]);
     const target = isDraft ? drafts : published;

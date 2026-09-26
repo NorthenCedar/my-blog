@@ -26,7 +26,8 @@ function readPostFrontmatter(): { slug: string; tags: string[] }[] {
     .flatMap((d) => {
       const file = join(dir, d.name, 'index.md');
       if (!existsSync(file)) return [];
-      const fm = readFileSync(file, 'utf8').match(/^---\n([\s\S]*?)\n---\n/);
+      // \r?\n：Windows 上 core.autocrlf=true 时新克隆出来是 CRLF（2026-09-27 实测）
+      const fm = readFileSync(file, 'utf8').match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
       if (!fm) return [];
       const raw = fm[1].match(/^tags:\s*\[(.*)\]$/m);
       const tags = raw ? raw[1].split(',').map((t) => t.trim()).filter(Boolean) : [];

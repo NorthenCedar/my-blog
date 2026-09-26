@@ -43,12 +43,16 @@ const parsed = [];
 for (const name of albums) {
   const text = await readFile(join(GALLERY, name, 'index.md'), 'utf8').catch(() => null);
   if (!text) fail(`相册 ${name} 缺少 index.md`);
-  const fm = (text.match(/^---\n([\s\S]*?)\n---/) || [])[1];
+  /* ⚠️ 换行必须容忍 CRLF（2026-09-27 实测踩到）：
+     仓库没有 .gitattributes，Windows 上 core.autocrlf=true ⇒ **新克隆出来的是 \r\n**，
+     而原来只认 `\n` 的正则直接判"没有 frontmatter" ⇒ 构建失败。
+     站主自己换台电脑克隆就会遇到，所以这里统一写成 \r?\n，并按 \r?\n 切行。 */
+  const fm = (text.match(/^---\r?\n([\s\S]*?)\r?\n---/) || [])[1];
   if (!fm) fail(`相册 ${name}/index.md 没有 frontmatter`);
   const title = (fm.match(/^title:\s*(.+)$/m) || [])[1];
   const date = (fm.match(/^date:\s*(.+)$/m) || [])[1];
   if (!title || !date) fail(`相册 ${name}/index.md 缺 title 或 date`);
-  const lines = fm.split('\n');
+  const lines = fm.split(/\r?\n/);
   const images = [];
   for (let i = 0; i < lines.length; i++) {
     const s = lines[i].match(/^\s*-\s*src:\s*(\S+)\s*$/);

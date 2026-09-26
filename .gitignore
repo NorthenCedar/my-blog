@@ -23,3 +23,8 @@ public/cursors/
 src/styles/cursors.css
 # 主页背景美术（从 assets/homepage-art 抠底生成，同 public/cursors 的理由）
 public/art/
+# 临时探针与证据（_tmp-*.mjs、_tmp-ref/、_tmp-boot-shots/ 截图、_tmp-arknights-cursor 那个嵌套仓库…）。
+# 2026-09-27 事故：站主用 `git add -A` 提交友链时，**239 个临时文件 + 一个嵌套仓库 gitlink 被一起提交**
+# （其中 gitlink 会让 Cloudflare 的克隆/构建失败，线上因此停在上一个成功版本、友链上不去）。
+# 它们本来就该只留在本地 ⇒ 这里从根上堵住，别再靠"提交时小心"。
+/_tmp*

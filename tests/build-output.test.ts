@@ -22,7 +22,8 @@ function readPosts(): PostInfo[] {
       const file = join(POSTS_DIR, d.name, 'index.md');
       if (!existsSync(file)) return [];
       const text = readFileSync(file, 'utf8');
-      const fm = text.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+      // \r?\n：Windows 上 core.autocrlf=true 时新克隆出来是 CRLF（2026-09-27 实测）
+      const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
       if (!fm) return [];
       const images = [...fm[2].matchAll(/!\[[^\]]*\]\(\.\/([^)\s]+)\)/g)].map((m) => m[1].split('/').pop()!);
       const date = (fm[1].match(/^date:\s*(\d{4}-\d{2}-\d{2})\s*$/m) ?? [, ''])[1];
