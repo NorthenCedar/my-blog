@@ -162,7 +162,6 @@
   color: var(--code-fg);
   font-size: var(--fs-xs);
   padding: 0 var(--sp-2);
-  cursor: var(--cursor-link);
 }
 .copy-btn:hover {
   background: var(--code-btn-bg);

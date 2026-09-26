@@ -6,25 +6,19 @@
  *   node scripts/gen-cursors.mjs          # 生成 public/cursors/*.png（构建/开发前自动跑）
  *   node scripts/gen-cursors.mjs --check  # 只比对不写；素材过期就红（两侧冒烟用）
  *
- * 三个光标 = 站主 2026-09-26 指定的 PRTS 原版三件套，映射与浏览器语义一一对应：
- *   正常选择   → default（普通箭头）
- *   文本选择   → text   （带喇叭衬线的 I 型）
- *   链接选择   → pointer（箭头 + 右下小回旋箭头）
+ * 现状（2026-09-26 站主最终决定）：**全站只有一个白色中心点**（跟手光标，见 CursorRing.astro）。
+ * 所以这里只生成一枚位图 `normal`（PRTS「正常选择」的结晶箭头，从 assets/cursors-source/normal.png 抠）。
+ * 它的唯一用途是 **无 JS / 脚本被拦时的兜底**：`cursor:none` 由 JS 加类，
+ * 脚本没跑时这枚接管 ⇒ 不会出现"一个光标都没有"。链接选择与文本选择两枚已按站主要求删除。
  *
- * 两条素材路线（**刻意的分工**）：
- *   · 正常 / 链接：站主给了参考图，明确要求"别画了，抠图" ⇒ 从 assets/cursors-source/*.png 抠。
- *     为什么必须抠而不是重画：结晶是 3D 折面 + 软阴影，手画 SVG 版本被站主一眼否掉（"太不像了"）。
- *   · 文本：I 型是纯几何，矢量重画更锐利也更好维护 ⇒ 继续用 SVG 渲染。
+ * 尺寸为什么出两档：Safari 忽略 >32×32 的光标，Chrome/Edge/Firefox 可以到 128。
+ *   ⇒ 主图 64×64（清晰）+ 32×32 兜底（Safari 用）；都失败时落到关键字（系统光标）。
  *
- * 尺寸为什么两个都出：Safari 忽略 >32×32 的光标，Chrome/Edge/Firefox 可以到 128。
- *   ⇒ 主图 64×64（清晰）、再列一张 32×32 兜底（Safari 用）；两个都失败时落到关键字（系统光标）。
- *   热点按各自尺寸分别给（CSS 里每个 url 后跟自己的热点）。
- *
- * 抠图两个必须注意的坑（都踩过）：
- *   ① 素材里的**软阴影**不能一起抠进来：白面与阴影"与背景的差值"区间重叠，单靠差值分不开
- *      ⇒ 按方向分流：比背景亮的一点点就保留（结晶主体），比背景暗的必须够暗才算折面棱线。
- *   ② sharp 的 `fit: contain` 补边默认是**不透明黑**，且对带 alpha 的 resize 是否预乘没有可靠约定
- *      ⇒ 缩放自己做（预乘 → 盒式平均 → 解预乘），补边也自己留白。
+ * 抠图四个要点（都踩过，详见工单 §13.1.1）：
+ *   ① 素材里的**软阴影**不能一起抠进来（白面与阴影"与背景的差值"区间重叠 ⇒ 按方向分流）
+ *   ② 只取最上面那条墨带（下面是"正常选择 / NORMAL SELECT"文字标签）
+ *   ③ 缩放自己做（预乘 → 盒式平均 → 解预乘）：sharp/vips 对带 alpha 的 resize 是否预乘没有可靠约定
+ *   ④ sharp 的 `fit: contain` 补边默认是**不透明黑**（会在图上多出一条黑条）
  */
 import sharp from 'sharp';
 import { createHash } from 'node:crypto';
@@ -38,35 +32,7 @@ const SRC_DIR = join(ROOT, 'assets/cursors-source');
 const OUT_DIR = join(ROOT, 'public/cursors');
 const CHECK = process.argv.includes('--check');
 
-/* ── 矢量那枚：文本选择 / 静态 I（喇叭衬线 I 型） ───────────────────────── */
-const WHITE = '#ffffff';
-const FACET_1 = '#e4e4df';
-const FACET_2 = '#c9c9c3';
-const INK = '#1a1a1a';
-const shadow = (d) => `
-  <path d="${d}" fill="${INK}" fill-opacity=".10" transform="translate(1.4 1.7)"/>
-  <path d="${d}" fill="${INK}" fill-opacity=".07" transform="translate(2.6 3.1)"/>`;
-const ibeam = (size) => {
-  const s = size / 32; // 以 32 网格设计，按比例放大到 64
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-  <g transform="scale(${s})">
-    ${shadow('M11 5.2h10l-2.6 3.4h-4.8zM11 26.8h10l-2.6-3.4h-4.8zM14.5 8.6h3v14.8h-3z')}
-    <path d="M11 5.2h10l-2.6 3.4h-4.8z" fill="${WHITE}"/>
-    <path d="M11 26.8h10l-2.6-3.4h-4.8z" fill="${WHITE}"/>
-    <path d="M14.5 8.6h3v14.8h-3z" fill="${WHITE}"/>
-    <path d="M16 8.6h1.5v14.8h-1.5z" fill="${FACET_2}"/>
-    <path d="M18.7 5.2h2.3l-2.6 3.4h-1.3z" fill="${FACET_1}"/>
-    <path d="M18.7 26.8h2.3l-2.6-3.4h-1.3z" fill="${FACET_1}"/>
-    <g fill="none" stroke="${INK}" stroke-opacity=".7" stroke-width="1.2" stroke-linejoin="round">
-      <path d="M11 5.2h10l-2.6 3.4h-4.8z"/>
-      <path d="M11 26.8h10l-2.6-3.4h-4.8z"/>
-      <path d="M14.5 8.6h3v14.8h-3z"/>
-    </g>
-  </g>
-</svg>`;
-};
-
-/* ── 抠图那两枚 ────────────────────────────────────────────────────────── */
+/* ── 抠图（唯一的素材路线） ────────────────────────────────────────────── */
 
 /** 找形状包围盒：逐行墨量分带（间隔 ≤3 行算同一带），**只取最上面那一带**（下面是"正常选择/NORMAL SELECT"文字标签）；阈值 Δ>25 把软阴影挡在外面 */
 async function shapeBox(name) {
@@ -183,12 +149,10 @@ async function matte(name, size) {
 const pngInfo = (buf) => ({ width: buf.readUInt32BE(16), height: buf.readUInt32BE(20), alpha: buf.readUInt8(25) === 6, bytes: buf.length });
 const toPng = (raw, size) => sharp(raw, { raw: { width: size, height: size, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer();
 
-/** 目标任务表：主图 64（清晰）+ 兜底 32（Safari 上限） */
+/** 目标任务表：只做 normal（兜底用），主图 64（清晰）+ 兜底 32（Safari 上限）。
+ *  链接选择与文本选择两枚已按站主 2026-09-26 的要求删除（位图 / token / 源图一并删）。 */
 const TARGETS = [];
-for (const name of ['normal', 'link']) {
-  for (const size of [64, 32]) TARGETS.push({ file: size === 64 ? `${name}.png` : `${name}-${size}.png`, make: () => matte(name, size), what: `${name} ${size}px（抠图）` });
-}
-for (const size of [64, 32]) TARGETS.push({ file: size === 64 ? 'text.png' : `text-${size}.png`, make: async () => ({ png: await sharp(Buffer.from(ibeam(size))).png({ compressionLevel: 9 }).toBuffer(), size, hotspot: [size / 2, size / 2] }), what: `text ${size}px（矢量 I 型）` });
+for (const size of [64, 32]) TARGETS.push({ file: size === 64 ? 'normal.png' : `normal-${size}.png`, make: () => matte('normal', size), what: `normal ${size}px（抠图）` });
 
 await mkdir(OUT_DIR, { recursive: true });
 let fails = 0;
@@ -223,11 +187,10 @@ for (const t of TARGETS) {
  */
 const tokenCss = `/* 由 scripts/gen-cursors.mjs 生成 —— 不要手改（改形状/配色/热点请改那个脚本）。
    URL 带内容指纹 ?v=<sha1 前 8 位>：图片内容变了 URL 就变，否则浏览器会一直用缓存里的旧光标。
+   只有一条 token：它是**无 JS 时的兜底**（正常运行时原生光标由 JS 换成跟手白点，见 CursorRing.astro）。
    每个 token 是「主图 64 + 兜底 32（Safari 忽略 >32 的光标）+ 关键字」三级。 */
 :root {
   --cursor-default: url('/cursors/normal.png?v=${hashes['normal.png']}') ${hotspots['normal.png']}, url('/cursors/normal-32.png?v=${hashes['normal-32.png']}') ${hotspots['normal-32.png']}, default;
-  --cursor-text: url('/cursors/text.png?v=${hashes['text.png']}') ${hotspots['text.png']}, url('/cursors/text-32.png?v=${hashes['text-32.png']}') ${hotspots['text-32.png']}, text;
-  --cursor-link: url('/cursors/link.png?v=${hashes['link.png']}') ${hotspots['link.png']}, url('/cursors/link-32.png?v=${hashes['link-32.png']}') ${hotspots['link-32.png']}, pointer;
 }
 `;
 const tokenFile = join(ROOT, 'src/styles/cursors.css');

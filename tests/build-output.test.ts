@@ -193,18 +193,19 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(all, '三个元素都没 pointer-events:none（会拦住点击）').toMatch(/\.cr-disc[^{}]*\{[^}]*pointer-events:\s*none/);
     // cursor:none 必须挂在 html.cursor-none（JS 加的类）上，而不是裸 html —— 否则脚本没跑时没有光标
     expect(all, 'cursor:none 没挂在 JS 可控的类上').toMatch(/cursor-none[^{}]*\{[^}]*cursor:\s*none/);
-    expect(all, '文字上没保留主题 I 型（被 cursor:none 一起吃掉了）').toMatch(/cursor-none[^{}]*\{[^}]*cursor:\s*var\(--cursor-text\)/);
+    expect(all, '文字上没保留主题 I 型（被 cursor:none 一起吃掉了）').not.toMatch(/cursor:\s*var\(--cursor-text\)/);
     const scripts = pages.map((f) => readFileSync(f, 'utf8')).join('\n');
     expect(scripts, '内联脚本里出现了 innerHTML —— 本站硬约束不允许').not.toMatch(/innerHTML/);
     console.log('判据 跟手光标 对象 每页三元素 + 守卫 + cursor:none 的可控性 + innerHTML 扫描 实测: 缺元素 0 页 · 全部通过');
   });
 
-  it('光标：三个主题光标在产物里可用，且没有裸关键字把主题光标顶掉', () => {
-    // 2026-09-26 站主指定：PRTS 原版三件套 —— 正常选择(default) / 文本选择(text) / 链接选择(pointer)。
-    // 三条断言，每条对应一种真实的失效方式：
-    //  ① 产物 CSS 里三条 cursor 都必须「url + 关键字兜底」—— 图没加载/被拦时光标不能整个消失；
-    //  ② 三张位图必须在产物里且是 32×32 带 alpha（Safari 忽略 >32；无 alpha 的图在纸面上会糊出一个方块）；
-    //  ③ 全站源码里不许再出现裸 `pointer` —— 那是 (0,1,0) 特异性的声明，会顶掉主题链接光标（已经踩过 5 处）。
+  it('光标：只剩一枚无 JS 兜底，删掉的两枚不留残迹', () => {
+    // 2026-09-26 站主最终决定：**全站只有一个白色中心点**（跟手光标，见 components/CursorRing.astro）。
+    // 链接选择与文本选择两枚连同 token / 位图 / 源图一起删了 ⇒ 这里守四件事：
+    //  ① 产物 CSS 里必须有一条「url + 热点 + 关键字」的 --cursor-default（无 JS / 脚本被拦时接管）；
+    //  ② URL 必须带内容指纹（改图后浏览器才会重取，不然会出现"跟上次没变化"）；
+    //  ③ 位图 64 主 + 32 兜底（Safari 忽略 >32）且带 alpha；删掉的两枚不该再在产物里；
+    //  ④ 全站源码不许出现裸 `pointer` 之类声明，也不许残留 --cursor-text / --cursor-link 死 token。
     const cssFiles: string[] = [];
     const walk = (d: string) => {
       for (const e of readdirSync(d)) {
@@ -217,21 +218,13 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     const all = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
 
     const flat = all.replace(/\s+/g, ' ');
-    // ① 三级链：主图 64 + 兜底 32（Safari 上限）+ 关键字兜底；**URL 必须带内容指纹**。
-    //    为什么指纹是硬要求：文件名固定、内容会变（本站光标从手画稿换成了抠图稿），
-    //    浏览器按 URL 缓存图片 ⇒ 不带指纹的话站主刷新后看到的还是旧光标（真发生过："跟上次没变化"）。
-    for (const [name, big, small, hotBig, hotSmall, kw] of [
-      ['--cursor-default', '/cursors/normal.png', '/cursors/normal-32.png', '3 0', '2 0', 'default'],
-      ['--cursor-text', '/cursors/text.png', '/cursors/text-32.png', '32 32', '16 16', 'text'],
-      ['--cursor-link', '/cursors/link.png', '/cursors/link-32.png', '2 0', '1 0', 'pointer'],
-    ] as const) {
-      expect(flat, `${name} 的 URL 没带内容指纹`).toMatch(new RegExp(`${name}:url\\(${big}\\?v=[0-9a-f]{8}\\)`));
-      expect(flat, `${name} 主图热点不对`).toContain(`url(${big}?v=`);
-      expect(flat, `${name} 主图热点值应为 ${hotBig}`).toMatch(new RegExp(`url\\(${big}\\?v=[0-9a-f]{8}\\) ${hotBig}`));
-      expect(flat, `${name} 缺 32px 兜底（Safari 忽略 >32 的光标）`).toMatch(new RegExp(`url\\(${small}\\?v=[0-9a-f]{8}\\) ${hotSmall}`));
-      // 压缩后最后一条声明可能没有尾分号（直接跟 `}`），所以 [;}] 都收
-      expect(flat, `${name} 缺关键字兜底（图取不到时光标不能消失）`).toMatch(new RegExp(`, ${kw}[;}]`));
-    }
+    expect(flat, '--cursor-default 的 URL 没带内容指纹').toMatch(/--cursor-default:url\(\/cursors\/normal\.png\?v=[0-9a-f]{8}\)/);
+    expect(flat, '主图热点不对').toMatch(/url\(\/cursors\/normal\.png\?v=[0-9a-f]{8}\) 3 0/);
+    expect(flat, '缺 32px 兜底（Safari 忽略 >32 的光标）').toMatch(/url\(\/cursors\/normal-32\.png\?v=[0-9a-f]{8}\) 2 0/);
+    expect(flat, '缺关键字兜底（图取不到时光标不能消失）').toMatch(/, default[;}]/);
+    expect(flat, 'html 上没用兜底光标').toContain('html{cursor:var(--cursor-default)}');
+    expect(flat, '删掉的两条 token 还有残迹（--cursor-text / --cursor-link）').not.toMatch(/--cursor-(text|link)/);
+
     // ①b 兜住整类漂移：产物 CSS 里**每一条** /cursors/ 引用都必须带指纹。
     //     站主 2026-09-26 撞过一次：换了光标图但文件名没变 ⇒ 浏览器用缓存里的旧图，页面"跟上次没变化"。
     {
@@ -240,14 +233,9 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       expect(refs.length, '产物 CSS 里一条 /cursors/ 引用都没有').toBeGreaterThan(0);
       expect(unfingerprinted, `这些光标 URL 没带内容指纹（改图后浏览器会用缓存里的旧光标）：${unfingerprinted.join(', ')}`).toEqual([]);
     }
-    // 三条规则分工：默认挂 html、链接与按钮用链接光标、文字上用主题 I 型
-    expect(flat, 'html 上没有默认光标').toContain('html{cursor:var(--cursor-default)}');
-    expect(flat, '链接与按钮没用主题链接光标').toMatch(/\{[^}]*cursor:var\(--cursor-link\)/);
-    expect(flat, '文字容器上没用主题 I 型').toContain('cursor:var(--cursor-text)');
-    expect(flat, '文字规则没包在 :where() 里（会被链接规则反过来压掉或压掉链接）').toContain(':where(');
 
-    // ② 位图本体：PNG 的 IHDR 在字节 16..24（宽高）、25（颜色类型，6 = RGBA）；主图 64、兜底 32
-    for (const name of ['normal.png', 'text.png', 'link.png', 'normal-32.png', 'text-32.png', 'link-32.png']) {
+    // ② 位图：只剩 normal 两档；已删除的两枚不该在产物里
+    for (const name of ['normal.png', 'normal-32.png']) {
       const expected = name.endsWith('-32.png') ? 32 : 64;
       const buf = readFileSync(join(DIST, 'cursors', name));
       const w = buf.readUInt32BE(16);
@@ -255,6 +243,9 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       const colorType = buf.readUInt8(25);
       expect([w, h], `dist/cursors/${name} 应为 ${expected}×${expected}`).toEqual([expected, expected]);
       expect(colorType, `dist/cursors/${name} 没有 alpha 通道`).toBe(6);
+    }
+    for (const gone of ['text.png', 'text-32.png', 'link.png', 'link-32.png']) {
+      expect(existsSync(join(DIST, 'cursors', gone)), `dist/cursors/${gone} 应已删除`).toBe(false);
     }
 
     // ③ 源码扫描：不允裸关键字
@@ -279,7 +270,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       }
     }
     console.log(
-      `判据 光标 对象 3 条 cursor 声明 + 6 张位图（64 主 / 32 兜底）+ ${srcFiles.length + 1} 个源文件扫描 实测: 越权声明 ${offenders.length} 处`,
+      `判据 光标 对象 1 条兜底 token + 2 张位图（64 主 / 32 兜底）+ ${srcFiles.length + 1} 个源文件扫描 实测: 越权声明 ${offenders.length} 处`,
     );
     expect(offenders, `这些声明会以更高特异性顶掉主题光标：${offenders.join(' | ')}`).toEqual([]);
   });

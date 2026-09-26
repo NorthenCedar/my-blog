@@ -1,20 +1,20 @@
 ---
 /**
- * 跟手光标：白色中心点 + 半透明圆盘 + 点击涟漪（站主 2026-09-26 定的形态）
+ * 跟手光标：白色中心点 + 半透明圆盘 + 点击涟漪（站主 2026-09-26 定的最终形态）
  *
- * 形态（对应站主给的那张参考图）：**半透明圆盘**跟着指针缓动，盘心是**白色小点**（点不缓动，它就是指针本身）；
- * 原生光标隐藏（`cursor:none`），所以"光标"= 这个白点。悬停可点元素时圆盘缩小、变稠、描边转绿。
+ * 形态：**半透明圆盘**跟着指针缓动，盘心是**白色小点**（点不缓动，它就是指针本身）；
+ * 原生光标全站隐藏（`cursor:none`），所以"光标"= 这个白点。悬停可点元素时圆盘缩小、变稠、描边转绿。
+ * 链接选择/文本选择两枚光标已按站主要求删除 ⇒ 链接、按钮、正文上看到的都是这个白点。
  *
- * 三个刻意的处理，都是为了本站是**纸白底**（参考图那套是在深蓝底上做的，白给白会看不见）：
- *   · 白点与圆盘都带一圈极细的深色描边（否则纸面上"白上白"直接消失）
- *   · 圆盘用半透明白（`rgba(255,255,255,.5)`）+ 发丝描边：纸面上读得出、深色区也不突兀
- *   · 文字上让位给主题 I 型光标（站主先前明确要保留文本光标），同时把点与盘藏起来 —— 否则双重光标
+ * 两处为了本站是**纸白底**（参考图那套是在深蓝底上做的，白给白会看不见）：
+ *   · 白点带一圈发丝深色描边、圆盘用**极淡墨色纱**而不是半透明白 —— 这样"盘比点暗"的关系成立，
+ *     白点才读得出来（参考图的观感正是靠这个关系，不是靠绝对颜色）
+ *   · 深底（代码块/控制台）上纱几乎不可见，白点自然发光 ✓ 两边都读得出
  *
  * `cursor:none` 由 **JS 加类**（`html.cursor-none`）而不是写死在 CSS：脚本没跑/被拦时，
- * 站上原有的三件套光标仍然在，不会出现"一个字都没有的光标"。
+ * `--cursor-default`（正常选择那枚）仍然接管，不会出现"一个光标都没有"。
  *
- * 层级 66/65/64：在开场覆盖层（60）之上 —— 因为原生光标被隐藏了，指针标记必须始终可见，
- * 不能像上一版那样藏在开场层下面。
+ * 层级 66/65/64：在开场覆盖层（60）之上 —— 原生光标已被隐藏，指针标记必须始终可见。
  */
 ---
 
@@ -87,28 +87,14 @@
       transform: translate3d(var(--x, 0px), var(--y, 0px), 0) translate(-50%, -50%) scale(2.4);
     }
   }
-  /* 原生光标隐藏（类由 JS 加）：全站都换成白点…… */
-  html.cursor-none,
-  html.cursor-none * {
-    cursor: none;
-  }
-  /* ……但文字上还给主题 I 型光标（.cr-text 时点与盘让位，避免双重光标） */
-  html.cursor-none :where(
-    p, li, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, td, th, figcaption,
-    pre, code, kbd, samp, textarea, article, .prose,
-    input[type='text'], input[type='search'], input[type='email'], input[type='url'], input[type='password']
-  ) {
-    cursor: var(--cursor-text);
-  }
-  /* 有 JS 且在动鼠标时才显形（用类控制，别用内联 opacity —— 内联会压过下面 .cr-text 的让位规则） */
+  /* 原生光标隐藏（`html.cursor-none *`）**必须写在全局样式 base.css 里**，不能在这里：
+     Astro 会把组件样式作用域化成 `html.cursor-none [data-astro-cid-…]`，那样只有本组件那三个元素被隐藏，
+     其余元素只能靠继承拿 none —— 而链接有 UA 的 `a{cursor:pointer}` 声明，继承会被它压过（实测链接上仍是箭头）。
+     base.css 里那条带完整来龙去脉。 */
+  /* 有 JS 且在动鼠标时才显形（用类控制，别用内联 opacity —— 内联会压过样式表） */
   html.cursor-live .cr-disc,
   html.cursor-live .cr-dot {
     opacity: 1;
-  }
-  /* 文字上：点与盘让位给主题 I 型光标。这条**必须写在上面那条之后**（同特异性，靠顺序取胜） */
-  html.cr-text .cr-disc,
-  html.cr-text .cr-dot {
-    opacity: 0;
   }
   /* 减少动态效果 / 触摸设备：整个效果不出现，也不加 cursor-none（JS 侧直接返回） */
   @media (prefers-reduced-motion: reduce), (hover: none) {
@@ -132,7 +118,6 @@
     root.classList.add('cursor-none');
 
     const HOT = 'a,button,input,textarea,select,summary,[role="button"],[role="tab"]';
-    const TXT = 'p,li,blockquote,h1,h2,h3,h4,h5,h6,td,th,pre,code,kbd,samp,article,.prose';
     let x = 0;
     let y = 0;
     let tx = 0;
@@ -158,13 +143,9 @@
           y = ty;
           root.classList.add('cursor-live'); // 第一次移动前不显形，否则会从左上角滑过来
         }
-        // 悬停/文字两种状态都在这里算：比 pointerover 可靠（内容在光标下变化时也能跟上）
-        if (e.target instanceof Element) {
-          const hot = !!e.target.closest(HOT);
-          disc.classList.toggle('is-hot', hot);
-          // 文字上把点与盘让给 I 型光标（否则白点叠在 I 型上，双重光标）
-          root.classList.toggle('cr-text', !hot && !!e.target.closest(TXT));
-        }
+        // 悬停可点元素：盘缩小 + 描边转绿（给"这里能点"的反馈）。文字上不再特殊处理 ——
+        // 站主要的就是"页面上只有白点"，所以点与盘在任何地方都显形。
+        if (e.target instanceof Element) disc.classList.toggle('is-hot', !!e.target.closest(HOT));
         if (!raf) raf = requestAnimationFrame(step);
       },
       { passive: true },

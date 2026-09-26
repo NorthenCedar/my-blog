@@ -44,28 +44,27 @@ button {
   outline-offset: 3px;
 }
 
-/* ===== 光标（2026-09-26）=====
-   三个（站主指定的 PRTS 原版：正常选择 / 文本选择 / 链接选择），与浏览器语义一一对应。
-   素材见 scripts/gen-cursors.mjs。
-   ⚠️ 三条规则的分工与"为什么这么写"：
-   1) `html` 上设默认值 ⇒ 全站继承（标签用元素选择器，任何声明值都胜过继承）；
-   2) **文字上用主题 I 型**（`--cursor-text`：本站自绘的喇叭衬线 I 型，仍然是 I 型 ⇒ "这里能选中"的信号没丢）。
-      用 :where() 包起来（特异性 0），这样第 3 条的 a/button 不需要靠顺序或 !important 去赢；
-      另外**不写 `.prose *`** —— 后代选择器会把正文里的链接一起按成 I 型。
-   3) 链接与按钮显式声明链接光标（元素自身声明 > 继承，顺序无关）。
-   disabled 的控件保留系统 `default`（见 comments.css）—— 那是"这里没得点"的信号，不另做素材。 */
+/* ===== 光标（2026-09-26 站主最终决定：全站只有一个白色中心点）=====
+   正常运行时原生光标由 JS 换成跟手白点（`html.cursor-none`，见 components/CursorRing.astro），
+   所以这里只剩一条**无 JS / 脚本被拦时的兜底**：
+   ① `html` 上设默认值 ⇒ 全站继承（标签用元素选择器，任何声明值都胜过继承）；
+   ② 链接、按钮、文字区都**不再单独换光标** —— 链接选择与文本选择两枚已按站主要求删除，
+      它们的 token、位图、源图一并删掉了（想恢复就把 assets/cursors-source 的素材与生成器里的
+      TARGETS 加回来，并在 tokens 里补 token）。
+   兜底意味着：脚本没跑时看到的是"正常选择"那枚结晶箭头，链接与正文也一样 —— 这是刻意的，
+   宁可统一，也不要"脚本挂了就一个光标都没有"。 */
 html {
   cursor: var(--cursor-default);
 }
-:where(
-  p, li, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, td, th, figcaption,
-  pre, code, kbd, samp, textarea, article, .prose,
-  input[type='text'], input[type='search'], input[type='email'], input[type='url'], input[type='password']
-) {
-  cursor: var(--cursor-text);
-}
-a, button, summary, label, select, [role='button'], [role='tab'] {
-  cursor: var(--cursor-link);
+
+/* 跟手白点接管原生光标：`html.cursor-none` 由 JS 加（见 components/CursorRing.astro）。
+   ⚠️ 这条**必须放全局样式**，不能写在组件的 `<style>` 里：Astro 会把组件样式作用域化成
+   `html.cursor-none [data-astro-cid-…]`，于是只有组件自己那三个元素被隐藏，其余元素只能靠继承拿 `none` ——
+   而链接有 UA 的 `a{cursor:pointer}` 声明，继承会被它压过 ⇒ 实测链接上原生箭头还在（与白点并存）。
+   即：`*` 这一步必须是不带作用域的全局选择器。 */
+html.cursor-none,
+html.cursor-none * {
+  cursor: none;
 }
 
 .skip {
