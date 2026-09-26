@@ -13,3 +13,7 @@ worker-configuration.d.ts
 # 会话档案：从 DSH 会话日志解出来的原始 JSONL（16 MB，含思考过程与工具原始输出）。
 # 可读版是 docs/session-log-9addf212.md（这个进仓库）；原始档只留本地。
 .session-archive/
+# 开场动画的生成 CSS（51 KB）。唯一真源 = src/lib/boot-tracks.ts（数据）+ src/lib/boot-css.ts（生成器）；
+# 由 `npm run build` / `npm run dev` 前的 scripts/gen-boot-css.mjs 产出。
+# 不入库的理由与 public/gallery/ 一致：生成物跟着脚本走，改数据不必重提一份大文件。
+src/styles/boot.css

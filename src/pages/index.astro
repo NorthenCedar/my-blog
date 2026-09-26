@@ -5,6 +5,7 @@
  * `.field-item` 与 `data-label` 是留给 B2 动效层的挂点，B1 不消费它们。
  */
 import Base from '../layouts/Base.astro';
+import BootIntro from '../components/BootIntro.astro';
 import { getVisiblePosts } from '../lib/posts';
 import { getSite } from '../lib/site';
 // 由 scripts/gen-gallery-webp.mjs 在构建前生成（原图不部署，只部署两档 webp）。
@@ -45,7 +46,26 @@ const sectors = [
       JS 到位后给 <html> 挂 .js，才有聚焦弱化与扫描仪表。
       放在槽内最前面：脚本同步执行，等 .field-item 被解析时类已就位，不会闪。
       只落在首页 —— 不动 Base，其余 13 页产物逐字节不变。 */}
-  <script is:inline>document.documentElement.classList.add('js');</script>
+  {/* ===== 开场门控（B3）：必须在覆盖层之前**同步**执行，否则会先闪一下再隐藏 =====
+      不播的四种情形（#6 + 站主 Q3）：reduced-motion / 无 JS / 本会话已播 / ≤767px。
+      方向是 fail-safe：默认不显示，只有判定"该播"才挂 .boot-on（锁滚动也挂在这个类上）。
+      `.js` 这个字面量有断言守着（tests/b2-motion.test.ts「门控脚本只落首页」），别改。 */}
+  <script is:inline>
+    document.documentElement.classList.add('js');
+    try {
+      var play =
+        !matchMedia('(prefers-reduced-motion: reduce)').matches &&
+        innerWidth >= 768 &&
+        !sessionStorage.getItem('boot-intro');
+      if (play) document.documentElement.classList.add('boot-on');
+      sessionStorage.setItem('boot-intro', '1'); /* 进入播放即记：刷新不重播（#6）；skip 也不重播（#16） */
+    } catch (e) {
+      /* 无痕 / 禁用 storage：退化成"可能重播一次"，不影响可用性 */
+    }
+  </script>
+
+  {/* 开场覆盖层（装饰 + skip 按钮）。只落首页；JS 与门控见 BootIntro.astro */}
+  <BootIntro />
 
   {/* ===== 背景装饰层（B2）：四样全是装饰，不承载任何信息 =====
       堆叠计划：0 装饰 < 1 正文 .tier < 2 扫描带 < 3 刻度尺 < 4 HUD < 5 OS 状态条
@@ -120,7 +140,9 @@ const sectors = [
             大字是英文站名；两个值都来自 content/site.md。 */}
         <span class="pod-zh" aria-hidden="true">{site.name}</span>
         <span class="pod-tag">POD 01 · 身份</span>
-        <h1 class="display">{site.wordmark}</h1>
+        {/* tabindex="-1"：开场结束/跳过时把焦点交回这里（决策 #16）。它只在**页内程序化聚焦**时生效，
+            不进 Tab 序列、不改变键盘浏览顺序。 */}
+        <h1 class="display" tabindex="-1">{site.wordmark}</h1>
         <p class="lede">{site.intro}</p>
         {hasCoord && (
           <p class="coord">

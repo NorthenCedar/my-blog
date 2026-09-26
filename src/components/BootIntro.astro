@@ -1,0 +1,269 @@
+---
+/**
+ * 首页开场动画 · 覆盖层（复刻上游 RhineLabUI 开场 · 纯 CSS 版）
+ *
+ * 本轮范围（增量 1–2）：**只有结构 + 生成样式**。
+ *   · 尚未挂到 `index.astro`（增量 3 挂载）
+ *   · 尚无门控 / skip / 收尾的 JS（增量 4）
+ *   · 所以它现在**不进任何产物** —— `npm run build` 的 15 页应当逐字节不变
+ *
+ * 两条硬约束（工单 §4.2，别在实现时改掉）：
+ *   1. 装饰子树 `aria-hidden="true"`，而 skip 按钮是它的**兄弟** ——
+ *      `aria-hidden` 子树里不许有可聚焦元素，否则屏幕阅读器会聚焦到"隐藏"元素。
+ *   2. skip 的类名是 `.boot-skip`，**不是** `.skip` —— `base.css:47-58` 已经占了 `.skip`（跳到正文链接），
+ *      照抄上游类名会继承 `left:-9999px` 那套。
+ *
+ * 全部数值来自 `src/lib/boot-tracks.ts`（唯一真源），样式由 `src/lib/boot-css.ts` 构建期生成。
+ */
+import { charSpans, SATELLITE_STEP_DEG } from '../lib/boot-css';
+// 生成物：由 scripts/gen-boot-css.mjs 在 `npm run build` / `npm run dev` 之前产出（见工单 §8-9）。
+// 不放在 <style set:html> 里内联，是因为实测那样会让 index.html raw +61 KB（gzip +13.4 KB）。
+import '../styles/boot.css';
+import {
+  TEXT,
+  AUTH,
+  ANALYSIS_POSITIONS,
+  SATELLITE_COUNT,
+  LOGO_WORD_WINDOW,
+  accessSpans,
+  authDotFrames,
+  delayMs,
+} from '../lib/boot-tracks';
+
+// 逐字表：延迟一律是**从动画原点（原片 169 帧）算的绝对值**
+const accessChars = accessSpans(TEXT.access);
+const logoChars = charSpans(TEXT.logoWord, LOGO_WORD_WINDOW);
+const idChars = charSpans(TEXT.authId, AUTH.idWindow);
+const nameChars = charSpans(TEXT.authName, AUTH.nameWindow);
+const requestChars = charSpans(TEXT.authRequest, AUTH.requestWindow);
+const processingChars = charSpans(TEXT.authProcessing, AUTH.processingWindow);
+const dotFrames = authDotFrames();
+const sats = Array.from({ length: SATELLITE_COUNT }, (_, i) => i);
+
+/**
+ * 我们自己的标志（与 `index.astro` 的 `#rhine-logo` 同源），y 方向整体 −6
+ * 以贴合 `viewBox="0 0 24 12"`。**必须内联一份**：`<use>` 出来的实例内部无法逐路径动画，
+ * 而开场要的是"轮廓单独描边 → 加减号单独进入"（决策 #12）。
+ */
+const MARK_CONTOUR =
+  'M12 6c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2 2.67 4 4 6 4a4 4 0 0 0 2.83-6.83M19.04 2.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4';
+const MARK_PLUS = 'M-1.3 0h2.6M0 -1.3v2.6';
+const MARK_MINUS = 'M-1.3 0h2.6';
+---
+
+<div class="boot" data-boot-overlay>
+  {/* 背景铺满**视口**，不进 1920×1080 舞台：舞台按等比缩放居中，在 16:10 之类的视口上上下会留缝，
+      缝里会漏出首页的 HUD / OS 状态条（实测截图一眼看见）。上游的生产行为也是「正常入场铺满实际视口，
+      只有逐帧对照才用固定 1920×1080 舞台」——所以只有**图形**留在舞台上（决策 #8 的数值照抄不受影响）。 */}
+  <div class="boot-bg">
+    <svg class="boot-bg-svg" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+      <g fill="none" stroke="#fff" stroke-width="3">
+        <path d="M-210 705C-45 705 182 704 247 567C337 377 99 306 4 435S27 680 169 631C309 584 227 314 279 111S568-113 568-113" />
+        <path d="M1560-80C1374 114 1671 168 1601 323S1371 367 1431 480S1692 666 1559 787S1329 886 1498 1130" />
+        <circle cx="1450" cy="648" r="346" />
+        <circle cx="1450" cy="648" r="348" />
+      </g>
+    </svg>
+  </div>
+
+  <div class="boot-deco" aria-hidden="true">
+    {/* ===== 1. ACCESS 26 字逐字输入（字数表驱动的节奏，170–187 帧） ===== */}
+    <div class="boot-access">
+      {accessChars.map((c) => (
+        <span class="boot-ch" style={`--d:${delayMs(c.frame)}ms`}>{c.ch}</span>
+      ))}
+    </div>
+
+    {/* ===== 2. 品牌三行（278 / 280 / 282 错峰，靠 --line-delay 各自延后 0/80/160ms） ===== */}
+    <div class="boot-brand">
+      {/* 品牌第一行：上游这里是 <h1>，**我们必须用 div** —— 站上有硬约束「每页恰好一个 h1」
+          （tests/build-output.test.ts 的那条断言当场就把它抓红了）。它本是装饰、又在 aria-hidden 子树里，
+          语义上也不该是标题。字号/字距/行高照抄（style.css:105-111 + boot-lettering.css:61-72）。 */}
+      <div class="boot-brand-1">{TEXT.brand1}</div>
+      <div class="boot-brand-2">{TEXT.brand2}</div>
+      <p class="boot-brand-3">
+        <span class="boot-analysis">
+          {[...TEXT.brand3].map((ch, i) => (
+            <span style={`left:${ANALYSIS_POSITIONS[i]}px`}>{ch}</span>
+          ))}
+        </span>
+        <b>{TEXT.brand3Tail}</b>
+      </p>
+    </div>
+
+    {/* ===== 右下 powered（279–295 帧逐字横扫） ===== */}
+    <div class="boot-powered">{TEXT.poweredLead} <b>{TEXT.brand1}</b><i></i></div>
+
+    {/* ===== 3. Logo：连续轮廓描边 → 加减号进入 → 整体左移（229–294 帧） ===== */}
+    <div class="boot-logo">
+      <svg class="boot-mark" viewBox="0 0 24 12">
+        <path class="boot-contour" pathLength="1" d={MARK_CONTOUR} fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+        <g class="boot-plus-pos">
+          <path class="boot-plus" d={MARK_PLUS} fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </g>
+        <g class="boot-minus-pos">
+          <path class="boot-minus" d={MARK_MINUS} fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </g>
+      </svg>
+      <div class="boot-logo-word">
+        {logoChars.map((c) => (
+          <span class="boot-ch" style={`--d:${delayMs(c.frame)}ms`}>{c.ch}</span>
+        ))}
+      </div>
+    </div>
+
+    {/* ===== 4. 身份验证：四句共用一个位置，靠各自的可见窗切换 ===== */}
+    <div class="boot-auth">
+      <span class="boot-auth-mark">▪</span>
+      <span class="boot-auth-msg">
+        <span class="boot-auth-b1">
+          {idChars.map((c) => (
+            <span class="boot-ch" style={`--d:${delayMs(c.frame)}ms`}>{c.ch}</span>
+          ))}
+          <span class="boot-auth-sep"> : </span>
+          {nameChars.map((c) => (
+            <span class="boot-ch" style={`--d:${delayMs(c.frame)}ms`}>{c.ch}</span>
+          ))}
+        </span>
+        <span class="boot-auth-b2">
+          {requestChars.map((c) => (
+            <span class="boot-ch" style={`--d:${delayMs(c.frame)}ms`}>{c.ch}</span>
+          ))}
+        </span>
+        <span class="boot-auth-b3">
+          {processingChars.map((c) => (
+            <span class="boot-ch" style={`--d:${delayMs(c.frame)}ms`}>{c.ch}</span>
+          ))}
+          {dotFrames.map((f) => (
+            <span class="boot-ch" style={`--d:${delayMs(f)}ms`}>.</span>
+          ))}
+        </span>
+        <span class="boot-auth-glitch">{TEXT.authGlitch}</span>
+      </span>
+    </div>
+
+    {/* ===== 5. 权限扫描：黑白双环收拢 + 内环 + 橙点 + 六颗卫星点 + 中央大点（487–568 帧） ===== */}
+    <div class="boot-scan">
+      <svg class="boot-scan-svg" viewBox="0 0 1920 1080">
+        <g class="boot-scan-group" fill="none" stroke-linecap="round">
+          {/* 环 / 点 / 弧端都以 (960,540) 为心；两侧小圆是绝对舞台坐标，放在另一个组里 */}
+          <g class="boot-g-center" transform="translate(960 540)">
+            <g class="boot-g-outer"><circle class="boot-arc boot-arc-outer" r="1" pathLength="1" /></g>
+            <g class="boot-g-white"><circle class="boot-arc boot-arc-white" r="1" pathLength="1" /></g>
+            <g class="boot-g-inner"><circle class="boot-arc boot-arc-inner" r="1" pathLength="1" /></g>
+            <g transform="rotate(180)">
+              <g class="boot-g-inner"><circle class="boot-arc boot-arc-inner" r="1" pathLength="1" /></g>
+            </g>
+            <g class="boot-orbit-t"><circle class="boot-orbit-dot" r="1" /></g>
+            <g transform="rotate(180)">
+              <g class="boot-orbit-t"><circle class="boot-orbit-dot" r="1" /></g>
+            </g>
+            {/* 六颗卫星点：**写全，不用 map** —— 类名 boot-sat-dot-0..5 各自绑一条独立的生长动画
+                （绝对时间轴，起点 548+3i 帧）。写成 `boot-sat-dot-${i}` 的话，
+                "每个被绑定的类都字面出现在模板里"那条静态断言就失效了（而它正是防"加了样式没元素"的网）。 */}
+            <g transform="rotate(0)"><g class="boot-sat"><circle class="boot-sat-dot boot-sat-dot-0" r="1" /></g></g>
+            <g transform="rotate(60)"><g class="boot-sat"><circle class="boot-sat-dot boot-sat-dot-1" r="1" /></g></g>
+            <g transform="rotate(120)"><g class="boot-sat"><circle class="boot-sat-dot boot-sat-dot-2" r="1" /></g></g>
+            <g transform="rotate(180)"><g class="boot-sat"><circle class="boot-sat-dot boot-sat-dot-3" r="1" /></g></g>
+            <g transform="rotate(240)"><g class="boot-sat"><circle class="boot-sat-dot boot-sat-dot-4" r="1" /></g></g>
+            <g transform="rotate(300)"><g class="boot-sat"><circle class="boot-sat-dot boot-sat-dot-5" r="1" /></g></g>
+            <circle class="boot-core" r="1" />
+            <g class="boot-cap-black-rot"><circle class="boot-cap boot-cap-black" cx="1" r="1" /></g>
+            <g class="boot-cap-white-rot"><circle class="boot-cap boot-cap-white" cx="1" r="1" /></g>
+          </g>
+          <g class="boot-g-sides">
+            <g class="boot-side-bl-pos">
+              <g class="boot-side-bl-rot"><circle class="boot-arc boot-side-bl" r="1" pathLength="1" /></g>
+            </g>
+            <g class="boot-side-br-pos">
+              <g class="boot-side-br-rot"><circle class="boot-arc boot-side-br" r="1" pathLength="1" /></g>
+            </g>
+          </g>
+        </g>
+      </svg>
+      <span class="boot-permission">{TEXT.permission}</span>
+    </div>
+
+    {/* ===== 6. 欢迎段：7 帧黑白闪切 → 公司名黑底横扫 → INTERNAL DATABASE 落定 → 退场白场 ===== */}
+    <div class="boot-welcome">
+      <div class="boot-panel"></div>
+      <div class="boot-heading">{TEXT.welcome}</div>
+      <div class="boot-company">
+        <strong>{TEXT.company}</strong>
+        <strong class="boot-highlight">{TEXT.company}</strong>
+      </div>
+      <div class="boot-database">{TEXT.database}</div>
+      <div class="boot-wlogo">
+        <svg viewBox="0 0 24 12">
+          <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d={MARK_CONTOUR} />
+          </g>
+          <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <g transform="translate(6 6)"><path d={MARK_PLUS} /></g>
+            <g transform="translate(18 6)"><path d={MARK_MINUS} /></g>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    {/* 时钟：只用来在 20.16 s 结束时触发一次 animationend（子元素的事件会冒泡，必须认 target）。
+        它是 0 尺寸元素，留在舞台上没有副作用。 */}
+    <div class="boot-clock"></div>
+  </div>
+
+  {/* 白场在舞台**之外**：它要盖住整屏（含上下留缝），所以放在装饰层之后、skip 之前 */}
+  <div class="boot-white"></div>
+
+  {/* skip：真按钮、右下、**在装饰子树之外**（决策 #16） */}
+  <button class="boot-skip" type="button" aria-label={TEXT.skipLabel}>{TEXT.skip}</button>
+</div>
+
+{/* ===== 开场行为（增量 4）：会话门控在 index.astro 的同步脚本里，这里只管 skip / Esc / 收尾 =====
+     三件事，目标 <800 B（决策 #20）：
+       ① 点击 skip 与 Esc 等价 → 同一条 close()
+       ② 20.16 s 跑完 → 时钟的 animationend → 加 .boot-out（400ms 淡出）→ 移除
+       ③ 收尾时**先**把焦点交回主标题、再移除覆盖层（反过来焦点会掉到 <body>）
+     两个必须记住的坑：
+       · animationend 会从子元素冒泡到根 ⇒ 必须判 e.target 是 .boot-clock（水印/打字那几条 0.7–1.2s 的动画
+         先结束，不判就会在 1 秒处误收尾）
+       · 覆盖层移除后 html 的 .boot-on 必须一起摘掉 —— 锁滚动挂在那上面
+*/}
+<script>
+  (() => {
+    const html = document.documentElement;
+    const overlay = document.querySelector('[data-boot-overlay]');
+    // 没播（无 JS 门控未加 .boot-on / 小屏 / reduced-motion / 本会话已播）就直接不注册任何东西
+    if (!overlay || !html.classList.contains('boot-on')) return;
+
+    const clock = overlay.querySelector('.boot-clock');
+    const skip = overlay.querySelector('.boot-skip');
+    let closed = false;
+
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      const title = document.querySelector('h1.display');
+      if (title && typeof title.focus === 'function') title.focus(); // 先交焦点
+      html.classList.remove('boot-on'); // 再解锁滚动 + 让覆盖层消失
+      overlay.remove();
+    };
+
+    if (skip) {
+      skip.addEventListener('click', close);
+      skip.focus(); // 决策 #16：开场即获焦点
+    }
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') close();
+    });
+
+    if (clock) {
+      overlay.addEventListener('animationend', (event) => {
+        if (event.target !== clock) return; // ← 子元素的事件会冒泡上来
+        overlay.classList.add('boot-out');
+        overlay.addEventListener('transitionend', close, { once: true });
+        setTimeout(close, 700); // 兜底：transitionend 万一不来，也别把滚动锁死
+      });
+    }
+  })();
+</script>
+
