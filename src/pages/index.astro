@@ -109,10 +109,18 @@ const sectors = [
   </div>
 
   <section class="tier" id="s1">
-    <div class="field-item" data-label={`身份 · ${site.name}`}>
+    {/* 扫描带读数用**作者名**（站主 2026-09-26 定）。这里刻意写死字面量：
+        content/site.md 没有 author 字段，而这一行是界面标签、不是正文 —— 优先照站主要求直改，
+        不顺手扩内容契约（若将来要可配置，给 site.md 加可选的 author 字段即可）。 */}
+    <div class="field-item" data-label="身份 · 郑云嘉">
       <div class="pod pod-s1">
+        {/* 中文站名沉为**背景水印**（站主 2026-09-26：做成英文旁的小字太扎眼）：
+            半透明、比小字大得多、允许越过身份舱边框但**越界部分被裁掉**（.pod-s1 overflow:hidden）。
+            它是纯装饰 —— 同样的站名在 OS 状态条与坐标行都已有 —— 所以 aria-hidden。
+            大字是英文站名；两个值都来自 content/site.md。 */}
+        <span class="pod-zh" aria-hidden="true">{site.name}</span>
         <span class="pod-tag">POD 01 · 身份</span>
-        <h1 class="display">{site.name}</h1>
+        <h1 class="display">{site.wordmark}</h1>
         <p class="lede">{site.intro}</p>
         {hasCoord && (
           <p class="coord">
@@ -543,6 +551,35 @@ const sectors = [
     background: var(--panel);
     padding: var(--sp-5);
   }
+  /* 身份舱的中文站名水印（站主 2026-09-26）：半透明沉到背景、字号大得多，
+     允许越过 pod 边框但被 overflow:hidden 裁掉 —— 裁切点就是"身份边框"，越界部分不显示。 */
+  .pod-s1 {
+    position: relative;
+    overflow: hidden; /* ← 越界部分不显示的那一刀 */
+  }
+  /* 水印是定位元素，会盖在静态兄弟之上 ⇒ 显式把其余内容抬到它上面（不用逐条改既有规则） */
+  .pod-s1 > *:not(.pod-zh) {
+    position: relative;
+    z-index: 1;
+  }
+  .pod-zh {
+    position: absolute;
+    right: -0.04em;
+    bottom: -0.22em;
+    z-index: 0;
+    font-size: clamp(5rem, 16vw, 15rem);
+    font-weight: 800;
+    line-height: 0.78;
+    letter-spacing: -0.04em;
+    /* alpha 写在颜色 token 里（--deco-identity-ink = --ink @ 6%）——
+       这里**不能**用 `opacity: var(...)`：变量没解析成功时它会回落到初值 1（全不透明），
+       实测就那样出过一张实心黑水印压在正文上的图。 */
+    color: var(--deco-identity-ink);
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+  }
+
   .pod-tag {
     display: inline-block;
     margin: 0 0 var(--sp-4);
