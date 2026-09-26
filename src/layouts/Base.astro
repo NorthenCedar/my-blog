@@ -83,7 +83,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
     <main id="main">
       <div class="shell"><slot /></div>
     </main>
-    {chrome !== 'console' && <SiteFooter name={site.name} email={site.email} github={site.github} />}
+    {chrome !== 'console' && <SiteFooter name={site.name} email={site.email} github={site.github} since={site.since ?? '2026-09-25'} />}
     {/* 跟手光标环 + 点击涟漪：纯装饰，z-index 55（在内容与灯箱之上、开场覆盖层 60 之下） */}
     <CursorRing />
   </body>

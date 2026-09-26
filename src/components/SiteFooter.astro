@@ -1,12 +1,20 @@
 ---
+import SiteStats from './SiteStats.astro';
+
 interface Props {
   name: string;
   email: string;
   github: string;
+  /** 建站日期（YYYY-MM-DD）—— 页脚「本站已经运行 …」的起点，来自 content/site.md 的 since。 */
+  since: string;
 }
-const { name, email, github } = Astro.props;
+const { name, email, github, since } = Astro.props;
 const year = new Date().getFullYear();
 ---
+{
+  /* 页脚统计（站主 2026-09-26："在每页最底部加上图一上的功能"）。
+     实现在 SiteStats.astro —— 首页的控制台外壳没有这个页脚，所以那块必须能单独复用。 */
+}
 <footer class="foot">
   <div class="wrap">
     <span>© {year} {name}</span>
@@ -15,6 +23,9 @@ const year = new Date().getFullYear();
       <a href={github} rel="me noopener">GitHub</a>
       <a href="/rss.xml">RSS</a>
     </span>
+  </div>
+  <div class="wrap stats-wrap">
+    <SiteStats since={since} tone="band" />
   </div>
 </footer>
 
@@ -42,5 +53,9 @@ const year = new Date().getFullYear();
     /* 13px 小字，必须用 AA 达标的 --accent-ink（5.18:1）。
        --accent 对白只有 3.68:1，只许用在 ≥24px 文字或非文字图形上（design-spec §3.1）。 */
     color: var(--accent-ink);
+  }
+  .stats-wrap {
+    display: block;
+    margin-top: var(--sp-3);
   }
 </style>

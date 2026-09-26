@@ -1,0 +1,87 @@
+---
+/**
+ * 页脚统计：本站已运行 + 总访问量（PV）/ 总访客数（UV）。站主 2026-09-26 要求"在每页最底部"，
+ * 所以抽成组件给两处用：`SiteFooter`（内页深色页脚）与首页的控制台外壳（它没有 SiteFooter）。
+ *
+ * 两个数字来源不同，别混：
+ *   · 运行时长：纯客户端算（起点 = since，来自内容层 site.md）—— 静态站没有"开机时间"，只能本地滴答；
+ *   · PV/UV：**服务端计数**（functions/_middleware.ts 只数 HTML 文档请求）+ 这里取回填进 DOM。
+ * 初值是 `—` 而不是 0：脚本没跑或接口挂了时，不显示一个假数字。
+ */
+interface Props {
+  since: string;
+  /** 深色底（内页页脚）用 on-band 配色；浅色底（首页）用 ink/muted */
+  tone?: 'band' | 'paper';
+}
+const { since, tone = 'band' } = Astro.props;
+const sinceISO = /^\d{4}-\d{2}-\d{2}$/.test(since) ? since : '2026-09-25';
+---
+<div class="stats" data-stats data-since={sinceISO} data-tone={tone}>
+  <span>本站已经运行 <span data-uptime>—</span></span>
+  <span class="counts">
+    总访问量（PV）：<span data-pv>—</span> ｜ 总访客数（UV）：<span data-uv>—</span>
+  </span>
+</div>
+
+<style>
+  .stats {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+    font-size: var(--fs-xs);
+    font-variant-numeric: tabular-nums;
+  }
+  .stats[data-tone='band'] {
+    color: var(--on-band-sub);
+  }
+  .stats[data-tone='band'] [data-uptime],
+  .stats[data-tone='band'] [data-pv],
+  .stats[data-tone='band'] [data-uv] {
+    color: var(--on-band);
+  }
+  .stats[data-tone='paper'] {
+    color: var(--muted);
+  }
+  .stats[data-tone='paper'] [data-uptime],
+  .stats[data-tone='paper'] [data-pv],
+  .stats[data-tone='paper'] [data-uv] {
+    color: var(--ink);
+  }
+  @media (max-width: 767px) {
+    .stats {
+      flex-direction: column;
+      gap: 0.3em;
+    }
+  }
+</style>
+
+<script>
+  // 页脚统计（本站已运行 + PV/UV）。**这段必须短**：它内联在每一页上，文章页的 JS 预算是 4096 字节。
+  // 两条踩过的坑写在这：
+  //   ① 内联 <script> 是**按 JS** 解析的（不是 TS）⇒ 别写 `<HTMLElement>` 尖括号断言，会 "Unexpected token" 并让构建失败；
+  //   ② 接口挂了就保持「—」，但 pv/uv 必须是数字才写进去（否则页面上出现 undefined）。
+  // 时长算法：`Date.now()-t0` 当毫秒数塞进 Date，取 ISO 串的 11..19 位就是 HH:MM:SS ——
+  // 比三个 Math.floor 加补零助手短得多（实测省下 ~80 字节，直接决定文章页能不能守住预算）。
+  const r = document.querySelector('[data-stats]');
+  if (r) {
+    const t0 = new Date((r.dataset.since || '2026-09-25') + 'T00:00:00+08:00').getTime();
+    const u = r.querySelector('[data-uptime]');
+    const f = () => {
+      const s = Date.now() - t0;
+      const h = new Date(s).toISOString().slice(11, 19).split(':');
+      u.textContent = `${Math.floor(s / 864e5)} 天 ${h[0]} 时 ${h[1]} 分 ${h[2]} 秒`;
+    };
+    f();
+    setInterval(f, 1e3);
+    fetch('/api/stats')
+      .then((x) => x.json())
+      .then((d) => {
+        // 两个数字一次查出来（各自的 querySelector 会多花 ~35 字节 —— 这点余量直接决定文章页守不守得住预算）
+        const c = r.querySelectorAll('[data-pv],[data-uv]');
+        if (d.pv != null) c[0].textContent = d.pv;
+        if (d.uv != null) c[1].textContent = d.uv;
+      })
+      .catch(() => {});
+  }
+</script>

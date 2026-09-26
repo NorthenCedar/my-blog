@@ -7,6 +7,7 @@
 import Base from '../layouts/Base.astro';
 import BootIntro from '../components/BootIntro.astro';
 import NavDrawer from '../components/NavDrawer.astro';
+import SiteStats from '../components/SiteStats.astro';
 import { NAV_LINKS } from '../lib/nav';
 import { getVisiblePosts } from '../lib/posts';
 import { getSite } from '../lib/site';
@@ -249,6 +250,13 @@ const sectors = [
       </ul>
     </div>
   </section>
+
+  {/* 页脚统计（站主 2026-09-26："在每页最底部加上图一上的功能"）。
+      首页是 console 外壳、**不渲染 SiteFooter** ⇒ 这里单独放一份，用浅色 tone。
+      放在正文流最末（下面那条固定 OS 状态条会盖住 fixed 层，所以这里给它留了底部间距）。 */}
+  <div class="home-stats">
+    <SiteStats since={site.since} tone="paper" />
+  </div>
 
   {/* ===== 动效层（B2）：6 段行为，零依赖 =====
        规矩：只读 DOM + 写 class/style，不动布局；reduced-motion 下不补间、不位移。
@@ -583,6 +591,13 @@ const sectors = [
   .band-line {
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+  /* 页脚统计（首页那份）：正文流最末，给固定的 OS 状态条留出高度 */
+  .home-stats {
+    margin: var(--sp-8) 0 0;
+    padding: var(--sp-3) 0 calc(1.9rem + var(--sp-6));
+    border-top: 1px solid var(--hair);
+    max-width: 60rem;
   }
   .os-rail {
     position: fixed;

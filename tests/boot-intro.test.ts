@@ -264,7 +264,11 @@ describe.skipIf(!existsSync(DIST_INDEX) || !existsSync(BASELINE))('B3 交付：�
       .replace(/\[data-astro-cid-[a-z0-9]+\]/g, '');
   const stripFeatureScripts = (html: string) =>
     html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, (block) =>
-      block.includes('data-boot-overlay') || block.includes("classList.add('js')") ? '' : block,
+      // 覆盖层与 JS 门控是本轮（#21）的产物；**页脚统计**是站主 2026-09-26 后加的功能，
+      // 同样不算"开场动了正文" ⇒ 一并摘掉（不摘这条基线比对会假红）。
+      block.includes('data-boot-overlay') || block.includes("classList.add('js')") || block.includes('[data-stats]')
+        ? ''
+        : block,
     );
   const mainOf = (html: string) => normalize((html.match(/<main[\s\S]*?<\/main>/) ?? [''])[0]);
 
@@ -311,6 +315,16 @@ describe.skipIf(!existsSync(DIST_INDEX) || !existsSync(BASELINE))('B3 交付：�
     after = after.replace(/<input type="checkbox" id="nav-toggle"[^>]*>/, '');
     after = after.replace(/<label for="nav-toggle"[^>]*>[\s\S]*?<\/label>/g, '');
     after = after.replace(/<nav class="navpanel"[^>]*>[\s\S]*?<\/nav>/, '');
+
+    // ⑥ 首页的页脚统计块（2026-09-26 站主："在每页最底部加上图一上的功能"；同上，不是开场的产物）。
+    //    它的脚本已在 stripFeatureScripts 里摘掉，这里摘标记（`.home-stats` 里嵌了 `.stats`，
+    //    所以按"起点到最近的一对 </div></div>"切片，比写嵌套正则稳）。
+    const hs = after.indexOf('<div class="home-stats"');
+    if (hs > -1) {
+      const close = after.indexOf('</div></div>', hs);
+      expect(close, '首页统计块的 div 没找到闭合').toBeGreaterThan(hs);
+      after = after.slice(0, hs) + after.slice(close + '</div></div>'.length);
+    }
     //    ① 去掉 HUD 右半段的 wrapper 开标签；② 它那一对闭标签里去掉一个
     //       （原结构：读数 </span> + hud-right </span> + hud </div> ⇒ 现在多了一层，变成三连闭标签）。
     after = after.replace(/<span class="hud-right"[^>]*>/, '');
