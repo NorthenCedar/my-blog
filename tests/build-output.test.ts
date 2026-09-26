@@ -261,9 +261,12 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     // 白名单：主题 token；text/default/auto/inherit/not-allowed 这些不会顶掉主题光标；
     // none 是跟手光标专用的（挂在 html.cursor-none 上、由 JS 加类 —— 上面那条断言守着它的可控性）。
     const ALLOW = /^(var\(--cursor-(default|link|text)\)|text|default|auto|inherit|not-allowed|none)$/;
+    /** 扫描前必须剥掉注释：本轮就栽过 —— 我在注释里为了解释 UA 那条规则写了 `a{cursor:pointer}`，
+     *  结果被当成真声明报了两处"越权"（假阳性）。文本扫描的通用纪律：先剥注释再扫。 */
+    const stripComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, ' ');
     const offenders: string[] = [];
     for (const f of [...srcFiles, 'src/lib/boot-css.ts']) {
-      const text = f.endsWith('boot-css.ts') ? bootCss() : readFileSync(f, 'utf8');
+      const text = stripComments(f.endsWith('boot-css.ts') ? bootCss() : readFileSync(f, 'utf8'));
       for (const m of text.matchAll(/cursor:\s*([^;{}]+)[;}]/g)) {
         const value = m[1].trim().replace(/\s+/g, ' ');
         if (!ALLOW.test(value)) offenders.push(`${f}: cursor:${value}`);

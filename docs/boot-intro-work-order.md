@@ -1055,4 +1055,11 @@ reduced-motion 与触摸设备下隐藏且**不加** `cursor-none`。
 - 静态断言：改成一枚 token + 2 张位图，并**新增两条防残迹**断言 —— 不许残留 `--cursor-text` / `--cursor-link`、
   已删的四张位图不许再出现在产物里 ✓
 - 浏览器级：`_tmp-cursor-ring-check.mjs` **25 条全 PASS**（含"链接上也必须是 none"）
-- 线上：`_tmp-live-cursor-check.mjs` 全 PASS（有 JS 时全站 none；无 JS 时四项全回落兜底）
+- 线上：`_tmp-live-cursor-check.mjs` 全 PASS（有 JS 时全站 none；无 JS 时 html/控制台/正文回落兜底、
+  **链接是系统手型** —— UA 的 `a{cursor:pointer}` 是元素自身声明、压过继承，这反而合适，如实记为预期而非 bug）
+- **两处探针/断言的自我修正**（都不是产品问题，但值得记）：
+  ① "等构建标记"第四次踩坑，且这次是**删除型部署** —— HTML 里没有任何新增元素可当标记，
+     只能改用**否定条件**（CSS 里不再有 `--cursor-text` / `--cursor-link` 才算新版本上线）。
+     纪律补一句：**删除型部署要用"某东西消失了"当标记。**
+  ② 源码扫描那条断言报了 2 处"越权声明"，查出来是**注释里的** `a{cursor:pointer}`（我为了解释这个坑写在注释里）
+     ⇒ 扫描前先剥注释。**文本扫描的通用纪律：先剥注释再扫。**
