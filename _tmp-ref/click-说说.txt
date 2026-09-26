@@ -1,0 +1,78 @@
+this is
+moment
+一些碎碎念，谁拉这了
+阿叶Ayeez
+2026/8/2 19:09:49
+#23
+今天做西餐，煎牛肋条
+很好吃，​就是不知道为什么卖相像中餐，是不是我炒菜炒多了...又或者少了摆盘.......
+​本来想摆摆盘的，翻了翻西餐厅的餐牌发现量大了，根本摆不下，这里一份西餐厅里能卖好几份
+阿叶Ayeez
+2026/7/29 20:35:59
+#22
+https://github.com/iSoron/uhabits
+分享一下这个app挺好用的，很简洁轻量，记录一些习惯，最近早睡早起（22:00-7:00），身体都好了
+阿叶Ayeez
+2026/7/12 20:02:20
+#21
+前段时间下了下棋，现在lichess慢棋2000分了，之后估计会控制下棋时间，一天就一两把。
+阿叶Ayeez
+2026/6/23 13:09:16
+#20
+阿巴阿巴
+阿叶Ayeez
+2026/6/20 19:23:53
+#19
+国际象棋回归！
+阿叶Ayeez
+2026/6/7 02:01:53
+#18
+最近搞了个宁宁bot，接入到了qq
+阿叶Ayeez
+2026/6/3 14:15:21
+#17
+宁宁线后劲好大
+阿叶Ayeez
+2026/5/2 11:23:27
+#16
+锄大地输了一下午(
+阿叶Ayeez
+2026/4/29 18:58:16
+#15
+Exception in thread "main" java.lang.InterruptedException: 课先别上了，妈妈喊你回家吃饭
+    at java.lang.Object.wait(Native Method)
+    at com.example.Student.attendClass(Student.java:42)
+    at com.example.Student.runHome(Student.java:15)
+​😋
+阿叶Ayeez
+2026/4/27 23:14:59
+#14
+今早突然看到群消息才想起来爪哇部落后端三轮考核还没动，还有12天 5555555~
+今天肝了一下午，把level1配置文件热重载给做了，直接加到了博客上，除了搞定docker的线上部署以及CI/CD废了些时间之外，感觉还好。看来后面才是真的难点了。（level2要实现代码的热重载）
+我的状态
+在线
+心情
+美滋滋
+在做
+期末考ing
+待办（13）
+校园bbs项目开发
+大创赛项目开发
+学习RabbitMQ
+学习JUC
+学习JVM
+学习科目一
+复习函数式编程
+学习MQTT
+学习EMQX
+过一遍黑马点评项目
+过一遍ruoyi框架
+复习Redis
+学习TypeScript
+碎碎念
+无
+上一页
+1 / 2
+下一页
+
+URL: https://blog.ayeez.cn/talks

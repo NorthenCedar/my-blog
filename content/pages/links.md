@@ -27,7 +27,10 @@ groups:
         href: /guestbook/
         desc: 想说什么都行
   - title: 友情链接
-    note: 还没有别人 —— 想换友链的去留言，我看到就加
-    items: []
+    note: 想换友链的去留言，我看到就加
+    items: 
+    -   name: WillowXI的小站
+        href: https://lwsblog.github.io/
+        desc: 这个博客很酷啊
 ---
 友链是博客之间互相串门的门牌。本站的友链按「分组」放，想换的话见上面的申请步骤。
