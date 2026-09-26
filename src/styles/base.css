@@ -45,13 +45,14 @@ button {
 }
 
 /* ===== 光标（2026-09-26）=====
-   只做两处：默认准星（控制台外壳/页面底）+ 链接指针。素材见 scripts/gen-cursors.mjs。
+   三个（站主指定的 PRTS 原版：正常选择 / 文本选择 / 链接选择），与浏览器语义一一对应。
+   素材见 scripts/gen-cursors.mjs。
    ⚠️ 三条规则的分工与"为什么这么写"：
-   1) `html` 上设默认值 ⇒ 全站继承准星（标签用元素选择器，任何声明值都胜过继承）；
-   2) **文字上必须还回 I 型光标**：这是写博客/选字天天要用的，被准星顶掉是真实伤害。
+   1) `html` 上设默认值 ⇒ 全站继承（标签用元素选择器，任何声明值都胜过继承）；
+   2) **文字上用主题 I 型**（`--cursor-text`：本站自绘的喇叭衬线 I 型，仍然是 I 型 ⇒ "这里能选中"的信号没丢）。
       用 :where() 包起来（特异性 0），这样第 3 条的 a/button 不需要靠顺序或 !important 去赢；
-      另外**不写 `.prose *`** —— 后代选择器会把正文里的链接一起按成 text。
-   3) 链接与按钮显式声明链接指针（元素自身声明 > 继承，顺序无关）。
+      另外**不写 `.prose *`** —— 后代选择器会把正文里的链接一起按成 I 型。
+   3) 链接与按钮显式声明链接光标（元素自身声明 > 继承，顺序无关）。
    disabled 的控件保留系统 `default`（见 comments.css）—— 那是"这里没得点"的信号，不另做素材。 */
 html {
   cursor: var(--cursor-default);
@@ -61,7 +62,7 @@ html {
   pre, code, kbd, samp, textarea, article, .prose,
   input[type='text'], input[type='search'], input[type='email'], input[type='url'], input[type='password']
 ) {
-  cursor: text;
+  cursor: var(--cursor-text);
 }
 a, button, summary, label, select, [role='button'], [role='tab'] {
   cursor: var(--cursor-link);
