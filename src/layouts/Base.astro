@@ -8,6 +8,7 @@ import '../styles/base.css';
 import '../styles/prose.css';
 import '../styles/links.css';
 import Brandline from '../components/Brandline.astro';
+import CursorRing from '../components/CursorRing.astro';
 import Band from '../components/Band.astro';
 import Topbar from '../components/Topbar.astro';
 import SiteFooter from '../components/SiteFooter.astro';
@@ -83,5 +84,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
       <div class="shell"><slot /></div>
     </main>
     {chrome !== 'console' && <SiteFooter name={site.name} email={site.email} github={site.github} />}
+    {/* 跟手光标环 + 点击涟漪：纯装饰，z-index 55（在内容与灯箱之上、开场覆盖层 60 之下） */}
+    <CursorRing />
   </body>
 </html>

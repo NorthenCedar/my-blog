@@ -1,0 +1,130 @@
+---
+/**
+ * 跟手光标环 + 点击涟漪（参考 Ocautator/arknights-cursor 的做法，用本站的 token 与更省的写法重写）
+ *
+ * 为什么是"环"而不是又换一张光标图：站主给的那份参考实现里，真正的重点是
+ * **一个 36px 的圆环跟手移动 + 悬停到可点元素时缩小并填色 + 点击时一圈涟漪扩散**；
+ * 它自己的光标图只是一张 6×6 的小箭头。所以这里只取"环"这件事，光标本体沿用站上已有的三件套。
+ *
+ * 几个刻意的取舍：
+ *   · 用 transform 而不是 left/top 做跟手（原实现改 left/top 会每帧触发布局）
+ *   · z-index 55：在正文与相册灯箱（50）之上、开场覆盖层（60）之下 ⇒ 开场 20 秒里它自动不出现
+ *   · pointer-events:none + aria-hidden：纯装饰，不拦点击、不进无障碍树
+ *   · 触摸设备（hover:none）与 prefers-reduced-motion 都不做 —— CSS 藏起来，JS 也直接不注册监听
+ *   · 零第三方请求：不引 CDN，不引外部字体，元素与样式都在本站
+ */
+---
+
+<div class="cr-ring" aria-hidden="true"></div>
+<div class="cr-ripple" aria-hidden="true"></div>
+
+<style>
+  .cr-ring,
+  .cr-ripple {
+    position: fixed;
+    top: 0;
+    left: 0;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0;
+    will-change: transform;
+  }
+  .cr-ring {
+    z-index: 55;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--accent);
+    transition:
+      width 0.25s,
+      height 0.25s,
+      background-color 0.25s,
+      border-color 0.25s;
+  }
+  /* 悬停到可点元素：缩小 + 填一层绿洗底（原实现的 hold 状态） */
+  .cr-ring.is-hot {
+    width: 22px;
+    height: 22px;
+    border-color: var(--accent-ink);
+    background-color: var(--accent-wash);
+  }
+  .cr-ripple {
+    z-index: 54;
+    width: 68px;
+    height: 68px;
+    border: 2px solid var(--accent);
+  }
+  .cr-ripple.is-on {
+    animation: cr-ripple 0.5s cubic-bezier(0.22, 0.61, 0.21, 1) forwards;
+  }
+  @keyframes cr-ripple {
+    from {
+      opacity: 0.85;
+      scale: 1;
+    }
+    to {
+      opacity: 0;
+      scale: 2.4;
+    }
+  }
+  /* 减少动态效果 / 触摸设备：整个效果不出现（JS 侧也不再注册监听） */
+  @media (prefers-reduced-motion: reduce), (hover: none) {
+    .cr-ring,
+    .cr-ripple {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  (() => {
+    const ring = document.querySelector('.cr-ring');
+    const ripple = document.querySelector('.cr-ripple');
+    if (!ring || !ripple) return;
+    if (!matchMedia('(hover: hover)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const HOT = 'a,button,input,textarea,select,summary,[role="button"],[role="tab"]';
+    let x = 0;
+    let y = 0;
+    let tx = 0;
+    let ty = 0;
+    let raf = 0;
+    let seen = false;
+
+    const step = () => {
+      x += (tx - x) * 0.3;
+      y += (ty - y) * 0.3;
+      ring.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%)`;
+      raf = Math.abs(tx - x) > 0.2 || Math.abs(ty - y) > 0.2 ? requestAnimationFrame(step) : 0;
+    };
+    const hit = (e) => e.target instanceof Element && e.target.closest(HOT);
+
+    addEventListener(
+      'pointermove',
+      (e) => {
+        tx = e.clientX;
+        ty = e.clientY;
+        if (!seen) {
+          // 第一次移动前不给它定位：否则环会从左上角滑过来
+          seen = true;
+          x = tx;
+          y = ty;
+          ring.style.opacity = '1';
+        }
+        if (!raf) raf = requestAnimationFrame(step);
+      },
+      { passive: true },
+    );
+    addEventListener('pointerover', (e) => { if (hit(e)) ring.classList.add('is-hot'); }, { passive: true });
+    addEventListener('pointerout', (e) => { if (hit(e)) ring.classList.remove('is-hot'); }, { passive: true });
+    addEventListener(
+      'pointerdown',
+      (e) => {
+        ripple.style.transform = `translate3d(${e.clientX}px,${e.clientY}px,0) translate(-50%,-50%)`;
+        ripple.classList.remove('is-on');
+        void ripple.offsetWidth; // 强制回流：同一位置连点也能重放动画
+        ripple.classList.add('is-on');
+      },
+      { passive: true },
+    );
+  })();
+</script>
