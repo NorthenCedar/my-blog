@@ -1,0 +1,161 @@
+---
+import { getEntry } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import PageTitle from '../components/PageTitle.astro';
+
+/** 友链页（2026-09-26 站主按参考站要求新增）。
+ *  内容全在 content/pages/links.md（主题不持有正文）；这里只负责把它画出来。
+ *  体例取自参考站：先一句引子，再按「分组」摆卡片；本页多两件事 —— 我自己的入口、以及**申请步骤**
+ *  （参考站有申请说明，但没写清流程；站上既然有留言板，就让申请走留言，闭环）。 */
+interface Item {
+  name: string;
+  href: string;
+  desc?: string;
+}
+interface Group {
+  title: string;
+  note?: string;
+  items: Item[];
+}
+interface LinksData {
+  title?: string;
+  intro?: string;
+  mine?: Item;
+  apply?: string[];
+  groups?: Group[];
+}
+const entry = await getEntry('pages', 'links');
+const d = (entry?.data ?? {}) as unknown as LinksData;
+const groups = d.groups ?? [];
+const isExternal = (h: string) => /^https?:/i.test(h);
+---
+
+<Base title="友链" current="links" chrome="page">
+  <header class="pagehead">
+    <PageTitle>友链</PageTitle>
+    {d.intro && <p class="lede">{d.intro}</p>}
+  </header>
+
+  {d.mine && (
+    <section class="mine">
+      <p class="sec">本站</p>
+      <a class="card card-mine" href={d.mine.href} {...(isExternal(d.mine.href) ? { rel: 'noopener' } : {})}>
+        <span class="name">{d.mine.name}</span>
+        {d.mine.desc && <span class="desc">{d.mine.desc}</span>}
+        <span class="url">{d.mine.href.replace(/^https?:\/\//, '')}</span>
+      </a>
+    </section>
+  )}
+
+  {groups.map((g, gi) => (
+    <section class="group">
+      <p class="sec">{g.title}</p>
+      {g.note && <p class="note">{g.note}</p>}
+      {g.items.length > 0 ? (
+        <ul class="cards">
+          {g.items.map((it) => (
+            <li>
+              <a class="card" href={it.href} {...(isExternal(it.href) ? { rel: 'noopener' } : {})}>
+                <span class="name">{it.name}</span>
+                {it.desc && <span class="desc">{it.desc}</span>}
+                <span class="url">{it.href.replace(/^https?:\/\//, '')}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="empty" data-group={gi}>这一组还空着 —— 想换友链的去<a href="/guestbook/">留言</a>。</p>
+      )}
+    </section>
+  ))}
+
+  {d.apply && d.apply.length > 0 && (
+    <section class="apply">
+      <p class="sec">怎么换</p>
+      <ol>
+        {d.apply.map((t) => (
+          <li>{t}</li>
+        ))}
+      </ol>
+    </section>
+  )}
+</Base>
+
+<style>
+  .lede {
+    margin: var(--sp-4) 0 0;
+    max-width: var(--measure);
+    color: var(--muted);
+  }
+  .sec {
+    margin: var(--sp-8) 0 var(--sp-3);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    border-left: 3px solid var(--accent);
+    padding-left: 0.6em;
+  }
+  .note {
+    margin: 0 0 var(--sp-3);
+    font-size: var(--fs-xs);
+    color: var(--muted);
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+    gap: var(--sp-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    padding: var(--sp-3) var(--sp-4);
+    border: 1px solid var(--hair);
+    background: var(--panel);
+    text-decoration: none;
+    color: var(--ink);
+  }
+  .card:hover {
+    border-color: var(--accent);
+    background: var(--accent-wash);
+  }
+  .card-mine {
+    max-width: 320px;
+  }
+  .name {
+    font-weight: 700;
+  }
+  .desc {
+    font-size: var(--fs-sm);
+    color: var(--muted);
+  }
+  .url {
+    font-size: var(--fs-xs);
+    color: var(--accent-ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .empty {
+    margin: 0;
+    padding: var(--sp-3) var(--sp-4);
+    border: 1px dashed var(--hair);
+    color: var(--muted);
+    font-size: var(--fs-sm);
+  }
+  .apply ol {
+    margin: 0;
+    padding-left: 1.2em;
+    max-width: var(--measure);
+    color: var(--ink);
+  }
+  .apply li {
+    margin-bottom: 0.4em;
+  }
+  @media (max-width: 767px) {
+    .sec {
+      margin-top: var(--sp-6);
+    }
+  }
+</style>

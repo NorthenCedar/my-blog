@@ -358,6 +358,77 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(offenders, `这些声明会以更高特异性顶掉主题光标：${offenders.join(' | ')}`).toEqual([]);
   });
 
+  it('导航：每一项都能点进去、两套外壳都有、移动端抽屉零 JS', () => {
+    // 站主 2026-09-26：按参考站 blog.ayeez.cn 加了「友链 / 说说 / 留言 / 日志」四项，
+    // 要求"每一个都要能点进去"，移动端要有导航菜单。这条按这个要求守四件事：
+    //  ① **每个 nav 链接都真能打开**（产物里有对应 HTML）—— 这是"能点进去"的硬判据；
+    //  ② 两套外壳（Brandline 深色带 / Topbar 浅色顶栏）渲染的是同一份清单，逐页都在；
+    //  ③ 移动端抽屉在每个页面里都有（≤1023px 才显示），且**不含任何脚本**（文章页 JS 预算是 4096，只有 3561 余量）；
+    //  ④ 新增的四个页面确实产出了。
+    const pages = htmlFiles().filter((f) => !f.endsWith('404.html') && f !== join(DIST, 'index.html'));
+    // 首页（chrome='console' 控制台外壳）**刻意没有导航**：右上角是 HUD 读数、底部是 OS 状态条，
+    // 这是站上既有定案（见 src/lib/nav.ts 的注释）。站主 2026-09-26 说"不同界面放不同元素" ⇒ 保持原样。
+    expect(pages.length, '产物页面太少，断言可能空转').toBeGreaterThan(10);
+
+    // ① 链接可达：把 nav 清单从产物里读回来（不 import 源码，避免"自证"）。
+    //    注意 `aria-current` 只挂在当前页那一项上 ⇒ 不能拿它当定位锚，要从 nav 块里取。
+    const sample = readFileSync(join(DIST, 'about', 'index.html'), 'utf8');
+    const navBlock = sample.match(/<nav aria-label="主导航">([\s\S]*?)<\/nav>/)?.[1] ?? '';
+    const navHrefs = [...navBlock.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]).filter((h) => h !== '/rss.xml');
+    expect(navHrefs.length, '取不到导航链接清单').toBeGreaterThanOrEqual(9);
+    const dead = navHrefs.filter((h) => {
+      const target = h === '/' ? join(DIST, 'index.html') : join(DIST, h.replace(/^\/|\/$/g, ''), 'index.html');
+      return !existsSync(target);
+    });
+    expect(dead, `这些导航项点进去是死链：${dead.join(', ')}`).toEqual([]);
+
+    // ② 每页（含新增四页）都得有完整清单；抽屉元素也要在
+    const labels = ['文章', '关于', '归档', '友链', '说说', '留言', '相册', '日志', '标签'];
+    const missing: string[] = [];
+    for (const f of pages) {
+      const html = readFileSync(f, 'utf8');
+      for (const l of labels) if (!html.includes(`>${l}</a>`)) missing.push(`${f}:${l}`);
+      if (!html.includes('class="navtog"') || !html.includes('class="navpanel"')) missing.push(`${f}:抽屉`);
+    }
+    expect(missing, `这些页面缺导航项/抽屉：${missing.slice(0, 8).join(', ')}`).toEqual([]);
+
+    // ③ 抽屉必须零 JS：把带抽屉的页面里的内联脚本总量与文章页预算对齐（沿用既有预算断言的口径）
+    const article = readFileSync(join(DIST, 'about', 'index.html'), 'utf8');
+    const scripts = [...article.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
+    const total = scripts.reduce((s, m) => s + Buffer.byteLength(m[1], 'utf8'), 0);
+    console.log(`判据 导航 对象 nav 链接可达性 + 每页清单 + 抽屉 实测: ${navHrefs.length} 项全部可达 · ${pages.length} 页清单完整 · 文章页内联脚本 ${total} 字节（抽屉零 JS）`);
+    expect(total, '抽屉引入了脚本（应该纯 CSS）').toBeLessThan(4096);
+
+    // ④ 新增页面在位
+    for (const p of ['links', 'talks', 'guestbook', 'log']) {
+      expect(existsSync(join(DIST, p, 'index.html')), `新页面 /${p}/ 没产出`).toBe(true);
+    }
+    // ⑤ 桌面隐藏抽屉、≤1023px 隐藏横排（都在 CSS 里，别让两套同时出现）
+    const cssFiles: string[] = [];
+    const walk2 = (d: string) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e);
+        if (statSync(p).isDirectory()) walk2(p);
+        else if (e.endsWith('.css')) cssFiles.push(p);
+      }
+    };
+    walk2(DIST);
+    const css = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n').replace(/\s+/g, '');
+    // 注意：Astro 会给组件样式加作用域属性（.navtog[data-astro-cid-…]），压缩器还会把
+    // `max-width:1023px` 写成 `(width<=1023px)` —— 两条断言都别绑这些形态，只认意思。
+    const hiddenRule = (css.match(/[^{}]*navtog[^{}]*\{[^}]*display:none[^}]*\}/) ?? [''])[0];
+    for (const cls of ['navbtn', 'navmask', 'navpanel']) {
+      expect(hiddenRule, `桌面隐藏规则里缺 ${cls}（两套菜单会同时出现）`).toContain(cls);
+    }
+    // 1023px 会有好几处（抽屉自己的、Brandline 的、Topbar 的）⇒ 逐个窗口看哪一个隐藏了横排 nav
+    const windows = [...css.matchAll(/1023px/g)].map((m) => css.slice(m.index!, m.index! + 400));
+    expect(windows.length, 'CSS 里找不到 1023px 断点').toBeGreaterThan(0);
+    expect(
+      windows.some((w) => /nav[^{}]*\{display:none\}/.test(w)),
+      '≤1023px 没有隐藏横排导航（会和抽屉同时出现）',
+    ).toBe(true);
+  });
+
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
     // 2026-09-25 修订：加了 <link rel="canonical"> 之后，这条断言需要区分
     // 「加载外部资源」（script/style/font/img —— 真实网络请求，必须禁止）
@@ -365,9 +436,12 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     for (const f of htmlFiles()) {
       const html = readFileSync(f, 'utf8');
       for (const m of html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)) {
-        const before = html.slice(Math.max(0, m.index! - 60), m.index!).trimEnd();
-        const isAnchor = before.endsWith('<a');
-        const isCanonical = before.endsWith('<link rel="canonical"');
+        // 判据是「这个外链出现在哪个标签里」——别只看紧跟其前的 60 字符。
+        // 2026-09-26 修正：原来的 `before.endsWith('<a')` 会在带属性的锚点上误报
+        // （友链页写的是 `<a class="card" href="https://…">` ⇒ 前面是 `<a class="card"` ✗）。
+        const tag = html.slice(html.lastIndexOf('<', m.index!), m.index!);
+        const isAnchor = /^<a[\s>]/.test(tag);
+        const isCanonical = /^<link[^>]*rel="canonical"/.test(tag);
         expect(isAnchor || isCanonical, `发现外部资源加载：${m[1]}（在 ${f}）`).toBe(true);
       }
     }

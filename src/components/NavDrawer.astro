@@ -1,0 +1,158 @@
+---
+/**
+ * 移动端导航抽屉（≤1023px 显示；桌面隐藏）。
+ *
+ * **零 JS**：用「隐藏 checkbox + 两个 label」实现 —— 一个 label 是汉堡按钮，另一个是全屏遮罩
+ * （点遮罩即关闭）。为什么不引脚本：文章页的内联脚本预算是 4096 字节、当前已用到 3561，
+ * 一个抽屉脚本会把预算吃穿；而 checkbox 方案原生就能开合、还能用键盘（Space）操作。
+ *
+ * 无障碍取舍（如实记）：
+ *   · checkbox 本体 `opacity:0` 但仍可聚焦，带 `aria-label="导航菜单"` ⇒ 屏幕阅读器能念到并切换；
+ *   · 关闭时面板用 `visibility:hidden` 而不是 `opacity:0` —— 否则链接仍在 Tab 序里，
+ *     键盘用户会 Tab 进一块看不见的面板（这是"透明菜单"最常见的坑）。
+ */
+import { NAV_LINKS, type NavKey } from '../lib/nav';
+
+interface Props {
+  current?: NavKey;
+}
+const { current } = Astro.props;
+const id = 'nav-toggle';
+---
+
+<input type="checkbox" id={id} class="navtog" aria-label="导航菜单" />
+<label for={id} class="navbtn" aria-hidden="true"><span class="bars"></span></label>
+<label for={id} class="navmask" aria-hidden="true"></label>
+<nav class="navpanel" aria-label="主导航（展开）">
+  <p class="navpanel-title">导航菜单</p>
+  {NAV_LINKS.map((l) => (
+    <a href={l.href} aria-current={current === l.key ? 'page' : undefined}>{l.label}</a>
+  ))}
+  <a href="/rss.xml">RSS</a>
+</nav>
+
+<style>
+  /* 桌面：整块不参与布局（PC 走 Brandline / Topbar 里那排横排链接） */
+  .navtog,
+  .navbtn,
+  .navmask,
+  .navpanel {
+    display: none;
+  }
+  @media (max-width: 1023px) {
+    .navtog {
+      /* 视觉上藏起来，但**保持可聚焦**（键盘 Space 开合） */
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      margin: 0;
+      pointer-events: none;
+      display: block;
+    }
+    .navbtn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      margin-left: auto;
+      cursor: var(--cursor-default);
+      color: inherit;
+    }
+    /* 汉堡：三横线（中间那条稍短，和站上的刻度线气质一致） */
+    .navbtn .bars,
+    .navbtn .bars::before,
+    .navbtn .bars::after {
+      display: block;
+      width: 18px;
+      height: 1px;
+      background: currentColor;
+    }
+    .navbtn .bars {
+      position: relative;
+    }
+    .navbtn .bars::before,
+    .navbtn .bars::after {
+      content: '';
+      position: absolute;
+      left: 0;
+    }
+    .navbtn .bars::before {
+      top: -6px;
+      width: 13px;
+    }
+    .navbtn .bars::after {
+      top: 6px;
+    }
+    .navtog:focus-visible + .navbtn {
+      outline: 3px solid var(--accent-ink);
+      outline-offset: 3px;
+    }
+    .navmask {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      opacity: 0;
+      visibility: hidden;
+      background: rgb(26 26 26 / 35%);
+      transition: opacity var(--dur-fast) linear, visibility var(--dur-fast) linear;
+    }
+    .navpanel {
+      display: block;
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 41;
+      width: min(78vw, 320px);
+      padding: var(--sp-4);
+      overflow-y: auto;
+      background: var(--paper);
+      border-left: 1px solid var(--hair);
+      box-shadow: -12px 0 28px rgb(26 26 26 / 12%);
+      transform: translateX(100%);
+      visibility: hidden;
+      transition: transform var(--dur) var(--ease), visibility var(--dur) var(--ease);
+    }
+    .navpanel-title {
+      margin: 0 0 var(--sp-3);
+      font-size: var(--fs-xs);
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      border-left: 3px solid var(--accent);
+      padding-left: 0.6em;
+    }
+    .navpanel a {
+      display: block;
+      padding: 0.7em 0;
+      font-size: var(--fs-body);
+      color: var(--ink);
+      text-decoration: none;
+      border-bottom: 1px solid var(--hair);
+    }
+    .navpanel a[aria-current='page'] {
+      color: var(--accent-ink);
+    }
+    /* 打开态：checkbox 一被勾上，遮罩淡入、面板滑入 */
+    .navtog:checked ~ .navmask {
+      opacity: 1;
+      visibility: visible;
+    }
+    .navtog:checked ~ .navpanel {
+      transform: translateX(0);
+      visibility: visible;
+    }
+    /* 面板打开时锁滚动（body 由 Base 提供，靠 html 层的 :has 兜住） */
+    html:has(.navtog:checked) {
+      overflow: hidden;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .navmask,
+    .navpanel {
+      transition: none;
+    }
+  }
+</style>

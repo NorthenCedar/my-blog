@@ -12,6 +12,7 @@
  * 所以其余页面既不会多背字节，也不会被这些规则碰到。
  */
 import { NAV_LINKS, type NavKey } from '../lib/nav';
+import NavDrawer from './NavDrawer.astro';
 
 interface Props {
   wordmark: string;
@@ -39,6 +40,8 @@ const { wordmark, current } = Astro.props;
     ))}
     <a href="/rss.xml">RSS</a>
   </nav>
+  {/* 移动端抽屉（零 JS）；桌面隐藏 —— 见组件内注释 */}
+  <NavDrawer current={current} />
 </div>
 
 <style is:global>
@@ -137,13 +140,18 @@ const { wordmark, current } = Astro.props;
     letter-spacing: 0.14em;
     text-decoration: none;
   }
-  body.chrome-page .topbar nav {
+  /* ⚠️ 这一段是 `<style is:global>`，选择器**必须锚在顶栏自己的那个 nav 上**（`> nav`）。
+     2026-09-26 踩过：写成 `.topbar nav` 时，移动端抽屉组件里的 `<nav class="navpanel">`
+     也被一起选中 —— 它的特异性（0,2,2）高过抽屉自己的作用域规则（0,2,0），
+     结果**桌面端也漏出一份横排菜单**、抽屉在手机上被拉成横排（截图里一眼能看到）。
+     `> nav` 只命中顶栏直接子节点，抽屉在组件内部、不受影响。 */
+  body.chrome-page .topbar > nav:not(.navpanel) {
     display: flex;
     align-items: center;
     gap: 1.1rem;
     flex-wrap: wrap;
   }
-  body.chrome-page .topbar a {
+  body.chrome-page .topbar > nav:not(.navpanel) a {
     /* 必须显式写颜色：UA 样式表的 `a:link { color: -webkit-link }` 是针对元素本身的声明，
        会压过从 .topbar 继承来的 color —— 不写就是浏览器默认蓝（放大截图逮到的）。
        深色带的 Brandline 显式声明了色所以没事，顶栏漏了。 */
@@ -152,16 +160,16 @@ const { wordmark, current } = Astro.props;
     border-bottom: 1px solid transparent;
     padding-bottom: 1px;
   }
-  body.chrome-page .topbar a:hover,
-  body.chrome-page .topbar a:focus-visible {
+  body.chrome-page .topbar > nav:not(.navpanel) a:hover,
+  body.chrome-page .topbar > nav:not(.navpanel) a:focus-visible {
     color: var(--ink);
     border-color: var(--accent-ink);
   }
-  body.chrome-page .topbar a:focus-visible {
+  body.chrome-page .topbar > nav:not(.navpanel) a:focus-visible {
     outline: 2px solid var(--accent-ink);
     outline-offset: 3px;
   }
-  body.chrome-page .topbar a[aria-current='page'] {
+  body.chrome-page .topbar > nav:not(.navpanel) a[aria-current='page'] {
     color: var(--ink);
     border-color: var(--accent-ink);
   }
@@ -171,6 +179,15 @@ const { wordmark, current } = Astro.props;
        而是它本身解决了折行问题 —— 如实记在这里，避免以后被当成依据引用。） */
   @media (max-width: 767px) {
     body.chrome-page .topbar .site {
+      display: none;
+    }
+  }
+
+  /* ≤1023px：横排链接换成移动端抽屉（站主 2026-09-26 追加导航四项后，9 项横排在平板上会挤）。
+     ⚠️ 同样必须 `:not(.navpanel)`：抽屉的 `<nav>` 也是 .topbar 的直接子节点，
+     漏了这一处会把**抽屉自己**按成 display:none（实测：面板 0×0、点开也看不见）。 */
+  @media (max-width: 1023px) {
+    body.chrome-page .topbar > nav:not(.navpanel) {
       display: none;
     }
   }

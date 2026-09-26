@@ -1,0 +1,103 @@
+---
+import { getEntry } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import PageTitle from '../components/PageTitle.astro';
+
+/** 说说页（2026-09-26 站主按参考站要求新增）：短的、没成为文章的东西。
+ *  体例取自参考站「说说」：时间线，每条 = 时间 + 正文（那边还带序号，本站不加序号 ——
+ *  时间已经很清楚地表达顺序，序号会跟站上别处的"编号"语义打架）。
+ *  内容在 content/pages/talks.md；**当前放的是站点自己的开发记录**（别人的生活不能替站主编），
+ *  站主替换成自己的碎碎念即可。 */
+interface Talk {
+  date: string | Date;
+  text: string;
+  href?: string;
+}
+interface TalksData {
+  intro?: string;
+  items?: Talk[];
+}
+const entry = await getEntry('pages', 'talks');
+const d = (entry?.data ?? {}) as unknown as TalksData;
+const items = [...(d.items ?? [])].sort((a, b) => (String(a.date) < String(b.date) ? 1 : -1));
+/** YAML 会把未加引号的 `date: 2026-09-26` 隐式解析成 Date 对象 —— 归一成 YYYY-MM-DD。
+ *  站上同一条约定见 src/lib/schema.ts 的 dateField（这里没走 schema，因为 pages 集合不校验）。 */
+const iso = (v: string | Date) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v));
+const fmt = (v: string | Date) => {
+  const [y, m, day] = iso(v).split('-');
+  return `${y} 年 ${Number(m)} 月 ${Number(day)} 日`;
+};
+---
+
+<Base title="说说" current="talks" chrome="page">
+  <header class="pagehead">
+    <PageTitle>说说</PageTitle>
+    {d.intro && <p class="lede">{d.intro}</p>}
+  </header>
+
+  <ol class="talks">
+    {items.map((t) => (
+      <li class="talk">
+        <time datetime={iso(t.date)}>{fmt(t.date)}</time>
+        <p class="body">
+          {t.text}
+          {t.href && <> <a href={t.href}>链接</a></>}
+        </p>
+      </li>
+    ))}
+  </ol>
+  {items.length === 0 && <p class="empty">还没有说说。</p>}
+</Base>
+
+<style>
+  .lede {
+    margin: var(--sp-4) 0 0;
+    max-width: var(--measure);
+    color: var(--muted);
+  }
+  .talks {
+    margin: var(--sp-8) 0 0;
+    padding: 0;
+    list-style: none;
+    max-width: var(--measure);
+  }
+  .talk {
+    position: relative;
+    padding: 0 0 var(--sp-6) var(--sp-5);
+    border-left: 1px solid var(--hair);
+  }
+  /* 时间轴上的点：与相册/扫描带同一套"仪器感" */
+  .talk::before {
+    content: '';
+    position: absolute;
+    left: -3px;
+    top: 0.45em;
+    width: 5px;
+    height: 5px;
+    background: var(--accent);
+  }
+  .talk:last-child {
+    padding-bottom: 0;
+    border-left-color: transparent;
+  }
+  time {
+    display: block;
+    font-size: var(--fs-xs);
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .body {
+    margin: 0.35em 0 0;
+    color: var(--ink);
+  }
+  .empty {
+    margin: var(--sp-8) 0 0;
+    color: var(--muted);
+  }
+  @media (max-width: 767px) {
+    .talk {
+      padding-left: var(--sp-4);
+    }
+  }
+</style>

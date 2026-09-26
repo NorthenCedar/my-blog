@@ -1,0 +1,105 @@
+---
+import { getEntry } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import PageTitle from '../components/PageTitle.astro';
+
+/** 日志页（2026-09-26 站主："你顺便把日志自己写了"）。
+ *  体例取自参考站：日期 + 版本号 + 该版本改了什么（一条一行）。
+ *  内容在 content/pages/log.md，按真实开发史写；新的插在最上面。 */
+interface LogItem {
+  date: string | Date;
+  version?: string;
+  changes?: string[];
+}
+interface LogData {
+  intro?: string;
+  items?: LogItem[];
+}
+const entry = await getEntry('pages', 'log');
+const d = (entry?.data ?? {}) as unknown as LogData;
+const items = [...(d.items ?? [])].sort((a, b) => (String(a.date) < String(b.date) ? 1 : -1));
+/** YAML 会把未加引号的 `date: 2026-09-26` 解析成 Date 对象（站上同一条约定见 src/lib/schema.ts） */
+const iso = (v: string | Date) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v));
+---
+
+<Base title="日志" current="log" chrome="page">
+  <header class="pagehead">
+    <PageTitle>日志</PageTitle>
+    {d.intro && <p class="lede">{d.intro}</p>}
+  </header>
+
+  <ol class="log">
+    {items.map((it) => (
+      <li class="entry">
+        <p class="head">
+          <time datetime={iso(it.date)}>{iso(it.date)}</time>
+          {it.version && <span class="ver">{it.version}</span>}
+        </p>
+        {it.changes && (
+          <ul class="changes">
+            {it.changes.map((c) => (
+              <li>{c}</li>
+            ))}
+          </ul>
+        )}
+      </li>
+    ))}
+  </ol>
+  {items.length === 0 && <p class="empty">还没有日志。</p>}
+</Base>
+
+<style>
+  .lede {
+    margin: var(--sp-4) 0 0;
+    max-width: var(--measure);
+    color: var(--muted);
+  }
+  .log {
+    margin: var(--sp-8) 0 0;
+    padding: 0;
+    list-style: none;
+    max-width: var(--measure);
+  }
+  .entry {
+    padding: var(--sp-4) 0;
+    border-top: 1px solid var(--hair);
+  }
+  .entry:last-child {
+    border-bottom: 1px solid var(--hair);
+  }
+  .head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-3);
+    margin: 0;
+  }
+  time {
+    font-size: var(--fs-xs);
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  /* 版本号用站上的"切片标签"气质：绿框 + 等宽数字 */
+  .ver {
+    font-size: var(--fs-xs);
+    color: var(--accent-ink);
+    border: 1px solid var(--accent);
+    padding: 0.05em 0.45em;
+    font-variant-numeric: tabular-nums;
+  }
+  .changes {
+    margin: var(--sp-3) 0 0;
+    padding-left: 1.1em;
+    color: var(--ink);
+  }
+  .changes li {
+    margin-bottom: 0.35em;
+  }
+  .changes li::marker {
+    color: var(--accent);
+  }
+  .empty {
+    margin: var(--sp-8) 0 0;
+    color: var(--muted);
+  }
+</style>

@@ -1,0 +1,43 @@
+---
+import { getEntry } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import PageTitle from '../components/PageTitle.astro';
+import CommentSection from '../components/CommentSection.astro';
+
+/** 留言页（2026-09-26 站主按参考站要求新增）。
+ *  参考站那一页是「全站评论汇总 + 本页留言」两块；**汇总那块需要后端聚合**，本站的评论接口
+ *  是按 slug 取的（/api/comments?slug=…），所以这里只做本页留言 —— 能用的那半，且是真的能用。
+ *  表单/列表/反垃圾全部复用站内既有 CommentSection（slug 固定 guestbook，与文章评论分开存放）。 */
+interface GuestbookData {
+  intro?: string;
+  note?: string;
+}
+const entry = await getEntry('pages', 'guestbook');
+const d = (entry?.data ?? {}) as unknown as GuestbookData;
+---
+
+<Base title="留言" current="guestbook" chrome="page">
+  <header class="pagehead">
+    <PageTitle>留言</PageTitle>
+    {d.intro && <p class="lede">{d.intro}</p>}
+    {d.note && <p class="note">{d.note}</p>}
+  </header>
+
+  <div class="prose">
+    <CommentSection slug="guestbook" />
+  </div>
+</Base>
+
+<style>
+  .lede {
+    margin: var(--sp-4) 0 0;
+    max-width: var(--measure);
+    color: var(--muted);
+  }
+  .note {
+    margin: var(--sp-2) 0 0;
+    max-width: var(--measure);
+    font-size: var(--fs-sm);
+    color: var(--muted);
+  }
+</style>

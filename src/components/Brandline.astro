@@ -1,5 +1,6 @@
 ---
 import { NAV_LINKS, type NavKey } from '../lib/nav';
+import NavDrawer from './NavDrawer.astro';
 
 interface Props {
   current?: NavKey;
@@ -19,6 +20,8 @@ const links = NAV_LINKS;
     ))}
     <a href="/rss.xml">RSS</a>
   </nav>
+  {/* 移动端抽屉（零 JS）；桌面隐藏 */}
+  <NavDrawer current={current} />
 </div>
 
 <style>
@@ -53,5 +56,11 @@ const links = NAV_LINKS;
     /* 深色带上用亮绿：--accent 的深绿对 --ink 只有 3.43:1，
        够非文字门槛但不够 4.5；--accent-bright 是 6.26:1 */
     box-shadow: inset 0 -2px 0 var(--accent-bright);
+  }
+  /* ≤1023px：横排链接换成移动端抽屉（站主 2026-09-26 追加导航四项后，9 项横排在平板上会挤） */
+  @media (max-width: 1023px) {
+    nav {
+      display: none;
+    }
   }
 </style>

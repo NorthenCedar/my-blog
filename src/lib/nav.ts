@@ -8,19 +8,36 @@
  *
  * 注意：`key` 同时是 `Base` 的 `current` 取值来源，加页面时两处一起生效。
  */
-export type NavKey = 'index' | 'gallery' | 'tags' | 'archive' | 'about';
+export type NavKey =
+  | 'index'
+  | 'about'
+  | 'archive'
+  | 'links'
+  | 'talks'
+  | 'guestbook'
+  | 'gallery'
+  | 'log'
+  | 'tags';
 
 /**
- * 2026-09-26 追加「相册」（站主定案的入口第二步）。
- * 这一步动的是**全站共享**：13 个深色带页面的 Brandline 与 /gallery 自己的 Topbar
- * 都会多一项 ⇒ **14 页产物全变**（首页是 console 外壳、没有导航，故不受影响）。
- * 所以它单独做、单独冻基线、单独双侧 L2，不与别的改动并做。
- * 位置放在「文章」之后 —— 与首页 S2 文章 / S3 相册的区段顺序一致。
+ * 2026-09-26 追加「相册」（站主定案的入口第二步）—— 那次的教训在这里沿用：
+ * 动这个数组就是动**全站共享**（13 个 band 页 + 各内页 Topbar）⇒ **产物全变**
+ * ⇒ 单独做、单独冻基线、不与别的改动并做。
+ *
+ * 2026-09-26 追加导航四项（站主给的参考站 blog.ayeez.cn）：友链 / 说说 / 留言 / 日志。
+ * 站上原有的「文章 / 相册 / 标签」保留（站主说"加这几项"，不是换掉），
+ * 顺序按站主截图（首页 关于 归档 友链 说说 留言 相册 日志），原有的「标签」放在最后。
+ * 两点说明：① 站主截图里的「首页」对应本站的「文章」（都指向 /），所以没有再加一项同地址的；
+ * ② 参考站的 GitHub 与 管理端两项按站主要求**不加**。
  */
 export const NAV_LINKS: { href: string; label: string; key: NavKey }[] = [
   { href: '/', label: '文章', key: 'index' },
-  { href: '/gallery/', label: '相册', key: 'gallery' },
-  { href: '/tags/', label: '标签', key: 'tags' },
-  { href: '/archive/', label: '归档', key: 'archive' },
   { href: '/about/', label: '关于', key: 'about' },
+  { href: '/archive/', label: '归档', key: 'archive' },
+  { href: '/links/', label: '友链', key: 'links' },
+  { href: '/talks/', label: '说说', key: 'talks' },
+  { href: '/guestbook/', label: '留言', key: 'guestbook' },
+  { href: '/gallery/', label: '相册', key: 'gallery' },
+  { href: '/log/', label: '日志', key: 'log' },
+  { href: '/tags/', label: '标签', key: 'tags' },
 ];
