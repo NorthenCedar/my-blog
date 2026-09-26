@@ -572,7 +572,8 @@ html.boot-on{overflow:hidden}
 /* 白场 / 时钟 / skip（决策 #16：真按钮、右下、**不在 aria-hidden 子树里**） */
 .boot-white{position:absolute;inset:0;background:#fff}
 .boot-clock{top:0;left:0;width:0;height:0}
-.boot-skip{position:absolute;right:60px;bottom:60px;z-index:2;padding:10px 0;font-size:14px;letter-spacing:1.1px;opacity:.55;color:var(--ink);background:none;border:0;cursor:pointer}
+/* cursor 交给 base.css 的全局 a/button 规则（那样才会用主题链接光标），这里不再写 cursor:pointer */
+.boot-skip{position:absolute;right:60px;bottom:60px;z-index:2;padding:10px 0;font-size:14px;letter-spacing:1.1px;opacity:.55;color:var(--ink);background:none;border:0}
 .boot-skip:hover,.boot-skip:focus-visible{opacity:1}
 /* 逐字 span：一条 1ms 点亮动画 + 内联 --d 定位（选择器要比 .boot-deco * 更具体，否则 position 被拉成 absolute） */
 .boot-deco .boot-ch{position:static;opacity:0;animation:boot-ch 1ms linear both;animation-delay:var(--d,0ms)}

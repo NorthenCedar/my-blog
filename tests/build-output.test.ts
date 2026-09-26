@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { bootCss } from '../src/lib/boot-css';
 
 const DIST = 'dist';
 const hasDist = existsSync(DIST);
@@ -158,6 +159,72 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     const globalLinkRule = /(?:^|[}\s,])a\s*(?:,[^{}]*)?\{[^}]*\bcolor\s*:/.test(all);
     expect(globalLinkRule, '产物 CSS 里找不到全局 a 颜色规则 —— 链接兜底被删了？').toBe(true);
     console.log('判据 链接兜底 产物 CSS 含全局 a 颜色规则: true');
+  });
+
+  it('光标：两个主题光标在产物里可用，且没有裸关键字把主题光标顶掉', () => {
+    // 2026-09-26 站主定：只做「默认准星 + 链接指针」两个（其余 PRTS 光标在博客里没有对应场景）。
+    // 三条断言，每条对应一种真实的失效方式：
+    //  ① 产物 CSS 里两条 cursor 都必须「url + 关键字兜底」—— 图没加载/被拦时光标不能整个消失；
+    //  ② 两张位图必须在产物里且是 32×32 带 alpha（Safari 忽略 >32；无 alpha 的图在纸面上会糊出一个方块）；
+    //  ③ 全站源码里不许再出现裸 `pointer` —— 那是 (0,1,0) 特异性的声明，会顶掉主题链接光标（已经踩过 5 处）。
+    const cssFiles: string[] = [];
+    const walk = (d: string) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (e.endsWith('.css')) cssFiles.push(p);
+      }
+    };
+    walk(DIST);
+    const all = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
+
+    const flat = all.replace(/\s+/g, ' ');
+    // ① token 定义：url + 热点 + 关键字兜底（压缩后引号会被去掉，所以按实际形态断言）
+    for (const [name, url, hot, kw] of [
+      ['--cursor-default', '/cursors/reticle.png', '16 16', 'default'],
+      ['--cursor-link', '/cursors/link.png', '2 2', 'pointer'],
+    ] as const) {
+      expect(flat, `${name} 丢了 url / 热点 / 兜底关键字`).toContain(`${name}:url(${url}) ${hot}, ${kw}`);
+    }
+    // 三条规则分工：默认准星挂 html、链接与按钮用链接光标、文字上还回 I 型
+    expect(flat, 'html 上没有默认准星').toContain('html{cursor:var(--cursor-default)}');
+    expect(flat, '链接与按钮没用主题链接光标').toMatch(/\{[^}]*cursor:var\(--cursor-link\)/);
+    expect(flat, '文字容器上没有还回 I 型光标').toContain('cursor:text');
+    expect(flat, '文字规则没包在 :where() 里（会被链接规则反过来压掉或压掉链接）').toContain(':where(');
+
+    // ② 位图本体：PNG 的 IHDR 在字节 16..24（宽高）、25（颜色类型，6 = RGBA）
+    for (const name of ['reticle.png', 'link.png']) {
+      const buf = readFileSync(join(DIST, 'cursors', name));
+      const w = buf.readUInt32BE(16);
+      const h = buf.readUInt32BE(20);
+      const colorType = buf.readUInt8(25);
+      expect([w, h], `dist/cursors/${name} 不是 32×32（Safari 会忽略大图）`).toEqual([32, 32]);
+      expect(colorType, `dist/cursors/${name} 没有 alpha 通道`).toBe(6);
+    }
+
+    // ③ 源码扫描：不允裸关键字
+    const srcFiles: string[] = [];
+    const walkSrc = (d: string) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e);
+        if (statSync(p).isDirectory()) walkSrc(p);
+        else if (/\.(css|astro)$/.test(e)) srcFiles.push(p);
+      }
+    };
+    walkSrc('src');
+    const ALLOW = /^(var\(--cursor-(default|link)\)|text|default|auto|inherit|not-allowed)$/;
+    const offenders: string[] = [];
+    for (const f of [...srcFiles, 'src/lib/boot-css.ts']) {
+      const text = f.endsWith('boot-css.ts') ? bootCss() : readFileSync(f, 'utf8');
+      for (const m of text.matchAll(/cursor:\s*([^;{}]+)[;}]/g)) {
+        const value = m[1].trim().replace(/\s+/g, ' ');
+        if (!ALLOW.test(value)) offenders.push(`${f}: cursor:${value}`);
+      }
+    }
+    console.log(
+      `判据 光标 对象 两条声明 + 2 张 32×32 位图 + ${srcFiles.length + 1} 个源文件扫描 实测: 越权声明 ${offenders.length} 处`,
+    );
+    expect(offenders, `这些声明会以更高特异性顶掉主题光标：${offenders.join(' | ')}`).toEqual([]);
   });
 
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {

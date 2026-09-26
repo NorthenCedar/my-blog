@@ -17,3 +17,5 @@ worker-configuration.d.ts
 # 由 `npm run build` / `npm run dev` 前的 scripts/gen-boot-css.mjs 产出。
 # 不入库的理由与 public/gallery/ 一致：生成物跟着脚本走，改数据不必重提一份大文件。
 src/styles/boot.css
+# 光标位图（32×32 PNG）。矢量源在 scripts/gen-cursors.mjs 里 —— 那是可 diff 的真源，PNG 是产物。
+public/cursors/

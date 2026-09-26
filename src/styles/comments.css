@@ -75,7 +75,7 @@
   border: 1px solid var(--ink);
   border-radius: 0;
   padding: var(--sp-2) var(--sp-5);
-  cursor: pointer;
+  cursor: var(--cursor-link);
 }
 /* hover 用 --accent-ink（5.18:1 达标）；--accent 只有 3.68:1，按钮文字是小字，刻意不用 */
 .comment-form button:hover:not(:disabled) {

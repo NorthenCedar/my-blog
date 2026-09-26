@@ -44,6 +44,29 @@ button {
   outline-offset: 3px;
 }
 
+/* ===== 光标（2026-09-26）=====
+   只做两处：默认准星（控制台外壳/页面底）+ 链接指针。素材见 scripts/gen-cursors.mjs。
+   ⚠️ 三条规则的分工与"为什么这么写"：
+   1) `html` 上设默认值 ⇒ 全站继承准星（标签用元素选择器，任何声明值都胜过继承）；
+   2) **文字上必须还回 I 型光标**：这是写博客/选字天天要用的，被准星顶掉是真实伤害。
+      用 :where() 包起来（特异性 0），这样第 3 条的 a/button 不需要靠顺序或 !important 去赢；
+      另外**不写 `.prose *`** —— 后代选择器会把正文里的链接一起按成 text。
+   3) 链接与按钮显式声明链接指针（元素自身声明 > 继承，顺序无关）。
+   disabled 的控件保留系统 `default`（见 comments.css）—— 那是"这里没得点"的信号，不另做素材。 */
+html {
+  cursor: var(--cursor-default);
+}
+:where(
+  p, li, blockquote, h1, h2, h3, h4, h5, h6, dt, dd, td, th, figcaption,
+  pre, code, kbd, samp, textarea, article, .prose,
+  input[type='text'], input[type='search'], input[type='email'], input[type='url'], input[type='password']
+) {
+  cursor: text;
+}
+a, button, summary, label, select, [role='button'], [role='tab'] {
+  cursor: var(--cursor-link);
+}
+
 .skip {
   position: absolute;
   left: -9999px;

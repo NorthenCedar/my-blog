@@ -23,6 +23,13 @@
   --code-btn-bg: #242424;
   --code-keyword: #6fcf8f; /* 代码里唯一的强调色；对 --code-bg 实测 10.11:1（旧橙 #ff8a66 是 8.35） */
 
+  /* 光标（2026-09-26 站主定：只做两个 —— 默认准星 + 链接指针）。
+     为什么是 url + 关键字兜底、而不是只写关键字：图没加载出来时光标不能消失（缺失/被拦时回落系统指针）。
+     为什么位图不是 SVG：Safari 直接忽略 SVG 光标；位图统一 32×32（Safari 的上限）。
+     素材由 scripts/gen-cursors.mjs 从矢量源生成，改形状/配色改那个脚本，不要手改 PNG。 */
+  --cursor-default: url('/cursors/reticle.png') 16 16, default; /* 热点 = 准星中心 */
+  --cursor-link: url('/cursors/link.png') 2 2, pointer;          /* 热点 = 箭头尖端 */
+
   /* 字号（11 档） */
   --fs-display: clamp(2.8rem, 13vw, 8.5rem);
   --fs-title: clamp(1.9rem, 1.1rem + 3.6vw, 3.8rem);
