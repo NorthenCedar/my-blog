@@ -1,6 +1,9 @@
 ---
 import '../styles/fonts.css';
 import '../styles/tokens.css';
+// 光标 token 在构建期生成（URL 要带图片内容指纹 —— 否则改了光标图，浏览器还会用缓存里那张，
+// 站主 2026-09-26 撞上过：换了图但页面"跟上次没变化"）。生成器：scripts/gen-cursors.mjs
+import '../styles/cursors.css';
 import '../styles/base.css';
 import '../styles/prose.css';
 import '../styles/links.css';

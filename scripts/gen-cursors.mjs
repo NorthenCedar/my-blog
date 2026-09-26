@@ -27,6 +27,7 @@
  *      ⇒ 缩放自己做（预乘 → 盒式平均 → 解预乘），补边也自己留白。
  */
 import sharp from 'sharp';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -192,12 +193,14 @@ for (const size of [64, 32]) TARGETS.push({ file: size === 64 ? 'text.png' : `te
 await mkdir(OUT_DIR, { recursive: true });
 let fails = 0;
 const hotspots = {};
+const hashes = {};
 for (const t of TARGETS) {
   const { png, hotspot } = await t.make();
   const out = join(OUT_DIR, t.file);
   const current = existsSync(out) ? await readFile(out) : null;
   const same = current !== null && Buffer.compare(current, png) === 0;
   const info = pngInfo(png);
+  hashes[t.file] = createHash('sha1').update(png).digest('hex').slice(0, 8);
   hotspots[t.file] = hotspot.join(' ');
   if (CHECK) {
     if (!same) fails++;
@@ -205,14 +208,44 @@ for (const t of TARGETS) {
     continue;
   }
   if (same) {
-    console.log(`判据 光标素材 对象 public/cursors/${t.file} 实测: 无变化 · ${info.width}×${info.height} · ${info.bytes} 字节 · 热点 ${hotspots[t.file]}`);
+    console.log(`判据 光标素材 对象 public/cursors/${t.file} 实测: 无变化 · ${info.width}×${info.height} · ${info.bytes} 字节 · 热点 ${hotspots[t.file]} · 指纹 ${hashes[t.file]}`);
   } else {
     await writeFile(out, png);
-    console.log(`判据 光标素材 对象 public/cursors/${t.file} 实测: ${current === null ? '新建' : '更新'} · ${info.width}×${info.height} · ${info.bytes} 字节 · 热点 ${hotspots[t.file]}`);
+    console.log(`判据 光标素材 对象 public/cursors/${t.file} 实测: ${current === null ? '新建' : '更新'} · ${info.width}×${info.height} · ${info.bytes} 字节 · 热点 ${hotspots[t.file]} · 指纹 ${hashes[t.file]}`);
   }
 }
+
+/**
+ * 生成 src/styles/cursors.css（token 定义）。**为什么 token 也要生成**：
+ * 光标图的文件名固定、内容会变（这次就从手画稿换成了抠图稿），浏览器按 URL 缓存图片 ⇒ 站主刷新后
+ * 看到的还是旧光标（"跟上次没变化"就是这么来的）。解法是把**内容指纹写进 URL 的查询串**：
+ * 图一改指纹就变、URL 就变，浏览器必然重取。热点也一起生成 ⇒ 不会与图片漂移。
+ */
+const tokenCss = `/* 由 scripts/gen-cursors.mjs 生成 —— 不要手改（改形状/配色/热点请改那个脚本）。
+   URL 带内容指纹 ?v=<sha1 前 8 位>：图片内容变了 URL 就变，否则浏览器会一直用缓存里的旧光标。
+   每个 token 是「主图 64 + 兜底 32（Safari 忽略 >32 的光标）+ 关键字」三级。 */
+:root {
+  --cursor-default: url('/cursors/normal.png?v=${hashes['normal.png']}') ${hotspots['normal.png']}, url('/cursors/normal-32.png?v=${hashes['normal-32.png']}') ${hotspots['normal-32.png']}, default;
+  --cursor-text: url('/cursors/text.png?v=${hashes['text.png']}') ${hotspots['text.png']}, url('/cursors/text-32.png?v=${hashes['text-32.png']}') ${hotspots['text-32.png']}, text;
+  --cursor-link: url('/cursors/link.png?v=${hashes['link.png']}') ${hotspots['link.png']}, url('/cursors/link-32.png?v=${hashes['link-32.png']}') ${hotspots['link-32.png']}, pointer;
+}
+`;
+const tokenFile = join(ROOT, 'src/styles/cursors.css');
+const currentToken = existsSync(tokenFile) ? await readFile(tokenFile, 'utf8') : null;
+if (CHECK) {
+  const same = currentToken === tokenCss;
+  if (!same) fails++;
+  console.log(`判据 光标 token 一致性 对象 src/styles/cursors.css 实测: ${currentToken === null ? '文件不存在' : same ? '与生成结果逐字节相同' : '与生成结果不一致（过期）'}`);
+} else if (currentToken === tokenCss) {
+  console.log('判据 光标 token 对象 src/styles/cursors.css 实测: 无变化');
+} else {
+  await writeFile(tokenFile, tokenCss, 'utf8');
+  console.log(`判据 光标 token 对象 src/styles/cursors.css 实测: ${currentToken === null ? '新建' : '更新'}`);
+}
+
 if (CHECK) {
   console.log(`判据 光标素材一致性 汇总: ${TARGETS.length - fails}/${TARGETS.length} 与真源一致`);
   process.exit(fails === 0 ? 0 : 1);
 }
-console.log('热点（要写进 src/styles/tokens.css 的 --cursor-* 里）: ' + JSON.stringify(hotspots));
+console.log('热点（已写进 src/styles/cursors.css）: ' + JSON.stringify(hotspots));
+console.log('内容指纹: ' + JSON.stringify(hashes));

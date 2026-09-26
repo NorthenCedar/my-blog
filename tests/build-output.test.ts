@@ -179,15 +179,20 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     const all = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
 
     const flat = all.replace(/\s+/g, ' ');
-    // ① 三级链：主图 64 + 兜底 32（Safari 上限）+ 关键字兜底。压缩后引号会被去掉，按实际形态断言。
+    // ① 三级链：主图 64 + 兜底 32（Safari 上限）+ 关键字兜底；**URL 必须带内容指纹**。
+    //    为什么指纹是硬要求：文件名固定、内容会变（本站光标从手画稿换成了抠图稿），
+    //    浏览器按 URL 缓存图片 ⇒ 不带指纹的话站主刷新后看到的还是旧光标（真发生过："跟上次没变化"）。
     for (const [name, big, small, hotBig, hotSmall, kw] of [
       ['--cursor-default', '/cursors/normal.png', '/cursors/normal-32.png', '3 0', '2 0', 'default'],
       ['--cursor-text', '/cursors/text.png', '/cursors/text-32.png', '32 32', '16 16', 'text'],
       ['--cursor-link', '/cursors/link.png', '/cursors/link-32.png', '2 0', '1 0', 'pointer'],
     ] as const) {
-      expect(flat, `${name} 主图/热点不对`).toContain(`${name}:url(${big}) ${hotBig}`);
-      expect(flat, `${name} 缺 32px 兜底（Safari 忽略 >32 的光标）`).toContain(`url(${small}) ${hotSmall}`);
-      expect(flat, `${name} 缺关键字兜底（图取不到时光标不能消失）`).toContain(`, ${kw};`);
+      expect(flat, `${name} 的 URL 没带内容指纹`).toMatch(new RegExp(`${name}:url\\(${big}\\?v=[0-9a-f]{8}\\)`));
+      expect(flat, `${name} 主图热点不对`).toContain(`url(${big}?v=`);
+      expect(flat, `${name} 主图热点值应为 ${hotBig}`).toMatch(new RegExp(`url\\(${big}\\?v=[0-9a-f]{8}\\) ${hotBig}`));
+      expect(flat, `${name} 缺 32px 兜底（Safari 忽略 >32 的光标）`).toMatch(new RegExp(`url\\(${small}\\?v=[0-9a-f]{8}\\) ${hotSmall}`));
+      // 压缩后最后一条声明可能没有尾分号（直接跟 `}`），所以 [;}] 都收
+      expect(flat, `${name} 缺关键字兜底（图取不到时光标不能消失）`).toMatch(new RegExp(`, ${kw}[;}]`));
     }
     // 三条规则分工：默认挂 html、链接与按钮用链接光标、文字上用主题 I 型
     expect(flat, 'html 上没有默认光标').toContain('html{cursor:var(--cursor-default)}');

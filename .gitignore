@@ -19,3 +19,5 @@ worker-configuration.d.ts
 src/styles/boot.css
 # 光标位图（32×32 PNG）。矢量源在 scripts/gen-cursors.mjs 里 —— 那是可 diff 的真源，PNG 是产物。
 public/cursors/
+# 光标 token（构建期生成）：URL 里带图片内容指纹 ?v=<sha1>，图一改 URL 就变，浏览器才会重取光标图。
+src/styles/cursors.css
