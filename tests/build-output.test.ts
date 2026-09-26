@@ -309,13 +309,17 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log(`判据 扫描读数 对象 .band-readout 实测: background:${bg} · 有 backdrop-filter · 单行截断`);
   });
 
-  it('光标：只剩一枚无 JS 兜底，删掉的两枚不留残迹', () => {
-    // 2026-09-26 站主最终决定：**全站只有一个白色中心点**（跟手光标，见 components/CursorRing.astro）。
-    // 链接选择与文本选择两枚连同 token / 位图 / 源图一起删了 ⇒ 这里守四件事：
-    //  ① 产物 CSS 里必须有一条「url + 热点 + 关键字」的 --cursor-default（无 JS / 脚本被拦时接管）；
-    //  ② URL 必须带内容指纹（改图后浏览器才会重取，不然会出现"跟上次没变化"）；
-    //  ③ 位图 64 主 + 32 兜底（Safari 忽略 >32）且带 alpha；删掉的两枚不该再在产物里；
-    //  ④ 全站源码不许出现裸 `pointer` 之类声明，也不许残留 --cursor-text / --cursor-link 死 token。
+  it('光标：自定义位图光标已删（无 JS 时用系统光标），跟手白点仍在', () => {
+    // 2026-09-27 站主："把之前的正常选择的光标删了，要不然有时会蹦出来"。
+    // 那枚是 PRTS「正常选择」的结晶箭头（scripts/gen-cursors.mjs 生成的 normal.png）。
+    // 它只在 JS 加上 `html.cursor-none` **之后**才被白点顶掉 ⇒ 加类之前的一瞬、
+    // 以及 `<select>` 这类 UA 自己声明光标的元素上会露出来。
+    // 现在：有 JS = 跟手白点；没 JS = **系统光标**（不再自带位图）。
+    // 这条守四件事：
+    //  ① 产物 CSS 里**一条 /cursors/ 引用都不许剩**（含 token 与 url）；
+    //  ② 位图目录不留（别让"删了但产物里还有"这种事蒙混过去）；
+    //  ③ 跟手光标那条 `html.cursor-none` 全局规则必须还在（它是白点能接管的前提，且必须不带作用域）；
+    //  ④ 源码里不许再有 `cursor: var(--cursor-…)` 这种指向已删 token 的死引用。
     const cssFiles: string[] = [];
     const walk = (d: string) => {
       for (const e of readdirSync(d)) {
@@ -326,39 +330,23 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     };
     walk(DIST);
     const all = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
-
     const flat = all.replace(/\s+/g, ' ');
-    expect(flat, '--cursor-default 的 URL 没带内容指纹').toMatch(/--cursor-default:url\(\/cursors\/normal\.png\?v=[0-9a-f]{8}\)/);
-    expect(flat, '主图热点不对').toMatch(/url\(\/cursors\/normal\.png\?v=[0-9a-f]{8}\) 3 0/);
-    expect(flat, '缺 32px 兜底（Safari 忽略 >32 的光标）').toMatch(/url\(\/cursors\/normal-32\.png\?v=[0-9a-f]{8}\) 2 0/);
-    expect(flat, '缺关键字兜底（图取不到时光标不能消失）').toMatch(/, default[;}]/);
-    expect(flat, 'html 上没用兜底光标').toContain('html{cursor:var(--cursor-default)}');
-    expect(flat, '删掉的两条 token 还有残迹（--cursor-text / --cursor-link）').not.toMatch(/--cursor-(text|link)/);
 
-    // ①b 兜住整类漂移：产物 CSS 里**每一条** /cursors/ 引用都必须带指纹。
-    //     站主 2026-09-26 撞过一次：换了光标图但文件名没变 ⇒ 浏览器用缓存里的旧图，页面"跟上次没变化"。
-    {
-      const refs = [...all.matchAll(/url\((\/cursors\/[^)]*)\)/g)].map((m) => m[1]);
-      const unfingerprinted = refs.filter((u) => !/\?v=[0-9a-f]{8}$/.test(u));
-      expect(refs.length, '产物 CSS 里一条 /cursors/ 引用都没有').toBeGreaterThan(0);
-      expect(unfingerprinted, `这些光标 URL 没带内容指纹（改图后浏览器会用缓存里的旧光标）：${unfingerprinted.join(', ')}`).toEqual([]);
-    }
+    const refs = [...all.matchAll(/url\((\/cursors\/[^)]*)\)/g)].map((m) => m[1]);
+    expect(refs, `产物 CSS 里还有光标位图引用（那枚光标应当已删除）：${refs.join(', ')}`).toEqual([]);
+    expect(flat, '产物 CSS 里还残留 --cursor-default（删得不干净）').not.toMatch(/--cursor-(default|text|link)/);
+    expect(existsSync(join(DIST, 'cursors')), 'dist/cursors/ 还在（位图没删干净）').toBe(false);
 
-    // ② 位图：只剩 normal 两档；已删除的两枚不该在产物里
-    for (const name of ['normal.png', 'normal-32.png']) {
-      const expected = name.endsWith('-32.png') ? 32 : 64;
-      const buf = readFileSync(join(DIST, 'cursors', name));
-      const w = buf.readUInt32BE(16);
-      const h = buf.readUInt32BE(20);
-      const colorType = buf.readUInt8(25);
-      expect([w, h], `dist/cursors/${name} 应为 ${expected}×${expected}`).toEqual([expected, expected]);
-      expect(colorType, `dist/cursors/${name} 没有 alpha 通道`).toBe(6);
-    }
-    for (const gone of ['text.png', 'text-32.png', 'link.png', 'link-32.png']) {
-      expect(existsSync(join(DIST, 'cursors', gone)), `dist/cursors/${gone} 应已删除`).toBe(false);
-    }
+    // ③ 跟手白点接管原生的前提：这条全局规则必须在（且不能带作用域属性）
+    expect(flat, '缺 html.cursor-none 的全局接管规则（白点会与原生光标并存）').toContain('html.cursor-none,html.cursor-none *{cursor:none}');
+    // ⚠️ 注意别写成 `!f.endsWith('index.html')` —— 那会把**所有**页面滤掉，
+    //    断言在空数组上永远通过（第一版就是这么空转的）。只排 404，并要求页面数不为零。
+    const pages = htmlFiles().filter((f) => !f.endsWith('404.html'));
+    expect(pages.length, '页面清单为空，断言会空转').toBeGreaterThan(10);
+    const noDot = pages.filter((f) => !readFileSync(f, 'utf8').includes('cr-dot'));
+    expect(noDot, `这些页面没有跟手光标的节点：${noDot.slice(0, 5).join(', ')}`).toEqual([]);
 
-    // ③ 源码扫描：不允裸关键字
+    // ④ 源码扫描：只允许 none（跟手光标用）；任何 var(--cursor-…) 都是死引用
     const srcFiles: string[] = [];
     const walkSrc = (d: string) => {
       for (const e of readdirSync(d)) {
@@ -368,12 +356,9 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       }
     };
     walkSrc('src');
-    // 白名单：主题 token；text/default/auto/inherit/not-allowed 这些不会顶掉主题光标；
-    // none 是跟手光标专用的（挂在 html.cursor-none 上、由 JS 加类 —— 上面那条断言守着它的可控性）。
-    const ALLOW = /^(var\(--cursor-(default|link|text)\)|text|default|auto|inherit|not-allowed|none)$/;
-    /** 扫描前必须剥掉注释：本轮就栽过 —— 我在注释里为了解释 UA 那条规则写了 `a{cursor:pointer}`，
-     *  结果被当成真声明报了两处"越权"（假阳性）。文本扫描的通用纪律：先剥注释再扫。 */
+    /** 扫描前必须剥掉注释：之前栽过 —— 在注释里为了解释 UA 那条规则写了 `a{cursor:pointer}` 被当成真声明。 */
     const stripComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, ' ');
+    const ALLOW = /^(none|auto|text|default|inherit|not-allowed|pointer)$/;
     const offenders: string[] = [];
     for (const f of [...srcFiles, 'src/lib/boot-css.ts']) {
       const text = stripComments(f.endsWith('boot-css.ts') ? bootCss() : readFileSync(f, 'utf8'));
@@ -382,10 +367,8 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
         if (!ALLOW.test(value)) offenders.push(`${f}: cursor:${value}`);
       }
     }
-    console.log(
-      `判据 光标 对象 1 条兜底 token + 2 张位图（64 主 / 32 兜底）+ ${srcFiles.length + 1} 个源文件扫描 实测: 越权声明 ${offenders.length} 处`,
-    );
-    expect(offenders, `这些声明会以更高特异性顶掉主题光标：${offenders.join(' | ')}`).toEqual([]);
+    expect(offenders, `这些声明指向已删除的光标 token：${offenders.join(' | ')}`).toEqual([]);
+    console.log(`判据 光标 对象 位图与 token 已删 + 跟手白点仍在 实测: /cursors/ 引用 ${refs.length} 条 · ${pages.length} 页有白点节点 · 死引用 ${offenders.length} 处`);
   });
 
   it('导航：每一项都能点进去、两套外壳都有、移动端抽屉零 JS', () => {

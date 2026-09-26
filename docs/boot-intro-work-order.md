@@ -1416,6 +1416,62 @@ body 带上了内容、新留言立刻出现在列表里、计数变「1 条」�
 - 全量 **118 passed | 2 skipped**（新增 `tests/reactions-core.test.ts` 16 条 + 产物挂点断言 1 条）。
 - 人眼：`talks-actions.png`（赞按钮已高亮 + 页脚三个数字）、`talks-comments.png`（评论列表 + 表单）。
 
+---
+
+## 23. 手机端头像对轴 + 删掉那枚位图光标（2026-09-27 站主两条）
+
+### 23.1 手机端关于页头像"歪了"
+
+**根因**：`.profile` 用的是 `text-align: center` —— 那个属性只能居中**行内**内容，
+而 Astro `<Image>` 产出的 `<img>` 是**块级**元素（都带 `data-astro-image="constrained"` 那套样式）
+⇒ 头像被左对齐、`北杉` 那行居中，看着就是歪的。
+**修法**：`.profile` 改成 flex 列 + `align-items: center`（不管图片是什么 display 都对得上）。
+
+**验证**（不靠肉眼，靠两侧中心 X 相减）：手机 390 下实测 **头像中心 195 / 名字中心 195（差 0px）**、
+头像在名字上方、宽 96px ✓；见 `_tmp-cursor-avatar-check.mjs` 与 `about-mobile-avatar.png`。
+
+### 23.2 删掉「正常选择」那枚位图光标
+
+站主："把之前的正常选择的光标删了，要不然有时会蹦出来"。**它确实会蹦**：
+那枚 PRTS 结晶箭头（`gen-cursors.mjs` 生成的 `normal.png`）只在 JS 把 `html.cursor-none` 加上**之后**
+才被跟手白点顶掉 ⇒ ① 加类之前的一瞬；② `<select>` 这类 UA 自己声明光标的元素上 —— 都会露出来。
+
+**删掉的东西**（一处不留）：
+
+| 删了什么 | 位置 |
+|---|---|
+| 生成器 | `scripts/gen-cursors.mjs`（含 `--check`） |
+| 位图 | `public/cursors/normal.png`、`normal-32.png` |
+| 生成的 token CSS 与它的 import | `src/styles/cursors.css`（gitignored）、`src/layouts/Base.astro` |
+| 全局兜底声明 | `src/styles/base.css` 的 `html{cursor:var(--cursor-default)}` |
+| 四处按钮上的引用 | `NavDrawer` / `archive` / `talks`×2 |
+| npm 脚本里的挂钩 | `dev` / `build` 里的 `node scripts/gen-cursors.mjs` |
+
+**保留**：源图 `assets/cursors-source/normal.png`（出处，31 KB）与 git 历史 —— 想恢复随时能捞回来。
+**现在的分工**：有 JS = 跟手白点（`html.cursor-none` + CursorRing）；没 JS / 脚本被拦 = **系统光标**。
+
+**测试跟着重写**（原来那几条是"必须存在那枚光标"，现在反过来了）：
+产物 CSS 里 **0 条 `/cursors/` 引用**、无 `--cursor-*` token、`dist/cursors/` 不存在、
+`html.cursor-none` 全局规则仍在、18 个页面都有白点节点、源码里没有指向已删 token 的死引用。
+
+**顺手逮到自己一个空转断言**：新写的那条里我用 `!f.endsWith('index.html')` 想排掉首页，
+结果把**所有**页面都排掉了 ⇒ 断言在空数组上永远通过（报告里写着"0 页有白点节点"）。
+已改成只排 404，并加 `expect(pages.length).toBeGreaterThan(10)` 防空转 —— 现在实测 **18 页有白点节点**。
+
+### 23.3 验证
+
+- 浏览器级（`_tmp-cursor-avatar-check.mjs`，**8/8 PASS**）：`html.cursor-none` 已加；`html/body/按钮/链接`
+  四处计算值全是 `none`、**没有任何 `url(...)`**；白点节点在且可见、移动指针后位置跟着变；
+  手机端头像/名字中心差 0px、头像在上方、宽 96px。
+- 全量 **118 passed | 2 skipped**；`verify-home-states` / `verify-boot-intro` / 导航 34 条 / 归档 16 条 均 ALL PASS。
+- 人眼：`about-mobile-avatar.png`（头像正上方居中对齐）。
+
+### 23.4 一个流程教训（记下来免得再犯）
+
+我用 PowerShell 的 `Set-Content -Encoding UTF8` 改 `package.json`，**写进了 BOM** ⇒
+Astro/Vite 读 JSON 时报 `Unexpected token '﻿'`，**构建与 vitest 全挂**。
+改文本文件（尤其 JSON）一律走编辑器工具，不用 `Set-Content`；事后用字节头核验（现在头三字节是 `123,10,32` = `{` LF 空格 ✓）。
+
 ### 18.4 验证
 
 - 静态：新增一条断言 —— `.band-readout` 的底色**必须半透明**（rgba 的 alpha<1 或 8 位 hex 且非 ff）、

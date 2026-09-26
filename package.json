@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/gen-cursors.mjs && node scripts/gen-home-art.mjs && node scripts/gen-boot-css.mjs && astro dev",
-    "build": "node scripts/gen-cursors.mjs && node scripts/gen-home-art.mjs && node scripts/gen-boot-css.mjs && node scripts/gen-gallery-webp.mjs && astro build && node scripts/prune-draft-assets.mjs",
+    "dev": "node scripts/gen-home-art.mjs && node scripts/gen-boot-css.mjs && astro dev",
+    "build": "node scripts/gen-home-art.mjs && node scripts/gen-boot-css.mjs && node scripts/gen-gallery-webp.mjs && astro build && node scripts/prune-draft-assets.mjs",
     "preview": "astro preview",
     "test": "vitest run",
     "verify": "npm run build && vitest run",

@@ -78,9 +78,15 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     max-width: var(--measure);
   }
   /* ---- 头像 ---- */
+  /* 手机端：头像与「北杉」必须**同一条中轴**（站主 2026-09-27："头像移到北杉正上方，歪了"）。
+     用 flex 列 + align-items:center 而不是 text-align:center ——
+     后者对 Astro `<Image>` 产出的图片无效（它是块级元素，text-align 管不到它，
+     实测头像被左对齐、名字居中，于是看着是歪的）。 */
   .profile {
     margin: var(--sp-6) 0 0;
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
   .avatar {
     width: 96px;

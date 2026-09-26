@@ -1056,3 +1056,17 @@ npm run dev:cf     # 起 wrangler pages dev，带本地 D1（不碰线上数据�
 
 页面在 `http://127.0.0.1:8788`；接口 `/api/comments`、`/api/likes`、`/api/stats` 都在这个进程里。
 
+---
+
+## 27. 光标（改版式时别又加回来）
+
+站上的光标是**一个跟手白点 + 半透明圆盘**（`src/components/CursorRing.astro`），逻辑是：
+JS 给 `html` 加 `.cursor-none` 把原生光标全站藏掉，白点当指针。
+
+- **不要**再往 CSS 里写 `cursor: url(...)` 或 `cursor: pointer` 之类 ——
+  站上曾有一枚 PRTS「正常选择」的位图光标，2026-09-27 按站主要求**删掉了**
+  （原话："要不然有时会蹦出来"：它只在 JS 加完类之后才被顶掉，所以加类前的一瞬、
+  以及下拉框这类浏览器自己声明光标的元素上会露出来）。
+- 现在没 JS 时用的是**系统光标**（这是刻意的：宁可统一用系统光标，也不要"一个光标都没有"）。
+- 想恢复那枚位图：生成器与源图都在 git 历史里，源图也还在 `assets/cursors-source/normal.png`。
+
