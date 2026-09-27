@@ -64,7 +64,7 @@ const firstBig = at(firstFrame, LIGHT_W);
             {/* data-no-transition（2026-09-27）：这张缩略图的点击是**灯箱自己接管**的（preventDefault 开大图），
                 不会真的跳转 ⇒ 页面过渡必须放行，否则蒙版会盖在灯箱上、照片就看不到了。
                 （transition.ts 里还有一道通用防线：微任务里检查 defaultPrevented。这里是显式豁免，双保险。） */}
-            <a class="frame" href={big.url} data-no-transition>
+            <a class="frame hud" href={big.url} data-no-transition>
               <img src={g.url} width={g.w} height={g.h} alt={f.alt} loading="lazy" decoding="async" />
               <span class="zoom" aria-hidden="true">放大</span>
             </a>

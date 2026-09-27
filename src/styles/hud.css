@@ -1,0 +1,234 @@
+/**
+ * HUD 视觉系统（2026-09-27 站主定案）—— 科研坐标纸 / 仪器待机 / 医疗橙点缀。
+ *
+ * 站上要的三件事，集中在这一个文件里：
+ *   一、全局背景：极淡的**灰绿工程网格**（3%、40px）+ 交点圆点的**极缓慢呼吸**（仪器待机感）。
+ *   二、容器（文章卡片 / 相册图 / 项目列表 / SECTOR 标题）：默认四角有**淡绿 HUD 括号**（20%），
+ *       悬停时边框起一层极淡绿光（10%）+ 一条 1px 医疗橙扫描线从左扫到右（0.5s 后消失）；
+ *       文章卡片额外：四角括号默认隐藏、悬停时以**橙色**出现。
+ *   三、导航与交互按钮去掉默认下划线，悬停时下方出现 1px 淡橙下划线；
+ *       正文干净（不加括号/扫描），引用块左侧换成 1px 淡绿竖线。
+ *
+ * 性能与降级：所有悬停动效都带 transition / 只动 transform 与 opacity；
+ * 触屏（`hover: none`）下**取消扫描线与微光**，只留静态的绿色四角括号。
+ */
+
+/* ============ 一、全局工程网格 + 交点呼吸 ============ */
+/* 用 body 的两个伪元素做（body::before/after 站上没被占用）：
+   固定定位 + z-index:-1 ⇒ 在纸底之上、一切内容之下。 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* 40px 网格（站主要求）：先竖线后横线，1px 实线 + 透明间隔 */
+  background-image:
+    linear-gradient(to right, var(--hud-grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--hud-grid-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* 只让**交点圆点**这一层呼吸（网格线不动）—— 单独一层 ⇒ 动画只作用在它自己的 opacity 上 */
+  background-image: radial-gradient(circle, var(--hud-grid-dot) 1px, transparent 1.6px);
+  background-size: 40px 40px;
+  animation: hud-breathe 7s ease-in-out infinite alternate;
+}
+@keyframes hud-breathe {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ============ 二 / 三、HUD 容器 ============ */
+/* 括号画在一个伪元素里：8 条 background 渐变 = 四角各两条短线（不用额外 DOM、也不占 :after） */
+.hud {
+  position: relative;
+  /* 括号颜色走变量 ⇒ 悬停换色只需改变量（文章卡片就是这么切成橙色的） */
+  --hud-bracket-color: var(--hud-bracket);
+  --hud-bracket-opacity: 1;
+  transition: box-shadow 0.3s ease;
+}
+.hud::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--hud-bracket-opacity);
+  transition: opacity 0.3s ease;
+  background-image:
+    linear-gradient(var(--hud-bracket-color), var(--hud-bracket-color)),
+    linear-gradient(var(--hud-bracket-color), var(--hud-bracket-color)),
+    linear-gradient(var(--hud-bracket-color), var(--hud-bracket-color)),
+    linear-gradient(var(--hud-bracket-color), var(--hud-bracket-color)),
+    linear-gradient(var(--hud-bracket-color), var(--hud-bracket-color)),
+    linear-gradient(var(--hud-bracket-color), var(--hud-bracket-color)),
+    linear-gradient(var(--hud-bracket-color), var(--hud-bracket-color)),
+    linear-gradient(var(--hud-bracket-color), var(--hud-bracket-color));
+  background-repeat: no-repeat;
+  /* 左上、右上、左下、右下：每角一横一竖 */
+  background-size:
+    10px 1px, 1px 10px, 10px 1px, 1px 10px, 10px 1px, 1px 10px, 10px 1px, 1px 10px;
+  background-position:
+    left top, left top, right top, right top, left bottom, left bottom, right bottom, right bottom;
+}
+/* 悬停：极淡绿光 + 一条 1px 橙扫描线从左扫到右（0.5s，扫过即消失） */
+.hud:hover {
+  box-shadow:
+    0 0 0 1px var(--hud-glow),
+    0 0 14px 1px var(--hud-glow);
+}
+.hud::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  pointer-events: none;
+  opacity: 0;
+  /* 2 倍宽的横向渐变里只有中间一小段是暖色 ⇒ 整层左右平移时，视觉上就是一道扫描光在走 */
+  background-image: linear-gradient(90deg, transparent 42%, var(--hud-orange) 50%, transparent 58%);
+  background-size: 200% 100%;
+  will-change: transform, opacity;
+}
+.hud:hover::after {
+  animation: hud-scan 0.5s ease-out 1;
+}
+@keyframes hud-scan {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%);
+  }
+  12% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(50%);
+  }
+}
+
+/* 文章卡片：四角括号默认**不显示**，悬停时以**橙色**出现（站主 2026-09-27 第二条） */
+.hud-card {
+  --hud-bracket-opacity: 0;
+}
+.hud-card:hover {
+  --hud-bracket-color: var(--hud-orange);
+  --hud-bracket-opacity: 1;
+}
+
+/* ============ 二.2 时间戳的方括号（形如 [ 2026.09.24 ]）：极其微弱的橙 ============ */
+/* 全局规则：归档列表（PostIndex）与首页文章行都用 .brk 包住方括号。
+   日期数字本身保持 muted —— 只有括号带色，"极其微弱"才成立。 */
+.brk {
+  color: var(--hud-orange-faint);
+}
+
+/* ============ 三.2 导航与交互按钮：去掉默认下划线，悬停给 1px 淡橙下划线 ============ */
+/* 做法：下划线**一直存在但透明**，悬停只改颜色 ⇒ text-decoration-color 可以过渡（0.3s ease），
+   比"从 none 切到 underline"平滑（后者不可动画，会硬跳）。
+   ⚠️ 这三条装饰属性**必须 !important**（2026-09-27 实测踩到）：顶栏 / 品牌行 / 移动抽屉里的
+   `text-decoration: none` 写在各组件**带 Astro 作用域属性**的样式里（特异性 (0,2,1)），
+   而这是一条全局规则（(0,1,1)）—— 不加 !important 会被压过去，实测表现就是
+   "静息仍有下划线颜色、悬停也不变橙"（探针里 `text-decoration-color` 读到的是 currentColor）。
+   站上对这类"全局覆盖组件"的少数几处（boot.css / transition.css 的减少动态效果）同样用 !important。 */
+.prose a,
+.topbar a,
+.brandline a,
+.hud-nav a,
+.navpanel a,
+.navbtn,
+.social a,
+.foot a,
+.links a,
+.rail-tick {
+  text-decoration-line: underline !important;
+  text-decoration-color: transparent !important;
+  text-decoration-thickness: 1px !important;
+  text-underline-offset: 0.24em;
+  transition:
+    text-decoration-color 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease;
+}
+.prose a:hover,
+.topbar a:hover,
+.brandline a:hover,
+.hud-nav a:hover,
+.navpanel a:hover,
+.social a:hover,
+.foot a:hover,
+.links a:hover,
+.rail-tick:hover {
+  text-decoration-color: var(--hud-orange) !important;
+}
+/* 图标型按钮（相册灯箱的翻页、页面里的关闭等）没有文字可画下划线，用同色的下边框代替 */
+.act,
+.f-sort button,
+.cform button,
+.lb button,
+.lb a {
+  transition:
+    border-color 0.3s ease,
+    color 0.3s ease,
+    background-color 0.3s ease;
+}
+
+/* ============ 三.3 阅读区：正文干净；引用块左侧 1px 淡绿竖线 ============ */
+.prose blockquote {
+  border-left: 1px solid var(--hud-rule);
+}
+
+/* ============ 三.4 触屏降级：取消悬停扫描线与微光，只留静态绿括号 ============ */
+@media (hover: none) {
+  .hud:hover {
+    box-shadow: none;
+  }
+  .hud:hover::after {
+    animation: none;
+    opacity: 0;
+  }
+  /* 文章卡片在触屏上就**一直显示**淡绿括号（否则点一下才出现，且会粘住） */
+  .hud-card {
+    --hud-bracket-opacity: 1;
+  }
+  .hud-card:hover {
+    --hud-bracket-color: var(--hud-bracket);
+    --hud-bracket-opacity: 1;
+  }
+  .prose a:hover,
+  .topbar a:hover,
+  .brandline a:hover,
+  .hud-nav a:hover,
+  .navpanel a:hover,
+  .social a:hover,
+  .foot a:hover,
+  .links a:hover,
+  .rail-tick:hover {
+    text-decoration-color: transparent;
+  }
+}
+
+/* 系统开了「减少动态效果」：只保留静态网格与括号，呼吸与扫描都停 */
+@media (prefers-reduced-motion: reduce) {
+  body::after {
+    animation: none;
+    opacity: 0.7;
+  }
+  .hud:hover::after {
+    animation: none;
+    opacity: 0;
+  }
+}

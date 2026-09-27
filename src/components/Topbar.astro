@@ -23,7 +23,8 @@ const { wordmark, current } = Astro.props;
 
 <div class="page-bg" aria-hidden="true">
   <div class="pb-noise"></div>
-  <div class="pb-grid"></div>
+  {/* .pb-grid 已于 2026-09-27 删除：网格改成全局层（src/styles/hud.css 的 body::before），
+      首页与内页共用同一套 40px 灰绿网格，这里不再各画一份。 */}
   <div class="pb-green"></div>
   {/* 切片素材走 CSS 背景而不是 <img>：原型本身就是背景层（post.html L162），
       而且纯装饰图不该进 DOM —— 既有全局契约「所有图片的 alt 都非空」会（正确地）
@@ -84,15 +85,9 @@ const { wordmark, current } = Astro.props;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
     background-size: 160px 160px;
   }
-  /* 「切片档案」母题：等距发丝横线（一层层切片） */
-  body.chrome-page .pb-grid {
-    position: absolute;
-    inset: 0;
-    background-image:
-      linear-gradient(to right, var(--page-grid-line) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--page-grid-line) 1px, transparent 1px);
-    background-size: 48px 48px;
-  }
+  /* 「切片档案」母题里的网格：**2026-09-27 交给全局那一层**（src/styles/hud.css 的 body::before）。
+     站主要求"全部背景加极淡的灰绿工程网格（3%、40px）"⇒ 网格必须首页/内页都有，
+     所以它不再属于内页外壳。这里原来那 48px 的墨色网格已删（留着会与全局网格叠成双重网格）。 */
   /* 底部极淡绿带（内页比首页低一点，18vh → 14vh 见下面的手机分支） */
   body.chrome-page .pb-green {
     position: absolute;
@@ -219,13 +214,10 @@ const { wordmark, current } = Astro.props;
     right: -3px;
   }
 
-  /* ---------- 手机：去噪点、网格收细、切片缩小（原型 L169-181） ---------- */
+  /* ---------- 手机：去噪点、切片缩小（网格已交给全局那一层，这里不再管） ---------- */
   @media (max-width: 767px) {
     body.chrome-page .pb-noise {
       display: none;
-    }
-    body.chrome-page .pb-grid {
-      background-size: 64px 64px;
     }
     body.chrome-page .pb-green {
       height: 14vh;

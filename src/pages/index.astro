@@ -151,7 +151,7 @@ const sectors = [
     {/* 扫描带读数用**作者名**（站主 2026-09-26 定）。这里刻意写死字面量：
         content/site.md 没有 author 字段，而这一行是界面标签、不是正文 —— 优先照站主要求直改，
         不顺手扩内容契约（若将来要可配置，给 site.md 加可选的 author 字段即可）。 */}
-    <div class="field-item" data-label="身份 · 郑云嘉">
+    <div class="field-item hud" data-label="身份 · 郑云嘉">
       <div class="pod pod-s1">
         {/* 中文站名沉为**背景水印**（站主 2026-09-26：做成英文旁的小字太扎眼）：
             半透明、比小字大得多、允许越过身份舱边框但**越界部分被裁掉**（.pod-s1 overflow:hidden）。
@@ -176,14 +176,14 @@ const sectors = [
   </section>
 
   <section class="tier" id="s2">
-    <div class="tier-head"><span class="sec">SECTOR 02</span><h2>最近写的</h2></div>
+    <div class="tier-head hud"><span class="sec">SECTOR 02</span><h2>最近写的</h2></div>
     <ul class="index">
       {posts.map((p) => (
-        <li class="field-item" data-label={`文章 · ${p.title}`}>
+        <li class="field-item hud hud-card" data-label={`文章 · ${p.title}`}>
           {/* .bracket：L 形角标（左下 + 右上对角）。它是聚焦的主要载体 —— 透明度只是辅助。 */}
           <div class="bracket">
             <a href={p.url}>
-              <span class="date"><time datetime={p.date}>{p.date}</time></span>
+              <span class="date"><time datetime={p.date}><span class="brk">[</span> {p.date.replace(/-/g, '.')} <span class="brk">]</span></time></span>
               <span class="title">{p.title}</span>
               <span class="tags">{p.tags.join(' / ')}</span>
             </a>
@@ -194,16 +194,16 @@ const sectors = [
   </section>
 
   <section class="tier" id="s3">
-    <div class="tier-head"><span class="sec">SECTOR 03</span><h2>相册</h2></div>
+    <div class="tier-head hud"><span class="sec">SECTOR 03</span><h2>相册</h2></div>
     {shots.length > 0 ? (
-      <div class="field-item" data-label={`相册 · ${album.title} · ${album.total} 帧`}>
+      <div class="field-item hud" data-label={`相册 · ${album.title} · ${album.total} 帧`}>
         <div class="pod">
           <p class="pod-tag">CULTURE POD · {album.title} · {album.total} 帧</p>
           <div class="frames">
             <div class="f-main">
               {/* S3 的图是 /gallery 的入口（站主 2026-09-26）：原型 home.html 也是这么连的。
                   三张都指向相册页 —— 筛选是客户端行为，没有按相册分的 URL 可深链。 */}
-              <a class="frame" href="/gallery">
+              <a class="frame hud" href="/gallery">
                 <img
                   src={shots[0].files[0].url}
                   srcset={mainSrcset(shots[0].files)}
@@ -219,7 +219,7 @@ const sectors = [
             {shots.length > 1 && (
               <div class="f-thumbs">
                 {shots.slice(1, 3).map((s) => (
-                  <a class="frame" href="/gallery">
+                  <a class="frame hud" href="/gallery">
                     <img src={s.files[1].url} width={s.files[1].w} height={s.files[1].h} alt={s.alt} loading="lazy" decoding="async" />
                   </a>
                 ))}
@@ -234,15 +234,15 @@ const sectors = [
   </section>
 
   <section class="tier" id="s4">
-    <div class="tier-head"><span class="sec">SECTOR 04</span><h2>项目</h2></div>
-    <div class="field-item" data-label="项目 · 空态">
+    <div class="tier-head hud"><span class="sec">SECTOR 04</span><h2>项目</h2></div>
+    <div class="field-item hud" data-label="项目 · 空态">
       <p class="empty">哎呀，目前还没有项目呢 &lt;3 —— 写了几个，但都还躺在本地，等它们能跑起来再挂到这儿。</p>
     </div>
   </section>
 
   <section class="tier" id="s5">
-    <div class="tier-head"><span class="sec">SECTOR 05</span><h2>找到我</h2></div>
-    <div class="field-item" data-label="联系 · 找到我">
+    <div class="tier-head hud"><span class="sec">SECTOR 05</span><h2>找到我</h2></div>
+    <div class="field-item hud" data-label="联系 · 找到我">
       <ul class="links">
         <li><a href={site.github}>GitHub</a></li>
         <li><a href="/rss.xml">RSS</a></li>
