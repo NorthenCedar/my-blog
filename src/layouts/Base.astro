@@ -96,12 +96,19 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
       <div class="shell"><slot /></div>
     </main>
     {chrome !== 'console' && <SiteFooter name={site.name} email={site.email} github={site.github} since={site.since ?? '2026-09-25'} />}
-    {/* 页面过渡的蒙版：两块毛玻璃 + 正中那根轴线。标记由 JS 加（见 <head> 与 src/scripts/transition），
-        没 JS 时 `.pt` 是 display:none —— 完全不存在，导航照旧。 */}
+    {/* 页面过渡的蒙版（2026-09-27 v2：无菌纸 + 墨绿结构线 + 医疗橙点缀）：
+        两块微磨砂玻璃舱门（同时也是第一阶段的米色柔雾）+ 橙色扫描线 + 墨绿基准线（卡尺刻度 / 中央准星 / 两端数据节点）。
+        标记由 JS 加（见 <head> 与 src/scripts/transition），没 JS 时 `.pt` 是 display:none —— 完全不存在，导航照旧。
+        节点的方向用内联 `--pt-dir` 区分左右（不用 :nth-of-type —— 那些元素是不同类型的兄弟，选择器会很绕）。 */}
     <div class="pt" data-transition aria-hidden="true">
       <div class="pt-pane pt-top"></div>
       <div class="pt-pane pt-bottom"></div>
-      <div class="pt-line"></div>
+      <div class="pt-scan"></div>
+      <div class="pt-axis"></div>
+      <div class="pt-ticks"></div>
+      <div class="pt-cross"></div>
+      <div class="pt-node" style="--pt-dir:-1"></div>
+      <div class="pt-node" style="--pt-dir:1"></div>
     </div>
     {/* 跟手光标环 + 点击涟漪：纯装饰，z-index 55（在内容与灯箱之上、开场覆盖层 60 之下） */}
     <CursorRing />

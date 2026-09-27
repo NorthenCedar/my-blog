@@ -569,8 +569,21 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
 
     const script = readFileSync('src/scripts/transition.ts', 'utf8');
     expect(script, '过渡脚本丢了 defaultPrevented 判断（相册灯箱会被误判成要跳转）').toContain('defaultPrevented');
-    expect(script, '过渡脚本丢了收尾（不清 pt-* 类 ⇒ .shell 残留 transform ⇒ 抽屉被盖住）').toMatch(/classList\.remove\('pt-on',\s*'pt-play'\)/);
-    console.log(`判据 过渡层叠 对象 蒙版/灯箱/缩略图 实测: 蒙版 z=${overlayZ} < 灯箱 z=${lightboxZ} · ${frames.length} 张缩略图带 data-no-transition · 收尾逻辑在位`);
+    expect(script, '过渡脚本丢了收尾（不清 pt-* 类 ⇒ 内容块会残留 transform）').toMatch(/classList\.remove\('pt-on',\s*'pt-play'\)/);
+
+    // ---- v2 时间线与配色（2026-09-27 站主给定的规格，写在 CSS 变量里）----
+    const tcss = readFileSync('src/styles/transition.css', 'utf8').replace(/\s+/g, '');
+    expect(tcss, '时间线变量没挂在 html.pt-on 上 —— 放在 .pt 里的话 `.shell > *` 解析不到，内容浮现会静默失效').toMatch(/html\.pt-on\{[^}]*--pt-content-at/);
+    expect(tcss, '聚焦消散时长不是 800ms').toMatch(/--pt-focus-dur:800ms/);
+    expect(tcss, '② 轴线起步不是 600ms / 长 800ms').toMatch(/--pt-axis-at:600ms/);
+    expect(tcss, '③ 舱门不是 1200ms 起、长 1000ms').toMatch(/--pt-hatch-at:1200ms/);
+    expect(tcss, '④ 内容浮现不是 1800ms 起、长 400ms').toMatch(/--pt-content-at:1800ms/);
+    expect(tcss, '配色丢了：医疗橙/无菌米色/墨绿三色必须都在').toMatch(/--pt-orange:#ff8c42/);
+    expect(tcss, '柔雾初始厚度不是 30px（首帧就不是"内容完全不可见"了）').toMatch(/blur\(30px\)/);
+    // 这两条是实测定格图抓出来的真 bug 的回归网：
+    expect(tcss, '消散动画用了 both ⇒ 会在延迟期间把 opacity:1 顶上去，准星/基准线 600ms 前就可见').not.toMatch(/pt-(axis|ticks)-out[^,;]*both/);
+    expect(tcss, '消散动画应当是 forwards（延迟期间不生效、结束后保持终态）').toMatch(/pt-axis-out[^,;]*forwards/);
+    console.log(`判据 过渡 v2 对象 时间线/配色/填充分散 实测: 变量挂在 html.pt-on · 800/600+800/1200+1000/1800+400 · blur(30px) 起 · 消散用 forwards`);
   });
 
   it('关于页头像用布局定位（不许 position:fixed）', () => {

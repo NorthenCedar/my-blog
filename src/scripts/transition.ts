@@ -22,7 +22,9 @@
 
 const KEY = 'pt';
 const root = document.documentElement;
-const HANDOFF_MS = 950; // 略长于最长的动画（800ms 可见 + 900ms 收尾）
+// v2（2026-09-27 站主定案）：时间线总长 2200ms（css 变量在 transition.css 顶上），
+// 收尾要多等一点：2300ms 时 CSS 才把自己藏掉 ⇒ 这里 2400ms 摘类，保证摘的时候动画已经结束。
+const HANDOFF_MS = 2400;
 
 /** 站内、可整页跳转的普通左键点击才值得盖（其余一律放行，别影响正常浏览）。 */
 function precheck(e: MouseEvent, a: HTMLAnchorElement): boolean {

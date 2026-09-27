@@ -1,159 +1,381 @@
 /**
- * 页面过渡（2026-09-27 站主定案）。
+ * 页面过渡 v2（2026-09-27 站主给定完整时间线与配色）。
  *
- * 时间线（总 800ms，落在站主要求的 0.8–1.0 秒内；四段高度交叠）：
- *   0–300ms    ① 极速对焦：毛玻璃 blur(15px) → 0、蒙版由 72% 减淡到 55%（ease-out）
- *   150–350ms  ② 中心轴线：1px #888 横线从正中向两侧抽出（cubic-bezier(.16,1,.3,1)，与①交叠）
- *   400–800ms  ③ 蒙版撕裂：上下两块向上下拉开 —— 前 100ms 极快、后 300ms 减速
- *   400–600ms  ④ 内容浮现：正文与导航同时 opacity + scale(0.98→1)，**无错落**
+ * 主题：**无菌纸**（米色柔雾）+ **墨绿结构线** + **医疗橙点缀**（极度克制：只有扫描线、两端数据节点、舱门边缘流光）。
  *
- * 实现纪律（站主要求 60fps）：位移与缩放只用 transform，透明度只用 opacity。
- * **例外**：模糊必须用 filter/backdrop-filter —— 这条没法用 transform 表达，写在明面上。
+ * 时间线（总 2200ms，四段自然交叠；下面这些 CSS 变量就是唯一的调节旋钮）：
+ *   0–800    ① 临床聚焦：米色柔雾 blur(30px) 缓慢消散（ease-in-out）+ 橙色扫描线 300ms 自上而下掠过
+ *   600–1400 ② 坐标锁定：中央准星出现 → 墨绿横线从中心机械式抽拉（带卡尺刻度），两端橙色数据节点随之外移
+ *   1200–2200 ③ 无菌舱门：上下两块微磨砂玻璃门拉开（前 200ms 极快、后 800ms 减速），边缘橙色流光随距离消散
+ *   1800–2200 ④ 内容落地：正文/导航浮现（scaleY(.98)→1 + opacity），左导航 translateX(-10px)→0，标题与正文错落 50ms
  *
- * 不许首帧闪烁的做法（关键）：
- *   · 蒙版标记（`html.pt-on` / `.pt-play`）由 <head> 里一段 **inline 同步脚本**加，
- *     它跑在首次绘制之前 ⇒ 目标页第一帧就已经是"盖住"的状态，不会先闪内容再盖上；
- *   · 上一页点击时**只盖不播**（`pt-on` 不带 `pt-play`）⇒ 两页的静止态长得一模一样，换页无缝；
- *   · 动画只播在目标页（`pt-play`）。
- * 蒙版 `pointer-events: none`，任何时刻都不挡点击；`prefers-reduced-motion` 下整套不出现。
+ * 纪律：位移/缩放/透明度只用 transform / opacity；**模糊与流光只能用 filter / backdrop-filter**（这条例外写在明面上）。
+ * 首帧不许闪：蒙版标记由 <head> 里的 inline 同步脚本在首次绘制前挂上（见 src/layouts/Base.astro），
+ * 且蒙版的**初始状态**（blur(30px) + 94% 米色）就是静态声明 —— 不依赖任何动画先跑一遍。
+ *
+ * 层叠阶梯（改这里前先看一遍）：
+ *   正文 ≤4（首页 console 的刻度尺/HUD） < 过渡蒙版 **45** < 相册灯箱 50 < 开场覆盖层 60 < 跟手光标 64+
+ *   蒙版必须低于灯箱：相册点照片是页面内 JS 开灯箱、不真跳转（另有 transition.ts 的 defaultPrevented 判断兜底）。
  */
 
 .pt {
   display: none;
 }
+
+/* ⚠️ 时间线变量必须挂在 `html.pt-on` 上，**不能只放 .pt 里**（2026-09-27 实测踩到）：
+   第四阶段要动画的是 `.shell > *`（正文/标题），它们**不在 `.pt` 子树里** ⇒
+   如果这些变量只声明在 `.pt` 上，`var(--pt-content-at)` 在那边解析为空 ⇒
+   整条 `animation` 简写被判定无效而丢弃 ⇒ 内容浮现那一段**静默不生效**（探针里表现为
+   `getAnimations()` 里根本没有 400ms 那条、内容 opacity 一直是 1）。
+   `.pt-*` 自己的动画之所以没受影响，正是因为它们是 `.pt` 的后代。 */
+html.pt-on {
+  /* ---- 时间线（毫秒；改这里整体调节奏，各段仍然交叠）---- */
+  --pt-focus-dur: 800ms; /* ① 聚焦消散 */
+  --pt-scan-dur: 300ms; /* ① 扫描线掠过 */
+  --pt-axis-at: 600ms; /* ② 准星/轴线起步 */
+  --pt-axis-dur: 800ms; /* ② 抽拉时长（到 1400ms） */
+  --pt-hatch-at: 1200ms; /* ③ 舱门开始拉开 */
+  --pt-hatch-dur: 1000ms; /* ③ 拉到 2200ms */
+  --pt-content-at: 1800ms; /* ④ 内容浮现（舱门开到 ~80% 时） */
+  --pt-content-dur: 400ms; /* ④ 到 2200ms 结束 */
+  --pt-hide-at: 2300ms; /* 收尾：把自己藏掉 */
+}
+
 html.pt-on .pt {
   display: block;
   position: fixed;
   inset: 0;
-  /* 层叠阶梯（2026-09-27 修 bug 时定下，改这里前先看一遍）：
-     正文 ≤4（首页 console 的刻度尺/HUD）  <  过渡蒙版 **45**  <  相册灯箱 50  <  开场覆盖层 60  <  跟手光标 64+
-     蒙版必须**低于灯箱**：相册点照片是页面内 JS 开灯箱（preventDefault）、根本不会跳转，
-     万一还是被挂上了蒙版，也绝不能把照片挡掉（第一道防线在 src/scripts/transition.ts 的 defaultPrevented 判断）。 */
   z-index: 45;
   pointer-events: none;
+
+  /* ---- 调色板（只属于过渡，不进全站 token；只被 .pt 子树用到，所以挂在 .pt 上就够）---- */
+  --pt-paper: #f7f5f0; /* 无菌纸米色 */
+  --pt-paper-hi: #fdfbf7; /* 暖白高光 */
+  --pt-green: #2c3e35; /* 墨绿：结构线 */
+  --pt-orange: #ff8c42; /* 医疗橙：只做极小点缀 */
 }
 
+/* ---------- ①②③ 两块无菌玻璃舱门（同时也是第一阶段的柔雾） ---------- */
 .pt-pane {
   position: absolute;
   left: 0;
   right: 0;
   /* 略过半：两块在正中对接，避免中间露出 1 像素缝 */
   height: 50.5%;
-  background: rgb(250 250 247 / 72%);
-  /* ⚠️ 只写**标准属性**，不要手写 -webkit- 前缀：
-     实测（2026-09-27）这个 .css 文件里两条都写时，压缩器按目标浏览器把**标准那条删掉**、
-     只留 -webkit- ⇒ Chrome 里 computed backdrop-filter 变成 none（毛玻璃整个失效，
-     首帧"闪内容"就是这么来的）。交给构建期加前缀，标准属性才保得住。 */
-  backdrop-filter: blur(15px) saturate(1.05);
+  background: linear-gradient(180deg, var(--pt-paper-hi), var(--pt-paper));
+  /* 初始就是极高厚度柔雾 —— 这是静态声明，首帧即为"内容完全不可见" */
+  backdrop-filter: blur(30px) saturate(1.04);
   will-change: transform, backdrop-filter;
 }
 .pt-top {
   top: 0;
   --pt-dir: -1;
+  /* 内缘（= 舱门接缝）的橙色流光：拉开时随距离消散 */
+  background-image: linear-gradient(180deg, var(--pt-paper-hi), var(--pt-paper));
 }
 .pt-bottom {
   bottom: 0;
   --pt-dir: 1;
+  background-image: linear-gradient(0deg, var(--pt-paper-hi), var(--pt-paper));
+}
+.pt-pane::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, var(--pt-orange) 18%, var(--pt-orange) 82%, transparent);
+  box-shadow: 0 0 14px 2px rgb(255 140 66 / 40%);
+  opacity: 0;
+}
+.pt-bottom::after {
+  bottom: auto;
+  top: 0;
 }
 
-.pt-line {
+/* ---------- ① 医疗橙扫描线（300ms 自上而下掠过，一闪而过） ---------- */
+.pt-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--pt-orange) 10%, var(--pt-orange) 90%, transparent);
+  box-shadow: 0 0 12px 2px rgb(255 140 66 / 45%);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+/* ---------- ② 墨绿基准线 + 卡尺刻度 + 中央准星 + 两端数据节点 ---------- */
+.pt-axis {
   position: absolute;
   top: 50%;
   left: 0;
   right: 0;
   height: 1px;
-  background: #888888;
+  background: var(--pt-green);
   transform: scaleX(0);
   transform-origin: 50% 50%;
   opacity: 0;
   will-change: transform, opacity;
 }
+.pt-ticks {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 9px;
+  margin-top: -4px;
+  /* 主刻度（每 96px，9px 高）+ 细刻度（每 16px，4px 高）—— 游标卡尺的观感 */
+  background-image:
+    repeating-linear-gradient(90deg, var(--pt-green) 0 1px, transparent 1px 96px),
+    repeating-linear-gradient(90deg, var(--pt-green) 0 1px, transparent 1px 16px);
+  background-size: 100% 9px, 100% 4px;
+  background-position: center, center;
+  background-repeat: repeat-x, repeat-x;
+  opacity: 0.7;
+  /* 刻度用"揭开"而不是缩放（缩放会把刻度间距拉花） */
+  clip-path: inset(0 50% 0 50%);
+}
+.pt-cross {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  background:
+    linear-gradient(var(--pt-green) 0 0) center / 1px 100% no-repeat,
+    linear-gradient(var(--pt-green) 0 0) center / 100% 1px no-repeat;
+  opacity: 0;
+}
+.pt-node {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  background: var(--pt-orange);
+  box-shadow: 0 0 6px 1px rgb(255 140 66 / 55%);
+  opacity: 0;
+}
 
-/* ---- 只有在目标页（pt-play）才播动画；上一页只盖不动 ---- */
+/* ================= 动画（只在目标页 pt-play 上播；上一页只盖不播）================= */
 html.pt-play .pt-pane {
   animation:
-    pt-focus 300ms ease-out both,
-    pt-split 400ms cubic-bezier(0.1, 0.9, 0.2, 1) 400ms both;
+    pt-focus var(--pt-focus-dur) ease-in-out both,
+    pt-hatch var(--pt-hatch-dur) var(--pt-hatch-at) both,
+    pt-hide 1ms linear var(--pt-hide-at) both;
 }
-html.pt-play .pt-line {
+html.pt-play .pt-scan {
+  animation: pt-scan var(--pt-scan-dur) linear both;
+}
+html.pt-play .pt-pane::after {
+  animation: pt-edge var(--pt-hatch-dur) var(--pt-hatch-at) both;
+}
+html.pt-play .pt-axis {
   animation:
-    pt-line 200ms cubic-bezier(0.16, 1, 0.3, 1) 150ms both,
-    pt-line-out 300ms ease-out 400ms both;
+    pt-axis var(--pt-axis-dur) cubic-bezier(0.16, 1, 0.3, 1) var(--pt-axis-at) both,
+    pt-axis-out 500ms ease-out var(--pt-hatch-at) forwards;
 }
-/* 800ms 之后整块收工：把蒙版彻底藏掉（离散属性，延时生效即可） */
-html.pt-play .pt {
-  animation: pt-hide 1ms linear 900ms both;
+html.pt-play .pt-ticks {
+  animation:
+    pt-unroll var(--pt-axis-dur) cubic-bezier(0.16, 1, 0.3, 1) var(--pt-axis-at) both,
+    pt-ticks-out 500ms ease-out var(--pt-hatch-at) forwards;
 }
-/* ④ 内容浮现（与③完全并行、无错落）：正文带缩放，导航只做淡入 ——
-   导航里有 position:fixed 的元素，给它们加 transform 会让 fixed 变成"相对祖先定位"（会跑位）。 */
-html.pt-play .shell {
-  animation: pt-content 200ms ease-out 400ms both;
+html.pt-play .pt-cross {
+  animation:
+    pt-cross 140ms ease-out var(--pt-axis-at) both,
+    pt-axis-out 500ms ease-out var(--pt-hatch-at) forwards;
 }
-html.pt-play .topbar,
-html.pt-play .brandline,
-html.pt-play .hud,
-html.pt-play .rail {
-  animation: pt-fade 200ms ease-out 400ms both;
+html.pt-play .pt-node {
+  animation:
+    pt-node var(--pt-axis-dur) cubic-bezier(0.16, 1, 0.3, 1) var(--pt-axis-at) both,
+    pt-axis-out 500ms ease-out var(--pt-hatch-at) forwards;
 }
-/* 首页是 console 外壳：它内部有 fixed 的刻度尺/HUD/扫描带 ⇒ 只淡入，不缩放（同上理由） */
-html.pt-play body.chrome-console .shell {
+/* 说明：上面每条都把"消散"那条放在 animation 列表**最后** —— 同一属性被多个动画作用时，
+   列表靠后的那个胜出（CSS Animations 规则）。所以 1200ms（舱门开始拉）之后，基准线/刻度/准星/节点
+   会一起淡出，1700ms 前完全消失：**它是舱门的接缝，门开了它就该跟着散掉**，
+   否则会有一根绿线孤零零横在正文上（结尾态推演时发现的真问题）。
+   ⚠️ 消散那条必须用 `forwards` 而**不是** `both`（2026-09-27 定格图抓到的真 bug）：
+   `both` 会让它在**延迟期间**就把自己的 0% 值（opacity:1）反向填充上去，而它在列表里靠后 ⇒
+   压过入场动画的 0% ⇒ 准星/节点/基准线在 600ms 之前就可见了（规格里它们 600ms 才该出现）。
+   换成 `forwards`：延迟期间不生效、结束后保持终值（opacity:0）—— 两头都对。 */
+/* ④ 内容浮现：`.shell` 的直接子块（首页 console 只淡入，不做纵向缩放 —— 里面有 fixed 元素） */
+html.pt-play .shell > * {
+  animation: pt-content var(--pt-content-dur) var(--pt-content-at) both;
+}
+/* 标题与正文之间 50ms 错落，形成呼吸感（站主指定可以有） */
+html.pt-play .shell > :nth-child(n + 2) {
+  animation-delay: calc(var(--pt-content-at) + 50ms);
+}
+html.pt-play body.chrome-console .shell > * {
   animation-name: pt-fade;
 }
+/* 左侧导航（首页 .rail）：像 HUD 数据在左对齐锁定 —— 只动刻度子元素，不动 fixed 容器本身 */
+html.pt-play .rail-tick {
+  animation: pt-hud var(--pt-content-dur) var(--pt-content-at) both;
+}
+/* 顶栏/深色带：只淡入（它们自己有 fixed/sticky 定位，不给它们加 transform） */
+html.pt-play .topbar,
+html.pt-play .brandline,
+html.pt-play .hud {
+  animation: pt-fade var(--pt-content-dur) var(--pt-content-at) both;
+}
 
+/* ---- 关键帧 ---- */
 @keyframes pt-focus {
   from {
-    backdrop-filter: blur(15px) saturate(1.05);
-    background-color: rgb(250 250 247 / 72%);
+    backdrop-filter: blur(30px) saturate(1.04);
+    background-color: rgb(247 245 240 / 94%);
   }
   to {
-    backdrop-filter: blur(0px) saturate(1);
-    background-color: rgb(250 250 247 / 55%);
+    backdrop-filter: blur(10px) saturate(1.02);
+    background-color: rgb(247 245 240 / 76%);
   }
 }
-@keyframes pt-split {
-  from {
+@keyframes pt-scan {
+  0% {
     transform: translateY(0);
+    opacity: 0;
   }
-  to {
-    transform: translateY(calc(var(--pt-dir, -1) * 100%));
-  }
-}
-@keyframes pt-line {
-  from {
-    transform: scaleX(0);
+  12% {
     opacity: 1;
   }
-  to {
+  72% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+@keyframes pt-axis {
+  0% {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
     transform: scaleX(1);
     opacity: 1;
   }
 }
-@keyframes pt-line-out {
-  to {
-    opacity: 0;
+@keyframes pt-unroll {
+  0% {
+    clip-path: inset(0 50% 0 50%);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
   }
 }
-@keyframes pt-hide {
-  to {
-    visibility: hidden;
-  }
-}
-@keyframes pt-content {
+@keyframes pt-cross {
   from {
-    opacity: 0.55;
-    transform: scale(0.98);
+    opacity: 0;
+    transform: scale(0.6);
   }
   to {
     opacity: 1;
     transform: scale(1);
   }
 }
-@keyframes pt-fade {
+@keyframes pt-node {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(calc(var(--pt-dir) * (50vw - 6px)));
+    opacity: 0.9;
+  }
+}
+/* ③ 前 200ms 冲到 62%（突如其来的冲击感），之后 800ms 减速停顿 */
+@keyframes pt-hatch {
+  0% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0.1, 0.9, 0.2, 1);
+  }
+  20% {
+    transform: translateY(calc(var(--pt-dir) * 62%));
+    animation-timing-function: cubic-bezier(0.25, 0.65, 0.25, 1);
+  }
+  60% {
+    transform: translateY(calc(var(--pt-dir) * 80%));
+    animation-timing-function: ease-out;
+  }
+  100% {
+    transform: translateY(calc(var(--pt-dir) * 100%));
+  }
+}
+@keyframes pt-edge {
+  0% {
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+/* 基准线/刻度/准星/节点的消散（从舱门开始拉的那一刻起） */
+@keyframes pt-axis-out {
   from {
-    opacity: 0.55;
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes pt-ticks-out {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes pt-content {
+  from {
+    opacity: 0.45;
+    transform: scaleY(0.98);
   }
   to {
     opacity: 1;
+    transform: scaleY(1);
+  }
+}
+@keyframes pt-fade {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes pt-hud {
+  from {
+    opacity: 0.25;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes pt-hide {
+  to {
+    visibility: hidden;
   }
 }
 
@@ -164,12 +386,17 @@ html.pt-play body.chrome-console .shell {
     display: none !important;
   }
   html.pt-play .pt-pane,
-  html.pt-play .pt-line,
-  html.pt-play .shell,
+  html.pt-play .pt-scan,
+  html.pt-play .pt-axis,
+  html.pt-play .pt-ticks,
+  html.pt-play .pt-cross,
+  html.pt-play .pt-node,
+  html.pt-play .pt-pane::after,
+  html.pt-play .shell > *,
+  html.pt-play .rail-tick,
   html.pt-play .topbar,
   html.pt-play .brandline,
-  html.pt-play .hud,
-  html.pt-play .rail {
+  html.pt-play .hud {
     animation: none !important;
   }
 }
