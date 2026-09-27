@@ -2,24 +2,17 @@
 import { getEntry } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
+import { sortLogItems, isoDate } from '../lib/log-order';
 
 /** 日志页（2026-09-26 站主："你顺便把日志自己写了"）。
  *  体例取自参考站：日期 + 版本号 + 该版本改了什么（一条一行）。
- *  内容在 content/pages/log.md，按真实开发史写；新的插在最上面。 */
-interface LogItem {
-  date: string | Date;
-  version?: string;
-  changes?: string[];
-}
-interface LogData {
-  intro?: string;
-  items?: LogItem[];
-}
+ *  内容在 content/pages/log.md，按真实开发史写；新的插在最上面。
+ *  排序（站主 2026-09-27："不光按日期，同一天版本号也排好"）见 src/lib/log-order.ts ——
+ *  那里是独立模块，因为版本号必须**数值**比较（v1.10 vs v1.9），字符串比较会蒙对一两次然后出错。 */
 const entry = await getEntry('pages', 'log');
-const d = (entry?.data ?? {}) as unknown as LogData;
-const items = [...(d.items ?? [])].sort((a, b) => (String(a.date) < String(b.date) ? 1 : -1));
-/** YAML 会把未加引号的 `date: 2026-09-26` 解析成 Date 对象（站上同一条约定见 src/lib/schema.ts） */
-const iso = (v: string | Date) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v));
+const d = (entry?.data ?? {}) as unknown as { intro?: string; items?: Parameters<typeof sortLogItems>[0] };
+const items = sortLogItems(d.items ?? []);
+const iso = isoDate;
 ---
 
 <Base title="日志" current="log" chrome="page">
