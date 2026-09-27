@@ -641,28 +641,36 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log('判据 评论顺序 对象 接口 + comments.ts + talks.ts 实测: ORDER BY created_at DESC,id DESC · 两处 fresh 都走 prepend');
   });
 
-  it('坐标纸网格：主页与内页共用一套，线色加深，交点圆点呼吸（2026-09-27 站主要求）', () => {
-    // 站主："把其他页面背景的这种网格应用到主页背景，同时网格颜色变深一点，
-    //        且要有呼吸感：让网格的交点有一个圆点，圆点有缓慢的明暗交替闪烁，模拟仪器待机状态。"
-    // 做法：网格线与圆点抽成全局共享类 `.paper-grid`（src/styles/base.css），
-    //       内页 .pb-grid 与主页新加的 .bg-grid 都挂它 ⇒ 两边永远同一套，不会各写一份。
+  it('坐标纸网格：主页与内页共用一套，圆点在交点上，呼吸自上而下（2026-09-27 站主定稿）', () => {
+    // 站主最终定稿："网格颜色变回上一轮的颜色；交点圆点在网格线和线的交点上（所以交点比线粗一点）；
+    //              呼吸效应重一点、明暗变化明显一点；整体呼吸效果可以是从上到下的循环。"
+    // 关键教训写进断言：圆点**必须**用 `radial-gradient(circle at 0 0, …)` ——
+    //   radial-gradient 的圆心默认在元素中心，而 background-position 只移动整个 tile、
+    //   挪不动圆心 ⇒ 只写 background-position: 0 0 的话圆点会落在**格子正中**（站主截图抓到、也量到过）。
     const t = readFileSync('src/styles/tokens.css', 'utf8');
-    // ⚠️ 8 位 hex 的末两位是**十六进制** alpha：Number('14') 会当十进制读成 14 ⇒ 必须 parseInt(_,16)
+    // ⚠️ 8 位 hex 的末两位是**十六进制** alpha（Number('0b') 会当十进制读成 11 ⇒ 必须 parseInt(_,16)）
     const lineAlpha = parseInt((t.match(/--page-grid-line:\s*#1a1a1a([0-9a-f]{2})/i) ?? [, '0b'])[1], 16) / 255;
-    expect(lineAlpha, `网格线没有加深（当前 alpha≈${lineAlpha.toFixed(3)}，改动前是 0.043）`).toBeGreaterThan(0.043);
+    expect(Math.abs(lineAlpha - 0.043), `线色应回到上一轮的 @4.3%（当前 ≈${lineAlpha.toFixed(3)}）`).toBeLessThan(0.006);
     expect(t, '缺少交点圆点令牌 --page-grid-dot').toMatch(/--page-grid-dot:\s*#1a1a1a[0-9a-f]{2}/i);
 
-    const base = readFileSync('src/styles/base.css', 'utf8').replace(/\s+/g, '');
+    // ⚠️ 先剥掉注释再比：源代码里关键帧中间夹着注释（`{/* … */ from{…}`），
+    //    只去空白的话 `\{from\{` 会匹配不上（这条断言就是这么假红过一次）。
+    const base = readFileSync('src/styles/base.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, '');
     expect(base, '共享类 .paper-grid 没定义网格线').toMatch(/\.paper-grid\{background-image:linear-gradient/);
-    expect(base, '交点圆点没单独成层').toMatch(/\.paper-grid::after\{[^}]*radial-gradient/);
-    expect(base, '圆点没有呼吸动画').toMatch(/@keyframesgrid-breathe/);
-    expect(base, '减少动态效果时圆点动画没降级').toMatch(/prefers-reduced-motion:reduce\)\{\.paper-grid::after\{animation:none/);
+    expect(base, '交点圆点没单独成层').toMatch(/\.paper-grid::before\{[^}]*radial-gradient/);
+    // 注意：上面把空白全删了 ⇒ 正则里也不能带空格（`circle at 0 0` 去空白后是 `circleat00`）
+    expect(base, '圆点圆心没写成 at 0 0 ⇒ 会落在格子正中而不是线的交点上').toMatch(/radial-gradient\(circleat00,/);
+    expect(base, '圆点没有实体核心（站主要"比线粗一点"）').toMatch(/var\(--page-grid-dot\)01\.5px,transparent2\.6px/);
+    // 声明后面有分号（`translateY(-100%);}to{…`）⇒ 正则要带 `;?`（这条我今天栽过两次）
+    expect(base, '明暗波没做成自上而下的位移').toMatch(/@keyframesgrid-breathe\{from\{transform:translateY\(-100%\);?\}to\{transform:translateY\(100%\);?\}\}/);
+    expect(base, '明暗波不是纸色（会变成灰色阴影）').toMatch(/var\(--paper\)40%/);
+    expect(base, '减少动态效果时明暗波没降级').toMatch(/prefers-reduced-motion:reduce\)\{\.paper-grid::after\{animation:none/);
 
     const home = readFileSync(join(DIST, 'index.html'), 'utf8');
     expect(home, '主页没有网格层（站主要求主页也要有）').toMatch(/class="bg-grid paper-grid"/);
     const inner = readFileSync(join(DIST, 'archive', 'index.html'), 'utf8');
     expect(inner, '内页网格层没挂共享类（会与主页各写一份）').toMatch(/class="pb-grid paper-grid"/);
-    console.log(`判据 坐标纸网格 对象 令牌/共享类/两层页面 实测: 线 alpha≈${lineAlpha.toFixed(3)}（>0.043）· .paper-grid + 圆点呼吸 · 主页与内页都挂上`);
+    console.log(`判据 坐标纸网格 对象 令牌/共享类/交点对齐/呼吸方向 实测: 线 alpha≈${lineAlpha.toFixed(3)}（=上一版）· 圆点 circle at 0 0 落在交点 · 明暗波 translateY -100%→100% 纸色扫过`);
   });
 
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {

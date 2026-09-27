@@ -97,42 +97,60 @@ html.cursor-none * {
   padding: var(--sp-7) var(--gutter) var(--sp-8);
 }
 
-/* 坐标纸网格（2026-09-27 站主："把其他页面背景的这种网格应用到主页背景，同时网格颜色变深一点，
-   且要有呼吸感：让网格的交点有一个圆点，圆点有缓慢的明暗交替闪烁，模拟仪器待机状态"）。
-   做法：把网格抽成**一个共享类** —— 内页外壳的 .pb-grid 与主页新加的 .bg-grid 都挂 .paper-grid，
-   两边从此是同一份实现（此前只有内页有网格，主页没有）。
-   · 线条用两层 linear-gradient（1px 实线 + 透明间隔），间距 48px（内页沿用至今的间距）；
-   · 交点圆点单独放在 ::after 一层，只让**这一层**的 opacity 呼吸 ⇒ 网格线本身不动，也不影响布局；
-     7 秒一个来回、只动 opacity（一个合成层，几乎不耗）。
-   定位/层叠由各自的宿主决定（内页 .pb-grid 在 .page-bg 里 absolute；主页 .bg-grid 是 fixed），
-   这里只管"长什么样"。 */
+/* 坐标纸网格（2026-09-27 站主定稿：主页与内页同一套、线色用上一轮那版、交点圆点落在线的交点上、
+   圆点比线粗一点、明暗变化明显一点、整体呼吸自上而下循环）。
+   三层结构（顺序即绘制顺序）：
+     · 宿主元素自己的背景 = 网格线（48px 间距，1px）；
+     · ::before           = **交点圆点**，background-position 必须是 0 0（tile 的原点 = 线的交点）；
+     · ::after            = 一张"纸色薄雾"自上而下扫过 —— 它压过的地方网格变暗、掠过后变亮，
+                            合起来就是"整片网格自上而下循环呼吸"。只用 transform ⇒ 合成层、不重绘。
+   ⚠️ 圆点曾经错在格子中心：radial-gradient 默认从元素**中心**起画，而网格线画在 tile 的边缘 ⇒
+      两条线交叉处在 tile 原点。必须显式写 background-position: 0 0（站主 2026-09-27 截图指出）。 */
 .paper-grid {
   background-image:
     linear-gradient(to right, var(--page-grid-line) 1px, transparent 1px),
     linear-gradient(to bottom, var(--page-grid-line) 1px, transparent 1px);
   background-size: 48px 48px;
 }
+.paper-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* 有实体核心 + 柔边（站主要"比线粗一点"）：核心 ~3px、外沿淡出到 ~5px。
+     ⚠️ 圆心必须写成 `at 0 0`：radial-gradient 的圆心默认在**元素中心**，
+        而 `background-position` 只移动整个 tile、并不能把圆心挪到 tile 的角上 ⇒
+        只写 background-position: 0 0 的话，圆点仍然落在**格子正中**（站主 2026-09-27 截图指出，
+        诊断脚本 _tmp-diag-grid-phase.mjs 也量到"格子正中 226 比交点 234 更暗"）。
+        `at 0 0` = 圆心对齐 tile 原点 = 横竖两条线的交点；其余三个象限由相邻 tile 补齐，无缝。 */
+  background-image: radial-gradient(circle at 0 0, var(--page-grid-dot) 0 1.5px, transparent 2.6px);
+  background-size: 48px 48px;
+  background-position: 0 0;
+}
 .paper-grid::after {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: radial-gradient(circle, var(--page-grid-dot) 1.1px, transparent 1.7px);
-  background-size: 48px 48px;
-  animation: grid-breathe 7s ease-in-out infinite alternate;
+  /* 纸色薄雾：两端透明、中段接近纸色 ⇒ 压住的网格看起来"暗下去了" */
+  background-image: linear-gradient(180deg, transparent 4%, var(--paper) 40%, transparent 76%);
+  opacity: 0.95;
+  animation: grid-breathe 9s linear infinite;
+  will-change: transform;
 }
 @keyframes grid-breathe {
+  /* 从视口上方整块进入、从下方整块离开 ⇒ 首尾都在画面外，循环无缝；"呼吸"就是一明一暗一个来回 */
   from {
-    opacity: 0.35;
+    transform: translateY(-100%);
   }
   to {
-    opacity: 1;
+    transform: translateY(100%);
   }
 }
-/* 系统开了「减少动态效果」：网格照旧，只是不呼吸（停在偏亮的一档，保证圆点仍看得见） */
+/* 系统开了「减少动态效果」：网格与圆点照旧，只是不再扫（停在最亮的一档） */
 @media (prefers-reduced-motion: reduce) {
   .paper-grid::after {
     animation: none;
-    opacity: 0.85;
+    opacity: 0;
   }
 }
