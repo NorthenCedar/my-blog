@@ -23,7 +23,9 @@ const { wordmark, current } = Astro.props;
 
 <div class="page-bg" aria-hidden="true">
   <div class="pb-noise"></div>
-  <div class="pb-grid"></div>
+  {/* .paper-grid 提供网格线与交点呼吸（全局共享，见 src/styles/base.css）；
+      这里只保留"这一层放在哪、多大"的定位声明。 */}
+  <div class="pb-grid paper-grid"></div>
   <div class="pb-green"></div>
   {/* 切片素材走 CSS 背景而不是 <img>：原型本身就是背景层（post.html L162），
       而且纯装饰图不该进 DOM —— 既有全局契约「所有图片的 alt 都非空」会（正确地）
@@ -84,14 +86,12 @@ const { wordmark, current } = Astro.props;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
     background-size: 160px 160px;
   }
-  /* 「切片档案」母题：等距发丝横线（一层层切片） */
+  /* 「切片档案」母题里那一层网格：**网格线与交点呼吸已抽到全局 .paper-grid**（src/styles/base.css），
+     因为站主 2026-09-27 要求主页也用同一套网格 ⇒ 两边必须共用一份实现，不能再各写一条。
+     这里只留定位；间距 48px 也在全局那一份里（手机端 64px 见下面的分支，连圆点一起改）。 */
   body.chrome-page .pb-grid {
     position: absolute;
     inset: 0;
-    background-image:
-      linear-gradient(to right, var(--page-grid-line) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--page-grid-line) 1px, transparent 1px);
-    background-size: 48px 48px;
   }
   /* 底部极淡绿带（内页比首页低一点，18vh → 14vh 见下面的手机分支） */
   body.chrome-page .pb-green {
@@ -225,6 +225,10 @@ const { wordmark, current } = Astro.props;
       display: none;
     }
     body.chrome-page .pb-grid {
+      background-size: 64px 64px;
+    }
+    /* 手机端网格间距放大到 64px ⇒ 交点圆点必须跟着放大，否则圆点会落在格子中间而不是交点上 */
+    body.chrome-page .pb-grid::after {
       background-size: 64px 64px;
     }
     body.chrome-page .pb-green {

@@ -73,6 +73,11 @@ const sectors = [
   {/* ===== 背景装饰层（B2）：四样全是装饰，不承载任何信息 =====
       堆叠计划：0 装饰 < 1 正文 .tier < 2 扫描带 < 3 刻度尺 < 4 HUD < 5 OS 状态条
       （装饰层是 position:fixed，若正文不给 z-index，定位元素会画在静态正文之上 —— 水印会盖到字上。） */}
+  {/* 坐标纸网格（站主 2026-09-27："把其他页面背景的这种网格应用到主页背景"）：
+      内页外壳早就有这一层（Topbar 的 .pb-grid），主页此前没有 ⇒ 现在两边共用全局的 .paper-grid
+      （网格线 + 交点呼吸都写在那份里）。放在装饰层最底下：它必须**在其它美术之下**，
+      否则会盖到磁带/同心环上；z-index -1 ⇒ 在纸底之上、一切内容之下。 */}
+  <div class="bg-grid paper-grid" aria-hidden="true"></div>
   <svg class="bg-mark" aria-hidden="true" focusable="false"><use href="#rhine-logo" /></svg>
   <div class="bg-ring" aria-hidden="true"></div>
   <div class="bg-orbit" aria-hidden="true"></div>
@@ -417,6 +422,14 @@ const sectors = [
        0 装饰 < 1 正文 .tier < 2 扫描带 < 3 刻度尺 < 4 HUD < 5 OS 状态条
      装饰层是 position:fixed，若正文不显式给 z-index，定位元素会画在静态正文之上
      —— 水印会盖到字上（原型靠给正文容器 z-index 解掉，这里同理）。 */
+  /* 坐标纸网格（站主 2026-09-27）：网格线与交点呼吸都在全局 .paper-grid 里（src/styles/base.css），
+     这里只给定位与层叠 —— z-index -1 让它待在纸底之上、其它美术（0）与正文（1）之下。 */
+  .bg-grid {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
   .bg-mark {
     position: fixed;
     top: 12vh;

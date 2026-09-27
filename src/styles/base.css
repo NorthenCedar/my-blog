@@ -96,3 +96,43 @@ html.cursor-none * {
   margin: 0 auto;
   padding: var(--sp-7) var(--gutter) var(--sp-8);
 }
+
+/* 坐标纸网格（2026-09-27 站主："把其他页面背景的这种网格应用到主页背景，同时网格颜色变深一点，
+   且要有呼吸感：让网格的交点有一个圆点，圆点有缓慢的明暗交替闪烁，模拟仪器待机状态"）。
+   做法：把网格抽成**一个共享类** —— 内页外壳的 .pb-grid 与主页新加的 .bg-grid 都挂 .paper-grid，
+   两边从此是同一份实现（此前只有内页有网格，主页没有）。
+   · 线条用两层 linear-gradient（1px 实线 + 透明间隔），间距 48px（内页沿用至今的间距）；
+   · 交点圆点单独放在 ::after 一层，只让**这一层**的 opacity 呼吸 ⇒ 网格线本身不动，也不影响布局；
+     7 秒一个来回、只动 opacity（一个合成层，几乎不耗）。
+   定位/层叠由各自的宿主决定（内页 .pb-grid 在 .page-bg 里 absolute；主页 .bg-grid 是 fixed），
+   这里只管"长什么样"。 */
+.paper-grid {
+  background-image:
+    linear-gradient(to right, var(--page-grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--page-grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+.paper-grid::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--page-grid-dot) 1.1px, transparent 1.7px);
+  background-size: 48px 48px;
+  animation: grid-breathe 7s ease-in-out infinite alternate;
+}
+@keyframes grid-breathe {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* 系统开了「减少动态效果」：网格照旧，只是不呼吸（停在偏亮的一档，保证圆点仍看得见） */
+@media (prefers-reduced-motion: reduce) {
+  .paper-grid::after {
+    animation: none;
+    opacity: 0.85;
+  }
+}

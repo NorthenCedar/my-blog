@@ -641,6 +641,30 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log('判据 评论顺序 对象 接口 + comments.ts + talks.ts 实测: ORDER BY created_at DESC,id DESC · 两处 fresh 都走 prepend');
   });
 
+  it('坐标纸网格：主页与内页共用一套，线色加深，交点圆点呼吸（2026-09-27 站主要求）', () => {
+    // 站主："把其他页面背景的这种网格应用到主页背景，同时网格颜色变深一点，
+    //        且要有呼吸感：让网格的交点有一个圆点，圆点有缓慢的明暗交替闪烁，模拟仪器待机状态。"
+    // 做法：网格线与圆点抽成全局共享类 `.paper-grid`（src/styles/base.css），
+    //       内页 .pb-grid 与主页新加的 .bg-grid 都挂它 ⇒ 两边永远同一套，不会各写一份。
+    const t = readFileSync('src/styles/tokens.css', 'utf8');
+    // ⚠️ 8 位 hex 的末两位是**十六进制** alpha：Number('14') 会当十进制读成 14 ⇒ 必须 parseInt(_,16)
+    const lineAlpha = parseInt((t.match(/--page-grid-line:\s*#1a1a1a([0-9a-f]{2})/i) ?? [, '0b'])[1], 16) / 255;
+    expect(lineAlpha, `网格线没有加深（当前 alpha≈${lineAlpha.toFixed(3)}，改动前是 0.043）`).toBeGreaterThan(0.043);
+    expect(t, '缺少交点圆点令牌 --page-grid-dot').toMatch(/--page-grid-dot:\s*#1a1a1a[0-9a-f]{2}/i);
+
+    const base = readFileSync('src/styles/base.css', 'utf8').replace(/\s+/g, '');
+    expect(base, '共享类 .paper-grid 没定义网格线').toMatch(/\.paper-grid\{background-image:linear-gradient/);
+    expect(base, '交点圆点没单独成层').toMatch(/\.paper-grid::after\{[^}]*radial-gradient/);
+    expect(base, '圆点没有呼吸动画').toMatch(/@keyframesgrid-breathe/);
+    expect(base, '减少动态效果时圆点动画没降级').toMatch(/prefers-reduced-motion:reduce\)\{\.paper-grid::after\{animation:none/);
+
+    const home = readFileSync(join(DIST, 'index.html'), 'utf8');
+    expect(home, '主页没有网格层（站主要求主页也要有）').toMatch(/class="bg-grid paper-grid"/);
+    const inner = readFileSync(join(DIST, 'archive', 'index.html'), 'utf8');
+    expect(inner, '内页网格层没挂共享类（会与主页各写一份）').toMatch(/class="pb-grid paper-grid"/);
+    console.log(`判据 坐标纸网格 对象 令牌/共享类/两层页面 实测: 线 alpha≈${lineAlpha.toFixed(3)}（>0.043）· .paper-grid + 圆点呼吸 · 主页与内页都挂上`);
+  });
+
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
     // 2026-09-25 修订：加了 <link rel="canonical"> 之后，这条断言需要区分
     // 「加载外部资源」（script/style/font/img —— 真实网络请求，必须禁止）
