@@ -8,7 +8,7 @@ draft: false
 
 ## 1.下载
 
-来到Typora官网https://typoraio.cn/releases/all下载1.10.6版本安装。（1.10.8目前没了）
+来到Typora官网https://typoraio.cn/releases/all   下载1.10.6版本安装。（1.10.8目前没了）
 
 ## 2.安装
 
