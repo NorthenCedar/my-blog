@@ -1,4 +1,4 @@
----
+﻿---
 title: 免费使用正版的Typora教程
 date: 2026-09-27
 summary: 本文主要介绍如何免费使用正版的Typora
