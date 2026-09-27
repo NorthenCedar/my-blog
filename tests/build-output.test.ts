@@ -583,7 +583,10 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     // 这两条是实测定格图抓出来的真 bug 的回归网：
     expect(tcss, '消散动画用了 both ⇒ 会在延迟期间把 opacity:1 顶上去，准星/基准线 600ms 前就可见').not.toMatch(/pt-(axis|ticks)-out[^,;]*both/);
     expect(tcss, '消散动画应当是 forwards（延迟期间不生效、结束后保持终态）').toMatch(/pt-axis-out[^,;]*forwards/);
-    console.log(`判据 过渡 v2 对象 时间线/配色/填充分散 实测: 变量挂在 html.pt-on · 800/600+800/1200+1000/1800+400 · blur(30px) 起 · 消散用 forwards`);
+    // 2026-09-27 站主调整：第三阶段"中央横线分裂成上下两条"—— 那两条线**本身**必须是墨绿（原来是橙的）
+    expect(tcss, '舱门接缝线（分裂出来那两条）不是墨绿').toMatch(/\.pt-pane::after\{[^}]*var\(--pt-green\)/);
+    expect(tcss, '接缝线不该以橙色为主体（橙只允许作为很淡的流光）').not.toMatch(/\.pt-pane::after\{[^}]*var\(--pt-orange\)/);
+    console.log(`判据 过渡 v2 对象 时间线/配色/填充/接缝线 实测: 变量挂 html.pt-on · 800/600+800/1200+1000/1800+400 · blur(30px) 起 · 消散 forwards · 接缝线墨绿`);
   });
 
   it('关于页头像用布局定位（不许 position:fixed）', () => {

@@ -70,7 +70,6 @@ html.pt-on .pt {
 .pt-top {
   top: 0;
   --pt-dir: -1;
-  /* 内缘（= 舱门接缝）的橙色流光：拉开时随距离消散 */
   background-image: linear-gradient(180deg, var(--pt-paper-hi), var(--pt-paper));
 }
 .pt-bottom {
@@ -78,6 +77,9 @@ html.pt-on .pt {
   --pt-dir: 1;
   background-image: linear-gradient(0deg, var(--pt-paper-hi), var(--pt-paper));
 }
+/* 内缘 = 舱门接缝。第三阶段中央那条横线"分裂成上下两条"就是这两条 ——
+   2026-09-27 站主调整：**线本身改成墨绿**（与中央基准线同色，看起来才是"同一条线裂开"），
+   橙色只留一点点微光贴在线下面（上一版规格要的"边缘数据流光"，极度克制）。 */
 .pt-pane::after {
   content: '';
   position: absolute;
@@ -85,8 +87,10 @@ html.pt-on .pt {
   right: 0;
   height: 1px;
   bottom: 0;
-  background: linear-gradient(90deg, transparent, var(--pt-orange) 18%, var(--pt-orange) 82%, transparent);
-  box-shadow: 0 0 14px 2px rgb(255 140 66 / 40%);
+  /* 两端透明：线是从中央那根轴延伸出去的感觉，不要硬切边 */
+  background: linear-gradient(90deg, transparent, var(--pt-green) 14%, var(--pt-green) 86%, transparent);
+  /* 橙光压到很淡 —— 它是"流光"，不是主体；主体是那根墨绿线 */
+  box-shadow: 0 0 10px 1px rgb(255 140 66 / 26%);
   opacity: 0;
 }
 .pt-bottom::after {
