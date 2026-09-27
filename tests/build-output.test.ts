@@ -660,23 +660,24 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     // ⚠️ 先剥掉注释再比：源代码里关键帧中间夹着注释（`{/* … */ from{…}`），
     //    只去空白的话 `\{from\{` 会匹配不上（这条断言就是这么假红过一次）。
     const base = readFileSync('src/styles/base.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, '');
-    expect(base, '共享类 .paper-grid 没定义网格线').toMatch(/\.paper-grid\{background-image:linear-gradient/);
-    expect(base, '交点圆点没单独成层').toMatch(/\.paper-grid::before\{[^}]*radial-gradient/);
+    // 第四版三层（从下到上）：本底=圆点 · ::before=纸色薄雾扫过 · ::after=网格线（最上层）
+    expect(base, '宿主元素背景没画交点圆点').toMatch(/\.paper-grid\{background-image:radial-gradient/);
     // 注意：上面把空白全删了 ⇒ 正则里也不能带空格（`circle at 0 0` 去空白后是 `circleat00`）
     expect(base, '圆点圆心没写成 at 0 0 ⇒ 会落在格子正中而不是线的交点上').toMatch(/radial-gradient\(circleat00,/);
     expect(base, '圆点没有实体核心（站主要"比线粗一点"）').toMatch(/var\(--page-grid-dot\)01\.5px,transparent2\.6px/);
     expect(base, '圆点没有光晕层（站主要"加一点发光的效果"）').toMatch(/var\(--page-grid-dot-glow\)0,transparent6px/);
-    // 第三版（站主："去掉那层薄雾…每个圆点都有明暗变化，但上下圆点的时机不一样…线的明暗不变"）：
-    //   · 不许再有盖住整张网格的薄雾层（::after）—— 那会把线也压暗；
-    //   · 明暗波改成**只挂在圆点层上的遮罩**、纵向平移 ⇒ 上下圆点相位不同，看起来像明暗走下去；
-    //   · 宿主元素（网格线）自己**不许有动画** —— 线的明暗必须恒定。
-    expect(base, '薄雾层（::after）还在 —— 站主要求去掉，线不该跟着变暗').not.toMatch(/\.paper-grid::after\{/);
-    expect(base, '圆点层没挂纵向遮罩').toMatch(/\.paper-grid::before\{[^}]*mask-image:linear-gradient\(180deg/);
-    expect(base, '遮罩不是两屏高（相位差不够）').toMatch(/mask-size:100%200%/);
-    // 声明后面有分号 ⇒ 正则要带 `;?`（这条我今天栽过两次）
-    expect(base, '遮罩没有纵向平移（上下圆点就不会错开时机）').toMatch(/@keyframesgrid-breathe\{from\{mask-position:00;?\}to\{mask-position:0-100%;?\}\}/);
-    expect(base, '网格线自己带了动画 —— 站主明确要求"线的明暗不变"').not.toMatch(/\.paper-grid\{[^}]*animation/);
-    expect(base, '减少动态效果时圆点明暗波没降级').toMatch(/prefers-reduced-motion:reduce\)\{\.paper-grid::before\{animation:none/);
+    // 站主："去掉那层薄雾…线的明暗不变" + "不是所有圆点消失后再一起出现"：
+    //   薄雾必须**只压圆点**（所以网格线画在它上层的 ::after 里），且不能设满（opacity < 1 ⇒ 圆点变浅而不消失）
+    expect(base, '网格线没画在最上层（薄雾会连它一起压暗 ⇒ 违反"线的明暗不变"）').toMatch(/\.paper-grid::after\{[^}]*linear-gradient\(toright,var\(--page-grid-line\)/);
+    expect(base, '薄雾层不见了（圆点就没有明暗变化了）').toMatch(/\.paper-grid::before\{[^}]*var\(--paper\)50%/);
+    const veilOpacity = Number((base.match(/\.paper-grid::before\{[^}]*opacity:(0?\.\d+)/) ?? [, '1'])[1]);
+    expect(veilOpacity, `薄雾不透明度 ${veilOpacity} —— 设满 1 的话圆点会在那一瞬彻底消失`).toBeLessThan(0.95);
+    expect(veilOpacity, '薄雾太淡的话就看不出明暗变化').toBeGreaterThan(0.3);
+    // 纯 transform（合成层）：用 mask-position 会让整屏每帧重绘，实测掉到 33fps
+    expect(base, '明暗波没用 transform（合成层）').toMatch(/@keyframesgrid-breathe\{from\{transform:translateY\(-100%\);?\}to\{transform:translateY\(100%\);?\}\}/);
+    expect(base, '明暗波又用回了 mask-position（会让整屏每帧重绘，实测 33fps）').not.toMatch(/mask-position/);
+    expect(base, '网格线自己带了动画 —— 站主明确要求"线的明暗不变"').not.toMatch(/\.paper-grid::after\{[^}]*animation/);
+    expect(base, '减少动态效果时薄雾没关掉').toMatch(/prefers-reduced-motion:reduce\)\{\.paper-grid::before\{display:none/);
 
     const home = readFileSync(join(DIST, 'index.html'), 'utf8');
     expect(home, '主页没有网格层（站主要求主页也要有）').toMatch(/class="bg-grid paper-grid"/);

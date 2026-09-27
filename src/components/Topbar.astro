@@ -227,9 +227,12 @@ const { wordmark, current } = Astro.props;
     body.chrome-page .pb-grid {
       background-size: 64px 64px;
     }
-    /* 手机端网格间距放大到 64px ⇒ **交点圆点必须跟着放大**，否则圆点会落在格子中间而不是交点上。
-       （圆点那层现在是 ::before —— 见 src/styles/base.css） */
-    body.chrome-page .pb-grid::before {
+    /* 手机端间距放大到 64px ⇒ **圆点与网格线都要跟着放大**，否则圆点会落在格子中间而不是交点上。
+       （第四版起：圆点在宿主元素背景上，网格线在 ::after 上，薄雾是 ::before —— 见 src/styles/base.css） */
+    body.chrome-page .pb-grid {
+      background-size: 64px 64px;
+    }
+    body.chrome-page .pb-grid::after {
       background-size: 64px 64px;
     }
     body.chrome-page .pb-green {
