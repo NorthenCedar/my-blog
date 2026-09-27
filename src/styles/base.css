@@ -118,8 +118,14 @@ html.cursor-none * {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* 有实体核心 + 柔边（站主要"比线粗一点"）：核心 ~3px、外沿淡出到 ~5px */
-  background-image: radial-gradient(circle at 0 0, var(--page-grid-dot) 0 1.5px, transparent 2.6px);
+  /* 圆点 = **两层**：本体（实体核心 + 柔边，站主要"比线粗一点"）+ 光晕（更宽、线性淡出，站主要"一点发光"）。
+     两层都用 `circle at 0 0` 对齐 tile 原点（= 横竖两条线的交点）；
+     在浅纸底上"发光"是深色外扩的柔晕（同色、更宽、更淡），不是加亮。
+     ⚠️ 圆心必须写成 `at 0 0`：radial-gradient 的圆心默认在**元素中心**，而 background-position 只平移整个 tile、
+        挪不动圆心 ⇒ 只写 background-position: 0 0 会落在**格子正中**（站主截图指出过）。 */
+  background-image:
+    radial-gradient(circle at 0 0, var(--page-grid-dot) 0 1.5px, transparent 2.6px),
+    radial-gradient(circle at 0 0, var(--page-grid-dot-glow) 0, transparent 6px);
   background-size: 48px 48px;
   background-position: 0 0;
   /* 遮罩：两屏高的纵向渐变里含一整个明暗来回（亮→暗→亮），只作用于这一层 */

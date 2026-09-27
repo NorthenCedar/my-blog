@@ -652,6 +652,10 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     const lineAlpha = parseInt((t.match(/--page-grid-line:\s*#1a1a1a([0-9a-f]{2})/i) ?? [, '0b'])[1], 16) / 255;
     expect(Math.abs(lineAlpha - 0.043), `线色应回到上一轮的 @4.3%（当前 ≈${lineAlpha.toFixed(3)}）`).toBeLessThan(0.006);
     expect(t, '缺少交点圆点令牌 --page-grid-dot').toMatch(/--page-grid-dot:\s*#1a1a1a[0-9a-f]{2}/i);
+    // 站主 2026-09-27："呼吸到最深的颜色时还可以再深一点（深灰），可以加一点发光的效果"
+    const dotAlpha = parseInt((t.match(/--page-grid-dot:\s*#1a1a1a([0-9a-f]{2})/i) ?? [, '00'])[1], 16) / 255;
+    expect(dotAlpha, `圆点最深处太浅（当前 alpha≈${dotAlpha.toFixed(2)}，应是深灰级别）`).toBeGreaterThan(0.3);
+    expect(t, '缺少圆点光晕令牌 --page-grid-dot-glow').toMatch(/--page-grid-dot-glow:\s*#1a1a1a[0-9a-f]{2}/i);
 
     // ⚠️ 先剥掉注释再比：源代码里关键帧中间夹着注释（`{/* … */ from{…}`），
     //    只去空白的话 `\{from\{` 会匹配不上（这条断言就是这么假红过一次）。
@@ -661,6 +665,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     // 注意：上面把空白全删了 ⇒ 正则里也不能带空格（`circle at 0 0` 去空白后是 `circleat00`）
     expect(base, '圆点圆心没写成 at 0 0 ⇒ 会落在格子正中而不是线的交点上').toMatch(/radial-gradient\(circleat00,/);
     expect(base, '圆点没有实体核心（站主要"比线粗一点"）').toMatch(/var\(--page-grid-dot\)01\.5px,transparent2\.6px/);
+    expect(base, '圆点没有光晕层（站主要"加一点发光的效果"）').toMatch(/var\(--page-grid-dot-glow\)0,transparent6px/);
     // 第三版（站主："去掉那层薄雾…每个圆点都有明暗变化，但上下圆点的时机不一样…线的明暗不变"）：
     //   · 不许再有盖住整张网格的薄雾层（::after）—— 那会把线也压暗；
     //   · 明暗波改成**只挂在圆点层上的遮罩**、纵向平移 ⇒ 上下圆点相位不同，看起来像明暗走下去；
