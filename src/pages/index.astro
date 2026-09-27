@@ -19,6 +19,12 @@ import galleryManifest from '../../public/gallery/manifest.json';
 const site = await getSite();
 const posts = await getVisiblePosts();
 
+// 首页 S2「最近写的」只露最新的三篇（站主 2026-09-28）。
+// 这里**不覆盖 posts**：posts 已是按日期倒序的全量列表，OS 状态条的 POSTS 读数
+// 与导航都还依赖它 —— 截断只发生在 S2 这一处渲染上，站点总量不该跟着首页走。
+const HOME_POST_LIMIT = 3;
+const recentPosts = posts.slice(0, HOME_POST_LIMIT);
+
 if (!galleryManifest.home) throw new Error('manifest.json 缺 home 段 —— 跑一下 node scripts/gen-gallery-webp.mjs');
 const album = galleryManifest.home;
 const shots = album.shots;
@@ -178,7 +184,7 @@ const sectors = [
   <section class="tier" id="s2">
     <div class="tier-head"><span class="sec">SECTOR 02</span><h2>最近写的</h2></div>
     <ul class="index">
-      {posts.map((p) => (
+      {recentPosts.map((p) => (
         <li class="field-item" data-label={`文章 · ${p.title}`}>
           {/* .bracket：L 形角标（左下 + 右上对角）。它是聚焦的主要载体 —— 透明度只是辅助。 */}
           <div class="bracket">
