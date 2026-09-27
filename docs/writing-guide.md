@@ -301,6 +301,30 @@ content/posts/my-new-post/
 最后一步别忘：Typora 插进来的语法是 `![](图片名.jpg)`，**中括号里是空的** ——
 按 §3.2 补一句人话再推送；推送前跑一次 `npm run verify`，空 alt 会被它拦下来。
 
+#### ⚠️ Typora 的图是"未跟踪文件"，只 `git add` 那篇 `index.md` 是不够的（2026-09-27 真踩过）
+
+用 Typora 写完一篇带图的文章后，`git status` 里会出现这样的东西 —— **那些图还没进仓库**：
+
+```
+?? content/posts/xxx/image-20260928000308825.png     ← 只在硬盘上，仓库里没有
+```
+
+**只 `git add` 那篇 `index.md` 就推送**会怎样：本地构建能过（图就在硬盘上 ✓），
+但 Cloudflare 上只有仓库内容 ⇒ 构建报 `Rolldown failed to resolve import "image-….png"`、
+部署 **Failure**、线上继续挂着上一个成功的部署 —— 表现就是那句"我 push 了，怎么没上线" ✗。
+（已实测复现：把图挪走，`npm run build` 直接 exit 1；挪回来 exit 0。）
+
+**推送前对一下这三条**：
+
+```bash
+git status --short                    # 除了 index.md，图片也要被列出（A / AM 才算进去了）
+git add content/posts/<你的文章>/      # 直接 add 整个文章文件夹，图就一起进去了
+npm run verify                        # 构建 + 测试都过再推
+```
+
+（顺带：`draft: true` 的文章**不会**上线，这是设计 —— 列表/标签/归档/RSS 全隐藏、直接访问 404。
+写完了想发，把那行改成 `false` 再推。）
+
 （相册是另一条路：照片放进 `public/gallery/<专辑名>/`，构建时由脚本生成 WebP 与缩略图，见相册那节。）
 
 ---
