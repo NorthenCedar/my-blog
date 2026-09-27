@@ -99,16 +99,20 @@ if (boxes.length > 0 || likeButtons.length > 0) {
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
 
-  const render = (list: HTMLOListElement, c: Comment) => {
+  // 顺序（2026-09-27 站主："把新评论放上面，其他的评论留言也一样"）：
+  // 接口按 created_at DESC 返回（新的在前）⇒ 取回来的那批按顺序 append；**刚发表的那条要 prepend**，
+  // 否则它会掉到最下面，跟"新的在上面"自相矛盾。
+  const render = (list: HTMLOListElement, c: Comment, fresh = false) => {
     const li = document.createElement('li');
     const meta = document.createElement('p');
     meta.className = 'cmeta';
-    meta.textContent = `${c.name} · ${fmtTime(c.createdAt)}`;
+    meta.textContent = `${c.name} · ${fmtTime(c.createdAt)}${fresh ? ' · 刚发表' : ''}`;
     const body = document.createElement('p');
     body.className = 'cbody';
     body.textContent = c.body;
     li.append(meta, body);
-    list.append(li);
+    if (fresh) list.prepend(li);
+    else list.append(li);
   };
 
   const keyOf = (el: HTMLElement) => el.dataset.commentsFor ?? '';
@@ -179,7 +183,7 @@ if (boxes.length > 0 || likeButtons.length > 0) {
         })
         .then((body) => {
           if (body.comment) {
-            render(list, body.comment);
+            render(list, body.comment, true); // fresh ⇒ prepend（新的在最上面）
             empty.hidden = true;
             setCount();
           }

@@ -609,6 +609,22 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log(`判据 关于页头像 对象 布局定位 实测: 头像与名字都在页头内 · ${rules.length} 条 .profile 规则无 position:fixed · 桌面页头是两栏 grid`);
   });
 
+  it('评论顺序：新的在最上面（接口排序 + 两个前端脚本的插入位置）', () => {
+    // 站主 2026-09-27："把留言页把新评论放上面，其他的评论留言也一样"。
+    // 顺序由三处共同决定，缺一处就会自相矛盾：
+    //   ① 接口 `ORDER BY created_at DESC, id DESC`（**唯一**的排序来源，三条路径共用）；
+    //   ② 前端取回来的那批按顺序 append（跟随接口顺序即可）；
+    //   ③ 刚发表的那条必须 **prepend** —— 漏了它，界面发的新评论会掉到列表最下面。
+    const api = readFileSync('functions/api/comments.ts', 'utf8');
+    expect(api, '接口没按 created_at DESC 排（新评论会沉到最底下）').toMatch(/ORDER BY created_at DESC/);
+    expect(api, '缺少 id DESC 决胜键（同一秒内的两条顺序会不稳定）').toMatch(/created_at DESC,\s*id DESC/);
+    for (const f of ['src/scripts/comments.ts', 'src/scripts/talks.ts']) {
+      const s = readFileSync(f, 'utf8');
+      expect(s, `${f} 丢了 fresh 的 prepend（界面发的新评论会掉到最下面）`).toMatch(/if \(fresh\) list\.prepend\(li\)/);
+    }
+    console.log('判据 评论顺序 对象 接口 + comments.ts + talks.ts 实测: ORDER BY created_at DESC,id DESC · 两处 fresh 都走 prepend');
+  });
+
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
     // 2026-09-25 修订：加了 <link rel="canonical"> 之后，这条断言需要区分
     // 「加载外部资源」（script/style/font/img —— 真实网络请求，必须禁止）

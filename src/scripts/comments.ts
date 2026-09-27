@@ -33,6 +33,12 @@ if (root) {
     count.textContent = n > 0 ? ` ${n} 条` : '';
   };
 
+  /**
+   * 渲染一条评论。
+   * 顺序（2026-09-27 站主："把新评论放上面，其他的评论留言也一样"）：
+   *   · 从接口取回来的那一批：接口已按 `created_at DESC` 排好（新的在前）⇒ 这里按顺序 append 即可；
+   *   · 刚发表的那条：必须 **prepend**，否则它会掉到列表最后（与"新的在上面"自相矛盾）。
+   */
   const render = (c: Comment, fresh = false) => {
     const li = document.createElement('li');
     li.dataset.id = String(c.id);
@@ -51,7 +57,8 @@ if (root) {
     body.textContent = c.body; // ← 绝不用 innerHTML
 
     li.append(name, time, body);
-    list.append(li);
+    if (fresh) list.prepend(li);
+    else list.append(li);
     empty.hidden = true;
     list.hidden = false;
   };

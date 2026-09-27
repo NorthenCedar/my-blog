@@ -25,8 +25,12 @@ async function hashIp(ip: string): Promise<string> {
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const slug = new URL(request.url).searchParams.get('slug') ?? '';
+  // 2026-09-27 站主："把新评论放上面，其他的评论留言也一样" ⇒ 新的在前。
+  // 这里是**唯一**决定顺序的地方（留言板 / 文章评论 / 说说评论三条路径共用这个接口）。
+  // `id DESC` 是稳定的决胜键：同一秒内的两条也有确定顺序。
+  // 顺带一提：LIMIT 200 现在取的是**最新**的 200 条（原来是取最旧的 200 条）。
   const { results } = await env.COMMENTS_DB.prepare(
-    'SELECT id, name, body, created_at FROM comments WHERE slug = ? ORDER BY created_at ASC LIMIT 200'
+    'SELECT id, name, body, created_at FROM comments WHERE slug = ? ORDER BY created_at DESC, id DESC LIMIT 200'
   )
     .bind(slug)
     .all<{ id: number; name: string; body: string; created_at: string }>();
