@@ -535,6 +535,44 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(junk, `这些临时文件不该在仓库里：${junk.slice(0, 5).join(', ')}`).toEqual([]);
   });
 
+  it('页面过渡与相册灯箱/导航抽屉的层叠关系（2026-09-27 两处回归的护栏）', () => {
+    // 两个真踩过的 bug：
+    //  ① 相册点照片会触发过渡、且蒙版盖住灯箱（照片看不到）⇒
+    //     · 缩略图链接必须有 data-no-transition（它的点击由灯箱 preventDefault 接管，不会真跳转）；
+    //     · 蒙版 z-index 必须**低于**灯箱，万一还是挂上了也不能挡住照片。
+    //  ② 手机抽屉在非首页被正文盖住 ⇒ 根因是过渡动画 `fill: both` 把 transform: scale(1) 留在 .shell 上
+    //     （非 none 的 transform = 层叠上下文）。修法在 transition.ts（950ms 后摘类），这里守"那段代码还在"。
+    const cssFiles: string[] = [];
+    const walkCss = (d: string) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e);
+        if (statSync(p).isDirectory()) walkCss(p);
+        else if (e.endsWith('.css')) cssFiles.push(p);
+      }
+    };
+    walkCss(DIST);
+    const css = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n').replace(/\s+/g, '');
+
+    // 注意：上面把空白全删了 ⇒ 选择器里的后代空格也没了，写成 `html.pt-on.pt`（不是 `html.pt-on .pt`）
+    const overlayZ = Number((css.match(/html\.pt-on\.pt\{[^}]*z-index:(\d+)/) ?? [, '0'])[1]);
+    // 灯箱那条规则带 Astro 作用域属性（`.lb[data-astro-cid-…]{…}`）⇒ 正则要容忍，别绑具体哈希
+    const lightboxZ = Number((css.match(/\.lb(?:\[data-astro-cid-[a-z0-9]+\])?\{[^}]*z-index:(\d+)/) ?? [, '0'])[1]);
+    expect(overlayZ, '没找到过渡蒙版的 z-index').toBeGreaterThan(0);
+    expect(lightboxZ, '没找到相册灯箱的 z-index').toBeGreaterThan(0);
+    expect(overlayZ, `过渡蒙版(${overlayZ}) 必须低于灯箱(${lightboxZ})，否则会盖住照片`).toBeLessThan(lightboxZ);
+
+    const gallery = readFileSync(join(DIST, 'gallery', 'index.html'), 'utf8');
+    const frames = [...gallery.matchAll(/<a class="frame"[^>]*>/g)].map((m) => m[0]);
+    expect(frames.length, '相册页一张缩略图链接都没有').toBeGreaterThan(0);
+    const missing = frames.filter((f) => !f.includes('data-no-transition'));
+    expect(missing, `${missing.length} 张缩略图链接缺 data-no-transition（点它会触发过渡、挡住灯箱）`).toEqual([]);
+
+    const script = readFileSync('src/scripts/transition.ts', 'utf8');
+    expect(script, '过渡脚本丢了 defaultPrevented 判断（相册灯箱会被误判成要跳转）').toContain('defaultPrevented');
+    expect(script, '过渡脚本丢了收尾（不清 pt-* 类 ⇒ .shell 残留 transform ⇒ 抽屉被盖住）').toMatch(/classList\.remove\('pt-on',\s*'pt-play'\)/);
+    console.log(`判据 过渡层叠 对象 蒙版/灯箱/缩略图 实测: 蒙版 z=${overlayZ} < 灯箱 z=${lightboxZ} · ${frames.length} 张缩略图带 data-no-transition · 收尾逻辑在位`);
+  });
+
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
     // 2026-09-25 修订：加了 <link rel="canonical"> 之后，这条断言需要区分
     // 「加载外部资源」（script/style/font/img —— 真实网络请求，必须禁止）

@@ -25,8 +25,11 @@ html.pt-on .pt {
   display: block;
   position: fixed;
   inset: 0;
-  /* 在内容之上、跟手光标（64+）之下，也在开场覆盖层（60）之下 —— 首页开场时不会打架 */
-  z-index: 58;
+  /* 层叠阶梯（2026-09-27 修 bug 时定下，改这里前先看一遍）：
+     正文 ≤4（首页 console 的刻度尺/HUD）  <  过渡蒙版 **45**  <  相册灯箱 50  <  开场覆盖层 60  <  跟手光标 64+
+     蒙版必须**低于灯箱**：相册点照片是页面内 JS 开灯箱（preventDefault）、根本不会跳转，
+     万一还是被挂上了蒙版，也绝不能把照片挡掉（第一道防线在 src/scripts/transition.ts 的 defaultPrevented 判断）。 */
+  z-index: 45;
   pointer-events: none;
 }
 
