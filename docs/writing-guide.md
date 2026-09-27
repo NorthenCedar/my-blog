@@ -1136,25 +1136,3 @@ JS 给 `html` 加 `.cursor-none` 把原生光标全站藏掉，白点当指针�
 **想整套关掉**：把 `src/styles/transition.css` 里的 `.pt` 保持 `display: none` 即可（或者删掉
 `src/layouts/Base.astro` 里的 `<div class="pt">` 那段标记 + `src/scripts/transition.ts` 的引入）。
 
----
-
-## 28. 坐标纸网格（主页与内页同一套）
-
-每页背景都铺着一层**坐标纸网格**（1px 细线 + 交点圆点），圆点会**缓慢明暗交替**（7 秒一个来回，
-模拟仪器待机）。主页与内页用的是**同一个共享类** `.paper-grid`，所以不会出现两套网格。
-
-**想调**（都在 `src/styles/base.css` 的 `.paper-grid` 与 `tokens.css`）：
-
-| 想改什么 | 改哪 |
-|---|---|
-| 线的深浅 | `--page-grid-line`（现在是 ink @7.8%） |
-| 圆点的深浅 | `--page-grid-dot`（ink @12%） |
-| 格子大小 | `.paper-grid` 的 `background-size`（桌面 48px；内页手机端 64px，圆点要跟着改，见下） |
-| 呼吸快慢 | `@keyframes grid-breathe` 上的 `9s`（改小 = 明暗走得更快）；它平移的是圆点层那层**遮罩**的 `mask-position` |
-| 想彻底关掉 | 把 `.paper-grid` 从对应元素上摘掉（主页是 `.bg-grid`，内页是 `.pb-grid`） |
-
-**两个别踩的**：① 改内页手机端的 64px 时，**圆点那份 `background-size` 要一起改**，
-否则圆点会落在格子中间而不是交点上（`Topbar.astro` 里那两条挨着写就是这个原因）；
-② 圆点的明暗波是**挂在圆点层（`::before`）那层遮罩**上的，别把动画写到宿主元素上 ——
-那会连网格线一起闪；站主明确要求"**线的明暗不变**"（实测守卫：单线像素 240~240 恒定）。
-

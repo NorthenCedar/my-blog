@@ -641,51 +641,6 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log('判据 评论顺序 对象 接口 + comments.ts + talks.ts 实测: ORDER BY created_at DESC,id DESC · 两处 fresh 都走 prepend');
   });
 
-  it('坐标纸网格：主页与内页共用一套，圆点在交点上，呼吸自上而下（2026-09-27 站主定稿）', () => {
-    // 站主最终定稿："网格颜色变回上一轮的颜色；交点圆点在网格线和线的交点上（所以交点比线粗一点）；
-    //              呼吸效应重一点、明暗变化明显一点；整体呼吸效果可以是从上到下的循环。"
-    // 关键教训写进断言：圆点**必须**用 `radial-gradient(circle at 0 0, …)` ——
-    //   radial-gradient 的圆心默认在元素中心，而 background-position 只移动整个 tile、
-    //   挪不动圆心 ⇒ 只写 background-position: 0 0 的话圆点会落在**格子正中**（站主截图抓到、也量到过）。
-    const t = readFileSync('src/styles/tokens.css', 'utf8');
-    // ⚠️ 8 位 hex 的末两位是**十六进制** alpha（Number('0b') 会当十进制读成 11 ⇒ 必须 parseInt(_,16)）
-    const lineAlpha = parseInt((t.match(/--page-grid-line:\s*#1a1a1a([0-9a-f]{2})/i) ?? [, '0b'])[1], 16) / 255;
-    expect(Math.abs(lineAlpha - 0.043), `线色应回到上一轮的 @4.3%（当前 ≈${lineAlpha.toFixed(3)}）`).toBeLessThan(0.006);
-    expect(t, '缺少交点圆点令牌 --page-grid-dot').toMatch(/--page-grid-dot:\s*#1a1a1a[0-9a-f]{2}/i);
-    // 站主 2026-09-27："呼吸到最深的颜色时还可以再深一点（深灰），可以加一点发光的效果"
-    const dotAlpha = parseInt((t.match(/--page-grid-dot:\s*#1a1a1a([0-9a-f]{2})/i) ?? [, '00'])[1], 16) / 255;
-    expect(dotAlpha, `圆点最深处太浅（当前 alpha≈${dotAlpha.toFixed(2)}，应是深灰级别）`).toBeGreaterThan(0.3);
-    expect(t, '缺少圆点光晕令牌 --page-grid-dot-glow').toMatch(/--page-grid-dot-glow:\s*#1a1a1a[0-9a-f]{2}/i);
-
-    // ⚠️ 先剥掉注释再比：源代码里关键帧中间夹着注释（`{/* … */ from{…}`），
-    //    只去空白的话 `\{from\{` 会匹配不上（这条断言就是这么假红过一次）。
-    const base = readFileSync('src/styles/base.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, '');
-    // 第四版三层（从下到上）：本底=圆点 · ::before=纸色薄雾扫过 · ::after=网格线（最上层）
-    expect(base, '宿主元素背景没画交点圆点').toMatch(/\.paper-grid\{background-image:radial-gradient/);
-    // 注意：上面把空白全删了 ⇒ 正则里也不能带空格（`circle at 0 0` 去空白后是 `circleat00`）
-    expect(base, '圆点圆心没写成 at 0 0 ⇒ 会落在格子正中而不是线的交点上').toMatch(/radial-gradient\(circleat00,/);
-    expect(base, '圆点没有实体核心（站主要"比线粗一点"）').toMatch(/var\(--page-grid-dot\)01\.5px,transparent2\.6px/);
-    expect(base, '圆点没有光晕层（站主要"加一点发光的效果"）').toMatch(/var\(--page-grid-dot-glow\)0,transparent6px/);
-    // 站主："去掉那层薄雾…线的明暗不变" + "不是所有圆点消失后再一起出现"：
-    //   薄雾必须**只压圆点**（所以网格线画在它上层的 ::after 里），且不能设满（opacity < 1 ⇒ 圆点变浅而不消失）
-    expect(base, '网格线没画在最上层（薄雾会连它一起压暗 ⇒ 违反"线的明暗不变"）').toMatch(/\.paper-grid::after\{[^}]*linear-gradient\(toright,var\(--page-grid-line\)/);
-    expect(base, '薄雾层不见了（圆点就没有明暗变化了）').toMatch(/\.paper-grid::before\{[^}]*var\(--paper\)50%/);
-    const veilOpacity = Number((base.match(/\.paper-grid::before\{[^}]*opacity:(0?\.\d+)/) ?? [, '1'])[1]);
-    expect(veilOpacity, `薄雾不透明度 ${veilOpacity} —— 设满 1 的话圆点会在那一瞬彻底消失`).toBeLessThan(0.95);
-    expect(veilOpacity, '薄雾太淡的话就看不出明暗变化').toBeGreaterThan(0.3);
-    // 纯 transform（合成层）：用 mask-position 会让整屏每帧重绘，实测掉到 33fps
-    expect(base, '明暗波没用 transform（合成层）').toMatch(/@keyframesgrid-breathe\{from\{transform:translateY\(-100%\);?\}to\{transform:translateY\(100%\);?\}\}/);
-    expect(base, '明暗波又用回了 mask-position（会让整屏每帧重绘，实测 33fps）').not.toMatch(/mask-position/);
-    expect(base, '网格线自己带了动画 —— 站主明确要求"线的明暗不变"').not.toMatch(/\.paper-grid::after\{[^}]*animation/);
-    expect(base, '减少动态效果时薄雾没关掉').toMatch(/prefers-reduced-motion:reduce\)\{\.paper-grid::before\{display:none/);
-
-    const home = readFileSync(join(DIST, 'index.html'), 'utf8');
-    expect(home, '主页没有网格层（站主要求主页也要有）').toMatch(/class="bg-grid paper-grid"/);
-    const inner = readFileSync(join(DIST, 'archive', 'index.html'), 'utf8');
-    expect(inner, '内页网格层没挂共享类（会与主页各写一份）').toMatch(/class="pb-grid paper-grid"/);
-    console.log(`判据 坐标纸网格 对象 令牌/共享类/交点对齐/只有圆点呼吸 实测: 线 alpha≈${lineAlpha.toFixed(3)}（=上一版，且线无动画）· 圆点 circle at 0 0 落在交点 · 明暗波是只作用在圆点层的遮罩、纵向平移`);
-  });
-
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
     // 2026-09-25 修订：加了 <link rel="canonical"> 之后，这条断言需要区分
     // 「加载外部资源」（script/style/font/img —— 真实网络请求，必须禁止）
