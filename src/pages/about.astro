@@ -36,18 +36,23 @@ const isExternal = (h: string) => /^https?:/i.test(h);
       版式依据不是原型：prototype/terminal/ 里没有关于页，依据是既有内页外壳的实测实现（/gallery 与文章页）。 */
 }
 <Base title="关于" current="about" chrome="page">
+  {/* 头像（站主 2026-09-26 要、2026-09-27 改）：
+      **必须和标题放在同一个页头里**，桌面靠 grid 排到右边、手机在标题下方居中。
+      为什么不用 `position: fixed`（第一版就是这么写的，被站主抓了）：
+        ① 它会**不跟页面滚**（站主："要求跟随鼠标滚轮上下而上下"）；
+        ② 更要命的：过渡动画给 `.shell` 加了 `transform: scale(0.98→1)`，而被 transform 的祖先会成为
+           `position: fixed` 的**包含块** ⇒ 头像按"相对 .shell"定位；动画结束、类被摘掉后 transform 变 none，
+           包含块又换回视口 ⇒ **位置突变，视觉上就是"加载后跳一下"**（实测从 y=246 跳到 y=198，48px）。
+      改成布局定位后这两个问题一起消失：位置由排版决定（不会变），元素在正文流里（自然跟着滚）。 */}
   <header class="pagehead">
     <PageTitle>关于</PageTitle>
+    {avatar && (
+      <div class="profile">
+        <Image class="avatar" src={avatar} alt={`${d.avatarName ?? '站主'}的头像`} widths={[96, 192]} sizes="128px" />
+        <p class="profile-name">{d.avatarName}</p>
+      </div>
+    )}
   </header>
-
-  {/* 头像（站主 2026-09-26）：桌面放正文右侧的空白处（固定，不随滚动跑掉），
-      窄屏挪到标题下方居中 —— 右侧在手机上根本没有位置。 */}
-  {avatar && (
-    <div class="profile">
-      <Image class="avatar" src={avatar} alt={`${d.avatarName ?? '站主'}的头像`} widths={[96, 192]} sizes="128px" />
-      <p class="profile-name">{d.avatarName}</p>
-    </div>
-  )}
 
   <div class="prose">{Content && <Content />}</div>
 
@@ -102,15 +107,21 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     letter-spacing: 0.12em;
     color: var(--muted);
   }
-  /* 宽屏：挪到正文右侧的空白处并固定（正文列只有 34em，右边本来就是空的） */
+  /* 宽屏：页头变成**两栏** —— 标题在左、头像在右（都留在正文流里 ⇒ 位置固定不变、且跟着页面滚）。
+     为什么不用 position:fixed：① 不跟滚动；② 过渡动画给 .shell 加的 transform 会把 fixed 的包含块
+     从视口换成 .shell，动画一结束就位置突变（"加载后跳一下"）。布局定位两个问题都没有。 */
   @media (min-width: 1024px) {
+    .pagehead {
+      max-width: none;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: start;
+      column-gap: var(--sp-6);
+    }
     .profile {
-      position: fixed;
-      top: 22vh;
-      right: 6vw;
-      margin: 0;
-      z-index: 1;
-      pointer-events: none;
+      /* 往下压一点，让头像对着标题的下半部分（站主给的参考图就是这个观感；
+         代价是页头行高变大、正文整体下移 40px —— 这是刻意的，不是副作用）。 */
+      margin: 2.5rem 0 0;
     }
     .avatar {
       width: 128px;

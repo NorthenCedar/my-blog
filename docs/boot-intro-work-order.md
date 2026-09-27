@@ -1643,3 +1643,48 @@ t≈420 时内容已经全清晰）。改成 **`animations.pause()` + `currentTi
 - **产物级护栏**（测试新增 1 条）：蒙版 z-index 必须低于灯箱、缩略图必须带 `data-no-transition`、收尾逻辑必须在。
   实测 `蒙版 z=45 < 灯箱 z=50 · 82 张缩略图带豁免 · 收尾逻辑在位`。
 - 全量 **120 passed | 2 skipped**；人眼：`gallery-lightbox-ok.png`（照片正常显示、左右翻页都在）。
+
+---
+
+## 27. 关于页头像「加载后跳一下 + 不跟滚动」（2026-09-27）
+
+站主："刚打开关于界面时头像在图一位置，随后跳到图二位置，并且不跟随鼠标滚轮上下而上下。"
+
+### 27.1 根因（先用探针量出来，不是猜的）
+
+第一版头像用的是 `position: fixed`（当时想的是"固定在右侧空白处别跑掉"）。问题出在**过渡动画**上：
+
+`pt-content` 会给 `.shell` 加 `transform: scale(0.98 → 1)`；而被 transform 的祖先会成为 `position: fixed`
+的**包含块** ⇒ 动画期间头像按"相对 `.shell`"定位；动画结束、`pt-on/pt-play` 被摘掉后 `transform` 变 `none`，
+包含块又换回视口 ⇒ **位置突变**。探针（`_tmp-avatar-jump-diag.mjs`）实测：
+
+```
++   0ms  {x:1066, y:252, w:125, position:fixed, shellTransform:matrix(0.98,…)}   ← 站主的"图一"
++1000ms  {x:1075, y:246, w:128, shellTransform:matrix(1,0,0,1,0,0)}             ← 动画跑完
++2000ms  {x:1075, y:198, w:128, position:fixed, shellTransform:none}            ← 类被摘掉 ⇒ 跳了 48px
+滚动 300px 后：{x:1075, y:198, scrollY:227}                                      ← y 一点没动（fixed 的本性）
+```
+
+### 27.2 修法：改成**布局定位**（放进页头，桌面两栏 grid）
+
+- 头像连同「北杉」搬进 `<header class="pagehead">`；
+- 桌面（≥1024px）页头变成 `grid-template-columns: 1fr auto`：标题在左、头像在右（`margin-top: 2.5rem`，对着标题下半部分）；
+- 手机端不动（仍是标题下方居中、头像与名字同轴 —— 站主上次认可的版式）。
+
+两个问题一起消失：位置由排版决定（**不会变**），元素在正文流里（**自然跟着滚**）。实测：
+
+```
++0ms(1095,216) +300ms(1095,216) +700ms(1104,208) +1100ms(1104,208) +1600ms(1104,208) +2400ms(1104,208)
+滚到 300px：y 208 → -92（差值≈滚动量）· 回到顶部：y 复原 208
+```
+
+注意 0→700ms 那 8px 是**动画本身的缩放**（有意为之），不是跳变；关键是 **1600 → 2400ms 之间完全不动**。
+
+### 27.3 验证与护栏
+
+- `_tmp-avatar-check.mjs` **7/7 PASS**（对着站主的两条要求逐条断言：不跳、跟滚动、上移量≈滚动量、回顶部复原）；
+- 其余 4 个探针（过渡 / 相册+抽屉 / 光标+头像对齐 / 导航 34 条）**全部 ALL PASS** ⇒ 版式改动没碰坏别处；
+- 新增产物级护栏 1 条：**`.profile` 规则里不许出现 `position:fixed`**、头像与名字必须在页头内、桌面页头必须是两栏 grid。
+  （写这条时又被 Astro 作用域绊了一次 —— `.pagehead[data-astro-cid-…]`；另外这一页的样式是**内联在 HTML 里**的，
+  `dist/_astro/*.css` 里根本没有 `.profile`。两处都写进注释了。）
+- 全量 **121 passed | 2 skipped**；人眼：`about-pc-fixed.png` / `about-mobile-fixed.png`。

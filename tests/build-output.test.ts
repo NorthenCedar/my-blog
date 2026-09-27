@@ -573,6 +573,42 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log(`判据 过渡层叠 对象 蒙版/灯箱/缩略图 实测: 蒙版 z=${overlayZ} < 灯箱 z=${lightboxZ} · ${frames.length} 张缩略图带 data-no-transition · 收尾逻辑在位`);
   });
 
+  it('关于页头像用布局定位（不许 position:fixed）', () => {
+    // 站主 2026-09-27："刚打开关于界面时头像在图一位置，随后跳到图二位置，并且不跟随鼠标滚轮上下。"
+    // 根因：`position: fixed` 的包含块会被祖先的 transform 抢走 —— 过渡动画给 .shell 加了
+    // `transform: scale(0.98→1)`，动画期间头像按"相对 .shell"定位，动画结束、类被摘掉后 transform 变 none，
+    // 包含块换回视口 ⇒ 位置突变（实测 y 从 246 跳到 198）；而真 fixed 又**不跟滚动**。
+    // 修法：头像放进页头、用 grid 排到右边（布局定位）⇒ 位置由排版决定（不会变）且在正文流里（跟着滚）。
+    const about = readFileSync(join(DIST, 'about', 'index.html'), 'utf8');
+    const head = (about.match(/<header class="pagehead"[\s\S]*?<\/header>/) ?? [''])[0];
+    expect(head, '头像不在页头里（布局定位的前提）').toContain('avatar');
+    expect(head, '头像下面那行名字跑出页头了').toContain('profile-name');
+
+    const cssFiles: string[] = [];
+    const walkCss = (d: string) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e);
+        if (statSync(p).isDirectory()) walkCss(p);
+        else if (e.endsWith('.css')) cssFiles.push(p);
+      }
+    };
+    walkCss(DIST);
+    // ⚠️ 这一页的样式是**内联在 HTML 里**的（Astro 对小的作用域样式会内联，dist 的 .css 里根本没有 .profile）
+    const inline = [...about.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+    const css = (cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n') + '\n' + inline).replace(/\s+/g, '');
+    const rules = [...css.matchAll(/\.profile(?:\[data-astro-cid-[a-z0-9]+\])?\{[^}]*\}/g)].map((m) => m[0]);
+    expect(rules.length, '产物里一条 .profile 规则都没有').toBeGreaterThan(0);
+    expect(rules.join(' '), `.profile 里出现 position:fixed（会不跟滚动 + 加载后跳一下）`).not.toMatch(/position:fixed/);
+    // 页头必须是两栏 grid（头像才能排到右边而不是压在标题下面）。
+    // 两处都要容忍产物形态：媒体查询被压缩成 range 写法（`@media (width>=1024px)`），
+    // 且选择器带 Astro 作用域属性（`.pagehead[data-astro-cid-…]`）—— 后者已经绊过我三次，成套路写。
+    const scope = '(?:\\[data-astro-cid-[a-z0-9]+\\])?';
+    expect(css, '桌面端页头不是两栏 grid（头像会掉到标题下面）').toMatch(
+      new RegExp(`@media\\((?:min-width:1024px|width>=1024px)\\)\\{\\.pagehead${scope}\\{[^}]*display:grid`),
+    );
+    console.log(`判据 关于页头像 对象 布局定位 实测: 头像与名字都在页头内 · ${rules.length} 条 .profile 规则无 position:fixed · 桌面页头是两栏 grid`);
+  });
+
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
     // 2026-09-25 修订：加了 <link rel="canonical"> 之后，这条断言需要区分
     // 「加载外部资源」（script/style/font/img —— 真实网络请求，必须禁止）
