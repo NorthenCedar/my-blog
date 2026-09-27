@@ -52,7 +52,8 @@ html.pt-on .pt {
   --pt-paper: #f7f5f0; /* 无菌纸米色 */
   --pt-paper-hi: #fdfbf7; /* 暖白高光 */
   --pt-green: #2c3e35; /* 墨绿：结构线 */
-  --pt-orange: #ff8c42; /* 医疗橙：只做极小点缀 */
+  --pt-orange: var(--signal); /* 医疗橙本体：**复用全站那一个 --signal(#e87722)**，别在这再写一个橙 */
+  --pt-orange-glow: #e8772242; /* 它的 26% 变体：舱门接缝流光与节点光晕（8 位 hex 承载 alpha，组件里不写 rgb()） */
 }
 
 /* ---------- ①②③ 两块无菌玻璃舱门（同时也是第一阶段的柔雾） ---------- */
@@ -90,7 +91,7 @@ html.pt-on .pt {
   /* 两端透明：线是从中央那根轴延伸出去的感觉，不要硬切边 */
   background: linear-gradient(90deg, transparent, var(--pt-green) 14%, var(--pt-green) 86%, transparent);
   /* 橙光压到很淡 —— 它是"流光"，不是主体；主体是那根墨绿线 */
-  box-shadow: 0 0 10px 1px rgb(255 140 66 / 26%);
+  box-shadow: 0 0 10px 1px var(--pt-orange-glow);
   opacity: 0;
 }
 .pt-bottom::after {
@@ -106,7 +107,7 @@ html.pt-on .pt {
   top: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--pt-orange) 10%, var(--pt-orange) 90%, transparent);
-  box-shadow: 0 0 12px 2px rgb(255 140 66 / 45%);
+  box-shadow: 0 0 12px 2px var(--pt-orange-glow);
   opacity: 0;
   will-change: transform, opacity;
 }
@@ -162,7 +163,7 @@ html.pt-on .pt {
   height: 5px;
   margin: -2.5px 0 0 -2.5px;
   background: var(--pt-orange);
-  box-shadow: 0 0 6px 1px rgb(255 140 66 / 55%);
+  box-shadow: 0 0 6px 1px var(--pt-orange-glow);
   opacity: 0;
 }
 

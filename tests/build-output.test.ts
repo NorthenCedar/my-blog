@@ -581,7 +581,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(tcss, '② 轴线起步不是 600ms / 长 800ms').toMatch(/--pt-axis-at:600ms/);
     expect(tcss, '③ 舱门不是 1200ms 起、长 1000ms').toMatch(/--pt-hatch-at:1200ms/);
     expect(tcss, '④ 内容浮现不是 1800ms 起、长 400ms').toMatch(/--pt-content-at:1800ms/);
-    expect(tcss, '配色丢了：医疗橙/无菌米色/墨绿三色必须都在').toMatch(/--pt-orange:#ff8c42/);
+    expect(tcss, '配色丢了：医疗橙/无菌米色/墨绿三色必须都在（橙应复用 --signal）').toMatch(/--pt-orange:var\(--signal\)/);
     expect(tcss, '柔雾初始厚度不是 30px（首帧就不是"内容完全不可见"了）').toMatch(/blur\(30px\)/);
     // 这两条是实测定格图抓出来的真 bug 的回归网：
     expect(tcss, '消散动画用了 both ⇒ 会在延迟期间把 opacity:1 顶上去，准星/基准线 600ms 前就可见').not.toMatch(/pt-(axis|ticks)-out[^,;]*both/);
@@ -651,7 +651,10 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     //   三、容器四角 20% 淡绿括号 + 悬停 10% 绿光 + 0.5s 扫描线；正文不加括号；引用块 1px 淡绿竖线；
     //   四、触屏（hover:none）取消扫描线与微光，只留静态绿括号。
     const t = readFileSync('src/styles/tokens.css', 'utf8').replace(/\s+/g, '');
-    expect(t, '缺少医疗橙 #e87722 令牌（站主指定色值）').toMatch(/--hud-orange:#e87722/);
+    // 医疗橙：站上本来就有 --signal:#e87722（语义就是"橙信号"）⇒ HUD 直接复用它，
+    // 不许再新造一个同色令牌（初版就是这么写的，等于同一个橙写两份）。
+    expect(t, '缺少医疗橙 #e87722（应复用既有的 --signal）').toMatch(/--signal:#e87722/);
+    expect(t, '又新造了一个同色的橙令牌（应当复用 --signal）').not.toMatch(/--hud-orange:#e87722/);
     expect(t, '网格线不是灰绿 @3%').toMatch(/--hud-grid-line:#6b7d6f08/);
     expect(t, '四角括号不是淡绿 @20%').toMatch(/--hud-bracket:#2d7d4633/);
     expect(t, '悬停微光不是淡绿 @10%').toMatch(/--hud-glow:#2d7d461a/);
@@ -662,6 +665,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(h, '交点呼吸动画丢了').toMatch(/@keyframeshud-breathe/);
     expect(h, '扫描线动画不是 0.5s').toMatch(/hud-scan0\.5sease-out/);
     expect(h, '触屏降级（hover:none）丢了 —— 触屏上会出现悬停扫描与误触').toMatch(/@media\(hover:none\)/);
+    expect(h, 'HUD 的橙没复用 --signal（会在站上留下第二个橙）').toMatch(/var\(--signal\)/);
     // 注意产物里最后一条声明后面有分号（`…var(--hud-rule);}`），正则要带上
     expect(h, '引用块没有换成 1px 淡绿竖线').toMatch(/\.proseblockquote\{border-left:1pxsolidvar\(--hud-rule\);?\}/);
     // 组件里的 `text-decoration: none` 是带 Astro 作用域的，会压过全局规则 ⇒ 这三条必须 !important

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * HUD 视觉系统（2026-09-27 站主定案）—— 科研坐标纸 / 仪器待机 / 医疗橙点缀。
  *
  * 站上要的三件事，集中在这一个文件里：
@@ -96,7 +96,7 @@ body::after {
   pointer-events: none;
   opacity: 0;
   /* 2 倍宽的横向渐变里只有中间一小段是暖色 ⇒ 整层左右平移时，视觉上就是一道扫描光在走 */
-  background-image: linear-gradient(90deg, transparent 42%, var(--hud-orange) 50%, transparent 58%);
+  background-image: linear-gradient(90deg, transparent 42%, var(--signal) 50%, transparent 58%);
   background-size: 200% 100%;
   will-change: transform, opacity;
 }
@@ -125,7 +125,7 @@ body::after {
   --hud-bracket-opacity: 0;
 }
 .hud-card:hover {
-  --hud-bracket-color: var(--hud-orange);
+  --hud-bracket-color: var(--signal);
   --hud-bracket-opacity: 1;
 }
 
@@ -172,7 +172,7 @@ body::after {
 .foot a:hover,
 .links a:hover,
 .rail-tick:hover {
-  text-decoration-color: var(--hud-orange) !important;
+  text-decoration-color: var(--signal) !important;
 }
 /* 图标型按钮（相册灯箱的翻页、页面里的关闭等）没有文字可画下划线，用同色的下边框代替 */
 .act,
