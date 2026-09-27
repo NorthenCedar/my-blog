@@ -15,7 +15,6 @@ const { posts, heading } = Astro.props;
        放在这里而不是归档页：归档页是复用这个组件渲染的，属性必须跟着行一起产出。
        标签页（6 个）也用它，多这几个属性无副作用 —— 筛选脚本只挂在归档页。 */
     <li
-      class="hud hud-card"
       data-date={p.date}
       data-year={p.date.slice(0, 4)}
       data-month={p.date.slice(5, 7)}
@@ -23,11 +22,7 @@ const { posts, heading } = Astro.props;
     >
       <a href={p.url}>
         <span class="date">
-          {/* 时间戳（站主 2026-09-27）：方括号用**极其微弱的橙**，期号用点分 —— 形如 [ 2026.09.24 ]。
-              time[datetime] 仍然是 ISO，归档页的筛选/排序都读 data-date，不受显示格式影响。 */}
-          <time datetime={p.date}>
-            <span class="brk">[</span> {p.date.replace(/-/g, '.')} <span class="brk">]</span>
-          </time>
+          <time datetime={p.date}>{p.date}</time>
           {p.draft && <> <DraftBadge /></>}
         </span>
         <span class="title">{p.title}</span>
@@ -64,7 +59,6 @@ const { posts, heading } = Astro.props;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
-  /* 时间戳方括号的橙色是**全局**规则（src/styles/hud.css 的 .brk）—— 首页文章行也要用同一套，别在这重复一份 */
   .title {
     display: block;
     margin: var(--sp-2) 0 var(--sp-3);

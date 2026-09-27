@@ -461,9 +461,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(groupYears, '年份分组不是倒序（新的应当在上面）').toEqual([...groupYears].sort().reverse());
 
     // 筛选要有东西可筛：每行都得带 data-*（搜索/年月都靠它）+ 筛选条在位
-    // 别把产物形态写死：2026-09-27 给行挂上 HUD 类之后，`<li>` 上多了 class ⇒
-    // 原来 `/<li\s+data-date=/` 这种"紧贴"的正则会假红。改成只锚定 data-* 的相对顺序。
-    const rows = [...html.matchAll(/<li[^>]*data-date="([^"]+)"[^>]*data-year="(\d{4})"[^>]*data-month="(\d{2})"[^>]*data-q="([^"]*)"/g)];
+    const rows = [...html.matchAll(/<li\s+data-date="([^"]+)"\s+data-year="(\d{4})"\s+data-month="(\d{2})"\s+data-q="([^"]*)"/g)];
     expect(rows.length, '归档的行没有 data-date/data-year/data-month/data-q（筛选会失效）').toBe(PUBLISHED.length);
     expect(html, '筛选条不在产物里').toContain('data-filters');
     expect(html, '筛选条默认应当隐藏（无 JS 时不显示）').toMatch(/<form class="filters" data-filters hidden/);
@@ -564,8 +562,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(overlayZ, `过渡蒙版(${overlayZ}) 必须低于灯箱(${lightboxZ})，否则会盖住照片`).toBeLessThan(lightboxZ);
 
     const gallery = readFileSync(join(DIST, 'gallery', 'index.html'), 'utf8');
-    // 同上：缩略图链接现在带 HUD 类（class="frame hud"）⇒ 正则要容忍 class 里的其它类名
-    const frames = [...gallery.matchAll(/<a class="frame[^"]*"[^>]*>/g)].map((m) => m[0]);
+    const frames = [...gallery.matchAll(/<a class="frame"[^>]*>/g)].map((m) => m[0]);
     expect(frames.length, '相册页一张缩略图链接都没有').toBeGreaterThan(0);
     const missing = frames.filter((f) => !f.includes('data-no-transition'));
     expect(missing, `${missing.length} 张缩略图链接缺 data-no-transition（点它会触发过渡、挡住灯箱）`).toEqual([]);
@@ -581,7 +578,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(tcss, '② 轴线起步不是 600ms / 长 800ms').toMatch(/--pt-axis-at:600ms/);
     expect(tcss, '③ 舱门不是 1200ms 起、长 1000ms').toMatch(/--pt-hatch-at:1200ms/);
     expect(tcss, '④ 内容浮现不是 1800ms 起、长 400ms').toMatch(/--pt-content-at:1800ms/);
-    expect(tcss, '配色丢了：医疗橙/无菌米色/墨绿三色必须都在（橙应复用 --signal）').toMatch(/--pt-orange:var\(--signal\)/);
+    expect(tcss, '配色丢了：医疗橙/无菌米色/墨绿三色必须都在').toMatch(/--pt-orange:#ff8c42/);
     expect(tcss, '柔雾初始厚度不是 30px（首帧就不是"内容完全不可见"了）').toMatch(/blur\(30px\)/);
     // 这两条是实测定格图抓出来的真 bug 的回归网：
     expect(tcss, '消散动画用了 both ⇒ 会在延迟期间把 opacity:1 顶上去，准星/基准线 600ms 前就可见').not.toMatch(/pt-(axis|ticks)-out[^,;]*both/);
@@ -642,53 +639,6 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       expect(s, `${f} 丢了 fresh 的 prepend（界面发的新评论会掉到最下面）`).toMatch(/if \(fresh\) list\.prepend\(li\)/);
     }
     console.log('判据 评论顺序 对象 接口 + comments.ts + talks.ts 实测: ORDER BY created_at DESC,id DESC · 两处 fresh 都走 prepend');
-  });
-
-  it('HUD 视觉系统：工程网格 / 四角括号 / 医疗橙点缀 / 触屏降级（2026-09-27 站主规格）', () => {
-    // 四组要求都在 src/styles/hud.css + tokens.css 里，这里守"别被清理掉"：
-    //   一、全局灰绿工程网格 3% / 40px + 交点圆点呼吸；
-    //   二、医疗橙 #e87722 只出现在扫描线、链接悬停下划线、时间戳方括号；
-    //   三、容器四角 20% 淡绿括号 + 悬停 10% 绿光 + 0.5s 扫描线；正文不加括号；引用块 1px 淡绿竖线；
-    //   四、触屏（hover:none）取消扫描线与微光，只留静态绿括号。
-    const t = readFileSync('src/styles/tokens.css', 'utf8').replace(/\s+/g, '');
-    // 医疗橙：站上本来就有 --signal:#e87722（语义就是"橙信号"）⇒ HUD 直接复用它，
-    // 不许再新造一个同色令牌（初版就是这么写的，等于同一个橙写两份）。
-    expect(t, '缺少医疗橙 #e87722（应复用既有的 --signal）').toMatch(/--signal:#e87722/);
-    expect(t, '又新造了一个同色的橙令牌（应当复用 --signal）').not.toMatch(/--hud-orange:#e87722/);
-    expect(t, '网格线不是灰绿 @3%').toMatch(/--hud-grid-line:#6b7d6f08/);
-    expect(t, '四角括号不是淡绿 @20%').toMatch(/--hud-bracket:#2d7d4633/);
-    expect(t, '悬停微光不是淡绿 @10%').toMatch(/--hud-glow:#2d7d461a/);
-
-    const h = readFileSync('src/styles/hud.css', 'utf8').replace(/\s+/g, '');
-    expect(h, '全局网格没挂在 body::before 上').toMatch(/body::before\{[^}]*background-size:40px40px/);
-    expect(h, '交点圆点没单独成层').toMatch(/body::after\{[^}]*radial-gradient/);
-    expect(h, '交点呼吸动画丢了').toMatch(/@keyframeshud-breathe/);
-    expect(h, '扫描线动画不是 0.5s').toMatch(/hud-scan0\.5sease-out/);
-    expect(h, '触屏降级（hover:none）丢了 —— 触屏上会出现悬停扫描与误触').toMatch(/@media\(hover:none\)/);
-    expect(h, 'HUD 的橙没复用 --signal（会在站上留下第二个橙）').toMatch(/var\(--signal\)/);
-    // 注意产物里最后一条声明后面有分号（`…var(--hud-rule);}`），正则要带上
-    expect(h, '引用块没有换成 1px 淡绿竖线').toMatch(/\.proseblockquote\{border-left:1pxsolidvar\(--hud-rule\);?\}/);
-    // 组件里的 `text-decoration: none` 是带 Astro 作用域的，会压过全局规则 ⇒ 这三条必须 !important
-    expect(h, '链接装饰属性没用 !important（会被组件的 text-decoration:none 压过去，实测过）').toMatch(/text-decoration-color:transparent!important/);
-
-    const cssFiles: string[] = [];
-    const walk = (d: string) => {
-      for (const e of readdirSync(d)) {
-        const p = join(d, e);
-        if (statSync(p).isDirectory()) walk(p);
-        else if (e.endsWith('.css')) cssFiles.push(p);
-      }
-    };
-    walk(DIST);
-    const built = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
-    // ⚠️ 压缩器会把 `body::before` 写成 `body:before`（单冒号）⇒ 两种都要认（产物形态别写死）
-    expect(built, '产物里没有全局网格那一层').toMatch(/body::?before/);
-    const html = readFileSync(join(DIST, 'archive', 'index.html'), 'utf8');
-    expect(html, '归档行没挂 HUD 类（四角括号/悬停扫描都不会出现）').toMatch(/class="hud hud-card"/);
-    // 同样别绑死：跨元素会带上 Astro 作用域属性 ⇒ `class="brk"` 后面可能还有 data-astro-cid-*
-    expect(html, '时间戳没有方括号标记').toMatch(/class="brk"[^>]*>\[/);
-    expect(html, '时间戳不是点分格式').toMatch(/\d{4}\.\d{2}\.\d{2}/);
-    console.log('判据 HUD 系统 对象 网格/括号/橙/触屏 实测: 3%@40px 网格 + 呼吸 · 四角 20% 绿括号 · #e87722 橙 · hover:none 降级在位');
   });
 
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
