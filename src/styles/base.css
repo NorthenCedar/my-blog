@@ -97,15 +97,16 @@ html.cursor-none * {
   padding: var(--sp-7) var(--gutter) var(--sp-8);
 }
 
-/* 坐标纸网格（2026-09-27 站主定稿：主页与内页同一套、线色用上一轮那版、交点圆点落在线的交点上、
-   圆点比线粗一点、明暗变化明显一点、整体呼吸自上而下循环）。
-   三层结构（顺序即绘制顺序）：
-     · 宿主元素自己的背景 = 网格线（48px 间距，1px）；
-     · ::before           = **交点圆点**，background-position 必须是 0 0（tile 的原点 = 线的交点）；
-     · ::after            = 一张"纸色薄雾"自上而下扫过 —— 它压过的地方网格变暗、掠过后变亮，
-                            合起来就是"整片网格自上而下循环呼吸"。只用 transform ⇒ 合成层、不重绘。
-   ⚠️ 圆点曾经错在格子中心：radial-gradient 默认从元素**中心**起画，而网格线画在 tile 的边缘 ⇒
-      两条线交叉处在 tile 原点。必须显式写 background-position: 0 0（站主 2026-09-27 截图指出）。 */
+/* 坐标纸网格（2026-09-27 站主定稿第三版：去掉盖住整张网格的薄雾 ✗，
+   改成**只有交点圆点**在明暗变化、且上下圆点的时机错开，看起来像明暗从上往下走过去；网格线明暗不变）。
+   两层结构：
+     · 宿主元素自己的背景 = 网格线（48px、1px、ink @4.3%）—— **完全静止**，不参与任何动画；
+     · ::before           = 交点圆点（`circle at 0 0` ⇒ 落在线的交点上）；
+       它上面挂一层**纵向渐变的遮罩**（亮→暗→亮），动画只平移这层遮罩 ⇒
+       同一列上的圆点在不同高度处于不同相位（越靠下的越晚到达最亮）⇒ 视觉上就是从下/上走过去的明暗波。
+       遮罩**不画任何像素**，所以它不会像薄雾那样把网格线也压暗。
+   ⚠️ 圆点必须用 `radial-gradient(circle at 0 0, …)`：radial-gradient 的圆心默认在元素中心，
+      而 background-position 只平移整个 tile、挪不动圆心 ⇒ 只写 background-position 会落在**格子正中**。 */
 .paper-grid {
   background-image:
     linear-gradient(to right, var(--page-grid-line) 1px, transparent 1px),
@@ -117,40 +118,33 @@ html.cursor-none * {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* 有实体核心 + 柔边（站主要"比线粗一点"）：核心 ~3px、外沿淡出到 ~5px。
-     ⚠️ 圆心必须写成 `at 0 0`：radial-gradient 的圆心默认在**元素中心**，
-        而 `background-position` 只移动整个 tile、并不能把圆心挪到 tile 的角上 ⇒
-        只写 background-position: 0 0 的话，圆点仍然落在**格子正中**（站主 2026-09-27 截图指出，
-        诊断脚本 _tmp-diag-grid-phase.mjs 也量到"格子正中 226 比交点 234 更暗"）。
-        `at 0 0` = 圆心对齐 tile 原点 = 横竖两条线的交点；其余三个象限由相邻 tile 补齐，无缝。 */
+  /* 有实体核心 + 柔边（站主要"比线粗一点"）：核心 ~3px、外沿淡出到 ~5px */
   background-image: radial-gradient(circle at 0 0, var(--page-grid-dot) 0 1.5px, transparent 2.6px);
   background-size: 48px 48px;
   background-position: 0 0;
-}
-.paper-grid::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  /* 纸色薄雾：两端透明、中段接近纸色 ⇒ 压住的网格看起来"暗下去了" */
-  background-image: linear-gradient(180deg, transparent 4%, var(--paper) 40%, transparent 76%);
-  opacity: 0.95;
+  /* 遮罩：两屏高的纵向渐变里含一整个明暗来回（亮→暗→亮），只作用于这一层 */
+  mask-image: linear-gradient(180deg, #000 0%, rgb(0 0 0 / 18%) 50%, #000 100%);
+  mask-repeat: no-repeat;
+  mask-size: 100% 200%;
+  mask-position: 0 0;
   animation: grid-breathe 9s linear infinite;
-  will-change: transform;
+  will-change: mask-position;
 }
 @keyframes grid-breathe {
-  /* 从视口上方整块进入、从下方整块离开 ⇒ 首尾都在画面外，循环无缝；"呼吸"就是一明一暗一个来回 */
+  /* 遮罩整体向下移动一屏 ⇒ 明暗带从上走到下。方向**必须靠量"由暗转亮"的先后**来定：
+     用"最亮时刻"判断会得到相反结论（余弦对相位模糊：滞后 2.9s 与超前 6.1s 的峰值时刻一样），
+     我第一次就是这么把方向改反的 —— 量到 上 3450ms 先亮（＝自上而下 ✓）却按峰值判成反向 ✗。 */
   from {
-    transform: translateY(-100%);
+    mask-position: 0 0;
   }
   to {
-    transform: translateY(100%);
+    mask-position: 0 -100%;
   }
 }
-/* 系统开了「减少动态效果」：网格与圆点照旧，只是不再扫（停在最亮的一档） */
+/* 系统开了「减少动态效果」：网格与圆点照旧，只是不再走明暗波（停在偏亮的一档） */
 @media (prefers-reduced-motion: reduce) {
-  .paper-grid::after {
+  .paper-grid::before {
     animation: none;
-    opacity: 0;
+    mask-image: none;
   }
 }
