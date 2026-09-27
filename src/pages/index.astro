@@ -298,7 +298,13 @@ const sectors = [
         items.forEach((el) => el.classList.add('is-revealed'));
       }
 
-      /* 2) 聚焦：屏幕中部 25vh 就是「扫描带」，焦点由滚动位置驱动。带外不禁用，只弱化。 */
+      /* 2) 聚焦：扫描带是**一条线**（视口中线），焦点 = 中线真正压住的那一个条目。
+            旧实现把「中部 25vh」当成带，条目够矮时一屏能塞进两三个 ⇒ 谁赢由
+            IntersectionObserver 的回调顺序决定 ⇒ 绿线压着上一篇、读数却显示下一篇
+            （站主 2026-09-28 报的就是这个，实测 73 个滚动位置里 26 个不一致）。
+            现在只看中线：压住谁就报谁；区段之间的留白谁也没压住 ⇒ 报「—」（站主 2026-09-28 定）。
+            条目互不重叠，中线最多压住一个，所以找到即收工，不需要再排序。
+            选人挂在下面 4) 的 rAF 里 —— 每帧至多算一次，不额外加滚动监听器。 */
       let current = null;
       const setFocus = (el) => {
         if (el === current) return;
@@ -311,22 +317,14 @@ const sectors = [
           setTimeout(() => band.classList.remove('is-tick'), 120);
         }
       };
-      if ('IntersectionObserver' in window) {
-        const focus = new IntersectionObserver((entries) => {
-          for (const e of entries) {
-            if (e.isIntersecting) setFocus(e.target);
-            else if (e.target === current) {
-              // 还在带内的其它条目会立刻把它顶掉；没有就清空
-              const still = items.filter((i) => {
-                const r = i.getBoundingClientRect();
-                return r.top < innerHeight * 0.625 && r.bottom > innerHeight * 0.375;
-              });
-              setFocus(still[0] || null);
-            }
-          }
-        }, { rootMargin: '-37.5% 0px -37.5% 0px', threshold: 0 });
-        items.forEach((el) => focus.observe(el));
-      }
+      const pickFocus = () => {
+        const cy = innerHeight / 2;
+        for (const el of items) {
+          const r = el.getBoundingClientRect();
+          if (r.top <= cy && r.bottom >= cy) return setFocus(el);
+        }
+        setFocus(null);
+      };
 
       /* 3) 刻度填充 + HUD 读数（passive，不阻塞滚动；仪器读数不加缓动） */
       let secTops = [];
@@ -368,6 +366,7 @@ const sectors = [
       let yieldQueued = false;
       const updateYield = () => {
         yieldQueued = false;
+        pickFocus(); // 焦点与让位同帧结算：读数、透明度、字色三者永远对着同一条中线
         const cy = innerHeight / 2, half = 12;
         for (const el of yieldEls) {
           const r = el.getBoundingClientRect();
