@@ -3,7 +3,7 @@ title: 免费使用正版的Typora教程
 date: 2026-09-27
 summary: 本文主要介绍如何免费使用正版的Typora
 tags: [教程, 工具]
-draft: true
+draft: false
 ---
 
 ## 1.下载
