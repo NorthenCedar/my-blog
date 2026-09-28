@@ -1,0 +1,111 @@
+/* 回复区（2026-09-28 站主要求：说说 / 留言 / 文章评论都能回复）。
+   只使用 tokens.css 里已有的变量 —— 不新增颜色、不新增间距档位、不用圆角/阴影。
+
+   ⚠️ 这个文件**必须是全局的**，而且 CommentSection.astro 与 talks.astro 都要 import 它：
+      · 回复元素是 JS 运行时创建的（`src/scripts/reply-common.ts`）；
+      · talks.astro 的 `<style>` 是 **scoped**（产物里是 `.cmeta[data-astro-cid-…]`），
+        动态创建的元素没有那个 data-astro-cid 属性 ⇒ 写在页面 style 里的回复样式**一条都不会生效**。
+      放进普通 .css 文件（不带 scope）就没有这个问题。 */
+
+/* 「回复」按钮：小字、弱化成 --muted，hover 才点亮 —— 不能跟正文抢注意力 */
+.reply-btn {
+  margin: var(--sp-2) 0 0;
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.reply-btn:hover,
+.reply-btn:focus-visible {
+  color: var(--accent-ink);
+}
+
+/* 回复列表：左边一道细线表示"挂在下面"，只有**一层**缩进（层级是两层，站主拍板） */
+.reply-list {
+  list-style: none;
+  margin: var(--sp-3) 0 0;
+  padding: 0 0 0 var(--sp-4);
+  border-left: 1px solid var(--hair);
+}
+.reply-item {
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--hair);
+}
+.reply-item:first-child {
+  border-top: 0;
+}
+.reply-meta {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.reply-body {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  white-space: pre-wrap; /* 保留换行，但不解析 HTML */
+  word-break: break-word;
+}
+
+/* 回复表单：贴着父评论的下方，视觉重量比主表单轻 */
+.reply-form {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-3);
+  background: var(--panel);
+  border: 1px solid var(--hair);
+  display: grid;
+  gap: var(--sp-2);
+}
+.reply-form input,
+.reply-form textarea {
+  width: 100%;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: var(--sp-2);
+}
+.reply-form input:focus-visible,
+.reply-form textarea:focus-visible {
+  border-color: var(--ink);
+}
+.reply-form button {
+  justify-self: start;
+  font: inherit;
+  font-size: var(--fs-xs);
+  padding: 0.3em 0.9em;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--hair);
+  cursor: pointer;
+}
+.reply-form button:hover:not(:disabled) {
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
+}
+/* 发表用实心（与主表单的按钮同一套语言）；取消是描边 —— 两个按钮不能长得一样重 */
+.reply-send {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.reply-send:hover:not(:disabled) {
+  background: var(--accent-ink);
+  border-color: var(--accent-ink);
+  color: var(--paper);
+}
+.reply-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.reply-error {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--accent-ink);
+}

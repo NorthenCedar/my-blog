@@ -655,6 +655,27 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log('判据 评论顺序 对象 接口 + comments.ts + talks.ts 实测: ORDER BY created_at DESC,id DESC · 两处 fresh 都走 prepend');
   });
 
+  it('回复：接口按 created_at ASC 取回复，前端提交带 parentId（两层、回复旧的在上）', () => {
+    // 2026-09-28 站主要求：说说 / 留言 / 文章评论都能回复（像 QQ 动态的评论区）。
+    // 这里守的是"三条路径不能各写一套"的那几条硬规则：
+    //   ① 回复顺序由接口**唯一**决定（旧的在上，站主拍板 —— 与顶层评论的 DESC 相反）；
+    //   ② 回复必须校验父评论存在且**同 slug**（否则能往任意 id / 别的页面塞回复）；
+    //   ③ 两个前端脚本提交时都要带 parentId，否则回复会被当成顶层评论存下来。
+    const api = readFileSync('functions/api/comments.ts', 'utf8');
+    expect(api, '接口没查 replies 表').toMatch(/FROM replies/);
+    expect(api, '回复不是按 created_at ASC（站主拍板：对话要顺着读，旧的在上）').toMatch(
+      /ORDER BY created_at ASC, id ASC/
+    );
+    expect(api, '回复没校验父评论存在且同 slug（可以往任意 id / 别的页面塞回复）').toMatch(
+      /id = \? AND slug = \?/
+    );
+    for (const f of ['src/scripts/comments.ts', 'src/scripts/talks.ts']) {
+      const s = readFileSync(f, 'utf8');
+      expect(s, `${f} 提交时没带 parentId（回复会被存成顶层评论）`).toMatch(/parentId/);
+    }
+    console.log('判据 回复 对象 functions/api/comments.ts + comments.ts + talks.ts 实测: replies 表 ASC · 父评论同 slug 校验 · 两处都带 parentId');
+  });
+
   it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
     // 2026-09-25 修订：加了 <link rel="canonical"> 之后，这条断言需要区分
     // 「加载外部资源」（script/style/font/img —— 真实网络请求，必须禁止）
@@ -743,9 +764,15 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     //      · <head> 里的 inline 首帧保险（防止换页时先闪内容）= 205 字节；
     //      · src/scripts/transition.ts 主模块（Astro 抽成同源共享 chunk）= 690 字节；
     //      合计 895 字节。预算仍按"内联 + 同源外链 import 闭包"的**实数**统计（不靠少算通过）。
+    //   ④ 预算 5632 → 8192：站主 2026-09-28 要求「说说 / 留言 / 文章评论都能回复」。
+    //      实测账（不是估的）：回复表单 + 回复列表让评论部分从 2569 → 4416
+    //      （comments.js 2181 + reply-common.js 2235）。为了少占字节已经做过两轮：
+    //        · 把分组函数从后端 core 搬回前端（原样 import 会把整个 core 拖进产物，多 3 KB）；
+    //        · 把「打开回复表单」与「提交」收进 reply-common，三处共用而不是各写一份（8310 → 7632）。
+    //      站主据此拍板 8192（中间先试过 6656，实测装不下）。
     // 标签数那条只是"别让页面无限堆脚本"的粗筛，真正的约束是下面的字节数；
     // 现在 5 处 = head 保险 + 光标 + 统计 + 评论 loader + 过渡 loader。
-    const BUDGET = 5632;
+    const BUDGET = 8192;
     console.log(`内联脚本体积: ${inline.join(' + ')} = ${inlineTotal} 字节 · 含同源外链合计 ${full} 字节（预算 ${BUDGET}）· ${scripts.length} 处 <script>`);
 
     expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBeLessThanOrEqual(5);

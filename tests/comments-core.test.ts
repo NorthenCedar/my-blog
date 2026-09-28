@@ -4,10 +4,14 @@ import {
   honeypotTripped,
   rateLimited,
   toRecord,
+  toReplyRecord,
   NAME_MAX,
   BODY_MAX,
   RATE_MAX,
 } from '../functions/api/_lib/comments-core';
+// 分组是**前端**的事（后端只返回两个数组），所以这个函数住在前端共享模块里，测试也从那边引。
+// 只有纯函数、顶层没有 DOM 调用 ⇒ 在 node 环境 import 它是安全的。
+import { groupReplies } from '../src/scripts/reply-common';
 
 const good = { slug: 'my-post', name: '小明', body: '写得真好。' };
 
@@ -94,5 +98,80 @@ describe('toRecord', () => {
     expect(
       toRecord({ id: 7, name: '小明', body: '你好', created_at: '2026-09-26T10:00:00.000Z' })
     ).toEqual({ id: 7, name: '小明', body: '你好', createdAt: '2026-09-26T10:00:00.000Z' });
+  });
+});
+
+describe('toReplyRecord', () => {
+  it('把 replies 行的 snake_case 转成 camelCase（含 parentId / replyTo）', () => {
+    expect(
+      toReplyRecord({
+        id: 3,
+        parent_id: 7,
+        reply_to: '小明',
+        name: '小红',
+        body: '同意',
+        created_at: '2026-09-28T10:00:00.000Z',
+      })
+    ).toEqual({
+      id: 3,
+      parentId: 7,
+      replyTo: '小明',
+      name: '小红',
+      body: '同意',
+      createdAt: '2026-09-28T10:00:00.000Z',
+    });
+  });
+});
+
+// 回复（2026-09-28 站主要求：说说 / 留言 / 文章评论都能回复）
+describe('validateComment 的回复字段', () => {
+  it('不传 parentId ⇒ 0（顶层评论）—— 老脚本不认识 parentId 也要能正常发言', () => {
+    for (const input of [{ ...good }, { ...good, parentId: undefined }, { ...good, parentId: null }, { ...good, parentId: '' }]) {
+      const r = validateComment(input);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value.parentId).toBe(0);
+    }
+  });
+
+  it('parentId 只接受安全非负整数（这个数字要进 SQL，宁可严格）', () => {
+    for (const bad of ['3', -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, {}, []]) {
+      expect(validateComment({ ...good, parentId: bad }).ok, `${String(bad)} 应该被拒`).toBe(false);
+    }
+    expect(validateComment({ ...good, parentId: 12 }).ok).toBe(true);
+  });
+
+  it(`replyTo 超过 ${NAME_MAX} 字 → 400`, () => {
+    expect(validateComment({ ...good, parentId: 1, replyTo: 'a'.repeat(NAME_MAX + 1) }).ok).toBe(false);
+    expect(validateComment({ ...good, parentId: 1, replyTo: 'a'.repeat(NAME_MAX) }).ok).toBe(true);
+  });
+
+  it('parentId=0 时 replyTo 一律归一成空串（避免脏数据落库）', () => {
+    const r = validateComment({ ...good, parentId: 0, replyTo: '小明' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.replyTo).toBe('');
+  });
+});
+
+describe('groupReplies（回复分组）', () => {
+  const rs = [
+    { parentId: 1, id: 10 },
+    { parentId: 1, id: 11 },
+    { parentId: 2, id: 20 },
+  ];
+
+  it('按所属顶层评论分组，顺序保持接口给的顺序（旧的在上）', () => {
+    const g = groupReplies(rs, [1, 2]);
+    expect(g.get(1)?.map((r) => r.id)).toEqual([10, 11]);
+    expect(g.get(2)?.map((r) => r.id)).toEqual([20]);
+  });
+
+  it('没有回复的顶层也会有一个空数组（前端不必再判空）', () => {
+    expect(groupReplies(rs, [1, 2, 3]).get(3)).toEqual([]);
+  });
+
+  it('孤儿回复（父不在这批里）丢弃 —— 挂上去会变成没有上下文的孤零零一条', () => {
+    const g = groupReplies([{ parentId: 999, id: 5 }], [1]);
+    expect(g.get(1)).toEqual([]);
+    expect(g.has(999)).toBe(false);
   });
 });

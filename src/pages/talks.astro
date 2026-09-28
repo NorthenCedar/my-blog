@@ -3,6 +3,9 @@ import { getEntry } from 'astro:content';
 import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
+// 回复区样式（2026-09-28）：全局引入。本页 <style> 是 scoped，
+// 而回复元素是 JS 运行时创建的（没有 data-astro-cid）⇒ 写在本页 style 里不会生效。
+import '../styles/replies.css';
 
 /** 说说页（2026-09-26 站主按参考站要求新增）：短的、没成为文章的东西。
  *  体例取自参考站「说说」：时间线，每条 = 时间 + 正文（那边还带序号，本站不加序号 ——

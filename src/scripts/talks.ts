@@ -3,8 +3,11 @@
 // 与 src/scripts/comments.ts 的区别（所以没有复用它）：
 //   · 那边是「一个页面一个评论区」（`document.querySelector('[data-comments]')`，单例）；
 //   · 这里是「一条说说一份」，页面上 N 个，且每个都带一个点赞按钮。
+//   两边**共用** src/scripts/reply-common.ts 的回复渲染与表单 ⇒ 三处回复的观感与规则完全一致。
 //
 // 安全铁律同 comments.ts：**任何地方都不用 innerHTML**，用户输入一律 textContent。
+
+import { fmtTime, groupReplies, parentIdsOf, postComment, replyLi, toggleReplyForm, type Reply } from './reply-common';
 
 type Comment = { id: number; name: string; body: string; createdAt: string };
 
@@ -93,17 +96,18 @@ if (boxes.length > 0 || likeButtons.length > 0) {
   }
 
   // ---------- 评论 ----------
-  const fmtTime = (iso: string) => {
-    const d = new Date(iso);
-    const p = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-  };
-
   // 顺序（2026-09-27 站主："把新评论放上面，其他的评论留言也一样"）：
   // 接口按 created_at DESC 返回（新的在前）⇒ 取回来的那批按顺序 append；**刚发表的那条要 prepend**，
   // 否则它会掉到最下面，跟"新的在上面"自相矛盾。
-  const render = (list: HTMLOListElement, c: Comment, fresh = false) => {
+  // 第 4 个参数 openReply 由每个评论区自己传进来（点「回复」要打开它**自己**那份表单）。
+  const render = (
+    list: HTMLOListElement,
+    c: Comment,
+    fresh = false,
+    openReply?: (li: HTMLElement, parentId: number, replyTo: string) => void
+  ) => {
     const li = document.createElement('li');
+    li.dataset.id = String(c.id);
     const meta = document.createElement('p');
     meta.className = 'cmeta';
     meta.textContent = `${c.name} · ${fmtTime(c.createdAt)}${fresh ? ' · 刚发表' : ''}`;
@@ -111,6 +115,18 @@ if (boxes.length > 0 || likeButtons.length > 0) {
     body.className = 'cbody';
     body.textContent = c.body;
     li.append(meta, body);
+
+    if (openReply) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'reply-btn';
+      btn.textContent = '回复';
+      btn.addEventListener('click', () => openReply(li, c.id, ''));
+      const rl = document.createElement('ul');
+      rl.className = 'reply-list';
+      li.append(btn, rl);
+    }
+
     if (fresh) list.prepend(li);
     else list.append(li);
   };
@@ -128,9 +144,21 @@ if (boxes.length > 0 || likeButtons.length > 0) {
     const countSpan = document.querySelector<HTMLElement>(`[data-count-for="${CSS.escape(slug)}"]`);
     let loaded = false;
 
+    /** 条数含回复（跟文章页一个口径：屏幕上真实有几行就是几条） */
     const setCount = () => {
-      if (countSpan) countSpan.textContent = list.children.length > 0 ? ` ${list.children.length}` : '';
+      const n = list.querySelectorAll('li').length;
+      if (countSpan) countSpan.textContent = n > 0 ? ` ${n}` : '';
     };
+
+    /** 打开回复表单的上下文（名字预填、发完重算条数）—— 交互本身在 reply-common 里，三处共用 */
+    const openReply = (li: HTMLElement, parentId: number, replyTo: string) =>
+      toggleReplyForm(list, li, {
+        slug,
+        parentId,
+        replyTo,
+        name: () => (form.elements.namedItem('name') as HTMLInputElement).value,
+        onAdded: setCount,
+      });
     const showError = (msg: string) => {
       errorBox.textContent = msg;
       errorBox.hidden = false;
@@ -141,9 +169,19 @@ if (boxes.length > 0 || likeButtons.length > 0) {
       loaded = true;
       fetch(`/api/comments?slug=${encodeURIComponent(slug)}`)
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('取评论失败'))))
-        .then((data: { comments?: Comment[] }) => {
+        .then((data: { comments?: Comment[]; replies?: Reply[] }) => {
           const items = data.comments ?? [];
-          for (const c of items) render(list, c);
+          for (const c of items) render(list, c, false, openReply);
+
+          // 回复挂到各自顶层评论下（顺序由接口定：旧的在上）；孤儿回复已被 groupReplies 丢掉
+          const grouped = groupReplies(data.replies ?? [], parentIdsOf(items));
+          for (const c of items) {
+            const li = list.querySelector<HTMLElement>(`li[data-id="${c.id}"]`)!;
+            const box2 = li?.querySelector<HTMLElement>(':scope > .reply-list')!;
+            for (const r of grouped.get(c.id) ?? []) {
+              box2.append(replyLi(r, () => openReply(li, c.id, r.name)));
+            }
+          }
           empty.hidden = items.length > 0;
           setCount();
         })
@@ -168,25 +206,15 @@ if (boxes.length > 0 || likeButtons.length > 0) {
         name: String(data.get('name') ?? ''),
         body: String(data.get('body') ?? ''),
         website: String(data.get('website') ?? ''),
+        parentId: 0, // 主表单永远发顶层评论；回复走 toggleReplyForm
       };
       submit.disabled = true;
       submit.setAttribute('aria-busy', 'true');
-      fetch('/api/comments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-        .then(async (r) => {
-          const body = (await r.json().catch(() => ({}))) as { comment?: Comment; error?: string };
-          if (!r.ok) return Promise.reject(new Error(body.error || '发表失败'));
-          return body;
-        })
-        .then((body) => {
-          if (body.comment) {
-            render(list, body.comment, true); // fresh ⇒ prepend（新的在最上面）
-            empty.hidden = true;
-            setCount();
-          }
+      postComment(payload)
+        .then((c) => {
+          render(list, c, true, openReply); // fresh ⇒ prepend（新的在最上面）
+          empty.hidden = true;
+          setCount();
           (form.elements.namedItem('body') as HTMLTextAreaElement).value = '';
         })
         .catch((err: Error) => {
