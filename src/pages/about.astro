@@ -16,15 +16,24 @@ interface Social {
   name: string;
   href: string;
 }
+/** 技术栈（站主 2026-09-28 要求：放在社交账号下方）。同样走内容层 about.md 的 `stack`，
+ *  与社交账号同一条例外理由：这是站主自己的信息，不该硬编码在主题里。 */
+interface StackGroup {
+  group?: string;
+  items?: string[];
+}
 interface AboutData {
   avatar?: string;
   avatarName?: string;
   social?: Social[];
+  stack?: StackGroup[];
 }
 const d = (entry?.data ?? {}) as unknown as AboutData;
 const assets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/about/*.{jpg,jpeg,png,webp,avif}', { eager: true });
 const avatar = d.avatar ? assets[`/src/assets/about/${d.avatar}`]?.default : undefined;
 const social = d.social ?? [];
+// 空组不渲染（内容层写错分组时不至于留一个空卡片）
+const stack = (d.stack ?? []).filter((g) => (g?.items ?? []).length > 0);
 const isExternal = (h: string) => /^https?:/i.test(h);
 ---
 {
@@ -73,6 +82,24 @@ const isExternal = (h: string) => /^https?:/i.test(h);
           </li>
         ))}
       </ul>
+    </section>
+  )}
+
+  {stack.length > 0 && (
+    <section class="stack-block" aria-labelledby="stack-title">
+      <h2 id="stack-title">技术栈</h2>
+      <div class="stack-groups">
+        {stack.map((g) => (
+          <div class="stack-group">
+            {g.group && <p class="stack-group-name">{g.group}</p>}
+            <ul class="stack-items">
+              {(g.items ?? []).map((t) => (
+                <li>{t}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
     </section>
   )}
 </Base>
@@ -167,5 +194,51 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     .social {
       grid-template-columns: 1fr 1fr;
     }
+  }
+  /* ---- 技术栈（站主 2026-09-28 要求：社交账号下方）----
+     视觉取既有元件，不新造：卡片沿用社交卡的「--panel 底 + --hair 边框」，
+     组名沿用 .profile-name / 日志版本号的「--accent-ink 小字 + 字距」，
+     条目沿用标签页 chips 的方框写法。颜色只用 token，无 rgba()。 */
+  .stack-block {
+    margin: var(--sp-8) 0 0;
+    max-width: var(--measure);
+  }
+  .stack-block h2 {
+    margin: 0 0 var(--sp-4);
+    font-size: var(--fs-lg);
+    font-weight: 800;
+  }
+  .stack-groups {
+    /* 单列：正文列只有 34em（≈544px），两列放不下三张卡会留一张孤卡（1440 实测）；
+       全宽单列让每组的 chips 有整行可用，长条目（Cloudflare D1…）也不用挤。 */
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--sp-3);
+  }
+  .stack-group {
+    border: 1px solid var(--hair);
+    background: var(--panel);
+    padding: var(--sp-4);
+  }
+  .stack-group-name {
+    margin: 0 0 var(--sp-3);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.12em;
+    color: var(--accent-ink);
+  }
+  .stack-items {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+  /* 条目是**不是链接**，所以刻意不给 hover —— 免得看着能点 */
+  .stack-items li {
+    font-size: var(--fs-sm);
+    color: var(--ink);
+    border: 1px solid var(--hair);
+    padding: 0.15em 0.5em;
   }
 </style>

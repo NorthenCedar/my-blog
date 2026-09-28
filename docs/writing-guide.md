@@ -29,7 +29,7 @@
 | **看/删留言** | `content/pages/guestbook.md` 是页面文案；留言本身在数据库 —— 见 §21 | 不用 |
 | 加相册、加照片 | `content/gallery/<相册名>/` —— 见 §17 | 不用 |
 | **归档页搜索/年月筛选** | 自动的，不用配 —— 见 §23 | 不用 |
-| **关于页头像 / 名字 / 社交账号** | `content/pages/about.md` 的 frontmatter —— 见 §24 | 不用 |
+| **关于页头像 / 名字 / 社交账号 / 技术栈** | `content/pages/about.md` 的 frontmatter —— 见 §24 | 不用 |
 | **说说的点赞与评论** | 自动的，不用配 —— 见 §25 | 不用 |
 | **页脚统计（运行时长 / PV / UV）** | 时长起点在 `content/site.md` 的 `since` —— 见 §26 | 不用 |
 | 标签清单 | `src/tag-registry.ts` | 会改一行数组就行 |
@@ -1057,9 +1057,10 @@ export const NAV_LINKS = [
 
 ---
 
-## 24. 关于页的头像与社交账号（`/about`）
+## 24. 关于页的头像、社交账号与技术栈（`/about`）
 
 > 2026-09-26 上线（站主要求）：右侧空白放圆形头像、下面写「北杉」；下面加社交账号卡片。
+> 2026-09-28 追加：社交账号下方加「技术栈」分组卡片。
 
 **全部在 `content/pages/about.md` 的 frontmatter 里改**（不用碰代码）：
 
@@ -1070,12 +1071,21 @@ social:
   - icon: github          # 图标名：github / mail / rss / douyin / bilibili
     name: GitHub          # 卡片上的字
     href: https://github.com/NorthenCedar
+stack:                    # 技术栈：group 是分组小标题，items 是该组条目（可加多组）
+  - group: 构建
+    items:
+      - Astro（静态生成）
+      - TypeScript
 ```
 
 - **换头像**：把新图放进 `src/assets/about/`，改 `avatar:` 的文件名（或同名覆盖，会自动重编）。
   头像会自动转 WebP、出两档尺寸、裁成圆形（圆形是样式做的，图片本身不用先裁好）。
 - **加一个社交账号**：往 `social:` 里加一组即可（`icon` 目前支持上面五个；都不合适就先用 `mail`）。
 - **删一个**：删掉那一组三行。
+- **技术栈**：往 `stack:` 里加一组（`group` + `items`）即可，卡片会自动多一张；某组 `items` 为空则整组不渲染。
+  条目**必须有出处**——只写这个博客真在用的技术（依赖看 `package.json`、部署看 `wrangler.toml`、
+  接口看 `functions/api/`、字体看 `public/fonts/`），不要往上堆自己没用过的名字。
+  版式是全宽单列（正文列只有 34em，两列会留孤卡，2026-09-28 实测后拍的板）。
 - 位置是自动的：**电脑上固定在正文右侧的空白处**（正文列只有 34em，右边本来是空的）；
   **手机上挪到标题下方居中** —— 手机上右侧没有位置，硬塞会压到正文。
 - 图标是**手绘内联 SVG**（不引图标库、不请求第三方）：形状是简笔（抖音是音符、哔哩哔哩是带天线的电视），
