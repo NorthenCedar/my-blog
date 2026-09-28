@@ -29,10 +29,19 @@ interface TalksData {
 }
 const entry = await getEntry('pages', 'talks');
 const d = (entry?.data ?? {}) as unknown as TalksData;
-const items = [...(d.items ?? [])].sort((a, b) => (String(a.date) < String(b.date) ? 1 : -1));
 /** YAML 会把未加引号的 `date: 2026-09-26` 隐式解析成 Date 对象 —— 归一成 YYYY-MM-DD。
  *  站上同一条约定见 src/lib/schema.ts 的 dateField（这里没走 schema，因为 pages 集合不校验）。 */
 const iso = (v: string | Date) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v));
+/** 倒序 = 新的在最上面（站主 2026-09-28 定）。
+ *  ⚠️ **必须先归一成 ISO 再比** —— 直接 `String(a.date)` 比的是 Date 的默认字符串
+ *  （"Sat Sep 26 2026 08:00:00 GMT+0800…"），开头是**星期名**：09-26 是 Sat、09-28 是 Mon，
+ *  "Sat" > "Mon" ⇒ 旧的反而被排到最上面（2026-09-28 实测到的就是这个现象）。
+ *  同日多条靠 Array.sort 的稳定性保留文件里的先后（写作手册要求"新的写最上面"）。 */
+const items = [...(d.items ?? [])].sort((a, b) => {
+  const x = iso(a.date);
+  const y = iso(b.date);
+  return x < y ? 1 : x > y ? -1 : 0;
+});
 const fmt = (v: string | Date) => {
   const [y, m, day] = iso(v).split('-');
   return `${y} 年 ${Number(m)} 月 ${Number(day)} 日`;

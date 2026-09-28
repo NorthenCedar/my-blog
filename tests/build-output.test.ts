@@ -491,6 +491,20 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log('判据 关于页 对象 头像 + 名字 + 5 张社交卡片 + 内联图标 实测: 全部在位');
   });
 
+  it('说说按日期倒序：新的在最上面', () => {
+    // 站主 2026-09-28："说说里面内容改为新发表的在上，后发的在下"。
+    // 事故：YAML 把未加引号的 `date: 2026-09-26` 解析成 Date，排序却比 `String(date)` ——
+    // 那个字符串以**星期名**开头（"Sat Sep 26…" / "Mon Sep 28…"），"Sat" > "Mon"
+    // ⇒ 09-26 被排到 09-28 前面，旧的在最上面。判据必须走归一后的 ISO 日期。
+    // 为什么守在产物里：Cloudflare 只跑构建不跑测试 ⇒ 只有这条断言能挡住它静默上线。
+    const talks = readFileSync(join(DIST, 'talks', 'index.html'), 'utf8');
+    const dates = [...talks.matchAll(/<time datetime="(\d{4}-\d{2}-\d{2})"/g)].map((m) => m[1]);
+    expect(dates.length, '说说页没有取到时间（选择器可能变了）').toBeGreaterThan(0);
+    const sortedDesc = [...dates].sort().reverse(); // ISO 日期可直接字典序比较
+    expect(dates, '说说不是按日期倒序（新的应在最上面）').toEqual(sortedDesc);
+    console.log(`判据 说说顺序 对象 dist/talks/index.html 实测: ${dates.join(' → ')}`);
+  });
+
   it('说说：每条都有点赞与评论入口，页脚统计在每页都在', () => {
     // 站主 2026-09-26："说说加个点赞评论功能，点赞不记名只记个数，评论要输入名称"
     //              + "在每页最底部加上图一上的功能"（运行时长 + PV/UV）。
