@@ -30,7 +30,7 @@ groups:
     note: 想换友链的去留言，我看到就加
     items: 
     -   name: WillowXI的小站
-        href: https://lwsblog.github.io/
+        href: http://willowxi.site
         desc: 这个博客很酷啊
 ---
 友链是博客之间互相串门的门牌。本站的友链按「分组」放，想换的话见上面的申请步骤。
