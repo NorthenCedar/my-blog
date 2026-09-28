@@ -530,6 +530,42 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log(`判据 说说互动 + 页脚统计 对象 产物挂点 实测: ${likes.length} 条带赞/评论 · ${pages.length} 页有统计 · since 在内容层`);
   });
 
+  it('说说：评论数在点开之前就显示（2026-09-28 站主报的 bug 的护栏）', () => {
+    // 事故经过（站主报的）：评论数原本只在 load() 里写，而 load() 只挂在「评论」按钮的 click 上
+    // ⇒ **不点按钮就永远是空的数字**。
+    // 修法：进页面时用 `/api/comments?slugs=…` 批量问一次（一个请求取齐整页，照 /api/likes 的样子）。
+    // 这条守的是"批量取数必须落在**按钮回调之外**"——挪回去就是原 bug 复活。
+    const ts = readFileSync('src/scripts/talks.ts', 'utf8');
+    const api = readFileSync('functions/api/comments.ts', 'utf8');
+
+    // 注意要匹配到**评论**这一处：点赞也有一个 `?slugs=`（/api/likes?slugs=），别串台
+    const batch = ts.indexOf('/api/comments?slugs=');
+    expect(batch, '说说脚本没有批量取评论数（应为 /api/comments?slugs=）').toBeGreaterThan(-1);
+
+    const clickAt = ts.indexOf("toggle?.addEventListener('click'");
+    expect(clickAt, '找不到「评论」按钮的点击事件').toBeGreaterThan(-1);
+    // 该回调的结束位置：从 clickAt 之后的第一个 '{' 起做花括号配对
+    let depth = 0;
+    let end = -1;
+    for (let i = ts.indexOf('{', clickAt); i < ts.length; i++) {
+      if (ts[i] === '{') depth++;
+      else if (ts[i] === '}' && --depth === 0) {
+        end = i;
+        break;
+      }
+    }
+    expect(end, '「评论」按钮的回调没闭合（选择器可能变了）').toBeGreaterThan(clickAt);
+    expect(batch, '批量取数被挪回「评论」按钮回调里了 ⇒ 又变成不点不显示').toBeGreaterThan(end);
+
+    // 口径必须是**含回复**：后端两表一起数，否则按钮上的数字会比展开后的行数少
+    expect(api, '批量口径丢了 replies 表（应 UNION ALL 两张表）').toMatch(/UNION ALL/);
+    expect(api, '后端没有处理 ?slugs= 批量形态').toMatch(/has\('slugs'\)/);
+    const line = ts.slice(0, batch).split('\n').length;
+    console.log(
+      `判据 评论数 对象 src/scripts/talks.ts:${line} + functions/api/comments.ts 实测: 批量取数在按钮回调之外（offset ${batch} > ${end}）· 后端 UNION ALL 两表合计`
+    );
+  });
+
   it('仓库里不许混进临时探针（_tmp*）—— 2026-09-27 事故的护栏', () => {
     // 事故经过：站主用 `git add -A` 提交一条友链（content/pages/links.md），
     // 结果把 **239 个临时文件 + 一个嵌套仓库 gitlink（_tmp-arknights-cursor，mode 160000）**

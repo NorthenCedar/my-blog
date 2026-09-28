@@ -31,9 +31,13 @@ const writeLiked = (list: string[]) => {
   }
 };
 
-const boxes = [...document.querySelectorAll<HTMLElement>('[data-comments-for]')];
-const likeButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-like]')];
-if (boxes.length > 0 || likeButtons.length > 0) {
+  const boxes = [...document.querySelectorAll<HTMLElement>('[data-comments-for]')];
+  const likeButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-like]')];
+  if (boxes.length > 0 || likeButtons.length > 0) {
+    // 条数要在**点开之前**就显示出来 ⇒ 先把每个「怎么把数字写回去」的函数记下来，进页面后一次性去问（见本块末尾）
+    const countPaints = new Map<string, (n: number) => void>();
+    /** 已经拉过完整评论的（用户点开过）：这批的条数以列表真实行数为准，批量结果不许覆盖 */
+    const pulled = new Set<string>();
   const liked = new Set(readLiked());
 
   // ---------- 点赞 ----------
@@ -144,10 +148,16 @@ if (boxes.length > 0 || likeButtons.length > 0) {
     const countSpan = document.querySelector<HTMLElement>(`[data-count-for="${CSS.escape(slug)}"]`);
     let loaded = false;
 
+    /** 按钮上的数字： > 0 才显示（一条都没有时按钮就写"评论"两个字） */
+    const paintCount = (n: number) => {
+      if (countSpan) countSpan.textContent = n > 0 ? ` ${n}` : '';
+    };
+    countPaints.set(slug, paintCount);
+
     /** 条数含回复（跟文章页一个口径：屏幕上真实有几行就是几条） */
     const setCount = () => {
       const n = list.querySelectorAll('li').length;
-      if (countSpan) countSpan.textContent = n > 0 ? ` ${n}` : '';
+      paintCount(n);
     };
 
     /** 打开回复表单的上下文（名字预填、发完重算条数）—— 交互本身在 reply-common 里，三处共用 */
@@ -167,6 +177,7 @@ if (boxes.length > 0 || likeButtons.length > 0) {
     const load = () => {
       if (loaded) return;
       loaded = true;
+      pulled.add(slug); // 自己会给 setCount 数一遍，别让批量回来的旧结果覆盖它
       fetch(`/api/comments?slug=${encodeURIComponent(slug)}`)
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('取评论失败'))))
         .then((data: { comments?: Comment[]; replies?: Reply[] }) => {
@@ -225,5 +236,25 @@ if (boxes.length > 0 || likeButtons.length > 0) {
           submit.removeAttribute('aria-busy');
         });
     });
+  }
+
+  // ---------- 评论数：进页面就显示，不等点 ----------
+  // 事故（2026-09-28 站主报的 bug）：条数原本只在 load() 里算，而 load() 挂在「评论」按钮的 click 上
+  // ⇒ 不点开就是空的数字。修法是这里**批量**问一次 `/api/comments?slugs=…`（一个请求取齐整页），
+  // 口径与 load() 一致：含回复 —— 后端 UNION ALL 把 comments + replies 一起数。
+  // 失败就什么都不显示（跟赞数取不到时留「·」一个道理：数字是锦上添花，不是页面本体）。
+  const asked = [...countPaints.keys()].filter(Boolean);
+  if (asked.length > 0) {
+    fetch(`/api/comments?slugs=${encodeURIComponent(asked.join(','))}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('取评论数失败'))))
+      .then((data: { counts?: Record<string, number> }) => {
+        for (const [slug, n] of Object.entries(data.counts ?? {})) {
+          // 用户在结果回来之前就点开了 ⇒ 那边的行数是真的，别拿这个盖掉
+          if (!pulled.has(slug)) countPaints.get(slug)?.(n);
+        }
+      })
+      .catch(() => {
+        /* 数字取不到就算了 */
+      });
   }
 }

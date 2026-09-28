@@ -4,6 +4,7 @@ import {
   rateLimited,
   toRecord,
   toReplyRecord,
+  parseCommentSlugList,
   RATE_WINDOW_MS,
   type CommentRecord,
   type ReplyRecord,
@@ -25,8 +26,45 @@ async function hashIp(ip: string): Promise<string> {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * GET /api/comments
+ *   · ?slug=talk-20260926      → { comments, replies }   单条：把这条的完整评论树取回来（点开评论框时用它）
+ *   · ?slugs=a,b,c             → { counts: { a: 2, b: 0 } }  批量：只取条数（说说页进页面就要显示多少个）
+ *
+ * 为什么要有第二种形态（2026-09-28 站主报的 bug）：评论数原本只有点开面板拉完整数据后才算得出来，
+ * 结果"不点评论按钮就不显示数字"。最省事的修法是进页面就给每条说说各发一次单条请求，
+ * 但那等于 N 个请求 —— 于是照 /api/likes?slugs= 的样子做成批量，**一个请求取齐一页**。
+ *
+ * 计数的**口径：含回复**（站主 2026-09-28 拍板）—— 屏幕上真实有几行就是几条，
+ * 所以两表要一起数；UNION ALL 就是为了让"点了展开"前后的数字对得上。
+ */
+const countAll = async (raw: string | null, env: Env): Promise<Record<string, number>> => {
+  const slugs = parseCommentSlugList(raw);
+  const counts: Record<string, number> = {};
+  for (const s of slugs) counts[s] = 0; // 查不到也要回 0：让前端能分清"查过了，是 0"和"压根没查"
+  if (slugs.length === 0) return counts;
+
+  const marks = slugs.map(() => '?').join(',');
+  const { results } = await env.COMMENTS_DB.prepare(
+    `SELECT slug, COUNT(*) AS n
+       FROM (SELECT slug FROM comments WHERE slug IN (${marks})
+             UNION ALL
+             SELECT slug FROM replies  WHERE slug IN (${marks}))
+      GROUP BY slug`
+  )
+    .bind(...slugs, ...slugs)
+    .all<{ slug: string; n: number }>();
+  for (const r of results ?? []) counts[r.slug] = r.n;
+  return counts;
+};
+
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  const slug = new URL(request.url).searchParams.get('slug') ?? '';
+  const url = new URL(request.url);
+  // 批量形态优先：`?slugs=` 存在就走批量（两个参数同时给也以批量为准，避免一次意外出两份语义）
+  if (url.searchParams.has('slugs')) {
+    return json({ counts: await countAll(url.searchParams.get('slugs'), env) });
+  }
+  const slug = url.searchParams.get('slug') ?? '';
   // 2026-09-27 站主："把新评论放上面，其他的评论留言也一样" ⇒ 新的在前。
   // 这里是**唯一**决定顺序的地方（留言板 / 文章评论 / 说说评论三条路径共用这个接口）。
   // `id DESC` 是稳定的决胜键：同一秒内的两条也有确定顺序。

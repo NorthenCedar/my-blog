@@ -354,6 +354,8 @@ git commit -m "feat(comments): pure validation core for comments API"
 **Interfaces:**
 - Consumes: Task 2 的全部导出；Task 1 的 binding `COMMENTS_DB`
 - Produces: `GET /api/comments?slug=` 与 `POST /api/comments`
+- 追加（2026-09-28）：`GET /api/comments?slugs=a,b,c` → `{ counts: { a: 2, … } }` —— 批量取条数，
+  说说页进页面就要显示数字用的（口径**含回复**，两表 UNION ALL 一起数，与点开后的行数一致）。
 
 - [ ] **Step 1: 写 `functions/api/comments.ts`**
 

@@ -117,6 +117,23 @@ export function toReplyRecord(row: {
   };
 }
 
+/**
+ * 批量查询用（2026-09-28 站主要求）：把 `slugs=a,b,c` 切成合法清单，非法项**静默丢弃**
+ * （不因为一个脏值就让整批失败）。
+ * 与 reactions-core 的 parseSlugList 同思路，但**不要求 `talk-` 前缀** ——
+ * 评论挂在文章 slug / 留言板 / 说说上，不是一个族，这里只对 slug 形态本身做校验。
+ */
+export function parseCommentSlugList(raw: string | null, max = 100): string[] {
+  if (typeof raw !== 'string' || raw.length === 0) return [];
+  const out: string[] = [];
+  for (const piece of raw.split(',')) {
+    const s = piece.trim();
+    if (SLUG_RE.test(s) && !out.includes(s)) out.push(s);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 // ⚠️ 分组函数（groupRepliesByParent）**不放在这里**：那是前端渲染的事（后端只返回两个数组），
 // 放进来会被前端 import ⇒ 整个 core 被打进浏览器产物（实测多出约 3 KB，直接顶爆 JS 预算）。
 // 它在 src/scripts/reply-common.ts 里，测试也从那边 import。

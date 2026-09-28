@@ -317,6 +317,10 @@
 GET  /api/comments?slug=<slug>
      → 200 { comments: [{ id, name, body, createdAt }] }   // 按 createdAt 正序
 
+GET  /api/comments?slugs=<a,b,c>                          // 2026-09-28 批量形态
+     → 200 { counts: { a: 2, b: 0, … } }                  // 只取条数（说说页按钮上的数字用）
+                                                           // 口径含回复：两表 UNION ALL 一起数
+
 POST /api/comments
      body: { slug, name, body, website }   // website 是蜜罐字段，正常用户永远为空
      → 201 { comment: { id, name, body, createdAt } }
