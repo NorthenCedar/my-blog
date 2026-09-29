@@ -1,7 +1,7 @@
 # 北杉札记 · 作者手册
 
 > 这份手册给**站主本人**看。它不发布到博客上（是作者工具，不是读者内容）。
-> 最后更新：2026-09-26 ｜ 对应仓库：https://github.com/NorthenCedar/personal（**已转私有**）
+> 最后更新：2026-09-29 ｜ 对应仓库：https://github.com/NorthenCedar/personal（**已转私有**）
 >
 > **怎么打开这份手册：**
 > 1. 这台电脑上：`<博客仓库>\docs\writing-guide.md`（推荐用 VS Code 打开，能实时渲染）
@@ -63,7 +63,7 @@ cd <博客仓库>
 ```powershell
 npm run dev       # 启动本地预览，改完立刻能看到（按 Ctrl+C 停止）
 npm run build     # 只构建，不跑测试
-npm run verify    # 构建 + 跑全部测试（57 个）—— 推送前必跑
+npm run verify    # 构建 + 跑全部测试（134 个，另有 6 条设计内跳过）—— 推送前必跑
 npm test          # 只跑测试
 git add -A        # 把改动标记为"要提交"
 git commit -m "说明"   # 存成一个版本
@@ -186,7 +186,8 @@ npm run dev
 npm run verify
 ```
 
-看到 `Tests 57 passed` 就对了。**没全绿就别推。**
+看到 `Tests 134 passed` 就对了（旁边那行 `6 skipped` 是设计内的跳过，不是失败 ——
+它们是「上游镜像已清」「未构建」这类前提缺失的占位，见 `tests/` 里的 `skipIf` 条件）。**没全绿就别推。**
 
 3. 提交并推送：
 
@@ -331,11 +332,13 @@ npm run verify                        # 构建 + 测试都过再推
 
 ## 4. 标签
 
-### 4.1 现在登记了这 6 个
+### 4.1 现在登记了这 8 个
 
 ```
-AI · 建站 · 摄影 · 成长 · 随笔 · 钢琴
+AI · 建站 · 摄影 · 成长 · 随笔 · 钢琴 · 教程 · 工具
 ```
+
+（唯一事实来源是 `src/tag-registry.ts`。这一段是它的镜像 —— 你在那里加了标签，这里也该同步。）
 
 **用没登记的标签 → 构建直接失败**，并告诉你具体是哪个标签、在哪篇文章里。
 
@@ -449,24 +452,31 @@ title: 关于
 ### 8.1 配色：`src/styles/tokens.css`
 
 ```css
---paper: #ffffff;        /* 页面底 */
---ink: #0e0e0e;          /* 主文字，也是黑带底色 */
---muted: #5c5c5c;        /* 次级文字（摘要、日期） */
---hair: #d6d6d6;         /* 装饰细线 */
---accent: #e4572e;       /* 信号橙：只许用在 ≥24px 大字 / hover / 图形 */
---accent-ink: #c2410c;   /* 小字专用橙 */
+--paper: #fafaf7;         /* 页面底（乳白，不是纯白） */
+--ink: #1a1a1a;           /* 主文字，也是黑带底色 —— 对纸 16.64:1 */
+--muted: #5a5a56;         /* 次级文字（摘要、日期） —— 6.62:1 */
+--hair: #d8d5ce;          /* 装饰细线，不承载文字 */
+--accent: #2d7d46;        /* 绿：对纸 4.86:1 */
+--accent-ink: #266b3b;    /* 纸上小字专用绿 —— 6.18:1 */
+--accent-bright: #4caf50; /* 深色底上的绿：对 --ink 6.26:1；**对纸只有 2.66** */
+--signal: #e87722;        /* 橙：对纸只有 2.83:1 ⇒ 图形色，不许承载文字 */
+--signal-text: #b45309;   /* 纸上小字可用的橙 —— 4.80:1 */
 ```
 
-**两条硬约束：**
+**三条硬约束：**
 
-1. **正文对比度必须 ≥ 4.5:1。** `--accent`（3.68:1）只能用在 ≥24px 的字或非文字图形上；小字一律用 `--accent-ink`。
-   页脚那行 13px 的字就曾经用错成 `--accent`，被代码审查抓出来了。
+1. **文字对比度必须 ≥ 4.5:1。** 现在真正会掉进坑里的是这两个：
+   - `--accent-bright`（对纸 2.66:1）**只许用在深色底**（`--ink` / `--code-bg`）上，例如黑带里那条 2px 下划线；
+   - `--signal`（对纸 2.83:1）是**图形色**，任何时候都不许承载文字；要在纸上写橙字就用 `--signal-text`。
+   - 顺带说清一件变了的事：2026-09-25 配色换成莱茵方向（绿）之后，`--accent` 是 4.86:1，
+     **纸上小字也达标了** —— 旧方向那条「橙只能用在 ≥24px 大字」的限制已经不成立，别再照它写。
 2. **改了颜色，`npm test` 会失败** —— 这是故意的。有个脚本从 `tokens.css` 读真实颜色、按 WCAG 公式复算，和期望值比对。你必须：
    - 打开 `scripts/assert-tokens.mjs`
    - 把对应那行的期望值改成新算出来的数字
    - **确认它仍然不低于下限**（那行最后一个数字）
 
    改完跑 `node scripts/assert-tokens.mjs` 看是否全绿。
+3. **alpha 一律写 8 位 hex**（如 `#1a1a1a0b`），组件里**不许写 `rgba()`** —— 颜色只能住在 `tokens.css`。
 
 ### 8.2 字号与间距：同一个文件
 
@@ -494,36 +504,51 @@ node scripts/fetch-fonts.mjs    # 会校验每个文件 > 5KB 且总量 < 200KB
 
 然后同步改 `src/styles/fonts.css` 的 `@font-face` 和 `base.css` / `tokens.css` 里的字体栈。
 
-### 8.4 导航菜单：`src/components/Brandline.astro`
+### 8.4 导航菜单：`src/lib/nav.ts`
 
-文件顶部有个数组，加减项目就改它：
+清单只在 **`src/lib/nav.ts`** 里（`Brandline.astro` 是旧位置，2026-09-26 已迁走 ——
+现在站上有**两套外壳**（深色带 Brandline / 内页浅色 Topbar），配色不同但链接必须一致，
+两处各写一份迟早漂移）。加减项目改下面这个数组：
 
 ```ts
-const links = [
-  { href: '/', label: '文章', key: 'index' },
-  { href: '/tags/', label: '标签', key: 'tags' },
-  { href: '/archive/', label: '归档', key: 'archive' },
+export const NAV_LINKS: { href: string; label: string; key: NavKey }[] = [
+  { href: '/', label: '主页', key: 'index' },
   { href: '/about/', label: '关于', key: 'about' },
+  { href: '/archive/', label: '归档', key: 'archive' },
+  { href: '/links/', label: '友链', key: 'links' },
+  { href: '/talks/', label: '说说', key: 'talks' },
+  { href: '/guestbook/', label: '留言', key: 'guestbook' },
+  { href: '/gallery/', label: '相册', key: 'gallery' },
+  { href: '/log/', label: '日志', key: 'log' },
+  { href: '/tags/', label: '标签', key: 'tags' },
 ];
 ```
 
-（`RSS` 链接单独写在下面，不在这里。）
+（`RSS` 是单独一个链接，不在这个数组里。）
+
+⚠️ 动这个数组就是动**全站共享** —— 每一页的导航都从它来 ⇒ 产物全变。单独做、单独看效果，别和别的改动并在一起。
 
 ### 8.5 动效
 
 ```css
---dur-fast: 120ms;   /* hover / 焦点 */
---dur-enter: 320ms;  /* 全站唯一一次入场：首屏黑带的站名+简介 */
---ease: cubic-bezier(0.2, 0, 0, 1);
+--dur-fast: 120ms;    /* 交互层：悬停 / 焦点 / 按压 */
+--dur-enter: 640ms;   /* 叙事层：区段入场 / 逐层展开 */
+--dur-stagger: 320ms; /* 错位：逐条展开之间的 delay */
+--ease: cubic-bezier(0.16, 1, 0.3, 1);           /* 叙事层主曲线 */
+--ease-interact: cubic-bezier(0.22, 1, 0.36, 1); /* 交互层曲线（与叙事层分开，别混用） */
 ```
 
 **规范明确禁止**：区块逐个淡入、卡片 hover 抬升、视差、滚动驱动动画。
 `prefers-reduced-motion` 下动效会自动取消（这是无障碍要求，别删）。
 
+（另有几条专项时长不在这里，改前先看 `tokens.css` 里的注释：`--dur-orbit` 循环层、
+`--dur-blink` 硬切闪烁、页面过渡那套在 `src/styles/transition.css`、
+首页开场那两个是 `--dur-boot` / `--dur-boot-out`。）
+
 ### 8.6 改完必须做的事
 
 ```powershell
-npm run verify        # 构建 + 57 个测试
+npm run verify        # 构建 + 134 个测试
 cd <博客仓库>
 node scripts/assert-tokens.mjs   # 单独复算对比度
 ```
