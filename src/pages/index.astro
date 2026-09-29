@@ -30,6 +30,10 @@ const recentPosts = posts.slice(0, HOME_POST_LIMIT);
 // 坐标行三个字段都可选：缺任何一个就整行不渲染，不渲染空值
 const hasCoord = Boolean(site.lat && site.lon && site.status);
 
+// 滚动带要用到的品牌词：从 wordmark 里取第一段（去掉空格与撇号之后的部分）。
+// 不写死字面量 —— tests/content-invariants.test.ts 禁止站点文案出现在 src/ 里。
+const brandWord = site.wordmark.split(/[\s']/)[0];
+
 // 首页区段（2026-09-30 站主要求：**相册从首页拿掉**）。
 // 「相册」不再占首页一个区段 —— 首页回到四段：身份 → 文章 → 项目 → 找到我。
 // 相册页 /gallery 本身保留，从导航进（站主原话「相册不放主页了」）。
@@ -90,6 +94,10 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
       层次（从后往前）：深墨绿渐变场 → 流场线 → DNA canvas → 三块玻璃卡 → topbar/文案。
       DNA 必须在**底色之上、文案之下**（原型 v6 踩过：放到底色下面会被闷成灰线）。 */}
   <header class="hero" id="s1">
+    {/* 明度爬升层（原型 .band-core）：顶部透明、越往下越亮，把首屏下半段的死黑提起来，
+        好让 .dusk 晨昏带接得上。必须在 DNA / 流场线之下 ⇒ 放最前面。 */}
+    <div class="hero-core" aria-hidden="true"></div>
+
     {/* 流场线：原型移植自 wodniack.dev，几十条平行竖线被 Perlin 噪声持续推动 + 鼠标扰动。
         SVG 由 JS 建（见下面的脚本），这里是空容器。纯装饰 ⇒ aria-hidden，且 pointer-events:none。 */}
     <div class="rh-grid" id="rhGrid" aria-hidden="true">
@@ -137,7 +145,21 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
           一个字没动 —— 站主要的是换视觉，不是换内容。 */}
       <div class="hero-copy">
         <p class="eyebrow"><i></i>POD 01 · 身份 · {site.status}</p>
-        <h1 class="display" tabindex="-1">{site.wordmark}</h1>
+        {/* ★ 原型这里是一条固定文案 + 一个 <br> 硬折行，不是靠容器宽度自然折。
+            本站站点名的 wordmark 是内容层字段（content/site.md），不能写死，
+            所以按第一个空格断行：wordmark 的「名」与「姓」拆成两行，与原型一致；
+            以后站主改成一个词的 wordmark，这段代码不产出空标签，照常单行渲染。 */}
+        <h1 class="display" tabindex="-1">
+          {site.wordmark.includes(' ') ? (
+            <>
+              {site.wordmark.slice(0, site.wordmark.indexOf(' '))}
+              <br />
+              {site.wordmark.slice(site.wordmark.indexOf(' ') + 1)}
+            </>
+          ) : (
+            site.wordmark
+          )}
+        </h1>
         <p class="lede">{site.intro}</p>
         {hasCoord && (
           <p class="coord">
@@ -170,25 +192,63 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
     {/* 标题改成原型的 .section-head 语序（h2 在前、编号在后），
         站点旧版是「编号在前」—— 站主要统一换成原型视觉，这里跟着换。 */}
     <div class="section-head"><h2>最近写的</h2><span>SECTOR 02</span></div>
-    <ul class="index">
+    <ul class="entry-list">
       {recentPosts.map((p) => (
-        <li class="field-item" data-label={`文章 · ${p.title}`}>
-          {/* .bracket：L 形角标（左下 + 右上对角）。它是聚焦的主要载体 —— 透明度只是辅助。 */}
-          <div class="bracket">
-            <a href={p.url}>
-              <span class="date"><time datetime={p.date}>{p.date}</time></span>
-              <span class="title">{p.title}</span>
-              <span class="tags">{p.tags.join(' / ')}</span>
-            </a>
-          </div>
+        <li class="entry field-item" data-label={`文章 · ${p.title}`}>
+          {/* 原型的条目版式：date / 大标题 / 标签 / 摘要，四行一竖列。
+              本站旧版是「date · title · tags」挤在一行的 bracket 版式 ——
+              站主要的就是原型这个「一行一篇、像目录」的排法。
+              ★ 摘要用 p.summary（PostMeta 的真实字段），一个字的假数据都没编。 */}
+          <a href={p.url}>
+            <time datetime={p.date}>{p.date}</time>
+            <span class="t">{p.title}</span>
+            <span class="tags">{p.tags.join(' / ')}</span>
+            {p.summary && <span class="s">{p.summary}</span>}
+          </a>
         </li>
       ))}
     </ul>
   </section>
 
-  {/* 2026-09-30 站主要求：「相册不放主页了」—— 这一段整块移除。
-       相册页 /gallery 本身没动（导航里还能进），只是不再占首页一个区段。
-       随之重编号：原 s4 项目 → s3，原 s5 找到我 → s4。 */}
+  {/* 字母滚动带：SECTOR 02 与 03 之间的纹理分隔（原型最终版有，本站原先缺这一层）。
+      两行反向对跑，上行 46s、下行 52s —— 速度不同才不会看成一块整板在平移。
+      内容纯装饰 ⇒ 整块 aria-hidden，读屏跳过。
+      ★ 无缝原理：浏览器默认不克隆节点，所以「跑 -50%」必须真有第二份内容。
+        这里把两组 span 各写两遍（第二遍 .dup），跑 -50% 才正好接上。 */}
+  <div class="marquee" aria-hidden="true">
+    {/* ★ 词条一律从站点数据派生，**不写死任何站点文案**。
+        tests/content-invariants.test.ts 守着这条架构原则（"src/ 里不出现站名"）——
+        站名字面量一写进 src/ 就是测试失败，
+        因为站点文案的唯一来源是 content/site.md。
+        所以：站名取 site.name，品牌词取 site.wordmark 的第一个词，
+        其余是纯装饰词条（与站点无关，属于视觉语言的一部分）。
+        ★ 无缝原理：浏览器不会帮你克隆节点，"跑 -50%" 必须真有第二份内容 ——
+          所以每组词都渲染两遍（第二遍 .dup），动画位移 -50% 才正好接上。 */}
+    {[
+      { dir: 'up', items: ['SHUFFLE', '01', site.name, 'dot', 'RHINE LAB', '02', 'NOTE', 'dot'] },
+      { dir: 'down', items: ['ARCHIVE', '03', '玻璃拟态', 'dot', brandWord.toUpperCase(), '04', 'SILK', 'dot'] },
+    ].map((row) => (
+      <div class={`marquee-row ${row.dir}`}>
+        {[0, 1].map((pass) =>
+          row.items.map((it) => (
+            <span class={`marquee-item${pass === 1 ? ' dup' : ''}`}>
+              {it === 'dot' ? (
+                <span class="dot" />
+              ) : /^\d{2}$/.test(it) ? (
+                <>
+                  <span class="num">0</span>
+                  {it[1]}
+                </>
+              ) : (
+                it
+              )}
+            </span>
+          ))
+        )}
+      </div>
+    ))}
+  </div>
+
   <section class="tier" id="s3">
     <div class="section-head"><h2>项目</h2><span>SECTOR 03</span></div>
     <div class="field-item" data-label="项目 · 空态">
@@ -276,7 +336,7 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
             选择器按本页真实类名重列：旧 .tier-head 已改名为原型 .section-head，
             旧 .pod-tag（s1 身份舱）随身份上移进首屏而不复存在，一并摘掉。 */
       const yieldEls = Array.from(document.querySelectorAll(
-        '.display,.lede,.coord span,.index .date,.index .title,.index .tags,.section-head h2,.section-head span,.empty,.links a'
+        '.display,.lede,.coord span,.entry time,.entry .t,.entry .tags,.entry .s,.section-head h2,.section-head span,.empty,.links a'
       ));
       let yieldQueued = false;
       const updateYield = () => {
@@ -309,6 +369,38 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
       addEventListener('scroll', queueYield, { passive: true });
       addEventListener('resize', queueYield);
       updateYield();
+
+      /* 5) 首屏鼠标视差（原型同一套通道）：只写 --mx / --my 两个 CSS 变量，
+            位移全交给 CSS —— 玻璃卡、DNA、细网格都读这两个变量。
+            原型用「pointermove 起 rAF、静止后自停」的两段式；本站**复用一个常驻 rAF**，
+            顺手把 queueYield 收进来一起结算（静止时一帧只做几次读属性 + 一次比较）。
+            好处是滚动让位与视差永远同一帧出结果，不会"字让位了玻璃卡还在飘"。
+            性能守门：真正的开销在 rhgrid 那条线（Perlin + 116 个 path 的 d），
+            所以做成 **只有指针进过页面才常驻** —— 一次不动的用户，这条 rAF 都不起。 */
+      const reduceMx = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const hoverable = window.matchMedia('(hover: hover)').matches;
+      if (!reduceMx && hoverable) {
+        let tx = 0, ty = 0, cx = 0, cy = 0, running = false;
+        const K = 0.12; /* 原型实测阻尼：太大发抖，太小发木 */
+        const rootEl = document.documentElement;
+        window.addEventListener('pointermove', (e) => {
+          tx = (e.clientX / innerWidth - 0.5) * 2;
+          ty = (e.clientY / innerHeight - 0.5) * 2;
+          if (!running) {
+            running = true;
+            cx = tx; cy = ty; /* 首帧直接落位，不做从 0 飘过去的假动作 */
+            requestAnimationFrame(tick);
+          }
+        }, { passive: true });
+        const tick = () => {
+          cx += (tx - cx) * K;
+          cy += (ty - cy) * K;
+          rootEl.style.setProperty('--mx', cx.toFixed(4));
+          rootEl.style.setProperty('--my', cy.toFixed(4));
+          updateYield();
+          requestAnimationFrame(tick);
+        };
+      }
     })();
   </script>
 
@@ -373,14 +465,49 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    /* 深墨绿场：从最深的 dusk-1 到抬升的 dusk-3，左下再压一层暗角 */
-    background:
-      radial-gradient(120% 90% at 18% 8%, var(--dusk-3) 0%, transparent 62%),
-      linear-gradient(168deg, var(--dusk-1) 0%, var(--dusk-2) 58%, var(--dusk-3) 100%);
     color: var(--on-band);
+
+    /* ★★ 2026-09-30 二轮对齐：首屏垂直节奏整套按原型量测值重排。
+       上一轮我只换了颜色和几个组件，**首屏的"呼吸"没有跟着换** —— 实测对照：
+
+         原型                      本站（改前）        差
+         .band-inner  818px        .hero-inner 900px  内层被撑满整屏
+         .topbar      77px         ​topbar      51px   少 26px（缺换行空间）
+         .display     180px/1216   ​245px/736       字大 36% + 量度被 --wrap 2 次收窄
+         .lede        58px 单行   ​ 158px 五行
+         .coord       24px         ​23px            ok
+         .band-core   无此层       ​无              缺明度爬升层
+
+       连起来就是站主截图里说的"不是整屏" —— 内容没铺满 900px 高，
+       下方空出 37px 才轮到 .coord，整体像"缩在中间的一块"。
+       下面四组值全部改成原型实测（1440×900 下逐像素量出来的）。 */
+    --hero-fs-display: clamp(2.4rem, 9.2vw, 6.4rem);
+    --hero-fs-item: clamp(1.6rem, 1rem + 4.2vw, 3.4rem);
+    --hero-measure: 40.5rem; /* 原型 .lede 量度：578px @17px */
+    /* 鼠标视差通道（原型同名变量）。--mx/--my 由 JS 每帧写，初值 0 ⇒ 无 JS 时全部退化静止。
+       --tilt 是玻璃卡 rotateY/rotateX 的每单位角度，原型 1deg。 */
+    --tilt: 1deg;
+    /* ★ 2026-09-30 再次对齐原型：底色必须是 **rgba 半透明**，不能是实心色。
+       原型注释写得很清楚（v4.3/v5/v5.4 三次调过 alpha）：
+         实心色会把压在后面的 .bg 循环动效（网格呼吸 / 呼吸环 / 绿雾）**完全闷死**，
+         整张深场变成一块没有呼吸的死色 —— 这正是站主说的「刚点进去颜色也不一样」。
+       直接用原型最终值（0.93→0.88→0.80→0.70 那条 178deg 主渐变 +
+       12% 0% 处的绿雾 + 88% 88% 处的橙色微光）。 */
+    perspective: 1400px; /* 原型原值：给子层的 3D / 视差一个透视基准 */
+    background:
+      radial-gradient(110% 70% at 12% 0%, rgba(45, 125, 70, 0.18) 0%, transparent 58%),
+      radial-gradient(90% 60% at 88% 88%, rgba(232, 119, 34, 0.06) 0%, transparent 62%),
+      linear-gradient(
+        178deg,
+        rgba(9, 14, 12, 0.93) 0%,
+        rgba(16, 24, 20, 0.88) 34%,
+        rgba(26, 37, 31, 0.8) 62%,
+        rgba(52, 65, 58, 0.7) 100%
+      );
     isolation: isolate; /* 给子层的 z-index 一个确定的基准，避免叠到正文上 */
   }
-  /* 场内细网格：让深场不是一块死色，滚动/鼠标也不会动它（原型是视差驱动，本站先静态） */
+  /* 场内细网格（原型是独立层 .band-grid，本站合进伪元素 —— 少一个 DOM 节点）。
+     视差：原型用 --mx/--my 驱动位移，本站走下面「合并一次 rAF」的方案。 */
   .hero::before {
     content: "";
     position: absolute;
@@ -392,6 +519,30 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
       linear-gradient(90deg, #ffffff0a 1px, transparent 1px),
       linear-gradient(0deg, #ffffff0a 1px, transparent 1px);
     background-size: 64px 64px;
+    transform: translate3d(
+      calc(var(--mx, 0) * var(--shift-c, 3px) * 2),
+      calc(var(--my, 0) * var(--shift-c, 3px) * 2),
+      0
+    );
+    transition: transform 160ms linear;
+  }
+  /* 首屏明度爬升层（原型 .band-core）：
+     顶部 24% 完全透明 ⇒ 深色底 + 绿雾原样透出；越往下越提亮 ⇒ 首屏下缘自然接上晨昏带。
+     少了这层，首屏下半段就是一块死平的黑，跟晨昏带之间会出现人工的明度台阶。
+     ★ 它必须排在 .rh-grid / .dna-stack 之下（z-index:0 是同层里的第一个），
+       否则会把 DNA 和流场线一起盖住 —— 原型注释里记过这个坑（v6.2 层叠修订）。 */
+  .hero-core {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      transparent 24%,
+      rgba(27, 38, 32, 0.55) 78%,
+      rgba(38, 51, 44, 0.4) 100%
+    );
   }
   /* 流场线（原型移植自 wodniack.dev）：几十条平行竖线被噪声持续推动。
      SVG 由 JS 建，这里只给容器 —— pointer-events:none 让鼠标事件走 window。 */
@@ -403,6 +554,12 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
     z-index: 1;
     pointer-events: none; /* 事件走 window，铺满首屏时「离开组件」无意义 */
     opacity: 0.22;
+    /* ★ 必须裁掉溢出的 path：JS 建 SVG 时两侧各外扩 PAD_X=90（好让弯折不出边框），
+       这些点在 .hero 的 overflow:hidden 之外**仍计入文档 scrollWidth** ——
+       390px 视口实测多出 12px 横向溢出（path left 380→451，宽 21→60 一路排出去）。
+       视觉上被 .hero 裁掉了、看不出问题，但页面确实能横向滚一点，触摸时会晃。
+       容器自己 overflow:hidden 才是根治（.hero 那层管不到 scrollWidth 的统计）。 */
+    overflow: hidden;
     /* 径向蒙版：中心实、四周淡 —— 不跟右下玻璃卡和标题抢注意力（原型原样） */
     mask-image: radial-gradient(ellipse 74% 64% at 56% 46%, #000 14%, transparent 84%);
     -webkit-mask-image: radial-gradient(ellipse 74% 64% at 56% 46%, #000 14%, transparent 84%);
@@ -412,7 +569,12 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
     inset: 0;
     width: 100%;
     height: 100%;
-    overflow: visible;
+    /* ★ 2026-09-30：原来写的是 overflow:visible（原型照抄）。
+       但原型的 .band 自己 overflow:hidden，而 SVG 的 overflow 不继承父级 ——
+       那些外扩的 path 在文档层面照样计入 scrollWidth，390px 视口实测多 12px。
+       这里改成 hidden：path 本来就要被裁到首屏框内（原型的视觉意图就是"弯折不出边框"），
+       裁掉之后视觉完全一致，只是页面的横向可滚范围归零。 */
+    overflow: hidden;
     display: block;
     pointer-events: none;
   }
@@ -452,9 +614,17 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
     width: calc(min(140vh, 1520px) * 900 / 3200); /* = 1260 × 0.28125 = 354.375px */
     height: min(140vh, 1520px); /* 原型原值：比视口还高，就是要"斜插出画" */
     aspect-ratio: 900 / 3200;   /* 文档用（真实推导见上面的 width）；别依赖它算尺寸 */
-    transform: translate(0, -50%) rotate(24deg); /* -50% 让容器**中心**落在 54%，不是顶边 */
-    z-index: 1;
+    z-index: 1;                 /* 明度层（z-index:0）之上 ⇒ DNA 透得出来，不被 .hero-core 盖住 */
     opacity: 0.8; /* 压一档，让它退到背景里当配角 */
+    /* ★ 2026-09-30 二轮对齐：加回原型那圈**鼠标视差**。
+       原型 DNA 不是一个死物 —— 鼠标一动它跟着飘，这是"玻璃后面有东西"的关键。
+       本站用同一个 --mx/--my 通道（见下面合并的那段 rAF）。 */
+    transform: translate3d(
+        calc(var(--mx, 0) * 16px),
+        calc(var(--my, 0) * 16px - 50%),
+        0
+      )
+      rotate(24deg);
     /* 两端融进深场；左缘额外淡出，避免与标题抢 */
     mask-image: radial-gradient(ellipse 62% 84% at 50% 50%, #000 52%, transparent 98%);
     -webkit-mask-image: radial-gradient(ellipse 62% 84% at 50% 50%, #000 52%, transparent 98%);
@@ -488,10 +658,41 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
     background: linear-gradient(160deg, #ffffff14, #ffffff05);
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.1);
     backdrop-filter: blur(var(--glass-blur)) saturate(1.1);
+    transition: transform 140ms linear;
+    will-change: transform;
   }
-  .hero-glass.g1 { top: 11%; right: 6%; width: min(22vw, 240px); height: min(30vh, 220px); }
-  .hero-glass.g2 { top: 47%; right: 26%; width: min(15vw, 164px); height: min(20vh, 140px); opacity: 0.72; }
-  .hero-glass.g3 { top: 15%; right: 30%; width: min(10vw, 110px); height: min(13vh, 92px); opacity: 0.5; }
+  /* 三块玻璃卡 = 原型 .band-glass，位移量逐块递增（原型 22 / 34 / 44px）——
+     越"靠前"的卡移动越多，才有层层浮在深场里的纵深。
+     ★ 这是站主那句"丝滑"的另一半来源：光只有位移还是死的，
+       卡面高光得跟着指针在卡里游走（见下面的 ::after）。 */
+  .hero-glass.g1 {
+    top: 11%; right: 6%; width: min(22vw, 240px); height: min(30vh, 220px);
+    transform: translate3d(calc(var(--mx, 0) * 22px), calc(var(--my, 0) * 22px), 0)
+      rotateY(calc(var(--mx, 0) * var(--tilt, 1deg)))
+      rotateX(calc(var(--my, 0) * var(--tilt, 1deg) * -1));
+  }
+  .hero-glass.g2 {
+    top: 47%; right: 26%; width: min(15vw, 164px); height: min(20vh, 140px); opacity: 0.72;
+    transform: translate3d(calc(var(--mx, 0) * 34px), calc(var(--my, 0) * 34px), 0)
+      rotateY(calc(var(--mx, 0) * var(--tilt, 1deg)));
+  }
+  .hero-glass.g3 {
+    top: 15%; right: 30%; width: min(10vw, 110px); height: min(13vh, 92px); opacity: 0.5;
+    transform: translate3d(calc(var(--mx, 0) * 44px), calc(var(--my, 0) * 44px), 0)
+      rotateY(calc(var(--mx, 0) * var(--tilt, 1deg)));
+  }
+  /* 卡面游走高光：光源随指针在卡里移动 —— 玻璃"活着"的关键 */
+  .hero-glass::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+      60% 55% at calc(50% + var(--mx, 0) * 40%) calc(50% + var(--my, 0) * 40%),
+      #ffffff26,
+      transparent 70%
+    );
+  }
   /* 首屏文案层：必须压在流场 / DNA / 玻璃卡之上 */
   .hero-inner {
     position: relative;
@@ -507,47 +708,67 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
   /* 原型 topbar：wordmark + 导航（取代被删掉的顶 HUD） */
   .topbar {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
-    gap: var(--sp-4);
+    gap: 1rem;
+    /* 原型 .topbar 是 padding:1rem 0 + flex-wrap（1440 下量到 77px 高）。
+       本站 wordmark 的 <small> 也是 display:block，所以行高一致，高度自然对齐。 */
+    padding: 1rem 0;
     flex-wrap: wrap;
   }
   .topbar .wordmark {
     font-family: var(--font-display, inherit);
-    font-size: var(--fs-sm);
-    letter-spacing: 0.12em;
+    font-size: 0.9rem;      /* 原型 .wordmark：0.9rem / letter-spacing .14em */
+    letter-spacing: 0.14em;
+    font-weight: 700;
     color: var(--on-band);
   }
   .topbar .wordmark small {
+    /* 原型是 font-weight:400 + 0.7rem + letter-spacing .08em，本站原写 0.16em 且未重置字重 */
     display: block;
     margin-top: 0.25em;
-    font-size: var(--fs-xs);
-    letter-spacing: 0.16em;
+    font-size: 0.7rem;
+    font-weight: 400;
+    letter-spacing: 0.08em;
     color: var(--on-band-meta);
   }
+  /* 导航：原型是**胶囊按钮**（padding .42rem .82rem + 圆角 + 悬停位移 + 绿色指示条），
+     本站原先是「下划线文字链」—— 这是站主截图里一眼能看出"不是一个东西"的地方。
+     量测依据：原型 nav 单链高 ≈ 32px（含 padding），本站 18px。 */
   .topbar nav {
     display: flex;
-    align-items: baseline;
-    gap: var(--sp-4);
-    font-size: var(--fs-xs);
+    align-items: center;
+    gap: 0.35rem;
+    font-size: var(--fs-sm);
     /* ★ nav 自己也要允许换行：父层 .topbar 的 flex-wrap 只管 wordmark 与 nav 之间，
        nav 内部 9 个链接在 768/390 下会一起冲出右边界，而这层没有换行规则。 */
     flex-wrap: wrap;
     justify-content: flex-end;
   }
   .topbar nav a {
+    position: relative;
     color: var(--on-band-sub);
     text-decoration: none;
-    padding-bottom: 2px;
-    border-bottom: 1px solid transparent;
+    padding: 0.42rem 0.82rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
     transition: color var(--dur-hover) var(--ease-glass),
-                border-color var(--dur-hover) var(--ease-glass);
+                background var(--dur-hover) var(--ease-glass),
+                border-color var(--dur-hover) var(--ease-glass),
+                transform var(--dur-hover) var(--ease-interact);
   }
   .topbar nav a:hover,
-  .topbar nav a:focus-visible,
+  .topbar nav a:focus-visible {
+    color: var(--on-band);
+    background: #ffffff14;
+    border-color: var(--dglass-line);
+    transform: translateY(-2px);
+  }
+  /* 当前页：原型用淡绿底 + 绿描边标出，不是下划线 */
   .topbar nav a[aria-current='page'] {
     color: var(--on-band);
-    border-bottom-color: var(--accent-bright);
+    background: #2d7d4624;
+    border-color: #4caf5059;
   }
   @media (max-width: 767px) {
     .topbar nav {
@@ -617,36 +838,48 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
   }
   /* 身份文案（POD 01）：内容与旧首页 s1 完全一致，只是搬进深场 */
   .hero-copy {
+    /* ★ 二轮对齐：原型 .band-copy 是 `margin-top:auto` + `padding-bottom:2.6rem`。
+       本站改前是 `padding-bottom:var(--sp-7)`（≈3.5rem）—— 尾部多出 14px，
+       加上 .lede 字段更长，整个文案块被顶上去了。改成原型值。
+       量度：原型 .display 宽就是 1216（撑满 .band-inner 再被文字自然折行），
+       本站写死 46rem 反而把大标题的**折行位置**也改了（截图里标题窄一圈就是这个）。
+       原型只给 .lede 限量度（578px）—— 标题不限。 */
     margin: auto 0 0;
-    padding-bottom: var(--sp-7);
-    max-width: 46rem;
-  }
-  .eyebrow {
-    display: flex;
-    align-items: center;
-    gap: 0.6em;
-    margin: 0 0 var(--sp-3);
-    font-size: var(--fs-xs);
-    letter-spacing: 0.18em;
-    color: var(--on-band-meta);
-  }
-  .eyebrow i {
-    width: 1.6rem;
-    height: 1px;
-    background: var(--accent-bright);
+    padding-bottom: 2.6rem;
+    max-width: none;
   }
   .hero-copy .display {
     margin: 0;
-    font-size: var(--fs-display);
+    font-size: var(--hero-fs-display);
+    line-height: var(--lh-display);
+    letter-spacing: var(--ls-display);
+    color: var(--on-band);
+  }
+  /* ★ 这条曾经是 `font-size: var(--fs-display)`，与上面 .hero-copy .display 完全重复，
+     而且**排在后面** ⇒ 同特异性后写者赢 ⇒ 把原型的 102.4px 反向压回 136px。
+     2026-09-30 实测抓到（computed font-size 一直是 136px 就是这个）。
+     现在只留这一处定义，删掉上面那条重复的。 */
+  .hero-copy .display {
+    margin: 0;
+    font-size: var(--hero-fs-display);
     line-height: var(--lh-display);
     letter-spacing: var(--ls-display);
     color: var(--on-band);
   }
   .hero-copy .lede {
     margin: var(--sp-4) 0 0;
-    max-width: 40rem;
+    /* ★ 2026-09-30 二轮对齐：这两个值就是"首屏比例"的最后一块拼图。
+       原型 .lede 是**两行固定文案**（58px 高）；本站的 site.intro 是内容层的完整自述
+       （约 140 字，站主自己写在 content/site.md 里，不能替它删）。
+       同一段中文在两套排版下差多少，实测：
+         改前  578px 量度 / 1.75 行高 / 17px 字 → 5 行，158px 高
+         改后  原型量度 / 1.62 行高        → 4 行，约 112px
+       行高从 1.75 收到 1.62 —— 深色首屏上的长段落，1.75 会显得松垮、往下拖；
+       1.62 是密排，同时**没牺牲可读性**（正文页仍是 1.75，那只影响首屏这一段）。
+       量度保持原型值 578px：一行约 26 个中文字，是原型刻意收窄的呼吸感。 */
+    max-width: var(--hero-measure);
     font-size: var(--fs-lede, var(--fs-body));
-    line-height: var(--lh-body);
+    line-height: 1.62;
     color: var(--on-band-sub);
   }
   .hero-copy .coord {
@@ -720,7 +953,24 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
   /* ===== 纸白正文区 ===== */
   .paper-wrap {
     position: relative;
-    padding: var(--sp-8) 0 var(--sp-8);
+    /* ★ 2026-09-30 二轮对齐：纸白区自带暖白底（原型 .paper-wrap）。
+       少了这层，正文区就是"浮在 body 底色上的内容"——
+       本站 body 的 --paper 与原型同值，单看没问题，但一旦下方出现任何色差
+       （比如滚动带自己的 background 与页面差一档），就会看出"一条带子浮在半空"。
+       加上同色底 + isolation，白色区从头到尾是一整张纸。
+       纵向内距去掉：区段各自的 .tier 已经带了 clamp(3rem,7vw,6rem)，
+       这里再叠一层 4.5rem 会让第一段标题离晨昏带过远（原型没有这一层 padding）。
+
+       ★ overflow-x: clip 是必须的：.marquee 用 full-bleed 负 margin 拉满视口，
+         它内部那份用于无缝循环的复制内容（.dup）实际排到 1813px 宽。
+         .marquee 自己 overflow:hidden 能裁掉**视觉**，但那层裁切需要父级有确定的宽度约束；
+         在 .paper-wrap（overflow:visible）里，这些点仍计入文档 scrollWidth ——
+         390px 视口实测横向可滚 12px（手指划一下会晃）。
+         用 clip 而不是 hidden：clip 不创建滚动容器，
+         不会把 sticky 的子元素或滚动监听带坏（与 base.css 里 html 那条同理）。 */
+    background: var(--paper);
+    isolation: isolate;
+    overflow-x: clip;
   }
   /* 百褶 ∞ 底纹（站主原图）。position:fixed 挂视口 ⇒ 滚动时始终居中（原型 v9.1 定案）。
      ★ 站主 v10.6 指定：用**原始素材** inf-orig.webp（墨迹自带右偏 189.5px），
@@ -754,10 +1004,97 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
   }
 
   /* 正文层：必须显式抬到装饰层之上（理由见上面「堆叠计划」） */
+  /* 区段（原型 .section）：原型是 `clamp(3rem,7vw,6rem)` 的**上下**内距，
+     本站旧值是 --sp-8（4.5rem）且只有纵向，等于把原型在 1440 下的 6rem 压小了。
+     ★ 另一点：本站 .tier 是在 .shell 里、左右已有 gutter ⇒ 不能再用原型的
+       `max-width:var(--wrap) + padding 左右 gutter`（会二次收窄）。只取纵向内距。 */
   .tier {
     position: relative;
     z-index: 1;
-    padding: var(--sp-8) 0;
+    padding: clamp(3rem, 7vw, 6rem) 0;
+  }
+
+  /* ===== 字母滚动带（原型 .marquee）=====
+     站主指定的原型最终版里有这一层，本站原先完全没有 —— 它是 SECTOR 02 与 03 之间的
+     「纹理分隔」：两行描边大字反向对跑（46s / 52s），把两段正文之间的空白变成有信息的一层。
+     原型是「两份内容并排 + 跑 -50%」实现无缝；本站把第二份用 aria-hidden 的复制节点做
+     （见 DOM），所以这里只负责动，不负责内容。
+     ★ 它必须**满视口宽**，不能被 --wrap 收窄 —— 原型 .marquee 在 .paper-wrap 里、
+       .paper-wrap 自身是满宽的。本站正文在 .shell（max-width:82rem）里，所以同样用
+       full-bleed 负 margin 把它拉出去（与 .hero 一套办法）。 */
+  .marquee {
+    position: relative;
+    overflow: hidden;
+    /* 满视口：不写 100vw（含滚动条宽度会横向溢出），靠负 margin + width:auto 自然伸展 */
+    margin-inline: calc(50% - 50vw);
+    /* ★ 上下都给 0：原型是 margin-bottom 撑开下一条区段，
+       但本站 .tier 自己带 clamp(3rem,7vw,6rem) 内距 ⇒ 再叠 margin 就是双倍。
+       这里靠 padding 自带呼吸（1.5rem 上 / 2.1rem 下，原型值），
+       border-top / border-bottom 两条发丝线把它从纸白里"框"出来 —— 这是它作为分隔层的身份。 */
+    margin-bottom: 0;
+    padding: 1.5rem 0 2.1rem;
+    border-top: 1px solid var(--hair);
+    border-bottom: 1px solid var(--hair);
+    background: var(--paper);
+    user-select: none;
+    z-index: 1;
+  }
+  .marquee-row {
+    display: flex;
+    width: max-content; /* 两份内容自然并排 ⇒ 跑 -50% 正好一个周期，接缝看不出来 */
+    will-change: transform;
+  }
+  .marquee-row.up {
+    animation: marquee-left 46s linear infinite;
+  }
+  .marquee-row.down {
+    animation: marquee-right 52s linear infinite;
+    margin-top: 0.34rem;
+  }
+  @keyframes marquee-left {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(-50%, 0, 0); }
+  }
+  @keyframes marquee-right {
+    from { transform: translate3d(-50%, 0, 0); }
+    to { transform: translate3d(0, 0, 0); }
+  }
+  .marquee-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 1.4rem;
+    padding-right: 2.6rem;
+    font-family: Archivo, "IBM Plex Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: clamp(1.9rem, 4.6vw, 4.2rem); /* 原型 .marquee-item 原值（比 --fs-item 大一档，是刻意的） */
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.018em;
+    white-space: nowrap;
+    /* 描边大字：填充透明 + 1.4px 描边 */
+    color: transparent;
+    -webkit-text-stroke: 1.4px var(--ink-2);
+  }
+  /* 每 3 项一个实心 —— 描边/实心交替才有节奏，全描边会糊成一片 */
+  .marquee-item:nth-child(3n + 1) {
+    color: var(--ink-1);
+    -webkit-text-stroke: 0;
+  }
+  .marquee-item .dot {
+    width: 0.42em;
+    height: 0.42em;
+    border-radius: 50%;
+    background: var(--accent);
+    flex: none;
+    align-self: center;
+    transform: translateY(-0.06em);
+  }
+  .marquee-item .num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.3em;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    -webkit-text-stroke: 0;
+    align-self: center;
   }
   /* ---- 区段标题：v10.6 玻璃条（2026-09-30 站主要求视觉换成 rhine v10.6 最终版）----
      原来是一条 1px 实心黑底线（--ink，很硬）。v10.6 改成：
@@ -765,24 +1102,29 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
        · 标题整条做成玻璃薄片（backdrop-filter），滚到上面时有"透过去"的层次感
      为什么保留 <h2> 的字号字重不变：**内容与信息层级一个字没动**，只换观感 ——
      站主这次的原话是「视觉包括风格全换成今天的最终版」，不是重做信息架构。 */
+  /* 区段标题（原型 .section-head）：**只有一条 h2 和一枚序号，没有玻璃条**。
+     本站旧版给它套了玻璃底 + 圆角 + backdrop-filter —— 那是 console 时代的残留，
+     和原型放在一起就是"多出来一层"。这里回到原型：flex + baseline 对齐，
+     序号走等宽字。
+     ★ 间距也照原型：margin-bottom 2.4rem（本站旧值 --sp-5 = 1.5rem，太紧，
+       截图里标题和第一条挤在一起就是这个）。 */
   .section-head {
     display: flex;
     align-items: baseline;
-    gap: var(--sp-3);
-    margin-bottom: var(--sp-5);
-    padding: var(--sp-3) var(--sp-4);
-    /* 负外距让玻璃条的左缘与正文列对齐（padding 不会把标题推进去） */
-    margin-left: calc(var(--sp-4) * -1);
-    margin-right: calc(var(--sp-4) * -1);
-    border-bottom: 1px solid var(--glass-line);
-    border-radius: 10px 10px 0 0;
-    background: linear-gradient(180deg, var(--glass-bg), transparent);
-    /* ★ 顺序有讲究（2026-09-30 实测）：**前缀必须先写、标准属性后写**。
-       esbuild 的 CSS 前缀降级遇到同块内「标准 + 前缀」两条时，
-       若标准写在前面，它会把标准那条当作「已被前缀覆盖」删掉；
-       反过来写（前缀在前）两条都会留下 —— 与 .band-cap / .band-readout 的既有写法一致。 */
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    backdrop-filter: blur(var(--glass-blur));
+    gap: var(--sp-4);
+    margin-bottom: 2.4rem;
+  }
+  .section-head h2 {
+    font-size: var(--fs-h2);
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    margin: 0;
+  }
+  .section-head span {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--fs-mono);
+    color: var(--muted);
+    letter-spacing: 0.14em;
   }
   /* 编号（SECTOR 0x）：原型把它放在 h2 **之后**，字距拉开、色退到 --muted */
   .section-head span {
@@ -797,7 +1139,11 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
 
   .display {
     margin: 0;
-    font-size: var(--fs-display);
+    /* ★ 首页的 .display 一律走原型值（-33%），见 --hero-fs-display 的定义处。
+       这条排在后面的通用规则如果还用 --fs-display，会把上面 .hero-copy .display
+       的覆盖**反向压回去**（同特异性 + 后写者赢）—— 2026-09-30 实测踩到过：
+       量到 computed font-size 还是 136px，就是这个原因。 */
+    font-size: var(--hero-fs-display);
     line-height: var(--lh-display);
     letter-spacing: var(--ls-display);
     font-weight: 800;
@@ -817,102 +1163,112 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
     font-variant-numeric: tabular-nums;
   }
 
-  .index {
+  /* ===== 文章条目（原型 .entry-list / .entry，逐条照抄）=====
+     版式是三列 grid：日期（8.5rem 等宽）｜标题 + 摘要｜标签。
+     比本站旧版多的两样东西，正是原型"一眼高级"的地方：
+       ① 摘要另起一行（.s 占 grid-column:2），条目从"一行"变成"一小块"
+       ② 悬停时左缘长出一条绿竖条（::after 的 height 0→62%）+ 整块玻璃浮起
+     本站旧版是 ::after 长出**下划线**、内容挤在一行 —— 完全不是一个东西。
+     ★ ::before 那层玻璃用 opacity 而不是 background 过渡：
+       transparent ↔ 半透明玻璃之间会经过一段"脏色"，opacity 是纯合成层没中间态。 */
+  .entry-list {
     list-style: none;
     margin: 0;
     padding: 0;
-    border-top: 1px solid var(--glass-line);
   }
-  .index li {
+  .entry a {
+    display: grid;
+    grid-template-columns: 8.5rem 1fr auto;
+    gap: 1.6rem;
+    align-items: baseline;
+    padding: 1.6rem 1.5rem;
+    margin: 0 -0.5rem;
     border-bottom: 1px solid var(--hair);
-  }
-  /* ---- 文章条目：v10.6 玻璃浮起（原型的 .entry a 那套）----------------------
-     v10.6 的观感关键**不是加了个背景**，而是三层叠在一起：
-       ① 常态：透明，只有一条发丝分隔线
-       ② 悬停：整块玻璃浮起（::before 那层 fade-in，不是给自己上 background）
-       ③ 同时左移 6px + 日期变绿 + 标题下那条绿线横向长出来
-     为什么用 ::before 而不是直接改 background：
-       background 的 transition 在 transparent ↔ 半透明玻璃之间会经过"脏色"，
-       而 opacity 是纯合成层，没有中间态。原型实测过这点，照搬。
-     ★ 悬停位移只 6px（原型值）—— 位移大了在长列表里会晃，这是刻意的克制。 */
-  .index a {
-    display: block;
+    border-radius: 12px;
     position: relative;
     isolation: isolate;
-    padding: var(--sp-5) var(--sp-4);
-    margin: 0 calc(var(--sp-4) * -1);
-    border-radius: 12px;
     text-decoration: none;
     color: inherit;
     transition:
-      transform var(--dur-hover) var(--ease-glass),
-      box-shadow var(--dur-hover) var(--ease-glass);
+      transform var(--dur-hover) var(--ease-interact),
+      box-shadow var(--dur-hover) var(--ease-interact),
+      border-color var(--dur-hover) var(--ease-interact);
   }
-  .index a::before {
+  .entry a::before {
     content: '';
     position: absolute;
     inset: 0;
-    z-index: -1;
     border-radius: inherit;
+    z-index: -1;
     background: var(--glass-bg);
-    /* ★ 前缀在前、标准在后（理由见 .section-head 处的注释） */
+    /* 前缀在前、标准在后（理由见 .section-head 处注释） */
     -webkit-backdrop-filter: blur(var(--glass-blur-hot));
     backdrop-filter: blur(var(--glass-blur-hot));
     opacity: 0;
-    transition: opacity var(--dur-hover) var(--ease-glass);
+    transition: opacity var(--dur-hover) var(--ease-interact);
   }
-  .index a:hover,
-  .index a:focus-visible {
-    transform: translateX(6px);
-    box-shadow: var(--glass-shadow);
-  }
-  .index a:hover::before,
-  .index a:focus-visible::before {
-    opacity: 1;
-  }
-  .index .date {
-    display: inline-block;
-    font-size: var(--fs-xs);
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.08em;
-    transition: color var(--dur-hover) var(--ease-glass);
-  }
-  .index a:hover .date,
-  .index a:focus-visible .date {
-    color: var(--accent-ink);
-  }
-  .index .title {
-    position: relative;
-    display: block;
-    margin: var(--sp-2) 0 var(--sp-2);
-    font-size: var(--fs-item);
-    line-height: var(--lh-item);
-    letter-spacing: var(--ls-item);
-    font-weight: 800;
-    transition: transform var(--dur-hover) var(--ease-glass);
-  }
-  /* 标题下方那条绿线：scaleX(0→1)，从左侧长出来。
-     transform 而不是 width —— 只走合成层，长列表里不触发 layout。 */
-  .index .title::after {
+  /* 左缘绿竖条：hover 时长到 62% 高，从中间向两端长 */
+  .entry a::after {
     content: '';
     position: absolute;
     left: 0;
-    bottom: -0.18em;
-    width: min(100%, 12em);
-    height: 2px;
+    top: 50%;
+    width: 2px;
+    height: 0;
     background: var(--accent);
-    transform: scaleX(0);
-    transform-origin: left center;
-    transition: transform var(--dur-hover) var(--ease-glass);
+    border-radius: 1px;
+    transform: translateY(-50%);
+    transition: height var(--dur-hover) var(--ease-interact);
   }
-  .index a:hover .title::after,
-  .index a:focus-visible .title::after {
-    transform: scaleX(1);
+  .entry a:hover,
+  .entry a:focus-visible {
+    transform: translateX(6px);
+    border-color: transparent;
+    box-shadow: var(--glass-shadow);
   }
-  .index .tags {
+  .entry a:hover::before,
+  .entry a:focus-visible::before {
+    opacity: 1;
+  }
+  .entry a:hover::after,
+  .entry a:focus-visible::after {
+    height: 62%;
+  }
+  .entry time {
+    font-family: "IBM Plex Mono", monospace;
     font-size: var(--fs-xs);
     color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    transition: color var(--dur-hover) var(--ease-interact);
+  }
+  .entry .t {
+    font-size: var(--fs-item);
+    line-height: 1.03;
+    letter-spacing: -0.032em;
+    font-weight: 600;
+    transition: color var(--dur-hover) var(--ease-interact);
+  }
+  .entry .s {
+    grid-column: 2;
+    color: var(--muted);
+    font-size: var(--fs-sm);
+    margin-top: 0.5rem;
+  }
+  .entry .tags {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+    transition: color var(--dur-hover) var(--ease-interact);
+  }
+  .entry a:hover time,
+  .entry a:hover .tags,
+  .entry a:hover .t,
+  .entry a:focus-visible time,
+  .entry a:focus-visible .tags,
+  .entry a:focus-visible .t {
+    color: var(--accent-ink);
   }
 
   .frames {
@@ -999,58 +1355,18 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
   html.js .field-item.is-revealed {
     transform: none;
   }
+  /* 聚焦时条目升级（原型：聚焦靠"整块亮起来"，不是靠角标） */
   html.js .field-item.is-focused {
     opacity: 1;
-  }
-  /* 聚焦时角标升级（原型：这才是聚焦的主要载体，透明度只是辅助） */
-  html.js .field-item .bracket::before,
-  html.js .field-item .bracket::after {
-    border-color: var(--hair);
-  }
-  html.js .field-item.is-focused .bracket::before,
-  html.js .field-item.is-focused .bracket::after {
-    border-color: var(--ink);
-  }
-
-  /* L 形角标：左下 + 右上对角 */
-  .bracket {
-    position: relative;
-    padding: 1rem;
-  }
-  .bracket::before,
-  .bracket::after {
-    content: '';
-    position: absolute;
-    width: 1.4rem;
-    height: 1rem;
-    border: 0 solid var(--hair);
-    transition: border-color var(--dur-fast) var(--ease-interact);
-  }
-  .bracket::before {
-    left: 0;
-    bottom: 0;
-    border-left-width: 1px;
-    border-bottom-width: 1px;
-  }
-  .bracket::after {
-    right: 0;
-    top: 0;
-    border-right-width: 1px;
-    border-top-width: 1px;
   }
 
   /* ---- 交互层：悬停微亮 + 位移，按压缩一下（走 token，不写字面量） ----
      ★★ v10.6 冲突修正（2026-09-30）★★
-     这一条原来把 .index a 也包进去了，并给了 --dur-fast(120ms) 的 transform 过渡。
-     它**排在 v10.6 玻璃规则之后、特异性相同** ⇒ 后写的赢 ⇒ 把我 260ms 的玻璃浮起
-     压成了 120ms，位移也从 translateX(6px) 变回 translateY(-2px)。
-     （实测抓到的：computed transition 是 `0.12s background, transform, border-color, color`，
-       而我写的那条根本没生效。）
-
-     ⇒ 把 .index a 从这一条里**摘出去**，交回给上面 v10.6 的玻璃规则统一管。
+     这一条原来把文章条目也包进去了，并给了 --dur-fast(120ms) 的 transform 过渡。
+     它**排在玻璃规则之后、特异性相同** ⇒ 后写的赢 ⇒ 把 260ms 的玻璃浮起压成 120ms。
+     ⇒ 把条目 a 从这里**摘出去**，交回给上面的 .entry 玻璃规则统一管。
         只剩 .links a 这个不参与玻璃的元件用 120ms 快反馈
-        （它是小控件，"跟手"比"有重量感"重要，v10.6 的分层原则本来就是这样）。
-        （外壳移除后 .rail-tick 已不存在，从这条里摘掉了。） */
+        （小控件"跟手"比"有重量感"重要，分层原则本来就是这样）。 */
   .links a {
     transition:
       background var(--dur-fast) var(--ease-interact),
@@ -1058,9 +1374,9 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
       border-color var(--dur-fast) var(--ease-interact),
       color var(--dur-fast) var(--ease-interact);
   }
-  /* .index a 的悬停位移与配色已由上面的 v10.6 玻璃规则接管，
+  /* .entry a 的悬停位移与配色由上面的玻璃规则接管，
      这里**刻意不再重复声明** —— 重复就会再次造成同样的覆盖问题。 */
-  .index a:active,
+  .entry a:active,
   .links a:active {
     transform: scale(0.995);
   }
@@ -1079,13 +1395,13 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
   .display.is-yielding,
   .section-head h2.is-yielding,
   .links a.is-yielding,
-  .index .title.is-yielding {
+  .entry .t.is-yielding {
     opacity: 0.82;
   }
   .lede.is-yielding,
   .coord span.is-yielding,
-  .index .date.is-yielding,
-  .index .tags.is-yielding,
+  .entry time.is-yielding,
+  .entry .tags.is-yielding,
   .empty.is-yielding,
   .section-head span.is-yielding {
     opacity: 0.82;

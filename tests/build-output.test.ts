@@ -291,29 +291,49 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log(`判据 百褶∞底纹 对象 产物资源 + 装饰属性 + 全站共用（首页 .paper-inf / 内页 .page-inf）实测: ${(artBuf.length / 1024).toFixed(1)} KB · ${pages.length} 页全部引到`);
   });
 
-  it('区段标题玻璃条：半透明 + 模糊，不再用不透明纸底', () => {
-    // ★ 2026-09-30 换判据对象（站主拍板「去掉 console 外壳，换成原型 topbar」）。
-    //   原来守 `.band-readout`（压在扫描带上的读数条，站主 2026-09-26 要求改毛玻璃别挡字）。
-    //   扫描带随外壳一起删了 ⇒ 对象换成原型 v10.6 的区段标题玻璃条 `.section-head`。
-    //   **判据一条没降**：① 底色半透明（不许再出现不透明 background）；② 有 backdrop-filter。
-    //   「单行截断」这条**不搬**：它不是压在正文上的浮层，是正文流里的标题行，
-    //     截断反而是错的 —— 标题该换行就换行。
+  it('悬停玻璃层：半透明 + 模糊，不再用不透明纸底', () => {
+    // ★ 2026-09-30 二次换对象（站主拍板「主页就用原型」）。
+    //   对象履历：`.band-readout`（外壳读数条）→ `.section-head`（原型 v10.6 标题玻璃条）
+    //   → `.entry a::before`（文章条目悬停玻璃层，本次）。
+    //   为什么第三次换：原型的 .section-head **本来就没有玻璃条** —— 它是纯 flex 标题行，
+    //   那条玻璃底是本站 console 时代的残留，已经在换原型时整块删掉。
+    //   而此刻首页**唯一**还压在内容上的玻璃层，就是条目悬停时浮起的那层
+    //   （z-index:-1 ⇒ 它在文字之下、页面底色之上，正是这条判据本来要守的那一类物件）。
+    //
+    //   **判据一条没降**：① 底色半透明；② backdrop-filter 在；③ 前缀与标准两条都在。
+    //   只是不再依赖「字面量里恰好写着 transparent」这种巧合 ——
+    //   这次底色是 var(--glass-bg) 这样的 token 引用，必须解析：
+    //   直接从 tokens.css 把 token 的值算出来再看 alpha。
+    //   这比原判据更严：原来只认内联字面色，写在 token 里的不透明底色会被漏过去。
     const all = allDistCss();
-    const rules = [...all.matchAll(/\.section-head[^{}]*\{[^}]*\}/g)].map((m) => m[0]);
+    const rules = [...all.matchAll(/\.entry[^{}]*a[^{}]*:before\{[^}]*\}/g)].map((m) => m[0]);
     const rule = rules.find((r) => r.includes('background:')) ?? '';
-    expect(rule, '产物里找不到带背景的 .section-head 规则').not.toBe('');
-    const bg = (rule.match(/background:([^;}]+)/) ?? ['', ''])[1].trim();
-    // 半透明判定：渐变里含 transparent 结尾，或 rgba(...,<1) / 8 位 hex 且 alpha 不是 ff
-    const hex8 = bg.match(/^#([0-9a-f]{6})([0-9a-f]{2})$/);
-    const rgba = bg.match(/rgba?\([^)]*,\s*(0?\.\d+|0|1)\)/);
-    const translucent =
-      /transparent/.test(bg) || (hex8 && hex8[2] !== 'ff') || (rgba && Number(rgba[1]) < 1);
-    expect(translucent, `.section-head 的底色不是半透明（实测 background:${bg}）`).toBe(true);
-    expect(rule, '.section-head 缺 backdrop-filter（毛玻璃）').toContain('backdrop-filter');
-    // ★ 2026-09-30 补：标准属性必须**两条都在**（前缀在前、标准在后）。
+    expect(rule, '产物里找不到 .entry a::before 这条悬停玻璃层规则').not.toBe('');
+    expect(rule, '.entry a::before 缺 backdrop-filter（毛玻璃）').toContain('backdrop-filter');
+    // ★ 标准属性必须**两条都在**（前缀在前、标准在后）。
     //   踩过一次：esbuild 按 cssTarget 做前缀降级，把标准那条删了，整站只剩 -webkit-。
-    expect(rule, '.section-head 只剩 -webkit- 前缀，标准 backdrop-filter 被构建删掉了').toContain('-webkit-backdrop-filter');
-    console.log(`判据 区段标题玻璃 对象 .section-head 实测: background:${bg} · 前缀/标准 backdrop-filter 两条都在`);
+    expect(rule, '.entry a::before 只剩 -webkit- 前缀，标准 backdrop-filter 被构建删掉了').toContain('-webkit-backdrop-filter');
+
+    const bg = (rule.match(/background:([^;}]+)/) ?? ['', ''])[1].trim();
+    // token 回溯：background 写的是 var(--glass-bg) 这样的引用，得去 tokens.css 取真值
+    const tokensCss = readFileSync('src/styles/tokens.css', 'utf8');
+    let resolved = bg;
+    for (let i = 0; i < 4 && /var\(/.test(resolved); i++) {
+      resolved = resolved.replace(/var\(\s*(--[\w-]+)\s*\)/g, (whole, name) => {
+        const m = tokensCss.match(new RegExp(`${name}\\s*:\\s*([^;]+);`));
+        return m ? m[1].trim() : whole;
+      });
+    }
+    // 半透明判定：渐变里含 transparent，或 rgba(...,<1)，或 8 位 hex 且 alpha 不是 ff
+    const hex8 = resolved.match(/^#([0-9a-f]{6})([0-9a-f]{2})$/);
+    const rgba = resolved.match(/rgba?\([^)]*,\s*(0?\.\d+|0|1)\)/);
+    const translucent =
+      /transparent/.test(resolved) || (hex8 && hex8[2] !== 'ff') || (rgba && Number(rgba[1]) < 1);
+    expect(
+      translucent,
+      `.entry a::before 的底色不是半透明（background:${bg} → 解析 ${resolved}）`
+    ).toBe(true);
+    console.log(`判据 悬停玻璃层 对象 .entry a::before 实测: background:${bg} → ${resolved} 半透明 · 前缀/标准 backdrop-filter 两条都在`);
   });
 
   it('光标：自定义位图光标已删（无 JS 时用系统光标），跟手白点仍在', () => {
