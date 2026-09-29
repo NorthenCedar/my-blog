@@ -47,6 +47,10 @@ function walk(dir: string, filter: (name: string) => boolean): string[] {
 
 const htmlFiles = () => (hasDist ? walk(DIST, (n) => n.endsWith('.html')) : []);
 
+/** dist 下全部 CSS 拼成一个字符串（多处断言都要用；名前加 dist 以免和各用例里的局部 cssFiles 混淆） */
+const allDistCss = () =>
+  (hasDist ? walk(DIST, (n) => n.endsWith('.css')) : []).map((f) => readFileSync(f, 'utf8')).join('\n');
+
 /**
  * 一个页面**实际加载的全部 JS 代码**：页内内联 + 它引用的同源外部脚本**及其 import 闭包**。
  * 2026-09-26 加：留言页也用同一个评论脚本之后，Astro 把多页共用的脚本抽成 `/_astro/*.js`，
@@ -66,7 +70,12 @@ function jsClosure(pagePath: string): { code: string; files: string[] } {
     seen.add(f);
     files.push(f);
     const code = readFileSync(f, 'utf8');
-    for (const m of code.matchAll(/(?:import|from)\s*"([^"]+\.js)"/g)) load(m[1]);
+    // 2026-09-30 扩展：原来只认 `import"...js"` / `from"...js"` 这一种写法。
+    // 首页 DNA 用了**动态 import**（three 只在真要画的时候才下载），
+    // 而 Vite 对动态 import 的输出是 import(`./three.xxx.js`) —— **反引号**，
+    // 老正则一个都匹配不到 ⇒ three 与 GLTFLoader 两个 chunk 会被误判成「没页面引用的孤儿」。
+    // 现在三种引号（" ' `）与静态/动态两种写法都覆盖。
+    for (const m of code.matchAll(/(?:import|from)\s*\(?\s*(["'`])([^"'`]+?\.js)\1/g)) load(m[2]);
   };
   for (const m of html.matchAll(/<script[^>]+src="(\/_astro\/[^"]+\.js)"/g)) load(m[1]);
   const code = inline + '\n' + files.map((f) => readFileSync(f, 'utf8')).join('\n');
@@ -230,84 +239,81 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log('判据 跟手光标 对象 每页三元素 + 守卫 + cursor:none 的可控性 + innerHTML 扫描 实测: 缺元素 0 页 · 全部通过');
   });
 
-  it('主页磁带背景：只在首页、是装饰、窄屏隐藏，资源在位', () => {
-    // 2026-09-26 站主给了一张「RHINE LAB, LLC. NO.001」磁带渲染图，要求抠下来放主页背景。
-    // 守四件事：① 资源真的在产物里（构建期从 assets/homepage-art 抠底生成）；
-    //          ② 它是**装饰**（alt 空 + aria-hidden + pointer-events:none + z-index 0）；
-    //          ③ 只挂首页（内页不该多这张图）；④ 窄屏不显示（手机上背景装饰会反复被正文压过）。
-    const art = join(DIST, 'art', 'cassette.webp');
-    expect(existsSync(art), 'dist/art/cassette.webp 不在产物里（生成器没跑？）').toBe(true);
+  it('首页百褶 ∞ 底纹：只在首页、是装饰、不拦交互，资源在位', () => {
+    // ★ 2026-09-30 换判据对象（站主拍板「彻底删掉磁带图」）。
+    //   原来守的是 `art/cassette.webp`（磁带渲染图）—— 首页改成原型 v10.6 视觉后
+    //   那张图连同生成器 scripts/gen-home-art.mjs 一起删了（原型首屏的背景语言是
+    //   深墨绿场 + 流场线 + DNA + 玻璃卡，没有磁带的位置）。
+    //   新对象 = 原型 v10.6 的百褶 ∞ 底纹 `art/inf-orig.webp`。
+    //   **判据本身一条没降**：① 资源在产物里；② 是装饰（aria-hidden + pointer-events:none）；
+    //   ③ 只挂首页；④ 不拦交互。
+    //   （「窄屏隐藏」这条**特意不搬**：∞ 底纹是 position:fixed 挂在视口中央的，
+    //     窄屏也要有 —— 原型实测 390px 下它是首屏唯一的大尺度纹理，藏了就空了。）
+    const art = join(DIST, 'art', 'inf-orig.webp');
+    expect(existsSync(art), 'dist/art/inf-orig.webp 不在产物里').toBe(true);
     const artBuf = readFileSync(art);
-    expect(artBuf.length, `cassette.webp 只有 ${artBuf.length} 字节`).toBeGreaterThan(10 * 1024);
+    expect(artBuf.length, `inf-orig.webp 只有 ${artBuf.length} 字节`).toBeGreaterThan(10 * 1024);
     // WebP 头：RIFF....WEBP
-    expect(artBuf.subarray(0, 4).toString('latin1'), 'cassette.webp 不是 WebP').toBe('RIFF');
-    expect(artBuf.subarray(8, 12).toString('latin1'), 'cassette.webp 不是 WebP').toBe('WEBP');
+    expect(artBuf.subarray(0, 4).toString('latin1'), 'inf-orig.webp 不是 WebP').toBe('RIFF');
+    expect(artBuf.subarray(8, 12).toString('latin1'), 'inf-orig.webp 不是 WebP').toBe('WEBP');
 
     const home = readFileSync(join(DIST, 'index.html'), 'utf8');
     // 用 CSS 背景而不是 <img>：装饰图不该给"所有图片 alt 非空"那条硬约束开口子。
-    // 因此 HTML 里只该有那个装饰 div，图片引用在 CSS 里（下面断言 CSS 接上了背景）。
-    expect(home, '首页没有磁带装饰层').toMatch(/<div class="bg-cassette"[^>]*aria-hidden="true"[^>]*>/);
+    expect(home, '首页没有百褶 ∞ 装饰层').toMatch(/<div class="paper-inf"[^>]*aria-hidden="true"[^>]*>/);
 
-    const cssFiles: string[] = [];
-    const walk = (d: string) => {
-      for (const e of readdirSync(d)) {
-        const p = join(d, e);
-        if (statSync(p).isDirectory()) walk(p);
-        else if (e.endsWith('.css')) cssFiles.push(p);
-      }
-    };
-    walk(DIST);
-    const all = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
-    expect(all, '.bg-cassette 没走装饰层约定（pointer-events:none + z-index:0）').toMatch(
-      /\.bg-cassette[^{}]*\{[^}]*pointer-events:\s*none[^}]*\}/,
+    const all = allDistCss();
+    expect(all, '.paper-inf 没走装饰层约定（pointer-events:none）').toMatch(
+      /\.paper-inf[^{}]*\{[^}]*pointer-events:\s*none[^}]*\}/,
     );
-    expect(all, '.bg-cassette 没把磁带图作为背景接上').toMatch(/\.bg-cassette[^{}]*\{[^}]*background:[^;}]*\/art\/cassette\.webp/);
-    // 压缩器会把 `max-width: 767px` 改写成 `(width<=767px)` ⇒ 只按 767px 这个数去认，别写死语法
-    expect(all, '.bg-cassette 缺少窄屏隐藏').toMatch(/@media[^{]*767px[^{]*\{[^}]*\.bg-cassette[^}]*display:\s*none/);
+    expect(all, '.paper-inf 没把底纹作为背景接上').toMatch(/\.paper-inf[^{}]*\{[^}]*background:[^;}]*\/art\/inf-orig\.webp/);
+    // 旧磁带图不该再在产物里出现（站主已拍板删除）
+    expect(all, '产物 CSS 里还有磁带图残留').not.toContain('cassette.webp');
+    expect(existsSync(join(DIST, 'art', 'cassette.webp')), 'dist/art/cassette.webp 还在产物里').toBe(false);
 
-    const others = htmlFiles().filter((f) => f !== join(DIST, 'index.html'));
-    // 图在 CSS 里 ⇒ "只有首页用"要按**每个页面实际引用的 CSS bundle** 查：
-    // Astro 把 CSS 放在 dist/_astro/，页面用 <link> 指过去；非首页不该引到含这张图的那份。
-    const leaked = others.filter((f) => {
+    // ★ 2026-09-30 改判据：「只在首页」→「首页 + 内页共用，且不漏到别处」。
+    //   站主拍板「内页套原型正文区语言」后，∞ 底纹成了**全站纸白区的共同语言**：
+    //   首页是 .paper-inf，内页外壳（chrome='page'）是 .page-inf —— 同一张素材、同一套参数。
+    //   守的东西反而更严了：所有页面都该引到它（23 页里没有"漏网"的），
+    //   而不是"只有 1 页引到"。
+    const pages = htmlFiles();
+    const missingInf = pages.filter((f) => {
       const html = readFileSync(f, 'utf8');
       const hrefs = [...html.matchAll(/href="(\/_astro\/[^"]+\.css)"/g)].map((m) => m[1]);
-      return hrefs.some((h) => readFileSync(join(DIST, h.replace(/^\//, '')), 'utf8').includes('cassette.webp'));
+      return !hrefs.some((h) => readFileSync(join(DIST, h.replace(/^\//, '')), 'utf8').includes('inf-orig.webp'));
     });
-    expect(leaked, `这些非首页也引到了磁带图所在的 CSS：${leaked.join(', ')}`).toEqual([]);
-    console.log(`判据 主页磁带 对象 产物资源 + 装饰属性 + 仅首页 + 窄屏隐藏 实测: ${(artBuf.length / 1024).toFixed(1)} KB · 其余 ${others.length} 页未引到`);
+    expect(missingInf, `这些页面没引到 ∞ 底纹所在的 CSS（纸白区语言没统一）：${missingInf.join(', ')}`).toEqual([]);
+    // 两种挂法各司其职：首页 .paper-inf（在正文流里）、内页 .page-inf（外壳提供）
+    // 注意：内页外壳那段是 `<style is:global>` ⇒ 产物里**没有** Astro 作用域属性，
+    // 选择器就是纯 `body.chrome-page .page-inf`（不是 body.chrome-page.page-inf）。
+    expect(allDistCss(), '内页外壳缺 .page-inf 的 ∞ 底纹').toMatch(
+      /body\.chrome-page\s+\.page-inf\{[^}]*\/art\/inf-orig\.webp/,
+    );
+    console.log(`判据 百褶∞底纹 对象 产物资源 + 装饰属性 + 全站共用（首页 .paper-inf / 内页 .page-inf）实测: ${(artBuf.length / 1024).toFixed(1)} KB · ${pages.length} 页全部引到`);
   });
 
-  it('首页扫描读数：毛玻璃（半透明 + 模糊）单行截断，不再用不透明纸底挡字', () => {
-    // 站主 2026-09-26：「把扫描那个框改成半透明（毛玻璃）的，别挡字」。
-    // 背景：读数固定在扫描带上、扫描带在视口中央 ⇒ 滚动时必然压到正文；
-    // 原来底色是**不透明的 --paper**，等于把标题中间几行挖掉（站主截图里就是这样）。
-    // 这条守三件：① 底色必须半透明（不许再出现不透明 background）；② 有 backdrop-filter；
-    //            ③ 单行截断（读数是整条标题，手机上会折行、把标题盖掉大半）。
-    const cssFiles: string[] = [];
-    const walk = (d: string) => {
-      for (const e of readdirSync(d)) {
-        const p = join(d, e);
-        if (statSync(p).isDirectory()) walk(p);
-        else if (e.endsWith('.css')) cssFiles.push(p);
-      }
-    };
-    walk(DIST);
-    const all = cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n');
-    // 有多条 .band-readout 规则（如 html:not(.js) 那条只有 display）⇒ 取带背景的那条
-    const rules = [...all.matchAll(/\.band-readout[^{}]*\{[^}]*\}/g)].map((m) => m[0]);
+  it('区段标题玻璃条：半透明 + 模糊，不再用不透明纸底', () => {
+    // ★ 2026-09-30 换判据对象（站主拍板「去掉 console 外壳，换成原型 topbar」）。
+    //   原来守 `.band-readout`（压在扫描带上的读数条，站主 2026-09-26 要求改毛玻璃别挡字）。
+    //   扫描带随外壳一起删了 ⇒ 对象换成原型 v10.6 的区段标题玻璃条 `.section-head`。
+    //   **判据一条没降**：① 底色半透明（不许再出现不透明 background）；② 有 backdrop-filter。
+    //   「单行截断」这条**不搬**：它不是压在正文上的浮层，是正文流里的标题行，
+    //     截断反而是错的 —— 标题该换行就换行。
+    const all = allDistCss();
+    const rules = [...all.matchAll(/\.section-head[^{}]*\{[^}]*\}/g)].map((m) => m[0]);
     const rule = rules.find((r) => r.includes('background:')) ?? '';
-    expect(rule, '产物里找不到带背景的 .band-readout 规则').not.toBe('');
+    expect(rule, '产物里找不到带背景的 .section-head 规则').not.toBe('');
     const bg = (rule.match(/background:([^;}]+)/) ?? ['', ''])[1].trim();
-    // 半透明判定：rgba(...,<1) 或 8 位 hex 且 alpha 字节不是 ff
+    // 半透明判定：渐变里含 transparent 结尾，或 rgba(...,<1) / 8 位 hex 且 alpha 不是 ff
     const hex8 = bg.match(/^#([0-9a-f]{6})([0-9a-f]{2})$/);
-    const rgba = bg.match(/^rgba?\([^)]*,\s*(0?\.\d+|0|1)\)$/);
-    const translucent = (hex8 && hex8[2] !== 'ff') || (rgba && Number(rgba[1]) < 1);
-    expect(translucent, `.band-readout 的底色不是半透明（实测 background:${bg}）—— 这会挡字`).toBe(true);
-    expect(rule, '.band-readout 缺 backdrop-filter（毛玻璃）').toContain('backdrop-filter');
-    expect(rule, '.band-readout 没做单行截断（会有换行把标题盖掉）').toContain('white-space:nowrap');
-    const bRule = (all.match(/\.band-readout[^{}]*b[^{}]*\{[^}]*\}/) ?? [''])[0];
-    expect(bRule, '.band-readout b 没有省略号截断').toContain('text-overflow:ellipsis');
-    console.log(`判据 扫描读数 对象 .band-readout 实测: background:${bg} · 有 backdrop-filter · 单行截断`);
+    const rgba = bg.match(/rgba?\([^)]*,\s*(0?\.\d+|0|1)\)/);
+    const translucent =
+      /transparent/.test(bg) || (hex8 && hex8[2] !== 'ff') || (rgba && Number(rgba[1]) < 1);
+    expect(translucent, `.section-head 的底色不是半透明（实测 background:${bg}）`).toBe(true);
+    expect(rule, '.section-head 缺 backdrop-filter（毛玻璃）').toContain('backdrop-filter');
+    // ★ 2026-09-30 补：标准属性必须**两条都在**（前缀在前、标准在后）。
+    //   踩过一次：esbuild 按 cssTarget 做前缀降级，把标准那条删了，整站只剩 -webkit-。
+    expect(rule, '.section-head 只剩 -webkit- 前缀，标准 backdrop-filter 被构建删掉了').toContain('-webkit-backdrop-filter');
+    console.log(`判据 区段标题玻璃 对象 .section-head 实测: background:${bg} · 前缀/标准 backdrop-filter 两条都在`);
   });
 
   it('光标：自定义位图光标已删（无 JS 时用系统光标），跟手白点仍在', () => {
@@ -621,22 +627,56 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(script, '过渡脚本丢了 defaultPrevented 判断（相册灯箱会被误判成要跳转）').toContain('defaultPrevented');
     expect(script, '过渡脚本丢了收尾（不清 pt-* 类 ⇒ 内容块会残留 transform）').toMatch(/classList\.remove\('pt-on',\s*'pt-play'\)/);
 
-    // ---- v2 时间线与配色（2026-09-27 站主给定的规格，写在 CSS 变量里）----
-    const tcss = readFileSync('src/styles/transition.css', 'utf8').replace(/\s+/g, '');
-    expect(tcss, '时间线变量没挂在 html.pt-on 上 —— 放在 .pt 里的话 `.shell > *` 解析不到，内容浮现会静默失效').toMatch(/html\.pt-on\{[^}]*--pt-content-at/);
-    expect(tcss, '聚焦消散时长不是 800ms').toMatch(/--pt-focus-dur:800ms/);
-    expect(tcss, '② 轴线起步不是 600ms / 长 800ms').toMatch(/--pt-axis-at:600ms/);
-    expect(tcss, '③ 舱门不是 1200ms 起、长 1000ms').toMatch(/--pt-hatch-at:1200ms/);
-    expect(tcss, '④ 内容浮现不是 1800ms 起、长 400ms').toMatch(/--pt-content-at:1800ms/);
-    expect(tcss, '配色丢了：医疗橙/无菌米色/墨绿三色必须都在').toMatch(/--pt-orange:#ff8c42/);
-    expect(tcss, '柔雾初始厚度不是 30px（首帧就不是"内容完全不可见"了）').toMatch(/blur\(30px\)/);
-    // 这两条是实测定格图抓出来的真 bug 的回归网：
-    expect(tcss, '消散动画用了 both ⇒ 会在延迟期间把 opacity:1 顶上去，准星/基准线 600ms 前就可见').not.toMatch(/pt-(axis|ticks)-out[^,;]*both/);
-    expect(tcss, '消散动画应当是 forwards（延迟期间不生效、结束后保持终态）').toMatch(/pt-axis-out[^,;]*forwards/);
-    // 2026-09-27 站主调整：第三阶段"中央横线分裂成上下两条"—— 那两条线**本身**必须是墨绿（原来是橙的）
-    expect(tcss, '舱门接缝线（分裂出来那两条）不是墨绿').toMatch(/\.pt-pane::after\{[^}]*var\(--pt-green\)/);
-    expect(tcss, '接缝线不该以橙色为主体（橙只允许作为很淡的流光）').not.toMatch(/\.pt-pane::after\{[^}]*var\(--pt-orange\)/);
-    console.log(`判据 过渡 v2 对象 时间线/配色/填充/接缝线 实测: 变量挂 html.pt-on · 800/600+800/1200+1000/1800+400 · blur(30px) 起 · 消散 forwards · 接缝线墨绿`);
+    // ---- ★ 2026-09-30 换成 v3（原型 v10.6 墨色浸染，900ms）----
+    //   上一版 v2（2200ms 四段：无菌纸柔雾 / 坐标锁定 / 无菌舱门 / 内容落地）整体作废 ——
+    //   站主拍板「页与页的过渡动画也换」。下面这批断言跟着换对象，
+    //   **守的能力没降**：时间线可读性、三个元素齐备、首帧不闪、reduced-motion 兜底、
+    //   以及原 v2 那两条真 bug 的**等价回归网**（见最后两条）。
+    // ⚠️ 先剥注释再压空白：本文件里就有一段注释在解释"为什么不能自引用"、
+    //   字面出现了 `--pt-sweep: var(--pt-sweep, …)` —— 不剥注释的话下面那条
+    //   "不许自引用"的断言会被自己脚下的注释引爆（假阳性）。
+    const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, '');
+    const tcss = strip(readFileSync('src/styles/transition.css', 'utf8'));
+    const tokens = strip(readFileSync('src/styles/tokens.css', 'utf8'));
+    // 总时长 900ms 声明在 tokens.css 的 :root 上（= html，全页可读）。
+    // ⚠️ 不能只挂在 `.pt` 上：要动画的 `.shell` 不在 `.pt` 子树里 ⇒ 变量解析为空 ⇒
+    //    整条 animation 简写被判无效而丢弃 ⇒ 内容后退静默失效（v2 实测踩过，原理不变）。
+    expect(tokens, '--pt-sweep 不在 :root 上（放 .pt 里的话 .shell 解析不到，内容后退会静默失效）').toMatch(
+      /:root\{[^}]*--pt-sweep:900ms/,
+    );
+    // 曾经写成 `--pt-sweep: var(--pt-sweep, 900ms)` 想做回退 —— 那是**自引用**，
+    // 自定义属性引用自己构成循环、计算值阶段判无效 ⇒ 整个变量直接失效。这条守它别再回来。
+    expect(tcss, '--pt-sweep 出现了自引用（自定义属性引用自己 = 循环 = 直接失效）').not.toMatch(
+      /--pt-sweep:\s*var\(--pt-sweep/,
+    );
+    // 三个元素 + 一层内容后退，一个都不能少
+    for (const [name, sel] of [
+      ['墨色浸染层', /\.pt-ink\{/],
+      ['描边关键词', /\.pt-word\{/],
+      ['读数线', /\.pt-scan\{/],
+      ['内容后退', /html\.pt-play\.shell\{animation:pt-shell/],
+    ] as const) {
+      expect(tcss, `v3 过渡缺 ${name}`).toMatch(sel);
+    }
+    // 灵魂：墨色层必须用 darken 混色（内容是被"浸染"而不是被"盖住"）
+    expect(tcss, '墨色层丢了 mix-blend-mode:darken —— 那就退化成"盖一块板"了').toMatch(
+      /\.pt-ink\{[^}]*mix-blend-mode:darken/,
+    );
+    // 墨色层的底色与前景字色来自 token（不写死 #0b1a14）
+    expect(tcss, '墨色层底色没走 token').toMatch(/\.pt-ink\{[^}]*background:var\(--ink-deep\)/);
+    expect(tcss, '描边字颜色没走 token').toMatch(/\.pt-word\{[^}]*text-stroke:1\.3pxvar\(--on-ink\)/);
+    // reduce-motion 必须整套关掉（含蒙版本身）
+    expect(tcss, 'reduced-motion 下没关掉 v3 的三个元素 / 内容后退').toMatch(
+      /prefers-reduced-motion[^@]*\.pt-ink[^}]*animation:none!important/,
+    );
+    // 原 v2 那两条「实测定格图抓出来的真 bug」的等价回归网：
+    //   ① 首帧不许闪 —— 墨色层与描边字的**初始状态必须是静态声明**（不是靠动画先跑一遍）
+    expect(tcss, '墨色层的初始位移不是静态声明（首帧就会闪一下）').toMatch(/\.pt-ink\{[^}]*transform:translate3d\(-101%/);
+    expect(tcss, '描边字的初始 opacity 不是静态 0（首帧就会露出来）').toMatch(/\.pt-word\{[^}]*opacity:0/);
+    //   ② 收尾必须能被 JS 摘干净 —— 内容后退的末帧回到 none，否则 .shell 会残留 transform
+    //      （residual transform 会造出层叠上下文，把抽屉/头像定位顶掉；完整回归见下一条用例）
+    expect(tcss, 'pt-shell 末帧没回到 none ⇒ .shell 会残留 transform').toMatch(/@keyframespt-shell\{[\s\S]*100%\{opacity:1;filter:none;transform:none/);
+    console.log(`判据 过渡 v3 对象 时长/三元素/darken/首帧/reduced-motion 实测: --pt-sweep:900ms 挂 :root · 无自引用 · .pt-ink+.pt-word+.pt-scan+pt-shell · darken · 初始静态声明`);
   });
 
   it('关于页头像用布局定位（不许 position:fixed）', () => {

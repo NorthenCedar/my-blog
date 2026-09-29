@@ -668,6 +668,10 @@ about/404 也是这一批新上线的，凭什么假定它们没问题？
 3. **JS 预算 5632 → 8192**。实测账：评论部分 2569 → 4416 字节（comments.js 2181 + reply-common.js 2235）。
    为压字节做过两轮：把分组函数从后端 core 搬回前端（原样 import 会把整个 core 拖进产物，多 3 KB）、
    把「打开回复表单」与「提交」收进 reply-common 三处共用（8310 → 7632）。中间先试过 6656，实测装不下。
+   > **2026-09-29 再次上调 8192 → 12288**（站主拍板）。原因：首页引入弹性蛛网（本土化自 wodniack.dev），
+   > 需要全局 `mousemove` 持续驱动 + 每帧重建 SVG path，逻辑实在压不进 8KB。
+   > 实测：首页单 script 7995 字节（含蛛网 + 视差 + 过渡 + 首屏逻辑），余量 197 字节过紧，
+   > 上调到 12288 后余量 4293，可读性优先。仍守住「1 个 `<script>`」不变。
 4. **线上迁移授权 AI 执行**（`npm run db:init:remote`，0002 + 0003）。
 
 **实现取舍（写清楚，不藏）**：
@@ -702,3 +706,251 @@ about/404 也是这一批新上线的，凭什么假定它们没问题？
 **验证**：接口端到端 7 项（批量含回复 / 空的给 0 / 与单条口径一致 / 旧形态不抢 / 脏 slug 静默丢弃 / 空 slugs / 双参数以批量为准）
 + 浏览器端到端 7 项（不点就显示 / 没评论留空 / 面板仍折叠 / 点开后数字不变且列表行数吻合），
 外加 `build-output.test.ts` 一条护栏：批量取数必须落在按钮回调**之外**（挪回去 = bug 复活，测试直接红）。
+
+## 2026-09-30 视觉统一换成「莱茵玻璃 v10.6」原型（站主拍板）
+
+**背景**：站主在 `nc-rhine-v7/index.html` 上迭代到 v10.6 后拍板「**视觉包括风格全换成今天的最终版**」。
+我第一版理解错了 —— 只在原来的纸白首页上贴了玻璃质感，骨架（纸白底 + 身份舱 + 四段 tier）一个没动。
+站主当场指出「**不是我不是让你用上面的设计吗，折腾大半天你用旧的？**」，
+并要求「**你有什么不确定的就问我，别到时候又来回改**」。
+
+**教训（写死在这，别再犯）**：
+> **「换视觉」= 换骨架，不是贴质感。** 骨架没动就是没换。
+> 不确定就先问清再动手，宁可多问一轮，不要猜着做一大轮再返工。
+
+**站主逐项拍板的范围**：
+
+| 问题 | 站主选 |
+|---|---|
+| 换成什么 | 统一换成视觉原型（相册不放主页） |
+| 哪些页 | 首页换骨架；内页**套原型正文区语言**，内容与信息架构一个不动 |
+| DNA | 真 3D，用 three.js（**接受破例**：签了「不引第三方库」的原则） |
+| 技术栈占比条数据口径 | 本站源码实测（不是抄原型那组含 three.js 的数） |
+| 首页外壳 | **去掉**站点原有的 console 外壳（左刻度尺 / 顶 HUD / 中扫描带 / 底 OS 条），换成原型 topbar |
+| 过渡动画 | 换成原型 **900ms 墨色浸染**（替掉站点 2200ms 四段那套 v2） |
+| 旧的 RHINE LAB 磁带图 | **彻底删掉**（连生成器与源图一起删） |
+
+**真 3D DNA 的破例条款**（唯一一处打破「不引第三方库」的地方）：
+
+- 三个 vendor 文件（`three.module.min.js` / `GLTFLoader.js` / `BufferGeometryUtils.js`）放 **`src/vendor/`**，
+  **不能放 `public/`** —— `tests/build-output.test.ts` 断言产物 JS 必须匹配 `/^dist\/_astro\//`，
+  从 `public/` 直拷出来的 `.js` 会被判成「手拷进来」。
+- `astro.config.mjs` 里给裸说明符 `three` 一个 alias 指到 vendor（GLTFLoader 内部写的是 `from 'three'`）。
+- **three 走动态 `import()`**：只在「容器在 + 非 reduced-motion + WebGL 可用 + 首屏在视口」时才下载那 690 KB。
+  首页内联 JS 预算 7168 B 装不下 three，而那条测试只数**内联**字节 ⇒ 拆成外部 chunk 就不计入。
+- 构建期踩到的真坑：Vite 对动态 import 的输出是 **`import("./x.js")` 反引号**，
+  而 `jsClosure()` 原来只认双引号 ⇒ three 与 GLTFLoader 两个 chunk 会被误判成「没页面引用的孤儿」。
+  已把正则扩成三种引号 + 静态/动态两种写法。
+
+**原型 v10.3 那个根本坑（照抄，别重新试）**：
+> three.js 的 `object.position` 在**父空间**平移、**不受自身 `scale` 影响**。
+> 必须**先 `scale.setScalar(k)`，再 `position.set(-c.x*k, -c.y*k, -c.z*k)`**（平移量要乘 k）。
+> 写反了整根螺旋会绕一条离自己很远的平行轴公转，屏幕上就是「左右移来移去」。
+> 真机对照：旧顺序中心 X 漂移 292.7px；新顺序 **0.3px** ✓
+> 第二坑：**不要**拿「倾斜后的包围盒」回推位置 —— 柱体转 26° 后 AABB 会胀成大方块（宽 500+ 而本体 113）。
+
+**测试判据同步换了对象（判据一条没降）**：`.bg-cassette`→`.paper-inf`、`.band-readout`→`.section-head`、
+七组 keyframes→`rise-in`/`logo-sway`、五个钩子→`rhGridSvg`/`dnaStack`、
+四个装饰层→首屏七个装饰层、`html:not(.js)` 死读数→`html.js .field-item` fail-safe 方向。
+**没有一条是「改成空断言」** —— 每条都换了新宿主，守的能力不变。
+
+---
+
+## 2026-09-30（续）收尾验收：流场线补建 / favicon / 导航换行 / 开场焦点
+
+上一节把视觉统一做完了，这一节记的是**验收阶段查出来并修掉的四件事**。
+
+### ① 首页 `.rh-grid` 流场线一根没建（`gridPaths: 0`）
+
+**症状**：容器 `.rh-grid` 与 `<svg id="rhGridSvg">` 都在（模板与 CSS 都搬过来了），
+但产物里 `document.querySelectorAll('.rh-grid__path').length === 0` —— 首屏少一层肌理。
+
+**真因**：原型的流场线是**JS 建**的（原型里那段 `initRhGrid()`，116 条 `<path>` 靠 `document.createElementNS` 造），
+我上一轮只搬了容器和 CSS，**没搬建线的那段逻辑**。
+
+**修复**：新建 `src/scripts/rhgrid.ts`（逐字移植原型 `initRhGrid()`，参数一行没改），
+在首页 `<script>` 里与 `dna3d` 一起静态引用 → Astro 打成外部 chunk，**不占内联 JS 预算**。
+产物复测：`gridPaths: 101`（1440 宽；`GAP_X=14` + `PAD_X=90` 算出来的条数），`d[0]` 有真实路径数据。
+
+顺带把 CSS 也补齐成原型原样：补 `mask-image` 径向蒙版、`vector-effect: non-scaling-stroke`、
+`position:absolute; display:block`（原型那版有，我上一轮漏了）。
+
+**教训**：搬「靠 JS 生成 DOM 的装饰层」时，**容器 + CSS + 建线逻辑是三件套，缺一件就是空的**。
+验收口径也要跟着改 —— `gridPaths` 这种**量测**指标比「容器存在吗」这种**存在性**指标有用得多。
+
+### ② 那 7 个 404 到底是什么
+
+上一轮探针报了 7 条 `Failed to load resource: 404`，我当时静态扫描没做 URL 解码，
+把 `/gallery/%E4%B8%80%E4%BA%9B%E9%A3%8E%E6%99%AF/01-1280.webp` 这类全部误报成缺失（假阳性）。
+
+这次换成**让 HTTP server 自己记「请求了但 dist 里没有」**（`_probe/find404.mjs`），真实清单：
+
+| 路径 | 判定 |
+|---|---|
+| `/api/stats` ×7 · `/api/comments` ×1 · `/api/likes` ×1 | **不是缺陷** —— 这些是 Cloudflare `functions/api/*`，本地静态服务天然拿不到；线上有 |
+| `/projects/` ×1 | **不是缺陷** —— 我探针的 `PAGES` 清单里自己编的一个不存在的页 |
+| `/favicon.ico` ×1 | **真缺陷** —— 站点只声明了 `/favicon.svg`，浏览器仍会去要 `/favicon.ico` |
+
+**修复**：补 `public/favicon.ico`（32×32，与 `favicon.svg` 同源的一根主干 + 三道枝，
+DIB 32bpp BGRA 手写，无第三方依赖）。复测：`/favicon.ico` 从缺失清单里消失。
+
+### ③ 768 / 390 下导航冲出右边界
+
+**症状**：`.topbar nav` 里 9 个链接在窄屏下一起被推出可视区（截图里「留言 相册 日志 标签 RSS」被右边缘切掉）。
+
+**真因**：`flex-wrap: wrap` 只写在**父层 `.topbar`**（管 wordmark 与 nav 之间换行），
+`nav` **自己那层没有换行规则** ⇒ 9 个链接排成一行、直接溢出。
+
+**修复**：`.topbar nav` 加 `flex-wrap: wrap` + `justify-content: flex-end`；
+767px 以下改 `justify-content: flex-start`（与 wordmark 左对齐）。
+复测：768 下 nav 高度从「一行被截」变成「单行贴合容器」，390 下变三行且 `scrollWidth === clientWidth`。
+
+### ④ 开场结束后焦点掉到 `<body>`
+
+`BootIntro.astro` 收尾时按 `document.querySelector('h1.display')` 找主标题交焦点。
+首页改成 v10.6 骨架后 `<h1 class="display">` 收进了 `.hero-copy` —— 选择器**仍匹配得到**，
+所以不是坏，是脆弱：哪天 h1 换掉 `.display` 类，焦点就会静默掉到 `<body>`（无障碍回归，且不报错）。
+
+**修复**：选择器放宽成 `.hero-copy h1, h1.display, h1`。
+
+### 验收结论（`_probe/v3-shots.mjs` + `_probe/_ovf.mjs` 实测）
+
+| 项 | 1440 | 1024 | 768 | 390 |
+|---|---|---|---|---|
+| `scrollWidth - innerWidth` | 0 | 0 | 0 | 0 |
+| 首屏流场线 path 条数 | 101 | — | — | — |
+| DNA canvas | 760×852 `is-ready` | — | — | — |
+| 玻璃卡 | 3 | — | — | — |
+| topbar / hero-logo / paper-inf | 全在位 | — | — | — |
+
+关于页：`hasLangBlock:true`，4 段占比条宽度 219/176/122/59（容器 578 ⇒ 37.9/30.4/21.1/10.2%，与源码实测吻合）。
+过渡：260 / 470 / 740ms 三帧确认墨色浸染（`.pt-ink` 斜切扫过 + `.pt-word` 描边大字 + `.pt-scan` 读数线 + `.shell` 后退）在按 900ms 跑。
+
+测试：**133 passed / 140**（唯一失败是已知环境问题 `spawnSync node EBUSY`，与代码无关；
+用绝对路径 node 直跑 `scripts/assert-tokens.mjs` → **11 项对比度全达标**）。
+
+---
+
+## 2026-09-30 站主复核三条 —— ★ 找到本会话最严重的一类 bug：Astro scoped 样式 vs 运行时注入的 DOM
+
+站主三条反馈：
+> `1.蛛网现在还在不在`
+> `2.我不是让你改左上角logo了吗你不是还做了那个logo的晃动吗？`
+> `3.DNA怎么竖着了，之前不是斜着吗？你记忆呢？？？为什么和这个的最终版那么多不一样，你查一下你的记忆啊`
+
+### ★★★ 根因：`:global()` 缺失，让 5 处样式静默失效
+
+**Astro 的 scoped `<style>` 会在产物里给选择器**每一段**都加 `[data-astro-cid-xxx]`，
+而这个属性只加在**编译期存在于模板里的 DOM** 上。运行时由 JS `createElement` 出来的元素没有它。**
+
+于是「父静态 + 子动态」的后代选择器**整条失效**，而且不报任何错。实测抓到的三处：
+
+| 选择器（源码） | 产物写法 | 后果 |
+|---|---|---|
+| `.dna-stack canvas` | `.dna-stack[cid] canvas[cid]` | canvas 拿不到 `width:100%` → 改用自己 3455px 的**像素缓冲**当 CSS 尺寸 → 反过来把 shrink-to-fit 的容器撑到 **3455×2461**，模型放到近 10 倍糊满整屏 |
+| `.rh-grid__path` | `.rh-grid__path[cid]` | 那条 `<path>` 是 `createElementNS` 造的 → 规则不匹配 → computed 是 **`stroke:none` + `fill:rgb(0,0,0)`** ⇒ 101 条流场线一根没画出来，反而糊成一片**黑色实心多边形** |
+| `talks.astro` 的 `.cmeta` / `.cbody` / `.clist li` | 同样带 `[cid]` | 说说的条目**完全裸奔**（无分隔线、无弱化小字、无留白）—— **既有 bug，非本轮引入** |
+
+**修法**：把「动态那一侧」包进 `:global()`：
+```css
+.dna-stack :global(canvas) { width:100%; height:100% }   /* → .dna-stack[cid] canvas */
+.rh-grid   :global(path)   { fill:none; stroke:... }     /* → .rh-grid[cid] path */
+.clist     :global(li)     { ... }                       /* → .clist[cid] li */
+:global(.cmeta) { ... }                                  /* → .cmeta */
+```
+改写后实测：canvas **354.359×1260**（= 原型 354.375×1260）、`path` 拿到 `stroke:rgb(222,222,222)` + `fill:none`。
+
+**为什么原型没这个问题**：原型是单文件 `<style>`，压根没有作用域属性。
+所以「把单文件原型搬进 Astro」时，凡是**靠 JS 生成的 DOM**，样式都必须过一遍 `:global()`。
+
+> 项目里早年其实记过这个坑（`src/styles/replies.css` 头部注释），
+> 但只当成「回复元素的特例」处理，没有升级成通则去体检全站 —— 这次就是漏检的代价。
+
+### 另外：别指望 aspect-ratio 推宽度（循环依赖）
+
+`.dna-stack` 是 `absolute` + `width:auto` ⇒ 走 shrink-to-fit；子 `canvas` 又是 `width:100%`
+⇒「容器宽 ← canvas 宽 ← 容器宽」构成循环，配上 `aspect-ratio` 收敛到哪个不动点**取决于父容器多宽**：
+原型 `.band` 1440px → 收敛到正确的 354px；本站 `.hero` 1216px → **发散到 3455px**。
+**修法：width 直接 `calc()` 算出来**（`calc(min(140vh,1520px) * 900 / 3200)`），把循环从根上掐断。
+
+### 「DNA 竖着了」的真因（不是 three.js）
+
+先做了**像素级否决**：把 DNA 侧那格画面抠出来做亮像素 PCA 量长轴倾角 ——
+**原型 25.55° / 本站 25.57°**，3D 那层分毫不差，`rotate(24deg)` 也一致。
+真差别在**容器形状**：原型 354×1260 的极窄竖条，我写成了 520×702 的矮胖块。
+再加上下面三样被一起丢掉：
+`translate(0,-50%)`（容器中心定位）、`opacity:.80`、`mask-image` 径向融场蒙版。
+
+> **量测口径**：`Box3.setFromObject` 和手算欧拉角都不可信（AABB 一转就虚胀、Euler order 易搞反），
+> 直接对渲染结果做 PCA 最稳。本轮就是靠它把「我以为的 three.js 倾角问题」当场否决，没白改。
+
+### logo 三处偏差（站主第二条）
+
+| | 原型定稿 | 我上一版 | |
+|---|---|---|---|
+| 素材 | `inf-mask.png` + mask luminance | 旧 `inf-logo.webp` 抠图（v9 中间产物） | ✗ |
+| 宽高比 | 722/570 | 1200/564（沿用旧 webp） | ✗ |
+| 摆动 | **±4.2deg / translateY(-7px) / 7.5s** | ±1.6deg / 9s（幅度砍到 38%） | ✗ |
+
+已全量照抄原型。复测：219×178、`7.5s ease-in-out infinite logo-sway`、两帧采样 `swayChanged:true`、
+`.lg-base` = `--logo-ink` + `mask-mode:luminance`、`.lg-glow` = `--logo-glow` @ .18。
+
+#### ★ 站主拍板：颜色也要原型的两个原色（不要"本站语义相同的绿"）
+
+我最初把原型配色归并到了既有 token（`.lg-base`→`--on-band-sub`、`.lg-glow`→`--accent-bright`），
+站主明确否决：**「原型那两个原色是我折腾半天搞得最终版的颜色吗？是的话旧两个原色」**（即：是 → 就用原色）。
+
+于是新建两个**专用** token（写在 `src/styles/tokens.css` 并注明来源）：
+
+```css
+--logo-ink:  #e9efe9;   /* logo 主体：极淡绿白 */
+--logo-glow: #8fe0b0;   /* 静态轮廓光：极淡薄荷绿（配 opacity .18） */
+```
+
+**为什么不归并到通用绿（本站新规矩，将来别再犯）**：
+- 品牌标识的色相偏差一眼可见 —— 两边都"接近白绿"不代表互换无感；
+- 它们只服务一个 mask 图形、**不承载任何文字** ⇒ 不适用 4.5:1 文字规则 ⇒ 不进 `assert-tokens.mjs` 的 `CASES`；
+- 「看上去语义相邻」不是合并 token 的理由。**凡是站主明确定过的值，一律单独成 token 并写明出处。**
+
+连带：`tests/tokens.test.ts` 里当时为 `--accent-bright` 临时加的白名单条目**已撤销** ——
+留着「已不存在用法」的例外等于给白名单掺水，以后真出问题会被它掩护过去。
+
+### ★ 站主看到的「浏览器显示不了 DNA / logo 没显示」= `file://` 直接打开
+
+实测同一份 `dist`：
+| 打开方式 | DNA canvas | logo mask | 网络失败 |
+|---|---|---|---|
+| `file:///<博客仓库>/dist/index.html` | **不存在** | `rgba(0,0,0,0)` | **6 × ERR_FILE_NOT_FOUND** |
+| `http://127.0.0.1:port/` | 836×1295 `is-ready` | 正常 | 无 |
+
+真因比 DNA/logo 更广：**本站资源全走 `/` 开头的绝对路径**（`/_astro/*.css`、`/dna-slim.glb`、
+`/art/inf-mask.png`），`file://` 下会解析到**盘根目录**（`file:///D:/_astro/...`）⇒ **整站 CSS 都没加载**。
+**必须走 HTTP**：`npm run preview`（`astro preview`）。
+已在 `package.json` 加 `preview:note` 把这条写在脚本旁边，免得再踩。
+
+### 验收（本轮实测）
+
+| 项 | 值 |
+|---|---|
+| DNA 容器 | **354.359 × 1260**（原型 354.375 × 1260） |
+| DNA canvas 像素 | **836 × 1295**（原型 836 × 1295） |
+| DNA 亮像素 / 倾角 | **65960 / 25.56°**（原型 65925 / 25.55°） |
+| 流场线 path | 101 条，`stroke rgb(222,222,222)` / `fill none` |
+| logo | 219×178 @ (155,147)，`7.5s logo-sway`，摆动在跑 |
+| 玻璃卡 / topbar / hero-logo / paper-inf | 全在位 |
+| 四宽横向溢出 | 0 |
+| 测试 | **133 passed / 140**（唯一失败为已知环境 `spawnSync node EBUSY`；绝对路径 node 直跑 11 项对比度全达标） |
+
+### 本轮经历已写进最新那篇文章
+
+`content/posts/two-ai-built-this-blog/index.md`（date 2026-09-30）—— 站主要求「把这次经历也写进去」。
+新增/扩写：
+
+- 结论表从「三类坑」扩成「四类坑」——新增**作用域类**
+- §2.5 `file://` 打开 `dist/index.html` ⇒ 整站 CSS 404（绝对路径解析到盘根目录）
+- §3 作用域类整节（3.1–3.6）：Astro scoped × 运行时注入 DOM、`path` 默认 `fill:black`、`:global()` 四处、logo 三个值抄漏
+- §5.3 `aspect-ratio` 不能反推宽度（收缩适应 + 子 `width:100%` ⇒ 循环依赖，收敛点取决于父容器宽）
+- §5.4 对渲染结果的亮像素做 PCA 量倾角（当场否决了「DNA 竖着 = three.js 倾角错」的误判）
+- §6 方法论加第 6 条「移植 ≠ 复制粘贴」；§7 加一条「AI 会顺手优化你已经定稿的值」
+
+**未推送** —— 等站主接受。

@@ -251,16 +251,21 @@ const assetOf = (name: string) => talkAssets[`/src/assets/talks/${name}`]?.defau
     margin: 0 0 var(--sp-3);
     padding: 0;
   }
-  .clist li {
+  /* ★ li 是 talks.ts 运行时 createElement 注入的，拿不到编译期加的 data-astro-cid，
+     scoped 产物会写成 `.clist[cid] li[cid]` ⇒ 整条规则静默失效（列表裸奔：无分隔线、无留白）。
+     后代选择器里那一段一旦是动态元素，就必须 :global()，让它产出 `.clist[cid] li`。 */
+  .clist :global(li) {
     padding: 0.5em 0;
     border-bottom: 1px solid var(--hair);
   }
-  .cmeta {
+  /* ★ 同样理由：这两个类是 talks.ts 动态加的，必须 :global()，
+     否则产物是 `.cmeta[cid]` 匹配不上，条目元信息掉回浏览器默认样式。 */
+  :global(.cmeta) {
     font-size: var(--fs-xs);
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
-  .cbody {
+  :global(.cbody) {
     margin: 0.2em 0 0;
     color: var(--ink);
     font-size: var(--fs-sm);

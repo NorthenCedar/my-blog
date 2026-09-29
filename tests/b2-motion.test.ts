@@ -65,12 +65,25 @@ describe.skipIf(!hasDist)('B2 动效层：产物静态契约', () => {
     expect(pages.map(rel), '门控脚本应当只出现在首页').toEqual(['dist/index.html']);
   });
 
-  it('无 JS 时死读数被藏掉（html:not(.js) 规则）', () => {
+  it('无 JS 时正文不被弱化（弱化只在 html.js 下，fail-safe 方向不能反）', () => {
+    // ★ 2026-09-30 换判据（站主拍板「去掉 console 外壳，换成原型 topbar」）。
+    //   原来守的是 `html:not(.js) .hud-progress / .band-readout` —— 那两个是仪表读数，
+    //   随外壳一起删了（没有 JS 就该藏，否则会挂着 000% 这种死指针）。
+    //
+    //   这条不变的**内核**是：门控方向必须是 fail-safe —— 默认（无 JS）页面完整可读，
+    //   JS 到位才启用增强。现在首页唯一还"弱化内容"的增强是入场揭示/聚焦
+    //   （`.field-item` 透明度压到 --focus-min），所以判据换成：
+    //     ① 弱化规则**必须**挂在 html.js 下（反过来写就是"没 JS 时正文永久半透明"）；
+    //     ② 并且 reduced-motion 下把它压回 1。
     const css = allCss();
-    // 仪表读数是 JS 驱动的：没有 JS 就不该显示死指针/假读数。
-    // 原型用 html.no-js 规则，本站门控方向相反（默认无 JS 安全、html.js 增强），故写作 html:not(.js)。
-    expect(css, '缺 html:not(.js) .hud-progress 规则').toMatch(/html:not\(\.js\)[^{,]*\.hud-progress/);
-    expect(css, '缺 html:not(.js) .band-readout 规则').toMatch(/html:not\(\.js\)[^{,]*\.band-readout/);
+    expect(css, '弱化规则没有挂在 html.js 下（无 JS 时正文会被永久半透明）').toMatch(
+      /html\.js[^{,]*\.field-item[^{]*\{[^}]*opacity:\s*var\(--focus-min\)/,
+    );
+    const blocks = mediaBlocks(css, 'prefers-reduced-motion');
+    const joined = blocks.join('\n');
+    expect(joined, 'reduced-motion 下没把 .field-item 的弱化压回 1').toMatch(
+      /\.field-item[^{]*\{[^}]*opacity:\s*1/,
+    );
   });
 
   it('prefers-reduced-motion 下关掉动画并压平位移', () => {
@@ -84,16 +97,24 @@ describe.skipIf(!hasDist)('B2 动效层：产物静态契约', () => {
     expect(joined, 'reduced-motion 下没有压平位移（transform:none）').toMatch(/transform:\s*none/);
   });
 
-  it('七组 @keyframes 都在产物 CSS 里', () => {
+  it('首页动效的 @keyframes 都在产物 CSS 里', () => {
+    // ★ 2026-09-30 换清单：旧的七组里 sweep-in / type-in / wipe-in 是给
+    //   扫描带 / HUD / 磁带水印做入场的，sweep-x / orbit / blink 是常驻循环 ——
+    //   这六组的宿主 DOM 已随 console 外壳全部删除，留着断言就是"守空气"。
+    //   新的两组：rise-in（首屏文案错位入场）、logo-sway（∞ 落款常驻小幅摆动）。
+    //   产物里还有 base/comment 侧的其它 @keyframes，所以只查名字不查总数。
     const css = allCss();
-    // 产物里还有 base 侧的 @keyframes rise（Band 的入场），所以只查名字不查总数。
-    for (const k of ['sweep-in', 'type-in', 'wipe-in', 'rise-in', 'sweep-x', 'orbit', 'blink']) {
+    for (const k of ['rise-in', 'logo-sway']) {
       expect(css, `产物 CSS 缺 @keyframes ${k}`).toContain(`@keyframes ${k}`);
     }
   });
 
   it('首页有全部动效钩子，其余页面一个都没有', () => {
-    const hooks = ['railFill', 'hudPct', 'hudSec', 'bandTitle', 'band-sweep'];
+    // ★ 2026-09-30 换钩子：railFill / hudPct / hudSec / bandTitle / band-sweep
+    //   全随外壳删除。新钩子 = 原型 v10.6 首屏的两个 JS 注入点：
+    //   rhGridSvg（流场线由 JS 建 path）、dnaStack（three.js 注入 canvas）。
+    //   判据不变：只在首页出现，其余 22 页一个都不许有。
+    const hooks = ['rhGridSvg', 'dnaStack'];
     for (const p of allHtml()) {
       const t = readFileSync(p, 'utf8');
       const isIndex = rel(p) === 'dist/index.html';
@@ -112,9 +133,22 @@ describe.skipIf(!hasDist)('B2 动效层：产物静态契约', () => {
   });
 
   it('背景装饰层不承载信息、也不拦指针', () => {
+    // ★ 2026-09-30 换清单：bg-mark / bg-ring / bg-orbit / bg-green 是旧纸白首页的装饰层，
+    //   已随「统一换成原型 v10.6」删除。新清单 = 原型首屏与纸白区的全部纯装饰层：
+    //   流场线、DNA 容器、三块玻璃卡、晨昏带、百褶 ∞ 底纹。
+    //   **判据一条没降**：每个都要 aria-hidden（不承载信息），且 CSS 里有 pointer-events:none（不拦指针）。
     const h = readFileSync(join(DIST, 'index.html'), 'utf8');
-    for (const cls of ['bg-mark', 'bg-ring', 'bg-orbit', 'bg-green']) {
-      expect(h, `${cls} 缺 aria-hidden`).toMatch(new RegExp(`class="${cls}"[^>]*aria-hidden="true"`));
+    const decos: [string, RegExp][] = [
+      ['rh-grid', /class="rh-grid"[^>]*aria-hidden="true"/],
+      ['dna-stack', /class="dna-stack"[^>]*aria-hidden="true"/],
+      ['hero-glass g1', /class="hero-glass g1"[^>]*aria-hidden="true"/],
+      ['hero-glass g2', /class="hero-glass g2"[^>]*aria-hidden="true"/],
+      ['hero-glass g3', /class="hero-glass g3"[^>]*aria-hidden="true"/],
+      ['dusk', /class="dusk"[^>]*aria-hidden="true"/],
+      ['paper-inf', /class="paper-inf"[^>]*aria-hidden="true"/],
+    ];
+    for (const [name, re] of decos) {
+      expect(h, `${name} 缺 aria-hidden`).toMatch(re);
     }
     expect(allCss(), '装饰层必须 pointer-events:none').toMatch(/pointer-events:\s*none/);
   });

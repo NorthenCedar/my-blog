@@ -35,6 +35,13 @@ describe('低对比 token 越界（--accent-bright 只许用在深色底上）',
     'nav a[aria-current=page]',
     '.lb button:hover',
     '.lb button:focus-visible',
+    // 2026-09-30 追加：原型 v10.6 首屏（深墨绿场）里 eyebrow 前面那道 1px × 1.6rem 的短横。
+    // 它与上面两条同属「深色底上的亮绿」——对 --ink-deep(#0b1a14) 远超 4.5:1，
+    // 且它是**非文字图形**（一根 1px 线），不是小字。抄的是原型 .eyebrow i 的原色。
+    '.eyebrow i',
+    // (2026-09-30 一度为 .hero-logo .lg-glow 登记过，随即撤销：
+    //  站主要求 logo 沿用原型最终定色，改用专用 token --logo-glow，不再是裸 --accent-bright。
+    //  留着这条"已不存在用法"的例外，等于给白名单掺水 —— 以后真出问题会被它掩护过去。)
   ];
 
   it('构建产物的 CSS 里，裸 var(--accent-bright) 只出现在白名单选择器里', () => {

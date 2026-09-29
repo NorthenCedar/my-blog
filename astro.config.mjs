@@ -18,6 +18,29 @@ export default defineConfig({
     layout: 'constrained',
   },
   vite: {
+    build: {
+      // ★ 2026-09-30：修「玻璃层在产物里只剩 -webkit- 前缀」。
+      //
+      // 现象：源码里成对写的
+      //     backdrop-filter: blur(10px);
+      //     -webkit-backdrop-filter: blur(10px);
+      //  构建后产物里**只剩 -webkit- 那条**，标准 backdrop-filter 被删掉。
+      //  v10.6 玻璃层三条规则（.tier-head / .index a::before / .pod）全中招。
+      //
+      // 真凶不是 lightningcss（那只在 cssMinify=false 时兜底），
+      //  而是 **Vite 默认的 esbuild CSS 压缩**：它按 build.cssTarget 做前缀降级，
+      //  默认目标是「较老的浏览器」，于是判定「标准属性无覆盖，用前缀版替换掉」。
+      //
+      // 为什么必须修：-webkit-backdrop-filter 是厂商前缀、不是规范属性。
+      //  现在 Chrome/Safari 确实认它，但这是**在赌**：一旦目标浏览器判定变化、
+      //  或 Firefox（只认标准属性）访问，玻璃会成片静默消失，且不报任何错。
+      //
+      // 修法：把 cssTarget 提到「支持标准 backdrop-filter 的现代基线」，
+      //  esbuild 就会两条都保留（体积代价：三个属性名）。
+      // 基线依据：Chrome 76+ / Safari 9+（前缀）/ Firefox 103+ 支持标准 backdrop-filter。
+      // 这里取一个宽松的现代基线，不追求兼容远古浏览器。
+      cssTarget: ['chrome111', 'edge111', 'firefox113', 'safari16'],
+    },
     resolve: {
       // 修 `astro sync` / `astro build` 的
       //   GenerateContentTypesError: require is not defined @ picomatch/index.js:6
@@ -32,6 +55,13 @@ export default defineConfig({
       // 这里把它 alias 到一个 ESM 外壳，壳内用 createRequire 在运行时加载真包。
       alias: {
         picomatch: fileURLToPath(new URL('./scripts/picomatch-esm-shim.mjs', import.meta.url)),
+        // ★ 2026-09-30：真 3D DNA（站主拍板「用 three.js，接受破例」）。
+        //   三个 vendor 文件（three.module.min.js / GLTFLoader.js / BufferGeometryUtils.js）
+        //   都放在 src/vendor/ 下 —— **不能**放 public/：
+        //   tests/build-output.test.ts 断言产物 JS 必须匹配 /^dist\/_astro\//，
+        //   从 public/ 直拷出来的 .js 会被判成「手拷进来」。
+        //   GLTFLoader 内部写的是裸说明符 `from 'three'`，所以这里给它一个别名指到 vendor。
+        three: fileURLToPath(new URL('./src/vendor/three.module.min.js', import.meta.url)),
       },
     },
   },

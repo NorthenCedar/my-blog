@@ -301,10 +301,12 @@ describe.skipIf(!existsSync(DIST_INDEX) || !existsSync(BASELINE))('B3 交付：�
     // ③ h1 的 tabindex
     after = after.replace(/(<h1 class="display") tabindex="-1"/, '$1');
 
-    // ④ 磁带背景层（2026-09-26 站主后加的首页装饰，与本轮开场工作无关 ⇒ 也算"非本轮的增量"）
-    //    不摘的话这条基线比对会把新功能当成"开场动了正文"，那是误报。
+    // ④ 磁带背景层：原来这里摘的是 `<div class="bg-cassette">`（2026-09-26 站主后加的首页装饰），
+    //    2026-09-30 站主拍板「彻底删掉磁带图」⇒ 那个 div 连同生成器一起没了，这行 replace 成了空转。
+    //    同类项还在（与本轮开场工作无关 ⇒ 也算"非本轮的增量"，不摘会把新功能当成"开场动了正文"）：
+    //    原型 v10.6 的百褶 ∞ 底纹 `<div class="paper-inf">`。
     //    注意 Astro 会给元素加作用域属性（data-astro-cid-…）⇒ 正则要容忍额外属性。
-    after = after.replace(/<div class="bg-cassette"[^>]*><\/div>/, '');
+    after = after.replace(/<div class="paper-inf"[^>]*><\/div>/, '');
 
     // ⑤ 首页 HUD 里的导航 + 移动端抽屉（2026-09-26 站主后加；同上，不是开场的产物）。
     //    站主："我手机电脑都没变化啊" —— 起因是我第一版没给首页加导航（只加了内页），

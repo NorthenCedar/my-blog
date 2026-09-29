@@ -37,10 +37,14 @@ stack:
       - Cloudflare Pages（部署）
       - Pages Functions（评论与点赞接口）
       - Cloudflare D1（存评论、留言、点赞）
+      - 站点统计 PV / UV（服务端计数，零第三方）
   - group: 呈现
     items:
       - 自托管字体（零第三方请求）
       - 构建期图片优化（WebP + 多档尺寸）
+      - 全 CSS 动效（无动画库，时间轴不写脚本）
+      - 页面过渡（2.2 秒四阶段，纯 CSS 时间轴）
+      - 跟手光标（白点 + 圆盘 + 涟漪，无位图）
       - RSS / Sitemap
 ---
 

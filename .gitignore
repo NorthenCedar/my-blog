@@ -10,6 +10,9 @@ prototype/_shots/
 # wrangler types 生成的 Cloudflare 运行时类型（604 KB）。
 # 需要编辑器类型提示时跑 `npx wrangler types` 重新生成；不进仓库，避免每次升级 wrangler 都产生巨型 diff。
 worker-configuration.d.ts
+# 本地探针脚本（_probe/*.mjs：无头 Chrome 截图、computed 样式/几何量测、404 定位、file:// 对照…）。
+# 与 `_tmp*` 同性质：**只在本地跑、用完就留着当证据**，不是站点代码，也不该被 Cloudflare 拉去构建。
+/_probe/
 # 会话档案：从 DSH 会话日志解出来的原始 JSONL（16 MB，含思考过程与工具原始输出）。
 # 可读版是 docs/session-log-9addf212.md（这个进仓库）；原始档只留本地。
 .session-archive/
@@ -22,7 +25,16 @@ public/cursors/
 # 光标 token（构建期生成）：URL 里带图片内容指纹 ?v=<sha1>，图一改 URL 就变，浏览器才会重取光标图。
 src/styles/cursors.css
 # 主页背景美术（从 assets/homepage-art 抠底生成，同 public/cursors 的理由）
-public/art/
+#
+# ★ 2026-09-30 收窄：原先写的是 `public/art/`（带尾斜杠 ⇒ 忽略目录本身），Git 因此**根本不进这个目录**，
+#   后面的 `!` 例外也跟着失效。而站主最终版 logo 的两张素材是**从原型拷来的手工素材**、
+#   不是任何脚本的产物（原生成器 scripts/gen-home-art.mjs 已随磁带图一起删掉）⇒ 它们就是真源。
+#   不写例外的话，本地 `npm run preview` 一切正常、上线后 logo 整块不可见（mask 图 404，
+#   .lg-base 只有 background + mask，图没了就什么都不剩）。
+#   所以改成逐条匹配（`public/art/*` 不匹配目录本身 ⇒ 例外生效），只放行这两个文件。
+public/art/*
+!public/art/inf-mask.png
+!public/art/inf-mask-edge.png
 # 临时探针与证据（_tmp-*.mjs、_tmp-ref/、_tmp-boot-shots/ 截图、_tmp-arknights-cursor 那个嵌套仓库…）。
 # 2026-09-27 事故：站主用 `git add -A` 提交友链时，**239 个临时文件 + 一个嵌套仓库 gitlink 被一起提交**
 # （其中 gitlink 会让 Cloudflare 的克隆/构建失败，线上因此停在上一个成功版本、友链上不去）。

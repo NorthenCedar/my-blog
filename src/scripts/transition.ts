@@ -1,4 +1,6 @@
-// 页面过渡（2026-09-27 站主定案）：点击站内链接时**先盖不播**，到目标页再播 800ms 的撕裂展开。
+// 页面过渡（2026-09-30 站主定案换成 v3）：点击站内链接时**先盖不播**，到目标页再播 900ms 的墨色浸染。
+// v2 那套 2200ms 四段（无菌纸柔雾 / 坐标锁定 / 无菌舱门 / 内容落地）已整体作废，
+// 换成了原型 v10.6 的过渡；本文件的**分工与两个 bug 的修法没变**，只有时长变了。
 //
 // 分工：
 //   · 本脚本（每一页都加载）：拦截站内链接 → 打 handoff 标记 + 盖上蒙版（静止态）；到目标页后收尾。
@@ -22,9 +24,13 @@
 
 const KEY = 'pt';
 const root = document.documentElement;
-// v2（2026-09-27 站主定案）：时间线总长 2200ms（css 变量在 transition.css 顶上），
-// 收尾要多等一点：2300ms 时 CSS 才把自己藏掉 ⇒ 这里 2400ms 摘类，保证摘的时候动画已经结束。
-const HANDOFF_MS = 2400;
+// v3（2026-09-30 站主定案）：换成**原型 v10.6 的墨色浸染**，时间线总长 900ms
+// （--pt-sweep，值在 tokens.css / transition.css）。收尾多留 100ms ⇒ 1000ms 摘类，
+// 保证摘的时候动画已经结束 —— 摘早了会把最后一帧（墨层刚收成一条线）硬切掉。
+const HANDOFF_MS = 1000;
+// 万一跳转没真的发生（被别的东西拦下、或用户中途取消），自己收掉。
+// v2 是 3000ms（对应 2200ms 的时间线）；v3 只有 900ms，1.5s 足够。
+const STALE_MS = 1500;
 
 /** 站内、可整页跳转的普通左键点击才值得盖（其余一律放行，别影响正常浏览）。 */
 function precheck(e: MouseEvent, a: HTMLAnchorElement): boolean {
@@ -61,8 +67,7 @@ if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
           return; // 隐私模式下写不进去：这次就没有过渡，不影响导航
         }
         root.classList.add('pt-on');
-        // 万一跳转没真的发生（被别的东西拦下、或用户中途取消），3 秒后自己收掉
-        setTimeout(() => root.classList.remove('pt-on'), 3000);
+        setTimeout(() => root.classList.remove('pt-on'), STALE_MS);
       });
     },
     true, // 捕获阶段只做初筛；真正的判断在微任务里（见上）

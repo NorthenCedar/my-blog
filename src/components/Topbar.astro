@@ -2,11 +2,19 @@
 /**
  * 内页外壳（chrome='page'）—— post / gallery / projects 共用。
  *
- * 规范来自冻结原型 prototype/terminal/post.html（L42-50 顶栏、L140-181 背景）。
- * 与首页（chrome='console'）**刻意不同**，这是站主指定的：
- *   · 没有刻度尺 / HUD / 扫描带 / 聚焦 —— 内页是阅读与浏览，不是"仪器正在扫描"
- *   · 背景换母题：首页是「扫描视场」（±∞ 水印 + 同心环），
- *     内页是「切片档案」（等距发丝横线 + 右下切片素材）；网格与纸纹是同一套底子
+ * ★ 2026-09-30 站主拍板：「内页套原型正文区语言」（视觉统一换成 rhine v10.6）。
+ *
+ * 装的是什么：**原型的纸白正文区语言** ——
+ *   · `--ink-1` 墨绿描边（取代原来那条 `--ink` 的实心黑底线）
+ *   · 百褶 ∞ 底纹（`/art/inf-orig.webp`，与首页同一张素材）
+ *   · 玻璃质感（`--glass-bg` / `--glass-blur` / `--glass-line` / `--glass-shadow`）
+ *   · 原型的 `.section-head` 排版（h2 在前、等宽编号在后）
+ *
+ * 没装的是什么（**刻意**，站主原话是「内容与信息架构一个不动」）：
+ *   · 不装首页的深墨绿首屏、DNA、流场线、玻璃舱窗 —— 那是首页专属，内页是阅读场景
+ *   · 不装原型那种「每个区块都做成卡片网格」的重新布局 —— 那会动信息架构
+ *   · 原来的「切片档案」背景母题（等距发丝横线 + 右下切片素材 `/bg-slice.webp`）
+ *     连同它的遮罩一起删除：与新的 ∞ 底纹是两套母题，叠在一起脏。
  *
  * 只用在本页渲染时才加载的样式（`is:global` + `body.chrome-page` 前缀），
  * 所以其余页面既不会多背字节，也不会被这些规则碰到。
@@ -21,16 +29,10 @@ interface Props {
 const { wordmark, current } = Astro.props;
 ---
 
-<div class="page-bg" aria-hidden="true">
-  <div class="pb-noise"></div>
-  <div class="pb-grid"></div>
-  <div class="pb-green"></div>
-  {/* 切片素材走 CSS 背景而不是 <img>：原型本身就是背景层（post.html L162），
-      而且纯装饰图不该进 DOM —— 既有全局契约「所有图片的 alt 都非空」会（正确地）
-      拒绝 alt="" 的 <img>，而给装饰图编一个 alt 又是坏做法。背景图两头都不占。 */}
-  <div class="pb-slice"></div>
-  <div class="pb-scrim"></div>
-</div>
+{/* 百褶 ∞ 底纹：与首页同一张素材、同一套挂法（fixed 挂视口 ⇒ 滚动时始终居中）。
+    纯装饰 ⇒ aria-hidden；不拦指针由 CSS 保证。
+    素材自带右偏的墨迹（原型 v10.6 定案：不做居中补偿，要的就是原图本来的样子）。 */}
+<div class="page-inf" aria-hidden="true"></div>
 
 <div class="topbar">
   <a class="site" href="/">{wordmark}</a>
@@ -69,68 +71,44 @@ const { wordmark, current } = Astro.props;
     z-index: 1;
   }
 
-  /* ---------- 背景四层：全部 fixed + z-index:0 + 不拦指针 ---------- */
-  body.chrome-page .page-bg {
+  /* ---------- 背景：百褶 ∞ 底纹（单层，fixed + z-index:-1 + 不拦指针） ----------
+     ★ 2026-09-30 换母题：原来的「切片档案」四层（纸纹噪点 / 等距发丝横线 /
+       底部绿洗 / 右下切片素材 + 纸色遮罩）整体删除，换成原型 v10.6 的 ∞ 底纹。
+       与首页 .paper-inf 同一套参数（fixed 挂视口 / min(128vw,1600px) / opacity .2），
+       保持全站只有一套纸白区语言。
+       z-index:-1 而不是 0：底纹要退到正文**之下**，正文不需要额外抬升
+       （原来用 0 时正文必须显式 z-index:1，现在那条还需要 —— 见下面 main/footer 那条）。 */
+  body.chrome-page .page-inf {
     position: fixed;
-    inset: 0;
-    z-index: 0;
+    left: 50%;
+    top: 50%;
+    width: min(128vw, 1600px);
+    aspect-ratio: 1572 / 878;
+    transform: translate(-50%, -50%);
+    background: url('/art/inf-orig.webp') center / contain no-repeat;
+    opacity: 0.2;
     pointer-events: none;
-    overflow: hidden;
-  }
-  /* 纸纹（与首页同一套噪点，原型 L148） */
-  body.chrome-page .pb-noise {
-    position: absolute;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
-    background-size: 160px 160px;
-  }
-  /* 「切片档案」母题：等距发丝横线（一层层切片） */
-  body.chrome-page .pb-grid {
-    position: absolute;
-    inset: 0;
-    background-image:
-      linear-gradient(to right, var(--page-grid-line) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--page-grid-line) 1px, transparent 1px);
-    background-size: 48px 48px;
-  }
-  /* 底部极淡绿带（内页比首页低一点，18vh → 14vh 见下面的手机分支） */
-  body.chrome-page .pb-green {
-    position: absolute;
-    inset: auto 0 0 0;
-    height: 18vh;
-    background: var(--page-wash-green);
-  }
-  /* 右下切片素材。素材底色已压到近白 → multiply 混合下近乎透明，
-     所以不需要 alpha，也就不会出现"没抠干净的一层雾"（原型 L153-156 的取舍）。 */
-  /* 切片与其纸色遮罩共用同一套几何（位置/宽度/宽高比），改一处两处一起动 */
-  body.chrome-page .pb-slice,
-  body.chrome-page .pb-scrim {
-    position: absolute;
-    right: -2vw;
-    bottom: -4vh;
-    width: min(44vw, 600px);
-    aspect-ratio: 720 / 755;
-  }
-  body.chrome-page .pb-slice {
-    background: url('/bg-slice.webp') center / contain no-repeat;
-    mix-blend-mode: multiply;
-  }
-  /* scrim：让照片退后，别和文字抢（**不是遮住照片** —— 10% 的纸色而已）。
-     为什么必须加：文字可读性是硬底线，不能靠"肉眼看清晰"赌。
-     实测数字与它的边界写在 tokens.css 的 --page-slice-scrim 旁边。 */
-  body.chrome-page .pb-scrim {
-    background: var(--paper);
-    opacity: var(--page-slice-scrim);
+    z-index: -1;
   }
 
-  /* ---------- 顶栏：极简，只有站名与主导航（原型 L42-50） ---------- */
+  /* ---------- 顶栏：极简，只有站名与主导航 ----------
+     ★ 2026-09-30 换成原型 topbar 的**质感**（首页用的就是这套），但布局保持原样：
+       内页顶栏是 `space-between` 的窄条（站名左、导航右），原型首页 topbar 在首屏里
+       是同样的结构 ⇒ 只换"看得见的那层皮"，不动它怎么排。
+       换的三样：底线从 --ink 实心黑改成 --glass-line（== --ink @ 8%），
+       加一层玻璃薄片（backdrop-filter）+ 顶部高光，字距收一点。
+       ★ 顺序有讲究：**前缀在前、标准在后**（理由见 pages/index.astro 里 .section-head 的注释）。 */
   body.chrome-page .topbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
     padding: 0.7rem var(--gutter);
-    border-bottom: 1px solid var(--hair);
+    border-bottom: 1px solid var(--glass-line);
+    background: linear-gradient(180deg, var(--glass-bg), transparent);
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 40%);
     font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
     font-size: var(--fs-xs);
     color: var(--muted);
@@ -197,11 +175,15 @@ const { wordmark, current } = Astro.props;
      四角定位点用印刷 registration mark 的路数，标记页头起止。
      **为什么放在外壳里**：五个内页的标题目前都渲染在 `<slot name="band" />` 里
      （about / archive / tags / 404 / posts），而 chrome='page' 不渲染那个槽 ——
-     迁移时每页都要把标题挪进正文流，页头样式若各页各写一遍必然漂移。 */
+     迁移时每页都要把标题挪进正文流，页头样式若各页各写一遍必然漂移。
+
+     ★ 2026-09-30：底线由 `var(--ink)`（实心黑，很硬）换成 `var(--glass-line)`
+       （== --ink @ 8%）+ 一道极淡的绿洗，与首页 .section-head 的玻璃条同一套语言。
+       四角定位点（registration mark）保留 —— 它是"仪器"质感的记号，与原型不冲突。 */
   body.chrome-page .pagehead {
     position: relative;
     padding: var(--sp-8) 0 var(--sp-7);
-    border-bottom: 1px solid var(--ink);
+    border-bottom: 1px solid var(--glass-line);
   }
   body.chrome-page .pagehead::before,
   body.chrome-page .pagehead::after {
@@ -219,22 +201,13 @@ const { wordmark, current } = Astro.props;
     right: -3px;
   }
 
-  /* ---------- 手机：去噪点、网格收细、切片缩小（原型 L169-181） ---------- */
+  /* ---------- 手机 ----------
+     ★ 2026-09-30：原来的「去噪点 / 网格收细 / 绿洗压矮 / 切片缩小」四条随那四层一起删。
+       ∞ 底纹**窄屏不隐藏**（与首页一致）：它是纸白区唯一的大尺度纹理，藏了就空了。
+       只把小屏的 gutter 收一点，避免底纹与正文挤在一起。 */
   @media (max-width: 767px) {
-    body.chrome-page .pb-noise {
-      display: none;
-    }
-    body.chrome-page .pb-grid {
-      background-size: 64px 64px;
-    }
-    body.chrome-page .pb-green {
-      height: 14vh;
-    }
-    body.chrome-page .pb-slice,
-    body.chrome-page .pb-scrim {
-      right: -6vw;
-      bottom: -2vh;
-      width: min(86vw, 380px);
+    body.chrome-page .page-inf {
+      width: min(150vw, 900px);
     }
   }
 </style>

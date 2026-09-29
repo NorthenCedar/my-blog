@@ -253,7 +253,8 @@ const MARK_MINUS = 'M-1.3 0h2.6';
     const close = () => {
       if (closed) return;
       closed = true;
-      const title = document.querySelector('h1.display');
+      // 首页 v10.6 后主标题收进 .hero-copy（原来还能带 .display），选择器放宽以两条都兜住
+      const title = document.querySelector('.hero-copy h1, h1.display, h1');
       if (title && typeof title.focus === 'function') title.focus(); // 先交焦点
       html.classList.remove('boot-on'); // 再解锁滚动 + 让覆盖层消失
       overlay.remove();
