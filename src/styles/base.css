@@ -6,6 +6,11 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* ★ 2026-09-30：首屏 hero 用 full-bleed（margin-inline:calc(50% - 50vw)）逃出 .shell 铺满视口。
+     而 50vw 是**含滚动条宽度**的单位 ⇒ 有垂直滚动条时会比可见区宽出约 15px。
+     这里用 overflow-x:clip 收掉那点溢出：与 hidden 的区别是 clip **不创建滚动容器**，
+     不会连带让内部 sticky / 滚动监听失效（这些本站都有）。 */
+  overflow-x: clip;
 }
 
 body {

@@ -354,6 +354,20 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
      （原型 v10.1 就是被 vw/vh 坑过：窗口一宽 logo 就被推出画面）。 */
   .hero {
     position: relative;
+    /* ★ 2026-09-30 修正：首屏深墨绿场必须**铺满视口**。
+       站主反馈：「主页为什么是这个比例，不是整个屏幕」——实测 1280 视口下 hero 只有 1184，
+       两侧各留白 48px 露出纸白，所以看着像"中间一块"而不是整屏。
+
+       根因在**结构**，不在这一行：原型里 `.band` 是**顶层元素**直接吃满视口，
+       收窄到 `--wrap` 的是它的内容层 `.band-inner` —— 背景满宽、内容居中，两层分工。
+       本站多了一层 Base.astro 的全局容器 `.shell`（`max-width:var(--wrap)` + `padding:var(--gutter)`），
+       它把**整页含首屏背景**一起框住了 ⇒ 背景被跟着切窄。
+
+       这里用 full-bleed 负 margin 让 hero 逃出 .shell 的宽度回到整屏，
+       内容居中仍由内层 .hero-inner 的 max-width 负责 ⇒ 与原型 .band / .band-inner 结构对齐。
+       ★ 不设 width:100vw（那会把滚动条宽度算进去导致横向溢出），
+         靠 block 元素 width:auto 自然伸展 = 包含块 + 两侧负 margin，正好等于可见视口宽。 */
+    margin-inline: calc(50% - 50vw);
     min-height: 100vh;
     min-height: 100svh; /* 手机浏览器地址栏收放时不跳 */
     display: flex;
