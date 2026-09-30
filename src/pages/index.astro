@@ -4,6 +4,7 @@
  * 零动效：本文件里没有任何 transition / animation / 监听器。
  * `.field-item` 与 `data-label` 是留给 B2 动效层的挂点，B1 不消费它们。
  */
+import { getEntry } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import BootIntro from '../components/BootIntro.astro';
 import NavDrawer from '../components/NavDrawer.astro';
@@ -11,9 +12,31 @@ import SiteStats from '../components/SiteStats.astro';
 import { NAV_LINKS } from '../lib/nav';
 import { getVisiblePosts } from '../lib/posts';
 import { getSite } from '../lib/site';
+import { isoDate, sortLogItems } from '../lib/log-order';
+import { readLanguageStats } from '../lib/lang-stats';
 
 const site = await getSite();
 const posts = await getVisiblePosts();
+
+// ── S3「最近改了什么」的四张卡 ──────────────────────────────────────
+// 原型这一屏（#s3）是四张玻璃卡，写的是原型自己的迭代说明。
+// 本站不能照抄那几段话 —— 那是原型的历史，不是这个站的。
+// 真实对应物是**更新日志**（content/pages/log.md，站点内容层）：
+// 取最近 4 条，一条一张卡。排序与日期格式化复用日志页那套（sortLogItems / isoDate），
+// 保证「首页卡片」与「/log 页」永远同一顺序、同一写法 —— 不在这里另起炉灶。
+const HOME_LOG_LIMIT = 4;
+const logEntry = await getEntry('pages', 'log');
+const logData = (logEntry?.data ?? {}) as unknown as {
+  items?: Parameters<typeof sortLogItems>[0];
+};
+const logItems = sortLogItems(logData.items ?? [])
+  .filter((it) => (it.changes?.length ?? 0) > 0)
+  .slice(0, HOME_LOG_LIMIT);
+
+// ── 技术栈那条语言占比 ─────────────────────────────────────────────
+// 构建期实测（见 src/lib/lang-stats.ts）：不写死任何数字。
+// 拿不到数据（仓库结构变了）就返回空数组 ⇒ 整块不渲染，不显示一条全是 0 的假条。
+const langSlices = readLanguageStats();
 
 // 首页 S2「最近写的」只露最新的三篇（站主 2026-09-28）。
 // 这里**不覆盖 posts**：posts 已是按日期倒序的全量列表，OS 状态条的 POSTS 读数
@@ -67,6 +90,20 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
 
   {/* 开场覆盖层（装饰 + skip 按钮）。只落首页；JS 与门控见 BootIntro.astro */}
   <BootIntro />
+
+  {/* ===== 背景肌理层（原型 .bg）=====
+      三样都是装饰、都挂视口（fixed），只在**纸白区**透出来：
+        · .bg-wash 底部绿雾（46vh 的极淡绿，从纸往下沉一档）
+        · .bg-grid 72px 细网格 + 11s 呼吸（原型唯一保留的循环动效）
+        · .bg-ring 左下角同心环，随指针极缓位移 + 微转
+      ★ 它们能被看见，靠的是 .paper-wrap 的背景是**半透明**的（原型写法，见下方 CSS）——
+        本站原先是纯色 var(--paper)，会把这一层完全盖死。
+      ★ 没有任何信息承载 ⇒ aria-hidden，且 pointer-events:none。 */}
+  <div class="bg" aria-hidden="true">
+    <div class="bg-wash"></div>
+    <div class="bg-grid"></div>
+    <div class="bg-ring"></div>
+  </div>
 
   {/* ===== 背景装饰层（B2）：四样全是装饰，不承载任何信息 =====
       堆叠计划：0 装饰 < 1 正文 .tier < 2 扫描带 < 3 刻度尺 < 4 HUD < 5 OS 状态条
@@ -249,15 +286,110 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     ))}
   </div>
 
+  {/* ===== S3：更新记录（原型 #s3 的四张玻璃卡）=====
+       原型这一屏写的是它自己的迭代说明（"v4 改了什么"），照抄到本站毫无意义 ——
+       那是原型的历史。**真实对应物是更新日志**，所以这里渲染 content/pages/log.md 的最近 4 条。
+       结构照抄原型 .cards / .card（玻璃卡 + 等宽小标签 + 标题 + 说明），
+       内容一条都不手写 —— 站主往 log.md 加一条，首页这张卡自己就换。 */}
   <section class="tier" id="s3">
-    <div class="section-head"><h2>项目</h2><span>SECTOR 03</span></div>
-    <div class="field-item" data-label="项目 · 空态">
-      <p class="empty">哎呀，目前还没有项目呢 &lt;3 —— 写了几个，但都还躺在本地，等它们能跑起来再挂到这儿。</p>
-    </div>
+    <div class="section-head"><h2>最近改了什么</h2><span>SECTOR 03</span></div>
+    {logItems.length > 0 ? (
+      <div class="cards">
+        {logItems.map((it) => {
+          const first = (it.changes ?? [])[0] ?? '';
+          const more = (it.changes?.length ?? 0) > 1 ? `（共 ${it.changes!.length} 项）` : '';
+          return (
+            <div class="card field-item" data-label={`更新 · ${it.version ?? isoDate(it.date)}`}>
+              <span class="k">{isoDate(it.date)}</span>
+              <h3>{it.version ?? isoDate(it.date)}</h3>
+              <p>{first}{more}</p>
+            </div>
+          );
+        })}
+      </div>
+    ) : (
+      <div class="field-item" data-label="更新 · 空态">
+        <p class="empty">更新日志还是空的 —— 往 content/pages/log.md 加一条就会出现在这一屏。</p>
+      </div>
+    )}
   </section>
 
-  <section class="tier" id="s4">
-    <div class="section-head"><h2>找到我</h2><span>SECTOR 04</span></div>
+  {/* ===== S4：技术栈 · 语言占比（原型 #s5 那条 GitHub 风格条形图）=====
+       ★ 数字一律构建期实测（src/lib/lang-stats.ts），一个字都不写死 ——
+         原型那段是手抄的旧数据，站主当时就纠正过一次「那个图片里的是旧的，你根据现在的数据做」。
+         写死必然过期，而且没人会发现。
+       结构与动效照抄原型：条本体 scaleX 生长（错开 90ms）+ 图例 + 明细表，
+       色值全部走 token（本站铁律：组件里不出现字面色值）。 */}
+  {langSlices.length > 0 && (
+    <section class="tier" id="s4">
+      <div class="section-head"><h2>技术栈</h2><span>SECTOR 04</span></div>
+
+      <div class="langbar field-item" data-label="技术栈 · 语言占比" aria-labelledby="langbar-hd">
+        <div class="langbar-hd" id="langbar-hd">
+          <b>LANGUAGE COMPOSITION</b>
+          <span>按字节 · <span class="of">不含图片与字体</span></span>
+        </div>
+
+        {/* 条本体：每段的宽度 = 占比；--i 只用来错开生长动画的 delay */}
+        <div
+          class="langbar-track"
+          role="img"
+          aria-label={`语言占比：${langSlices.map((s) => `${s.name} ${s.pct}%`).join('、')}`}
+        >
+          {langSlices.map((s, i) => (
+            <i
+              style={`--i:${i}; width:${s.pct}%; background:${
+                /* ★ 第一段（占比最大的语言）用同色系渐变，其余纯色。
+                   ★★ 末端刻意**不用** --accent-bright：这条在**纸白底**上，
+                   #4caf50 对纸只有 2.66:1（tests/tokens.test.ts 守的就是这条），
+                   亮绿只许出现在深色底上。深绿→主绿已经足够分出主次。 */
+                i === 0
+                  ? 'linear-gradient(90deg,var(--accent-ink) 0%,var(--accent) 55%,var(--accent) 100%)'
+                  : i === 1 ? 'var(--accent-ink)'
+                  : i === 2 ? 'var(--accent)'
+                  : i === 3 ? 'var(--signal)'
+                  : 'var(--muted)'
+              }`}
+            />
+          ))}
+        </div>
+
+        <ul class="langbar-legend">
+          {langSlices.map((s, i) => (
+            <li style={`--i:${i}`}>
+              <span
+                class="dot"
+                style={`background:${
+                  i === 0 ? 'var(--accent)'
+                  : i === 1 ? 'var(--accent-ink)'
+                  : i === 2 ? 'var(--accent)'
+                  : i === 3 ? 'var(--signal)'
+                  : 'var(--muted)'
+                }`}
+              />
+              <span class="nm">{s.name}</span>
+              <span class="pct">{s.pct}%</span>
+            </li>
+          ))}
+        </ul>
+
+        {/* 明细：语言 / 字节 / 占比。占比用第二个 dd（不是 span）——
+            <dl> 里 <div> 只允许包 dt/dd，原型那个裸 span 不是合法结构。 */}
+        <dl class="langbar-detail">
+          {langSlices.map((s, i) => (
+            <div style={`--i:${i}`}>
+              <dt>{s.name}</dt>
+              <dd>{s.bytes.toLocaleString('en-US')} B</dd>
+              <dd class="pct">{s.pct}%</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
+  )}
+
+  <section class="tier" id="s5">
+    <div class="section-head"><h2>找到我</h2><span>SECTOR 05</span></div>
     <div class="field-item" data-label="联系 · 找到我">
       <ul class="links">
         <li><a href={site.github}>GitHub</a></li>
@@ -336,7 +468,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
             选择器按本页真实类名重列：旧 .tier-head 已改名为原型 .section-head，
             旧 .pod-tag（s1 身份舱）随身份上移进首屏而不复存在，一并摘掉。 */
       const yieldEls = Array.from(document.querySelectorAll(
-        '.display,.lede,.coord span,.entry time,.entry .t,.entry .tags,.entry .s,.section-head h2,.section-head span,.empty,.links a'
+        '.display,.lede,.coord span,.entry time,.entry .t,.entry .tags,.entry .s,.section-head h2,.section-head span,.card h3,.card p,.empty,.links a'
       ));
       let yieldQueued = false;
       const updateYield = () => {
@@ -429,6 +561,70 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
        .hero 首屏深墨绿场（含 .rh-grid 流场 / .dna-stack / .hero-glass×3 / .topbar / .hero-logo）
        .dusk 晨昏带 · .paper-wrap + .paper-inf 纸白正文区与百褶∞底纹
      ============================================================ */
+
+  /* ===== 背景肌理层（原型 .bg 逐条照抄）=====
+     ★ z-index 靠 DOM 顺序解决：.bg 是首页第一个定位元素，正文的 .tier / .marquee
+       都带 z-index:1 且排在它后面 ⇒ 自然压在它上面。
+     ★ fixed + inset:0 + overflow:hidden ⇒ 无论里面的环多大多靠外，都不会产生横向溢出。 */
+  .bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  /* 底部绿雾：从纸白往下沉出一档极淡的绿（原型 #2d7d460b = 主绿 @ 4%） */
+  .bg-wash {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 46vh;
+    background: linear-gradient(0deg, #2d7d460b, transparent);
+  }
+  /* 72px 细网格：本站首页唯一的常驻循环动效（11s 呼吸，只动 opacity ⇒ 不重绘网格）
+     位移读 --mx/--my（JS 每帧写），与首屏那套视差共用同一个通道。 */
+  .bg-grid {
+    position: absolute;
+    inset: 0;
+    opacity: 0.5;
+    background-image:
+      linear-gradient(90deg, #7fd89a12 1px, transparent 1px),
+      linear-gradient(0deg, #7fd89a12 1px, transparent 1px);
+    background-size: 72px 72px;
+    transform: translate3d(
+      calc(var(--mx, 0) * var(--shift-c, 3px) * 2),
+      calc(var(--my, 0) * var(--shift-c, 3px) * 2),
+      0
+    );
+    transition: transform 160ms linear;
+    animation: breathe 11s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { opacity: 0.34; }
+    50% { opacity: 0.72; }
+  }
+  /* 左下角同心环：与首屏玻璃卡同一套位移语言（--shift-a = 14px，原型原值） */
+  .bg-ring {
+    position: absolute;
+    left: -10vw;
+    bottom: -12vh;
+    width: min(56vw, 660px);
+    aspect-ratio: 1;
+    background: repeating-radial-gradient(
+      circle at 50% 50%,
+      transparent 0 118px,
+      #1a1a1a12 118px 119px
+    );
+    transform: translate3d(
+        calc(var(--mx, 0) * var(--shift-a, 14px)),
+        calc(var(--my, 0) * var(--shift-a, 14px)),
+        0
+      )
+      rotate(calc(var(--mx, 0) * 0.6deg));
+    transition: transform 120ms linear;
+    will-change: transform;
+  }
 
   /* 符号定义块：不占位、不显示，只提供 #rhine-logo 给 <use> */
   .svg-defs {
@@ -891,26 +1087,42 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     letter-spacing: 0.1em;
     color: var(--on-band-meta);
   }
+  /* ★ 2026-09-30 二轮对齐：本站原先是「居中竖线 + 竖排字」，原型是**左下角横排**
+     （一条 28px 短横线 + SCROLL，横线里有一道 2.2s 的绿色跑光）。
+     位置也照原型：left:var(--gutter) ⇒ 与正文左缘同一条线，不是画面正中。 */
   .scroll-hint {
     position: absolute;
-    left: 50%;
-    bottom: 1.2rem;
-    transform: translateX(-50%);
+    left: var(--gutter);
+    bottom: 1rem;
     z-index: 2;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
-    font-size: var(--fs-xs);
-    letter-spacing: 0.24em;
+    gap: 0.6rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--fs-mono);
+    letter-spacing: 0.2em;
     color: var(--on-band-meta);
   }
   .scroll-hint s {
     display: block;
-    width: 1px;
-    height: 2.4rem;
-    background: linear-gradient(180deg, transparent, var(--on-band-meta));
+    width: 28px;
+    height: 1px;
+    background: #ffffff33; /* 8 位 hex（本站铁律：不写 rgba()） */
+    position: relative;
+    overflow: hidden;
     text-decoration: none;
+  }
+  /* 跑光：一道亮绿从左扫到右，停 40% 再走下一轮 */
+  .scroll-hint s::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent-bright);
+    animation: hint 2.2s var(--ease) infinite;
+  }
+  @keyframes hint {
+    0% { transform: translateX(-100%); }
+    60%, 100% { transform: translateX(100%); }
   }
   @media (max-width: 767px) {
     .dna-stack { display: none; }      /* 手机上 3D 太重且挤，直接不渲染 */
@@ -968,7 +1180,20 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
          390px 视口实测横向可滚 12px（手指划一下会晃）。
          用 clip 而不是 hidden：clip 不创建滚动容器，
          不会把 sticky 的子元素或滚动监听带坏（与 base.css 里 html 那条同理）。 */
-    background: var(--paper);
+    /* ★ 2026-09-30 三轮对齐：这一层必须是**半透明**的（原型写法）。
+       本站原先是纯色 var(--paper) —— 那会把上面那层 .bg 肌理（网格 / 同心环 / 绿雾）
+       整个盖死，等于白加。两端 alpha 收一档（#fafaf7eb ≡ 92%），
+       中段仍是实心纸 ⇒ 正文始终落在实底上，只有上下边缘透出背景。
+       `fixed` 让这层纸不随滚动走：滚到底时也不会露出下面的色带。
+       （本站铁律：alpha 一律写 8 位 hex，不写 rgba()。） */
+    background: linear-gradient(
+        180deg,
+        #fafaf7eb 0%,
+        var(--paper) 18%,
+        var(--paper) 82%,
+        #fafaf7eb 100%
+      )
+      fixed;
     isolation: isolate;
     overflow-x: clip;
   }
@@ -1271,6 +1496,205 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     color: var(--accent-ink);
   }
 
+  /* ===== 卡片（原型 .cards / .card）=====
+     原型 #s3 那一屏是四张玻璃卡。本站这一屏渲染的是**更新日志**（内容层），
+     卡片的观感照抄原型：玻璃底 + 顶部高光 + 悬停抬升 4px。
+     ★ 抬升幅度 -4px、圆角 16px、内距 1.7rem 都是原型定值，不"优化"。 */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1.2rem;
+  }
+  .card {
+    position: relative;
+    padding: 1.7rem;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--glass-line);
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.05);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.05);
+    box-shadow: var(--glass-shadow);
+    transition:
+      transform var(--dur-hover) var(--ease-interact),
+      background var(--dur-hover) var(--ease-interact),
+      border-color var(--dur-hover) var(--ease-interact),
+      box-shadow var(--dur-hover) var(--ease-interact);
+  }
+  /* 顶部高光：悬停时才浮出来（原型同款） */
+  .card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(46% 46% at 50% 0%, #ffffffb0, transparent 72%);
+    opacity: 0;
+    transition: opacity var(--dur-hover) var(--ease-interact);
+  }
+  .card:hover {
+    transform: translateY(-4px);
+    background: var(--glass-bg-hot);
+    border-color: #2d7d4630;
+    box-shadow: 0 2px 4px #1a1a1a0a, 0 18px 44px -18px #1a1a1a33;
+  }
+  .card:hover::after {
+    opacity: 1;
+  }
+  .card h3 {
+    font-size: 1.15rem;
+    margin: 0 0 0.5rem;
+    font-weight: 600;
+  }
+  .card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--fs-sm);
+  }
+  /* 等宽小标签：版本号 / 日期那一行的身份标识 */
+  .card .k {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--fs-mono);
+    color: var(--accent-ink);
+    letter-spacing: 0.1em;
+    margin-bottom: 0.9rem;
+    display: block;
+  }
+
+  /* ===== 技术栈 · 语言占比（原型 .langbar 全套）=====
+     三段：条本体（scaleX 生长，错开 90ms）+ 图例 + 明细表。
+     ★ 生长用 transform 而不是 width —— 只走合成层，不触发 layout。
+     ★★ 必须给 reduced-motion 终态（见文件末尾那一段）：
+        本站的降级里有 `* { animation: none !important }`，
+        而条本体与图例的**初值**是 scaleX(0) / opacity:0 ——
+        动画一旦被禁掉，这些东西就永久停在"还没开始播放"的状态 = 什么也看不见。
+        所以终态要用 !important 顶回去，这是正确性问题，不是观感问题。 */
+  .langbar {
+    margin-top: var(--sp-5);
+    font-family: "IBM Plex Mono", monospace;
+  }
+  .langbar-hd {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.55rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .langbar-hd b {
+    color: var(--ink);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+  }
+  .langbar-hd .of {
+    color: var(--hair);
+  }
+  /* 条本体：高 12px 胶囊，段间 2px 缝（缝用背景色，不用 border —— 缩放时线宽不会跳） */
+  .langbar-track {
+    display: flex;
+    gap: 2px;
+    height: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--hair);
+  }
+  .langbar-track > i {
+    display: block;
+    height: 100%;
+    transform-origin: left center;
+    transform: scaleX(0);
+    animation: lang-grow 0.9s var(--ease) forwards;
+    animation-delay: calc(var(--i, 0) * 90ms + 180ms);
+  }
+  @keyframes lang-grow {
+    to { transform: scaleX(1); }
+  }
+  .langbar-legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 0.4rem 1.4rem;
+    margin: 0.85rem 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+  }
+  .langbar-legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted);
+    opacity: 0;
+    animation: lang-fade 0.5s ease forwards;
+    animation-delay: calc(var(--i, 0) * 90ms + 520ms);
+  }
+  @keyframes lang-fade {
+    to { opacity: 1; }
+  }
+  /* 图例色块：方形（比圆点更贴本站的工业感），纯色 —— 不用渐变，
+     渐变需要每个 li 单独设 background，漏一个就是全透明（原型踩过）。 */
+  .langbar-legend .dot {
+    flex: none;
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    box-shadow: inset 0 0 0 1px #0000000f;
+  }
+  .langbar-legend .pct {
+    margin-left: auto;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+  }
+  .langbar-legend .nm {
+    color: var(--ink);
+  }
+  /* 明细表：语言 / 字节 / 占比。等宽数字，否则右对齐的百分比会左右跳 */
+  .langbar-detail {
+    margin: 1.1rem 0 0;
+    padding: 0;
+    border-top: 1px solid var(--hair);
+  }
+  .langbar-detail > div {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: baseline;
+    gap: 0.5rem 1rem;
+    padding: 0.42rem 0;
+    border-bottom: 1px solid var(--hair);
+    font-size: 0.72rem;
+    opacity: 0;
+    animation: lang-fade 0.5s ease forwards;
+    animation-delay: calc(var(--i, 0) * 90ms + 620ms);
+  }
+  .langbar-detail dt {
+    color: var(--muted);
+  }
+  .langbar-detail dd {
+    margin: 0;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  /* 第二个 dd 是占比（这一栏的"读数"）→ 给主绿，与条上的色阶呼应 */
+  .langbar-detail dd + dd {
+    min-width: 3.6em;
+    text-align: right;
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+  @media (max-width: 640px) {
+    /* 手机上三列挤不下：藏掉字节数，只留语言名 + 占比（字节是佐证，不是主角） */
+    .langbar-detail > div {
+      grid-template-columns: 1fr auto;
+    }
+    .langbar-detail dd:first-of-type {
+      display: none;
+    }
+  }
+
   .frames {
     display: flex;
     gap: var(--sp-4);
@@ -1425,6 +1849,25 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
   @media (prefers-reduced-motion: reduce) {
     html.js .field-item {
       opacity: 1 !important;
+      transform: none !important;
+    }
+    /* ★ 语言占比条必须**显式给终态**，不能只依赖下面那条 `* { animation: none }`：
+       条本体的初值是 scaleX(0)、图例与明细的初值是 opacity:0 ——
+       它们靠 animation 的 forwards 才停在可见状态。动画一禁，
+       就永久停在「还没开始播放」= 整块内容凭空消失。
+       这是可用性问题（减弱动效的用户看不到数据），不是观感问题，所以必须写。 */
+    .langbar-track > i {
+      transform: scaleX(1) !important;
+    }
+    .langbar-legend li,
+    .langbar-detail > div {
+      opacity: 1 !important;
+    }
+    /* 背景肌理：减弱动效时停掉呼吸与位移（原型同款降级），
+       但**保留静态网格与同心环** —— 它们是背景肌理，不是动效，去掉会让纸面变空。 */
+    .bg-grid,
+    .bg-ring {
+      animation: none !important;
       transform: none !important;
     }
     * {

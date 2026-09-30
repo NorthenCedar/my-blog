@@ -39,6 +39,11 @@ describe('低对比 token 越界（--accent-bright 只许用在深色底上）',
     // 它与上面两条同属「深色底上的亮绿」——对 --ink-deep(#0b1a14) 远超 4.5:1，
     // 且它是**非文字图形**（一根 1px 线），不是小字。抄的是原型 .eyebrow i 的原色。
     '.eyebrow i',
+    // 2026-09-30 追加：原型首屏左下角 SCROLL 提示里那道 2.2s 跑光（1px 横线上的亮绿）。
+    // 与 .eyebrow i 完全同情形：深墨绿场上的**非文字图形**，对 --ink-deep 远超 4.5:1。
+    // ★ 写单冒号 `:after` —— 断言比的是**产物**里的选择器（esbuild 会把 ::after 压成 :after），
+    //   写成 ::after 这条例外永远匹配不上，白名单就成了摆设。
+    '.scroll-hint s:after',
     // (2026-09-30 一度为 .hero-logo .lg-glow 登记过，随即撤销：
     //  站主要求 logo 沿用原型最终定色，改用专用 token --logo-glow，不再是裸 --accent-bright。
     //  留着这条"已不存在用法"的例外，等于给白名单掺水 —— 以后真出问题会被它掩护过去。)
