@@ -429,13 +429,30 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
        ③ alpha 一律写 **8 位 hex**（本站铁律：组件里不写 rgba()）。
      ============================================================================ */
 
-  /* 原型 :root 里那几个本站还没有的变量 —— 只在首页作用域补，不动全局 tokens.css。
+  /* 原型 :root 里那几个本站 tokens.css 还没有的变量 —— 只在首页作用域补。
      ★ 必须写 :global(:root)：scoped 的 `:root` 会变成 `:root[data-astro-cid]`，
-       而 <html> 上没有这个属性 ⇒ 整块失效（原型用它定义 --line-1 / --paper-0 等）。 */
+       而 <html> 上没有这个属性 ⇒ 整块失效。
+     ★ 这份 CSS 是**首页专属**（产物里是独立的 /_astro/index.*.css，内页只加载 Base.css），
+       所以在这里覆盖变量不会外溢到其余 13 页。 */
+
+  /* ★★ 2026-09-30 第四轮（站主拍板「以原型为源、照搬原型」）——
+     上一轮我在这个块里**多写了三行**，把原型里本来是「死」的声明救活了，
+     这正是「本站跟原型不一样」的根因之一，已删除，别再补：
+       --line-1 / --paper-0  →  原型 `.marquee` 用了但**从未定义** ⇒ 那两条 border 与 background
+                                在原型里整条作废（所以原型没有上下横线、没有实色底）；
+       --ink-3               →  原型 `.marquee-item .num` 用了但**从未定义** ⇒ color 声明作废，
+                                数字退回继承色。站主要求「照原型让它退」。
+     （原型 `:root` 里其实留了一段注释承认自己补过 --ink-1/--ink-2 的同类笔误，但漏了 --ink-3。）
+     ★ 另：原型 `--mu` 定义了但全文件零引用 ⇒ 不必搬。 */
   :global(:root) {
-    --line-1: var(--hair);    /* 原型发丝线 ← 本站 --hair */
-    --paper-0: var(--paper);  /* 原型纸白底 ← 本站 --paper */
-    --ink-3: var(--muted);    /* 原型三级墨 ← 本站 --muted */
+    /* ★ 这两行是**照搬原型的原值**，故意保留 `+` 两侧无空格 ——
+       按 CSS 规范 clamp() 里的算术运算符两侧必须有空格，无空格 ⇒ 值非法 ⇒
+       `font-size: var(--fs-item/--fs-h2)` 在计算值阶段整条作废 ⇒ 标题退回**继承的正文 17px**。
+       这不是需要修的笔误，**这就是原型渲染出来的样子**（站主 2026-09-30 拍板「标题字号照搬原型」）。
+       本站 tokens.css 里这两个变量是**带空格的有效值**，所以必须在这里覆盖掉。
+       ⇒ 谁要是"顺手"把空格补上，首页标题就会从 17px 跳到 54.4px、跟原型对不上。 */
+    --fs-item: clamp(1.6rem,1rem+4.2vw,3.4rem);
+    --fs-h2: clamp(1.45rem,1.05rem+1.5vw,2.1rem);
     --mono: 'IBM Plex Mono';
     --font-display: Archivo, 'IBM Plex Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
     --font-mono: 'IBM Plex Mono';
@@ -694,12 +711,18 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
       );
     isolation: isolate;
   }
-  /* 明度爬升层：顶部透明、越往下越提亮，把首屏下半段的死黑提起来接上晨昏带 */
+  /* ★★ 明度爬升层：**照搬原型** —— `flex:1` + `position:relative`（在文档流里）。
+     上一轮我加了 `position:absolute; inset:0; z-index:0`，让它「盖满整个首屏」，
+     于是那条 78%/100% 处的深墨绿洗色**真的生效了** —— 而原型里它是个**可伸缩的顶部留白块**：
+     `.band-inner` 的 `min-height:auto` 先吃掉内容高度（802 视口下是 761），
+     flex 把剩下的 41px 分给 `.band-core` ⇒ 原型的渐变只铺在顶部 41px ⇒ 几乎不可见。
+     实测证据（1258×802，英雄区最末 40px 平均亮度）：原型 112 / 本站 85
+     —— 站主截的「身份下面的过渡」就是这条。
+     ⇒ 恢复原型形态：① 首屏下半段不再多一层压暗；② topbar 会被这块留白往下推一点
+       （原型 41px，本站因真实简介更长、内容更高，实测约 34px）。 */
   .band-core {
     flex: 1;
-    position: absolute;
-    inset: 0;
-    z-index: 0;
+    position: relative;
     pointer-events: none;
     background: linear-gradient(
       180deg,
@@ -813,6 +836,11 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     color: var(--on-band-sub);
     border: 1px solid transparent;
     overflow: hidden;
+    /* ★ 2026-09-30 第四轮补：原型第 78 行有一条全局 `a{color:inherit;text-decoration:none}`，
+       上一轮我按「不搬全局 reset」的原则整体没带 ⇒ 首页导航成了全站唯一带下划线的链接
+       （其余组件 Topbar / NavDrawer / PostIndex / Toc / 首页 .entry a 都各自补过这一条）。
+       这里按同样的局部写法补上，不改全局 base.css。 */
+    text-decoration: none;
     transition:
       transform var(--dur-tap) var(--ease-interact),
       color var(--dur-tap) var(--ease-interact),
@@ -840,11 +868,15 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
   nav a:focus-visible::before {
     transform: translateX(120%);
   }
-  /* 当前页：淡绿底 + 绿描边（不是下划线） */
+  /* 当前页：淡绿底 + 绿描边（不是下划线）。
+     ★ 三段值**照搬原型**（原型 nav a[aria-current] 那一行）。
+       上一轮我把它们换成了 --on-band / #2d7d4624 / #4caf5059，结果「主页」那两个字不会变绿 ——
+       站主 2026-09-30 报的就是这条。别再"统一到 token"：原型就是直接写 #4caf50 系字面量。
+       深色 band 上用亮绿合法（对 --ink 6.26:1），tests/tokens.test.ts 的白名单里已登记。 */
   nav a[aria-current] {
-    color: var(--on-band);
-    background: #2d7d4624;
-    border-color: #4caf5059;
+    color: var(--accent-bright);
+    background: #4caf5014;
+    border-color: #4caf5038;
   }
   .band-copy {
     margin-top: auto;
@@ -855,7 +887,10 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     font-size: var(--fs-mono);
     letter-spacing: 0.22em;
     color: var(--on-band-meta);
-    margin-bottom: 1rem;
+    /* ★ 原型靠全局 `*{margin:0;padding:0}` 抹掉 <p> 的 UA 外边距，本站 base.css 没有这条
+       ⇒ 首屏三个 <p> 各自多出上/下外边距（实测 .eyebrow mt 多 13.6px、.lede 多 17+17px、
+       .coord mb 多 13.6px，合计约 61px）。这里按元素逐个补 0，不去动全局 reset。 */
+    margin: 0 0 1rem;
     display: flex;
     align-items: center;
     gap: 0.7rem;
@@ -877,16 +912,19 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     margin: 0 0 1.1rem;
   }
   .lede {
-    max-width: 40.5rem; /* 原型 .lede 量度：578px @17px */
+    /* ★ 照搬原型 `max-width:34em`（em 按自身 font-size 1.0625rem 算 = 578px）。
+       上一轮写的是 40.5rem = 648px，注释却写着「原型量度 578px」—— 注释对、值错了。 */
+    max-width: 34em;
+    margin: 0;
     color: var(--on-band-sub);
     font-size: 1.0625rem;
-    line-height: 1.62;
+    line-height: 1.7; /* 原型值（上一轮误写成 1.62） */
   }
   .coord {
     display: flex;
     gap: 2rem;
     flex-wrap: wrap;
-    margin-top: 1.5rem;
+    margin: 1.5rem 0 0; /* 原型只有 margin-top:1.5rem，下外边距靠全局 reset 抹掉 ⇒ 这里显式归零 */
     font-family: var(--font-mono);
     font-size: var(--fs-mono);
     color: var(--on-band-meta);
@@ -962,9 +1000,16 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     position: relative;
     overflow: hidden;
     padding: 1.5rem 0 2.1rem;
+    /* ★★ 下面三条**照搬原型**，而且要在原型里也是「死」的 —— 别去补 --line-1 / --paper-0！
+       原型这两个变量从未定义 ⇒ `var()` 无 fallback ⇒ 计算值阶段整条作废 ⇒
+       原型本来就没有上下横线、也没有实色底（∞ 底纹从跑马灯后面透出来）。
+       上一轮我在 :global(:root) 里定义了这两个变量，把它们救活了 ⇒ 横线冒出来 ——
+       站主 2026-09-30 报的就是这条。要复现「有横线」才需要去 tokens.css 里给这两个变量赋值。 */
     border-top: 1px solid var(--line-1);
     border-bottom: 1px solid var(--line-1);
     background: var(--paper-0);
+    /* 原型有这一条，上一轮漏了 ⇒ S2→S3 的间距比原型紧。照搬补回。 */
+    margin-bottom: clamp(2.4rem, 5vw, 4.2rem);
     user-select: none;
     z-index: 1;
   }
@@ -1015,6 +1060,12 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     font-family: var(--font-mono);
     font-size: 0.3em;
     letter-spacing: 0.14em;
+    /* ★★ 照搬原型：原型 `.marquee-item .num` 写的就是 `color:var(--ink-3)`，而
+       `--ink-3` 在原型里**从未定义** ⇒ 这条 color 在原型里作废 ⇒ 数字退回**继承色**
+       （父级 .marquee-item 是 color:transparent）+ `-webkit-text-stroke:0` ⇒
+       非 3n+1 的那些「0」在原型里**本来就是看不见的**。
+       站主 2026-09-30 明确要求「照原型让它退」，所以这里保持原样、别补 --ink-3。
+       ⇒ 想看数字，得给 --ink-3 一个值（那就不叫照搬原型了）。 */
     color: var(--ink-3);
     -webkit-text-stroke: 0;
     align-self: center;

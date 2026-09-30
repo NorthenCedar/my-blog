@@ -266,7 +266,16 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       /\.paper-inf[^{}]*\{[^}]*pointer-events:\s*none[^}]*\}/,
     );
     expect(all, '.paper-inf 没把底纹作为背景接上').toMatch(/\.paper-inf[^{}]*\{[^}]*background:[^;}]*\/art\/inf-orig\.webp/);
-    // 旧磁带图不该再在产物里出现（站主已拍板删除）
+    // ★★ 2026-09-30 第四轮补的**关键一条**：上面所有断言查的都是 `dist/art/`，
+    //    而 dist 是 `npm run build` 从 public/ 拷出来的 —— **本地永远有，线上不一定有**。
+    //    这一条才是真正止血的：`.gitignore` 里 `public/art/*` 会把整个目录忽略掉，
+    //    必须有逐条 `!` 例外才进得了 git。上一轮漏了 inf-orig.webp ⇒ 它从没进过仓库
+    //    ⇒ Cloudflare 构建产物里没有它 ⇒ 线上 404、∞ 全站不可见，
+    //    而本地每一轮核对都"看得见"它（含当时这条断言也在过）。事故经过见 docs/rhinelab-spec.md §6.8。
+    const ignore = readFileSync('.gitignore', 'utf8');
+    for (const f of ['inf-orig.webp', 'inf-mask.png', 'inf-mask-edge.png']) {
+      expect(ignore, `.gitignore 没有放行 public/art/${f} ⇒ 它进不了 git（本地有、线上 404）`).toContain(`!public/art/${f}`);
+    }
     expect(all, '产物 CSS 里还有磁带图残留').not.toContain('cassette.webp');
     expect(existsSync(join(DIST, 'art', 'cassette.webp')), 'dist/art/cassette.webp 还在产物里').toBe(false);
 
@@ -926,6 +935,66 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     const orphans = jsFiles.filter((f) => !referenced.has(f));
     expect(orphans, `这些 JS 产物没被任何页面引用：${orphans.join(', ')}`).toEqual([]);
     console.log(`判据 产物 JS 对象 dist/**/*.js 实测: ${jsFiles.length} 个，全部在 _astro 下且被页面（含 import 闭包）引用`);
+  });
+});
+
+describe.skipIf(!hasDist)('首页 CSS：照搬原型的「故意保留的无效声明」（2026-09-30 第四轮）', () => {
+  // 这组守的不是"我们写的值是对的"，而是**"我们没有比原型更聪明"**。
+  //
+  // 背景：视觉原型 nc-rhine-v7/index.html 自己的 CSS 有两类"死"声明，
+  // 而上一轮"顺手修好/补全"之后，本站渲染得跟原型**不一样**了 ——
+  // 站主报的三条差异里有两条就是这么来的。所以这里把两条反向钉住。
+  //
+  // ① `--fs-item` / `--fs-h2`：原型 `:root` 里写的是 `clamp(1.6rem,1rem+4.2vw,3.4rem)`，
+  //    算术运算符 `+` 两侧**没有空格** ⇒ 按 CSS 规范该值非法 ⇒ `font-size: var(--fs-item)`
+  //    在计算值阶段整条作废 ⇒ 标题退回**继承的正文 17px**（这就是原型渲染出来的样子）。
+  //    本站 tokens.css 里的同名变量是**带空格的有效值**，首页那份 :global(:root) 特意覆盖成
+  //    原型原值。谁要是"顺手"把空格补上，首页标题会从 17px 跳到 54.4px、跟原型对不上。
+  //    ★ 注意断言比的是**产物**：esbuild 会把它压成 `1rem4.2vw`（依然非法，结果不变），
+  //      所以正则要容得下"没 +"和"有 + 但两侧无空格"两种形态，只拒绝"两侧带空格"那种。
+  //
+  // ② `--line-1` / `--paper-0` / `--ink-3`：原型在多处引用了这三个变量但**从未定义** ⇒
+  //    `.marquee` 的上下横线与实色底、`.marquee-item .num` 的 color 全部作废。
+  //    上一轮在首页 :global(:root) 里给它们赋了值，把死声明救活了 ⇒ 原型本来没有的横线冒出来。
+  //    ⇒ 这两个变量在**任何**产物 CSS 里都不许有定义。
+  const css = () => {
+    const files = walk(DIST, (n) => n.endsWith('.css'));
+    return { files, all: files.map((f) => readFileSync(f, 'utf8')).join('\n') };
+  };
+  // 首页那份 CSS：**从 dist/index.html 的 <link> 里取**，别用文件名猜
+  // （dist/_astro 下不止一个 index.*.css，另一个是别的页面的）。
+  const homeCss = () => {
+    const html = readFileSync(join(DIST, 'index.html'), 'utf8');
+    const refs = [...html.matchAll(/href="(\/_astro\/[A-Za-z0-9._-]+\.css)"/g)].map((m) => m[1]);
+    const files = refs.map((r) => join(DIST, r.replace(/^\//, '')));
+    return { refs, files, text: files.map((f) => readFileSync(f, 'utf8')).join('\n') };
+  };
+
+  it('首页 CSS 覆盖了 --fs-item / --fs-h2，且值是原型那个「无空格、故意无效」的 clamp', () => {
+    const { refs, text } = homeCss();
+    expect(refs.length, '首页 HTML 里没找到任何 <link rel=stylesheet>').toBeGreaterThan(0);
+    // ★ 取**最后一次**定义：首页加载 Base.css（tokens.css 里是带空格的有效值）之后再加载
+    //   自己那份 index.*.css ⇒ 后者按级联胜出。所以"生效的那个值"是最后一处。
+    const last = (name: string) => [...text.matchAll(new RegExp(`${name}:\\s*([^;}]+)`, 'g'))].at(-1)?.[1]?.trim();
+    const item = last('--fs-item');
+    const h2 = last('--fs-h2');
+    expect(item, '首页 CSS 里没有 --fs-item 覆盖 ⇒ 标题会用 tokens.css 的有效值（54.4px），跟原型对不上').toBeTruthy();
+    expect(h2, '首页 CSS 里没有 --fs-h2 覆盖 ⇒ 同上').toBeTruthy();
+    // 只拒绝"运算符两侧带空格"的**有效**写法；无空格 / 被压成 1rem4.2vw 都算合格
+    for (const [name, v] of [['--fs-item', item!], ['--fs-h2', h2!]] as const) {
+      expect(v, `${name} 生效值是带空格的有效 clamp（${v}）—— 首页标题会跳大（17px → 54.4px），跟原型不一样了`).not.toMatch(/\s[+*]\s/);
+      expect(v, `${name} 不含 clamp(`).toContain('clamp(');
+    }
+    console.log(`判据 首页字号 对象 ${refs.join(' + ')}（取最后一处定义 = 级联胜出者）实测: --fs-item=${item} · --fs-h2=${h2}（无空格 ⇒ 声明作废 ⇒ 标题继承 17px，与原型一致）`);
+  });
+
+  it('--line-1 / --paper-0 / --ink-3 在整份产物里都没有定义（原型也没定义）', () => {
+    const { all } = css();
+    for (const name of ['--line-1', '--paper-0', '--ink-3']) {
+      const hit = all.match(new RegExp(`${name}:\\s*[^;}]+`));
+      expect(hit?.[0] ?? '', `${name} 被定义了（${hit?.[0]}）⇒ 原型里本来是"死"的声明会复活（跑马灯冒横线 / 实色底 / 数字显形）`).toBe('');
+    }
+    console.log('判据 原型死变量 对象 dist/**/*.css 实测: --line-1 / --paper-0 / --ink-3 均无定义 ⇒ .marquee 无横线透明底、.num 退回继承色，与原型一致');
   });
 });
 
