@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-/* 首屏流场线（src/scripts/rhgrid.ts）的两条不可退让的性质。
+/* 首屏流场线（src/scripts/rhgrid.ts）的几条不可退让的性质。
  *
  * ① 时间基准必须是**毫秒**。
  *    参考站 wodniack.dev 的 <a-waves> 给噪声项喂的是毫秒 —— 它的 ticker 是
@@ -17,12 +17,30 @@ import { readFileSync } from 'node:fs';
  *    流速完全由噪声参数决定：WAVE_TX 是 px/ms ⇒ 场的横向流速 = WAVE_TX × 1000。
  *    钉住"性质"而不是"数值"：允许站主按手感调（"更有弹性一点"就可能动这几个数），
  *    但挡住量级错误（差 1000 倍）与"调到躁动"。
+ *
+ * ③ 流场要带**弹性**，而且必须**两种手段都在**（只做跟随弹簧是看不见的）。
+ *    站主原话：「把本站的线改的更有弹性一点，不要太多」。
+ *    ★★ 反直觉但实测确凿：单独的"跟随弹簧"在这批线上**完全不可见**。
+ *      固定噪声种子扫了三档（_probe/cdp-flow-drift.mjs --seed，摆幅 / 相邻转角）：
+ *        ω₀ = ∞（无弹簧） 38.22 / 3.68°   ω₀ = 1.04  38.95 / 3.75°   ω₀ = 0.70  38.90 / 3.76°
+ *      —— 差别全落在 ± 之内。两个原因叠加：
+ *        (a) 弹簧是**全场统一**的 ⇒ 只产生"整片一起晚一拍 + 整体缩一点"，
+ *            没有参照物、人眼看不出（人眼只能看出**差异**，看不出"一起晚了"）；
+ *        (b) 这批噪声场的能量几乎**全在 λ > 170 px**（实测每条线弧长 881 px、
+ *            走向反向 5.2 次 ⇒ 平均褶长约 170 px）。截止波长要压到它之下才有东西
+ *            可滤，而那时滤掉的是**主起伏本身**（观感 = 线变平），不是"弹性"。
+ *      ⇒ 可见的弹性必须**空间上不均匀** ⇒ 所以还需要 ⅱ：呼吸（沿 x 带波长的调制）：
+ *        ω₀ = 1.04 rad/s ⇒ 截止波长 = 流速 × 2π/ω₀ ≈ 76 px
+ *        ω₀ = 0.70 rad/s ⇒ 截止波长 ≈ 112 px
+ *    ⇒ 断言钉三条：ζ 欠阻尼但不过分（0.45–0.75）、ω₀ 有滤但没把线滤塌（0.4–3.0）、
+ *      以及呼吸的两件套（sin 调制 + 与列位相关）必须在。
  */
 const SRC = readFileSync('src/scripts/rhgrid.ts', 'utf8');
 const CODE = SRC.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, ' ');
-const num = (name: string) => Number((SRC.match(new RegExp(`${name}\\s*=\\s*([\\d.]+)`)) ?? [])[1]);
+// ★ 要能读科学计数法（参数写成 7.5e-5 时只抓到 7.5 会让整条断言变成假的）
+const num = (name: string) => Number((SRC.match(new RegExp(`${name}\\s*=\\s*([\\d.]+(?:e[-+]?\\d+)?)`, 'i')) ?? [])[1]);
 
-describe('首屏流场线：时间基准与流速', () => {
+describe('首屏流场线：时间基准、流速与弹性', () => {
   it('时间基准是毫秒：T = now（不是 now / 1000）', () => {
     console.log(
       `判据 流场时间基准 对象 src/scripts/rhgrid.ts 实测: `
@@ -66,5 +84,99 @@ describe('首屏流场线：时间基准与流速', () => {
   it('降级路径还在：reduced-motion 只画一帧静态、且不建 raf', () => {
     expect(CODE, 'reduced-motion 分支被删了').toMatch(/if\s*\(\s*reduce\s*\)\s*\{[^}]*draw\(\)[^}]*return/);
     expect(CODE, '出视口停帧的 IntersectionObserver 被删了').toContain('IntersectionObserver');
+  });
+
+  it('流场带弹性：wave 用二阶弹簧跟随，不是直接赋值', () => {
+    const spring = /pt\.wv\.[xy]\s*\+=\s*\(\s*t[xy]\s*-\s*pt\.wave\.[xy]\s*\)\s*\*\s*WAVE_S/.test(CODE);
+    console.log(
+      `判据 流场弹性 对象 src/scripts/rhgrid.ts 实测: `
+      + `${spring ? 'v += (target - x) * WAVE_S ✓' : '没找到弹簧积分'} · `
+      + `${/pt\.wave\.x\s*=\s*Math\.cos/.test(CODE) ? '⚠️ wave 仍被直接赋值' : '无直接赋值 ✓'}`,
+    );
+    expect(CODE, '弹簧的积分式没了（wave 退化成直接赋值 ⇒ 弹性消失）').toMatch(
+      /pt\.wv\.[xy]\s*\+=\s*\(\s*t[xy]\s*-\s*pt\.wave\.[xy]\s*\)\s*\*\s*WAVE_S/,
+    );
+    expect(
+      CODE,
+      'pt.wave 被直接赋值（= 目标）—— 弹性被删了；见文件里「可见的弹性来自谐波差别对待」那段',
+    ).not.toMatch(/pt\.wave\.x\s*=\s*Math\.cos/);
+    expect(
+      CODE,
+      '少了「首帧直接落位」的分支 —— 开场/改窗宽时会看到线从平到皱的过渡',
+    ).toMatch(/pt\.ini/);
+  });
+
+  it('弹性参数停在"看得见"的那一段（ζ 欠阻尼但不过分、ω₀ 有滤但没把线滤塌）', () => {
+    const S = num('WAVE_S');
+    const D = num('WAVE_D');
+    const w0 = Math.sqrt(S) * 60;              // rad/s（离散刚度 → 固有频率，60 fps）
+    const zeta = (1 - D) / (2 * Math.sqrt(S)); // 阻尼比
+    // 截止**空间**波长 λ = 流速 × 截止周期 = v × 2π/ω₀（流速取实测的 WAVE_TX×1000）
+    const lam = ((num('WAVE_TX') * 1000) * 2 * Math.PI) / w0;
+    console.log(
+      `判据 弹性参数 对象 rhgrid.ts 实测: WAVE_S=${S} WAVE_D=${D} ⇒ `
+      + `ω₀=${w0.toFixed(3)} rad/s（周期 ${((2 * Math.PI) / w0).toFixed(1)}s）· ζ=${zeta.toFixed(3)} · `
+      + `截止波长 ≈ ${lam.toFixed(0)}px（主起伏 ≈170px；压到它之下滤掉的就是主起伏本身）`,
+    );
+    expect(S, 'WAVE_S 没解析出来（写成科学计数法也要能读）').toBeGreaterThan(0);
+    expect(D, 'WAVE_D 没解析出来').toBeGreaterThan(0);
+    expect(D, 'WAVE_D > 1 会让弹簧发散').toBeLessThan(1);
+    expect(
+      zeta,
+      `ζ=${zeta.toFixed(3)}：≥0.75 就没有过冲（站主要"轻微回弹"），≤0.45 会共振放大、观感躁动`,
+    ).toBeGreaterThan(0.45);
+    expect(zeta, `ζ=${zeta.toFixed(3)} 超出 0.45–0.75`).toBeLessThan(0.75);
+    expect(
+      w0,
+      `ω₀=${w0.toFixed(3)} rad/s 太低（截止波长 ${lam.toFixed(0)}px）：连主起伏（≈170px）都会被滤掉，`
+      + `观感是"线变平"而不是"弹性"（站主："不要太多"）`,
+    ).toBeGreaterThan(0.4);
+    expect(
+      w0,
+      `ω₀=${w0.toFixed(3)} rad/s 太高（截止波长 ${lam.toFixed(0)}px）：什么都滤不掉，弹性等于没做`,
+    ).toBeLessThan(3.0);
+  });
+
+  it('流场带呼吸：弯曲强度沿 x 按波长起伏 —— 这才是"可见"的那一半', () => {
+    console.log(
+      `判据 流场呼吸 对象 src/scripts/rhgrid.ts 实测: `
+      + `${/WAVE_BR\s*\*\s*Math\.sin/.test(CODE) ? '有 sin 调制 ✓' : '没有调制'} · `
+      + `${/col\[0\]\.x\s*\/\s*WAVE_BR_WL/.test(CODE) ? '与列位相关（有横向波长）✓' : '⚠️ 全场同步'}`,
+    );
+    expect(
+      CODE,
+      '呼吸项没了 —— 单独的跟随弹簧在这批线上实测不可见（三档 ω₀ 都无效果），见文件里那段',
+    ).toMatch(/WAVE_BR\s*\*\s*Math\.sin/);
+    expect(
+      CODE,
+      '呼吸必须与列位相关（带横向波长）：全场同步地变弯没有参照物，人眼看不出来',
+    ).toMatch(/col\[0\]\.x\s*\/\s*WAVE_BR_WL/);
+    const br = num('WAVE_BR');
+    const wl = num('WAVE_BR_WL');
+    console.log(
+      `        ⇒ 呼吸深度 ±${(br * 100).toFixed(0)}% · 周期 ${num('WAVE_BR_MS')}ms · 横向波长 ${wl}px`,
+    );
+    expect(br, '呼吸深度必须 > 0（= 没做）').toBeGreaterThan(0);
+    expect(br, `呼吸深度 ±${br} 太大（站主："不要太多"）`).toBeLessThanOrEqual(0.35);
+    expect(wl, '横向波长太小 ⇒ 相邻列的弯曲程度差太多，线会像被撕开').toBeGreaterThan(400);
+  });
+
+  it('呼吸必须绕过滤波（乘在弹簧**输入**上实测等于没做）', () => {
+    const viaInput = /Math\.cos\(o\)\s*\*\s*WAVE_AMP_X\s*\*\s*breath/.test(CODE);
+    const viaOutput = /pt\.wb\.[xy]\s*=\s*pt\.wave\.[xy]\s*\*\s*breath/.test(CODE);
+    const drawn = /f0\.x\s*\+\s*f0\.wb\.x/.test(CODE);
+    console.log(
+      `判据 呼吸接线 对象 src/scripts/rhgrid.ts 实测: `
+      + `${viaInput ? '⚠️ 乘在弹簧输入上' : '不在弹簧输入上 ✓'} · `
+      + `${viaOutput ? '作用在弹簧输出 ✓' : '没作用在输出'} · `
+      + `${drawn ? 'draw 消费 wb ✓' : '⚠️ draw 还在读 wave'}`,
+    );
+    expect(
+      viaInput,
+      '呼吸被乘在弹簧的输入上 —— 弹簧在 r≈1 处 |H|≈0.83、滞后 90°，会把呼吸衰减掉一大半，'
+      + '剩下的还与场的自然波动相位抵消（实测：有呼吸的摆幅起伏 8.5% < 无呼吸的 12.3%）',
+    ).toBe(false);
+    expect(viaOutput, '呼吸没有作用在弹簧输出上（pt.wb = pt.wave × breath）').toBe(true);
+    expect(drawn, 'draw() 必须消费 wb —— 否则白算').toBe(true);
   });
 });

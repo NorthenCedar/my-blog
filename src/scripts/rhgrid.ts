@@ -44,6 +44,31 @@
 //   参考站 ticker 发毫秒（`$.emit("tick", t*1e3)`，GSAP 的 t 是秒、它乘了 1000），
 //   本站移植时写成 `now / 1000` ⇒ 噪声项慢 1000 倍。
 //   ⇒ 详见 tick() 里的注释；回归读数见 `_probe/cdp-flow-drift.mjs`（② 运动 那一行）。
+//
+// ---------------------------------------------------------------------------
+// ★ 2026-10-01 第十版：流场加**弹性**（跟随弹簧 + 横向呼吸）
+//
+//   站主原话：「把本站的线改的更有弹性一点，不要太多」。
+//
+//   ★★ 这一版最贵的一课：**"全场统一"的改动是看不见的**。
+//      先只做了跟随弹簧（二阶低通），还用固定种子扫了三档 ω₀（∞ / 1.04 / 0.70 rad/s）
+//      实测摆幅 38.22 / 38.95 / 38.90、相邻转角 3.68 / 3.75 / 3.76 —— **三档一模一样**。
+//      原因两条：弹簧只产生"整片一起晚一拍 + 整体缩一点"，没有参照物；
+//      而噪声场的能量几乎全在 λ > 170 px（每条线弧长 881 px、走向反向 5.2 次），
+//      截止波长真压到它之下时，滤掉的是**主起伏本身**（= 线变平），不是"弹性"。
+//      ⇒ 必须让响应在**空间上不均匀** ⇒ 才有沿 x 带波长的"呼吸"（WAVE_BR 那几行）。
+//
+//      ★ 而且呼吸必须**绕过弹簧**（乘在弹簧输出上）：乘在输入上时，弹簧在 r≈1 处
+//        把它衰减到 |H|≈0.83 并滞后 90°，再与场的自然波动相位抵消 ——
+//        实测"有呼吸"的摆幅起伏 8.5% **小于**"无呼吸"的 12.3%（同种子同 t）。
+//        接线见 move() 里的 ②；回归断言在 tests/flow-field.test.ts。
+//
+//   回归工具（三层，缺一层就会得出错误结论）：
+//     · `_probe/cdp-flow-drift.mjs` —— 同 t 的统计量（摆幅 / 转角 / 帧率）。
+//     · `_probe/cdp-flow-sync.mjs`  —— **同种子 + 同 performance.now() 逐点比对**：
+//       这是唯一能确认"改动到底有没有改变形状"的手段（噪声底 0.04–0.40 px，
+//       而"弹簧+呼吸"相对无弹性版本是 10–13 px ⇒ 差 30 倍，结论确凿）。
+//     · `_probe/cdp-flow-series.mjs` —— 目标运动的频率特性（自相关主周期）。
 
 const host = document.getElementById('rhGrid');
 const svg = document.getElementById('rhGridSvg');
@@ -117,13 +142,58 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
   const PAD_Y = 60; // 高度外扩（原站 30）
   const WAVE_TX = 0.0125, WAVE_TY = 0.005, WAVE_SC = 0.002, WAVE_SC2 = 0.0015;
   const WAVE_AMP_X = 32, WAVE_AMP_Y = 16;
+  /* ★ 流场弹性（2026-10-01 第十版，站主：「把本站的线改的更有弹性一点，不要太多」）
+     由**两层**组成 —— 只做第二层是没用的，原因见下。
+
+     ① 跟随弹簧：noise 的目标值不再直接赋值给 wave，而是让 wave 用二阶弹簧去"追"：
+
+            v += (target - x) * WAVE_S      ← 刚度（每帧²）
+            v *= WAVE_D                     ← 阻尼（每帧）
+            x += v
+
+     ② 横向呼吸：弯曲强度沿 x 按波长起伏、并随时间缓慢流过（`WAVE_BR` 那一行）。
+
+     ★★ 为什么必须有 ②：单独做 ① 实测**完全不可见**。固定噪声种子做了三档扫描
+        （_probe/cdp-flow-drift.mjs --seed，摆幅 / 相邻转角 / 最大转角）：
+
+            ω₀ = ∞（无弹簧）  摆幅 38.22 ± 2.18 · 转角 3.68° · 最大 22.22°
+            ω₀ = 1.04         摆幅 38.95 ± 1.76 · 转角 3.75° · 最大 23.20°
+            ω₀ = 0.70         摆幅 38.90 ± 1.16 · 转角 3.76° · 最大 23.62°
+
+        三档的差别全落在 ± 之内 —— 也就是"没做"。两个原因叠在一起：
+          · 弹簧是**全场统一**的 ⇒ 只产生"相位滞后 + 幅度缩放"，而两者都发生在
+            整片场上、没有参照物（人眼只能看出"差异"，看不出"一起晚了"）。
+          · 这批噪声场的能量几乎**全在 λ > 170 px**（实测每条线弧长 881 px、
+            走向反向 5.2 次 ⇒ 平均褶长 ≈ 170 px）。截止波长要压到它之下才有东西
+            可滤，而那时滤掉的已经是**主起伏本身**（观感 = 线变平），不是"弹性"。
+        ⇒ 结论：可见的弹性必须来自**空间上不均匀**的响应。呼吸给了它一个"参照" ——
+          同一时刻，视口左边和右边的线弯曲程度不同，两边在缓慢地此消彼长。
+
+     ★★ 比版本必须**固定噪声种子**：场来自 `new Noise(Math.random())`，不固定的话
+        两次加载的摆幅能差 25%（实测 31 vs 40），比的是种子不是版本 —— 踩过。 */
+  const WAVE_S = 1.36e-4;   // 刚度/帧² ⇒ ω₀ = √S × 60 ≈ 0.70 rad/s（周期 ≈ 9 s）
+  const WAVE_D = 0.9860;    // 阻尼/帧 ⇒ ζ ≈ 0.6（< 0.707 ⇒ 约 9% 的轻微过冲）
+  const WAVE_BR = 0.20;     // 呼吸深度 ±20% —— ★ 不是拍脑袋，是按"能不能被测出来"定的：
+                            //   场自身的摆幅起伏就有 ±12%（同种子同 t 实测，10 帧极差 12.3%），
+                            //   呼吸比它小就淹没在里面。±13% 实测只把起伏抬到 14.7%（+20%，
+                            //   10 个样本下不显著）；±20% ⇒ 预期叠加后 ≈23%，明确高于 12.3%。
+  const WAVE_BR_MS = 9000;  // 呼吸周期：与主起伏（≈13 s）同量级、略快 ⇒ 看得出在"呼"
+  const WAVE_BR_WL = 1600;  // 呼吸的**横向波长** —— 可见性的关键：全场同步地变弯
+                            //   没有参照（看不出来），有波长才有"从这头流到那头"
   const CUR_R = 175, CUR_K = 6.5e-4;
   const SPRING = 0.005, DAMP = 0.925, CLAMPV = 100;
 
   const noise = new Noise(Math.random());
   const mouse = { x: -1e4, y: -1e4, lx: -1e4, ly: -1e4, sx: -1e4, sy: -1e4, vs: 0, a: 0, set: false };
   let W = 0, H = 0;
-  let cols: { x: number; y: number; wave: { x: number; y: number }; cursor: { x: number; y: number; vx: number; vy: number } }[][] = [];
+  let cols: {
+    x: number; y: number;
+    wave: { x: number; y: number };
+    wv: { x: number; y: number };
+    wb: { x: number; y: number }; // = wave × 呼吸（draw 真正消费的是这个）
+    ini: boolean;
+    cursor: { x: number; y: number; vx: number; vy: number };
+  }[][] = [];
   let paths: SVGPathElement[] = [];
   let raf = 0, T = 0;
 
@@ -149,6 +219,9 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
           x: cx,
           y: offY + GAP_Y * g,
           wave: { x: 0, y: 0 },
+          wv: { x: 0, y: 0 },
+          wb: { x: 0, y: 0 },
+          ini: false, // 首帧直接落位（见 move()）—— 别让线从"平"慢慢起褶
           cursor: { x: 0, y: 0, vx: 0, vy: 0 },
         });
       }
@@ -186,11 +259,35 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
     const ca = Math.cos(mA) * c2, sa = Math.sin(mA) * c2;
     for (let i = 0; i < cols.length; i++) {
       const col = cols[i];
+      /* ★ 呼吸：弯曲强度沿 x 按波长起伏、并随时间缓慢流过（WAVE_BR 那一行 + 文件上方注释）。
+         同列的列位相同 ⇒ 这一项整个列共用一个值，提到内层循环外算（每点一次 sin 没必要）。 */
+      const breath = 1 + WAVE_BR * Math.sin((t / WAVE_BR_MS - col[0].x / WAVE_BR_WL) * Math.PI * 2);
       for (let k = 0; k < col.length; k++) {
         const pt = col[k];
         const o = noise.perlin2((pt.x + t * WAVE_TX) * WAVE_SC, (pt.y + t * WAVE_TY) * WAVE_SC2) * 12;
-        pt.wave.x = Math.cos(o) * WAVE_AMP_X;
-        pt.wave.y = Math.sin(o) * WAVE_AMP_Y;
+        const tx = Math.cos(o) * WAVE_AMP_X;
+        const ty = Math.sin(o) * WAVE_AMP_Y;
+        // ① 弹簧追的是**纯噪声目标**（不带呼吸 —— 见下面 ② 的注释）
+        if (pt.ini) {
+          pt.wv.x += (tx - pt.wave.x) * WAVE_S;
+          pt.wv.y += (ty - pt.wave.y) * WAVE_S;
+          pt.wv.x *= WAVE_D;
+          pt.wv.y *= WAVE_D;
+          pt.wave.x += pt.wv.x;
+          pt.wave.y += pt.wv.y;
+        } else {
+          // 首帧（含 resize 重建）**直接落位**：否则开场那 1–2 秒线是"平"的、
+          // 要慢慢才起褶；改窗宽时也会看到一次"从平到皱"的过渡。
+          pt.wave.x = tx; pt.wave.y = ty; pt.ini = true;
+        }
+        // ② ★ 呼吸必须作用在弹簧**输出**上（绕过滤波）。
+        //   一开始是乘在"目标"上的，实测等于没做：弹簧在 r≈1（呼吸周期 9 s、
+        //   ω₀=0.70 ⇒ r≈1.0）处 |H|≈0.83 且滞后 90°，把呼吸衰减掉一大半，
+        //   剩下的还与场的自然波动（±12%）相位抵消 —— 结果是"有呼吸"的摆幅起伏
+        //   8.5%，**反而小于**无呼吸的 12.3%（同种子同 t 实测）。绕过去之后呼吸是
+        //   100% 强度地直接改形状，这才是可见的那一半。
+        pt.wb.x = pt.wave.x * breath;
+        pt.wb.y = pt.wave.y * breath;
         if (!reduce) {
           const dx = pt.x - mx, dy = pt.y - my;
           const h = Math.sqrt(dx * dx + dy * dy);
@@ -215,12 +312,13 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
     for (let i = 0; i < cols.length; i++) {
       const col = cols[i];
       const f0 = col[0];
-      let d = 'M' + (f0.x + f0.wave.x) + ' ' + (f0.y + f0.wave.y);
+      // ★ 消费的是 wb（= wave × 呼吸），不是 wave —— 呼吸绕过了弹簧，见 move() 里的 ②
+      let d = 'M' + (f0.x + f0.wb.x) + ' ' + (f0.y + f0.wb.y);
       for (let k = 1; k < col.length; k++) {
         const pt = col[k], last = k === col.length - 1;
         const cx = last ? 0 : pt.cursor.x, cy = last ? 0 : pt.cursor.y;
-        d += 'L' + (((pt.x + pt.wave.x + cx) * 10) | 0) / 10 + ' ' +
-             (((pt.y + pt.wave.y + cy) * 10) | 0) / 10;
+        d += 'L' + (((pt.x + pt.wb.x + cx) * 10) | 0) / 10 + ' ' +
+             (((pt.y + pt.wb.y + cy) * 10) | 0) / 10;
       }
       paths[i].setAttribute('d', d);
     }
