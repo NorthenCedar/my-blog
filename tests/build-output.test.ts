@@ -1009,6 +1009,67 @@ describe.skipIf(!hasDist)('首页 CSS：照搬原型的「故意保留的无效�
   });
 });
 
+describe.skipIf(!hasDist)('首页：宽视口的接缝 / ∞ 淡入淡出 / 揭示动画的自愈路径（2026-09-30 第六轮）', () => {
+  // 这三条守的都是**站主报的现象**（不是"我觉得应该这样"），每条都先实测定位到机制再钉住。
+  // 用产物断言而不是源码断言：这三条全是"产物里那条声明/那段代码在不在"。
+  const homeHtml = () => readFileSync(join(DIST, 'index.html'), 'utf8');
+  const homeCss = () => {
+    const html = homeHtml();
+    const refs = [...html.matchAll(/href="(\/_astro\/[A-Za-z0-9._-]+\.css)"/g)].map((m) => m[1]);
+    return refs.map((r) => readFileSync(join(DIST, r.replace(/^\//, '')), 'utf8')).join('\n');
+  };
+  // 取某条规则（scoped ⇒ 产物里是 `.dusk[data-astro-cid-xxx]{…}`）的声明体。
+  // ★ 取**最后一处**：Base.css 里也有同名 `.band[...]`（老组件残留的样式，首页 slot 里用不到它），
+  //   而首页自己那份 index.*.css 是后加载的、按级联胜出 —— 和上面那条字号断言同一套判据。
+  //   用带 `{` 的正则而不是 indexOf：`.dusk[…]::before{` 也含 `.dusk[`，会被 indexOf 误取。
+  const decls = (text: string, sel: string) => {
+    const re = new RegExp(`${sel.replace(/\./g, '\\.')}\\[[^\\]]*\\]\\{([^}]*)\\}`, 'g');
+    return [...text.matchAll(re)].map((m) => m[1]).at(-1) ?? '';
+  };
+
+  it('① .dusk 必须和 .band / .paper-wrap 一样逃出 .shell（否则宽视口下晨昏带被框窄、上下硬切）', () => {
+    const text = homeCss();
+    const d = decls(text, '.dusk');
+    expect(d, '产物里没有 .dusk 规则').toBeTruthy();
+    // 「先自证另一半」：.band / .paper-wrap 的逃逸本来就该在，缺了说明整条前提变了
+    expect(decls(text, '.band'), '.band 的 full-bleed 逃生口没了').toContain('margin-inline:calc(50% - 50vw)');
+    expect(decls(text, '.paper-wrap'), '.paper-wrap 的 full-bleed 逃生口没了').toContain('margin-inline:calc(50% - 50vw)');
+    expect(
+      d.replace(/\s+/g, ''),
+      '.dusk 没有 margin-inline:calc(50% - 50vw) ⇒ 视口宽于 --wrap(82rem=1312px) 时晨昏带被 .shell 框成"中间一段"，' +
+        '两侧露出纸白，与上面满宽的深墨绿场/下面满宽的纸白区各形成一条竖向硬边（站主报的"身份下面衔接"）',
+    ).toContain('margin-inline:calc(50%-50vw)');
+    console.log('判据 接缝 对象 dist/_astro/index.*.css 实测: .band / .dusk / .paper-wrap 三者都带 margin-inline:calc(50% - 50vw) ⇒ 宽视口下三段同宽、无竖向硬边');
+  });
+
+  it('② .paper-inf 必须有 opacity 过渡（否则百褶 ∞ 是硬切出来的）', () => {
+    const d = decls(homeCss(), '.paper-inf');
+    expect(d, '产物里没有 .paper-inf 规则').toBeTruthy();
+    expect(
+      /transition:[^;}]*opacity/.test(d.replace(/\s+/g, '')),
+      `.paper-inf 的 transition 里没有 opacity（${d}）⇒ 显隐是硬切；站主报"百褶 ∞ 突然闪出来"`,
+    ).toBe(true);
+    console.log('判据 ∞ 淡入淡出 对象 dist/_astro/index.*.css 实测: .paper-inf 带 transition:opacity .9s var(--ease-glass) ⇒ 进出纸白区是淡入淡出');
+  });
+
+  it('③ 揭示动画必须能"自愈"：播完摘掉内联 opacity + 取消动画，并带 pageshow 兜底', () => {
+    const html = homeHtml();
+    // 内联 opacity:0 是"脚本没跑"时的保护，但如果它**一直留着**，就成了唯一的可见性来源的反面：
+    // 脚本动画一旦被丢弃（bfcache 恢复 / 标签页冻结回收 / 合成器回收 / 回调抛错），
+    // 元素就永久停在 opacity:0 —— 实测线上：正常揭示 cs=1（唯一理由是有 1 个动画），
+    // cancel() 后 cs=0，滚走再回来仍 0（io.unobserve 已执行 ⇒ 无自愈路径）。
+    expect(
+      /removeProperty\([`"']opacity[`"']\)/.test(html),
+      '首页内联脚本里没有 removeProperty(`opacity`) ⇒ 揭示动画播完后内联 opacity:0 仍留着，动画一丢内容就永久不可见',
+    ).toBe(true);
+    expect(
+      /[`"']pageshow[`"']/.test(html),
+      '首页内联脚本里没有 pageshow 兜底 ⇒ 从 bfcache 恢复/标签页解冻回来时，卡在 opacity:0 的条目不会自愈',
+    ).toBe(true);
+    console.log('判据 揭示自愈 对象 dist/index.html 内联脚本 实测: 含 removeProperty(`opacity`) + pageshow 兜底 ⇒ 内容可见性不再依赖"活着的动画"');
+  });
+});
+
 describe.skipIf(!hasDist)('首页 JS 预算（B2 动效层）', () => {
   // 2026-09-26 站主拍板：首页动效内联脚本**另立一条**预算，上限 7 KB。
   // 文章页仍守 4096 B（上面的「JS 预算」），且产物里不得有独立 .js 文件

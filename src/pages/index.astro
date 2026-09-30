@@ -218,7 +218,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     <div class="marquee" aria-hidden="true">
       {[
         { dir: 'up', items: ['SHUFFLE', '01', site.name, 'dot', 'RHINE LAB', '02', 'NOTE', 'dot'] },
-        { dir: 'down', items: ['ARCHIVE', '03', '玻璃拟态', 'dot', brandWord.toUpperCase(), '04', 'SILK', 'dot'] },
+        { dir: 'down', items: ['ARCHIVE', '03', '自由热烈', 'dot', brandWord.toUpperCase(), '04', 'SILK', 'dot'] },
       ].map((row) => (
         <div class={`marquee-row ${row.dir}`}>
           {[0, 1].map((pass) =>
@@ -374,11 +374,17 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
         }, { passive: true });
       }
 
-      /* 2) 百褶 ∞：fixed 挂视口 ⇒ 必须限定只在纸白区里出现。滚动时零 JS 参与。 */
+      /* 2) 百褶 ∞：fixed 挂视口 ⇒ 必须限定只在纸白区里出现。滚动时零 JS 参与。
+            ★ 淡入淡出靠 CSS 的 transition（.paper-inf）。第一次隐藏必须**瞬时**：
+              此刻先把过渡摘掉、强制一次样式计算把 opacity:0 定下来，再把过渡交还 CSS，
+              否则开场会在首屏正中"淡出"一个幽灵 ∞。之后每次切换都会走过渡。 */
       const paperWrap = document.querySelector('.paper-wrap');
       const paperInf = document.querySelector('.paper-inf');
       if (paperWrap && paperInf && 'IntersectionObserver' in window) {
+        paperInf.style.transition = 'none';
         paperInf.style.opacity = '0';
+        paperInf.getBoundingClientRect(); /* 强制样式计算：让上面这组值成为"当前值" */
+        paperInf.style.removeProperty('transition');
         new IntersectionObserver((es) => {
           for (const e of es) paperInf.style.opacity = e.isIntersecting ? '' : '0';
         }, { rootMargin: '0px 0px -30% 0px', threshold: 0 }).observe(paperWrap);
@@ -386,20 +392,41 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
 
       /* 3) 揭示：首次进视口播一次，播完即 unobserve。
             ★ 初值 opacity:0 由**这里**写（不是 CSS）⇒ 无 JS / JS 报错时内容照常可见，
-              不会出现「动画没跑成 ⇒ 整页空白」这种最坏情况。 */
+              不会出现「动画没跑成 ⇒ 整页空白」这种最坏情况。
+            ★★ 2026-09-30 第六轮（站主报「最近写的有时鼠标不放上去文章不显示」）——
+              上面那条只保住了"脚本没跑"这一种失败，漏了更常见的一种：**动画丢了**。
+              原来靠 `fill:'both'` 的脚本动画一直撑着元素可见，而内联 opacity:0 **始终留着** ⇒
+              动画一旦被丢弃（返回上一页的 bfcache 恢复、标签页被冻结/回收、合成器回收、
+              回调中途抛错……），内联 0 立刻接管 ⇒ 整条内容**永久不可见**，
+              且没有任何自愈路径（io.unobserve 已执行，观察器不会再触发）。
+              实测复现（线上 1258×802，CDP）：正常揭示后 cs=1 且唯一可见理由是那 1 个动画；
+              手动 cancel() 后 cs 立刻 0；再滚走滚回来仍是 0。
+              修法：动画播完就把内联 opacity 拆掉、并取消动画本身 ⇒ 元素回到"原生无覆盖"状态，
+              可见性不再依赖任何活着的动画（动画只负责那 820ms 的入场观感）。
+              settle 里"先摘内联、再取消"写在同一微任务内，中间不落帧 ⇒ 不会闪一下。 */
       if (!reduce && 'IntersectionObserver' in window) {
         const blocks = document.querySelectorAll('.band-copy > *, .section-head, .entry, .card');
         const io = new IntersectionObserver((entries) => {
           entries.forEach((en, i) => {
             if (!en.isIntersecting) return;
-            en.target.animate(
+            const el = en.target;
+            io.unobserve(el);
+            const anim = el.animate(
               [{ opacity: 0, transform: 'translateY(16px)' }, { opacity: 1, transform: 'none' }],
               { duration: 820, delay: (i % 4) * 90, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'both' }
             );
-            io.unobserve(en.target);
+            const settle = () => { el.style.removeProperty('opacity'); anim.cancel(); };
+            anim.finished.then(settle, settle);
           });
         }, { rootMargin: '0px 0px -8% 0px', threshold: 0.02 });
         blocks.forEach((b) => { b.style.opacity = '0'; io.observe(b); });
+        /* 兜底：从 bfcache 恢复 / 标签页解冻回来时，把任何还卡在 opacity:0、且动画已经不在了的
+           放出来（正常路径下内联早已被 settle 摘掉，这里不会命中；动画还在跑的不碰，别打断入场）。 */
+        addEventListener('pageshow', () => {
+          blocks.forEach((b) => {
+            if (b.style.opacity === '0' && !b.getAnimations().length) b.style.removeProperty('opacity');
+          });
+        });
       }
     })();
   </script>
@@ -652,6 +679,11 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     transform: translate(-50%, -50%);
     background: url('/art/inf-orig.webp') center / contain no-repeat;
     opacity: 0.2;
+    /* ★ 2026-09-30 第六轮（站主报「百褶 ∞ 是突然闪出来的」）——
+       显隐由下面那段的 IntersectionObserver 切换 opacity 来做，但这里没有过渡 ⇒ 硬切。
+       加一条过渡即可「淡入淡出」；初值的那次隐藏由 JS 临时摘掉过渡来规避（见脚本 2），
+       否则开场会在首屏正中淡出一个幽灵 ∞。 */
+    transition: opacity 900ms var(--ease-glass);
     pointer-events: none;
     z-index: -1;
     will-change: opacity;
@@ -977,6 +1009,17 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
   /* ====================== 晨昏带 ====================== */
   .dusk {
     position: relative;
+    /* ★★ 2026-09-30 第六轮（站主报「身份下面衔接」那条）——
+       必须和 .band / .paper-wrap 一样**逃出 Base 的 .shell**（max-width: --wrap = 82rem = 1312px）。
+       原型的 .dusk 是顶层元素、天生满宽；本站它被包在 .shell 里，而 .shell 的内边距在首页
+       被清零了 ⇒ **窄视口下看不出来**，一旦视口宽于 1312px，.dusk 就被框成「中间 1312px 一段」：
+       它上面满宽的深墨绿场、下面满宽的纸白区都在，只有晨昏带两侧露出纸白
+       ⇒ 上下各出现一条竖向硬边，看起来就是「没接上」（站主截图那条白边）。
+       实测（1680×900 窗口，CDP elementFromPoint 逐点）：
+         修前 本站 .dusk x=173 w=1312，x<173 命中 main（纸白）
+         同条件 原型 .dusk x=0   w=1658（满宽）
+       ★ 不写 width:100vw —— vw 含滚动条宽度 ⇒ 横向溢出（与 .band 同理）。 */
+    margin-inline: calc(50% - 50vw);
     height: min(46vh, 400px);
     background: linear-gradient(
       180deg,
