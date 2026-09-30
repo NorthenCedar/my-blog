@@ -191,14 +191,17 @@ const MARK = 'M19.04 2.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4c-2-2.67-4-4-6-4a4 4
     /* 深墨绿空场：与首屏 .band 同一族色（撤走时不出现色相跳变） */
     background: radial-gradient(120% 80% at 12% 0%, #2d7d4626 0%, transparent 58%),
       linear-gradient(178deg, #090c0c 0%, #0e1512 46%, #141d18 100%);
+    /* ★ 退场淡出必须挂在**根层** .bi 上，不能挂 .bi-stage ——
+       .bi 自己那层背景是不透明的：只让 stage 淡出的话，露出来的是这层背景（一整屏墨绿），
+       要等 5300 ms 把 .bi 整个从 DOM 移除才**硬切**到首屏 ⇒ 中间那 700 ms 是黑屏。
+       （5000 ms 截图实测：一片墨绿，看不到首屏。） */
+    animation: bi-fade var(--bi-fade) linear var(--bi-fade-at) both;
   }
   .bi-stage {
     position: absolute;
     inset: 0;
-    /* 剪幕与退场：两条动画、两个互不重叠的属性（clip-path / opacity）⇒ 不会互相顶掉 */
-    animation:
-      bi-wipe var(--bi-wipe) cubic-bezier(0.65, 0, 0.35, 1) var(--bi-wipe-at) both,
-      bi-fade var(--bi-fade) linear var(--bi-fade-at) both;
+    /* 剪幕只管裁切（clip-path）；淡出归 .bi 管（opacity）⇒ 仍是两个元素各管一个属性 */
+    animation: bi-wipe var(--bi-wipe) cubic-bezier(0.65, 0, 0.35, 1) var(--bi-wipe-at) both;
   }
   @keyframes bi-wipe {
     from { clip-path: inset(0 0 0 0); }
