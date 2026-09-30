@@ -729,25 +729,63 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     /* ★ 2026-09-30：暗角（vignette）挪到内层 .rh-grid__svg —— 本层现在专职做
        「开场揭幕时线从两端向中间被画出来」的那层遮罩，两层遮罩套在一起才是最终形。 */
   }
-  /* ★ 开场揭幕：整片竖线从**两端向中间**生长出来（对应 wodniack 的 `stagger.from:"edges"`）。
-     做法是两层纯色遮罩各占半宽，从 0% 长到 50% —— mask-size 是可插值的，不依赖 @property。
-     ★ 只在 html.boot-on 且非 mini 时挂；摘掉 .boot-on（skip / 结束）后无遮罩 ⇒ 完整可见。
-     与上游的区别：上游是给 160 条 path 逐条挂 drawSVG（他必须逐条画，因为是曲线）；
-     我们的线是**竖直直线**，一层横向遮罩就能得到同样的"从外向内"错落，代价是一行 CSS。 */
-  :global(html.boot-on:not(.boot-mini)) .rh-grid {
-    -webkit-mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
-    mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
-    -webkit-mask-position: left center, right center;
-    mask-position: left center, right center;
-    -webkit-mask-repeat: no-repeat, no-repeat;
-    mask-repeat: no-repeat, no-repeat;
-    -webkit-mask-size: 0% 100%, 0% 100%;
-    mask-size: 0% 100%, 0% 100%;
-    animation: rh-reveal 1200ms var(--ease) 4000ms both;
+  /* ★★ 开场揭幕 = **首屏这批线自己**（2026-09-30 第八版，站主要「线正好接上」）。
+     第七版这里是两层 mask 让线"从两端向中间被画出来"，而开场另有一套 96 条线 ——
+     两套线的列距/高度/明暗全不一样，遮罩撤走时读作"换了一批线"。现在没有第二套线了。
+
+     动画的形状：每条线从「自己的列位 ⋯ 中间一条线」长到满高，同时从 ∞ 上的采样点飞回列位。
+       · scaleY 压到 .003 ⇒ 每条只剩 ~3px 高一截，而它们横向仍展开 ±32px（Perlin 摆幅）
+         ⇒ 14px 一列互相交叠成一整条**横线** —— 正是幕布收拢到中间时那一条的位置。
+       · transform-box: fill-box ⇒ 50% 50% 是这条线自己的包围盒中心（都是满高 ⇒ 同一个中线），
+         scaleY 才是"从中间向两头长开"。不用 view-box：它在老 Safari 上支持面更窄。
+       · --dx0 的算法写在 CSS 里（不是 JS）：min(23vw,260px) 就是 .bi-mark 宽度
+         min(46vw,520px) 的一半 —— 两个数必须同步，放一起才看得出来。 */
+  /* ★ 幕布收成一条线的那一刻，这片线**已经是完整亮度**了（from 就是 .58/.9）——
+     不然会出现"幕布那条线没了，再淡入一条新的线"，接不上。
+     整片线从亮到暗（.58 → .22）走完揭幕全程：内容上来时它自己退到背景去。 */
+  :global(html.boot-on) .rh-grid {
+    animation: rh-field var(--bi-bloom) linear var(--bi-bloom-at) both;
   }
-  @keyframes rh-reveal {
-    from { -webkit-mask-size: 0% 100%, 0% 100%; mask-size: 0% 100%, 0% 100%; }
-    to { -webkit-mask-size: 50% 100%, 50% 100%; mask-size: 50% 100%, 50% 100%; }
+  @keyframes rh-field {
+    from { opacity: 0.58; }
+    to { opacity: 0.22; }
+  }
+  :global(html.boot-on) .rh-grid :global(path) {
+    /* ★★ 必须是 view-box（= 整个 SVG 的中心），**不能**用 fill-box：
+       fill-box 的原点是"这条 path 自己的包围盒中心"，而每条线的 Perlin 位移会把 bbox
+       整体上下挪 ±16px ⇒ 104 条线各按自己的中心塌缩，塌成一条 ~32px 宽的带，不是一条线。
+       实测（fill-box）：塌缩后 y=371–373，而幕布收拢的位置是视口中心 360 —— 差 11px。
+       view-box 让所有线都绕**同一条中线**塌缩 ⇒ 与幕布收拢到的那条线严丝合缝。
+       （兼容性：view-box 也是 SVG 子元素 transform-origin 的历史行为，老 WebKit 同样是
+         "相对最近的 SVG 视口" ⇒ 不支持该关键字时结果一样，不会退化。） */
+    transform-box: view-box;
+    transform-origin: 50% 50%;
+    /* 缓动是 ease-in-out（不是 --ease 那条"起步极快"的）：
+       起步慢，那条线才会在观众眼前**停留一下**再炸开；用 --ease 的话 25% 处已经长完 85%，
+       生长全程都躲在幕布后面（实测踩到过）。 */
+    animation: rh-bloom var(--bi-bloom) cubic-bezier(0.65, 0, 0.35, 1)
+      calc(var(--bi-bloom-at) + var(--st, 0ms) * var(--bi-k)) both;
+  }
+  /* ★ 顺序是**横向**在前、**竖向**在后，而且必须分开：
+       0 → 45%    还在 ∞ 那撮采样点上（扁的）→ 横向散开到自己该在的列位
+                   ⇒ 幕布收成那条线之后，它先"横向拉长"成整屏一条线
+       45% → 100% 竖向长成满高（按 --st 从两端向中间错峰）
+     为什么顺序是这个、为什么不能合并成一次变形 —— 两个都是实测出来的：
+       · 扁的时候横向散开：整屏一条**干净的线**（这是最要紧的那一帧）。
+       · 长高的时候横向散开：104 条**波浪线**在同一小段高度里互相交叠 ⇒ 一坨摩尔纹
+         （实测 3300ms 是一整条模糊的梭形，不像线）。
+       · 两者同时跑：上面两条都占 ⇒ 中段直接糊掉。
+     ⇒ 竖向那一段要短（--bi-bloom 的 55%），"糊"的窗口只有 ~180ms，一闪就过去了。 */
+  @keyframes rh-bloom {
+    from {
+      opacity: 0.9;
+      transform: translateX(calc(50vw + var(--k, 0) * min(23vw, 260px) - var(--x, 0px))) scaleY(0.003);
+    }
+    45% {
+      opacity: 0.88;
+      transform: translateX(0) scaleY(0.004);
+    }
+    to { opacity: 0.62; transform: none; }
   }
   .rh-grid__svg {
     position: absolute;
@@ -976,18 +1014,29 @@ const titleLines: { ch: string; i: number }[][] = (() => {
         首屏内容默认就是终态、完整可读。绝不写成"默认藏起来、靠 JS 放出来"
         （上游 wodniack.dev 就是整站 SSR `opacity:0` 靠 JS 点亮，动画一丢内容永久不可见 ——
           那正是本仓 2026-09-30 第六轮修掉的 bug 类型）。
-     ★ 三段故意与遮罩重叠：遮罩 5300 ms 才撤，而揭帘 3550–4500、竖线 4000–5200、
-        逐字 3850–4970 ⇒ 观感是"遮罩打开的同时首屏正在成形"，不是"揭幕完再放一段"。 */
+     ★ 四个时刻全部走 tokens.css 的 --bi-*（第八版：时间轴只有一处定义，覆盖层与首屏共用）。
+     ★ 几段故意重叠：幕布 2400 收完，而线长到 3850、页头 2450–3070、揭帘 3150–4100、
+       逐字 3400–4550 ⇒ 观感是"幕布收拢的同时线在长、内容在成形"，不是"揭幕完再放一段"。 */
+  /* 页头（字标 + 导航）：幕布从上边缘先揭开它 ⇒ 不给门控就会**闪一下**。
+     只动 opacity、不动 transform —— .topbar 里有抽屉（NavDrawer），给它 transform 会
+     让它变成 fixed 后代的包含块，那是另一个坑。 */
+  :global(html.boot-on:not(.boot-mini)) .topbar {
+    animation: topbar-in 620ms var(--ease) calc(var(--bi-copy-at) - 700ms) backwards;
+  }
+  @keyframes topbar-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
   :global(html.boot-on:not(.boot-mini)) .band-copy {
-    animation: copy-veil 950ms cubic-bezier(0.65, 0, 0.35, 1) 3550ms both;
+    animation: copy-veil var(--bi-copy) cubic-bezier(0.65, 0, 0.35, 1) var(--bi-copy-at) both;
   }
   @keyframes copy-veil {
     from { clip-path: inset(0 0 100% 0); }
     to { clip-path: inset(0 0 0 0); }
   }
   :global(html.boot-on:not(.boot-mini)) .display .dch {
-    animation: ch-rise 640ms var(--ease) both;
-    animation-delay: calc(3850ms + var(--i, 0) * 30ms);
+    animation: ch-rise var(--bi-ch) var(--ease) both;
+    animation-delay: calc(var(--bi-ch-at) + var(--i, 0) * var(--bi-ch-step));
   }
   @keyframes ch-rise {
     from { opacity: 0; transform: translateY(0.6em); }

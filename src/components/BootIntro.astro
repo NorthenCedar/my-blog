@@ -1,71 +1,66 @@
 ---
 /**
- * 首页开场动画 · 覆盖层（2026-09-30 第七个版本：**方向 B「∞ 落笔 → 崩解成线 → 收束揭幕」**）
+ * 首页开场动画 · 覆盖层（2026-09-30 第八版：**开场那批线就是首屏那批线**）
  *
- * ── 为什么整份重写（站主 2026-09-30 拍板）──────────────────────────────────
- *   上一版是「照着上游 RhineLabUI 的 25fps 原片逐帧复刻」的产物：20.16 s / 六段叙事
- *   （ACCESS 打字 → 品牌三行 → ∞ 描边 → 身份验证 → 权限扫描 → 欢迎段），
- *   专用资产 2831 行（boot-tracks 915 + boot-css 619 + boot.css 57 KB + 两个测试 + 一个校验脚本）。
- *   站主要的是「5 秒内、丝滑、有印象、符合本站视觉」，并且明确说可以**摒弃冷静机器感**。
- *   ⇒ 逐帧版无法剪枝（六段入场互相咬合），只能重写；顺带把这笔技术债一次还掉。
+ * ── 第八版改了什么（站主 2026-09-30 原话）──────────────────────────────────
+ *   「我想要的是像 wodniack.dev 他一样，开屏动画出现的线正好可以接上主页的线」
  *
- * ── 新时间轴（总长 --dur-boot = 5300 ms 硬上限，含退场）────────────────────
+ *   第七版是**两套线**：覆盖层里 96 条（列距 13.1px、颜色 #e9efe9、居中一段、
+ *   元素 opacity .5），首屏 #rhGrid 另外 104 条（14px、#dedede、满高、.62 × 容器 .22）。
+ *   实测（`_probe/cdp-lines.mjs`，1258×704）五轴全对不上：
+ *     条数 96 / 104 · 列距 13.1 / 14px · 可见段高 199–492px / 838–893px ·
+ *     颜色 #e9efe9 / #dedede · 有效不透明度 .5 / .136
+ *   列位只是**碰巧**近似重合（100vw/96 ≈ 14px，两侧相位也刚好对上）—— 不是设计。
+ *   ⇒ 遮罩撤走那一刻，人眼读到的是"换了一批线"，不是"同一批线接上"。
  *
- *   段落        起(ms)  时长   内容
- *   ────────────────────────────────────────────────────────────────────────
- *   落笔        180     1150   ∞ 轮廓自缺口端起笔、一笔画完（dashoffset 1 → 0）
- *   崩解        1400    1350   96 条竖线从 ∞ 上的采样点（--k）起飞、展开到各自列位（--x1）
- *   收束        3000    1100   整片竖线向中央收拢成一条横线（scaleY → .008）
- *   剪幕        4150    450    遮罩 clip-path 上下对开收成中央一条线
- *   退场        4600    700    残余淡出；5300 ms 时 clock 的 animationend 触发 close()
+ *   参考站的真相（已扒过源码，别再凭印象说）：它开场画的线**就是**首屏那批 ——
+ *     intro(){
+ *       const waves = this.el.querySelector('a-waves');
+ *       const lines = waves.querySelectorAll('.js-line');        // ← 首屏的同一个 DOM
+ *       tl.fromTo(lines, { drawSVG: '100% 100%' }, { drawSVG: '0% 100%', duration: 3,
+ *          ease: 'expo.out', stagger: { amount: .5, from: 'edges' } }, .5);
+ *     }
+ *   它那个 fixed 面板（`.site-intro`）里只有 logo 的 5 竖 3 横 + 三条边框，**一根线都没有**，
+ *   而且 tween 第一件事就是把面板背景设成 `transparent`。⇒ 对齐问题在源头被消掉了：
+ *   不是"两套线对齐"，是**根本没有第二套线**。
  *
- *   ★ 三段时间**故意重叠**（崩解尾巴压在收束头上、收束尾巴压在剪幕头上）——
- *     这是「丝滑」的第一因：观感是同一个东西在变形，不是「一段演完再演下一段」。
- *   ★ 全程只有 transform / opacity / clip-path / stroke-dashoffset —— 不碰 layout。
+ *   本版照这个思路：**删掉覆盖层里那 96 条**，把揭幕动画搬到 `#rhGrid` 那批 path 自己身上
+ *   —— 见 `src/pages/index.astro` 的 `rh-field` / `rh-bloom`，以及 `src/scripts/rhgrid.ts`
+ *   在建列时落的 `--x` / `--dx0` / `--st`。覆盖层只剩：暗场幕布 + ∞ 笔画 + 跳过 + 时长钟。
  *
- * ── 三条硬约束（别在改动时破坏）─────────────────────────────────────────
+ * ── 时间轴（整条在 src/styles/tokens.css 的 --bi-*，**不在这里**）────────────
+ *   落笔 180     ∞ 一笔画完（stroke-dashoffset 1 → 0）
+ *   溶解 1300    ∞ 淡出（与剪幕重叠）
+ *   剪幕 1450    暗场幕布上下对开、收成中间一条线 —— **那条线正是首屏的线出生的地方**
+ *   揭幕 1500    首屏自己的线：从"中间一条线"长成满高，并从 ∞ 上的采样点横向飞回自己的列位
+ *   （揭帘 2900 / 逐字 3150 在 index.astro；几段故意重叠 ⇒ 观感是一个东西在变形）
+ *   ★ 时间轴放 token 而不是放这里：首屏（index.astro）现在也要消费它。放在组件里会造成
+ *     「index.astro 依赖兄弟组件的 <style>」这种隐形耦合。
+ *
+ * ── 三条硬约束（别在改动时破坏）───────────────────────────────────────────
  *   1. **方向是 fail-safe**：覆盖层默认 `display:none`，只有 JS 判定"该播"才挂 `.boot-on`。
  *      反向（默认显示、靠 JS 隐藏）会在无 JS / JS 报错时把整站盖死。
- *   2. **绝不效仿上游的「整站 SSR opacity:0」**：上游把首页写成 `style="opacity:0"` 靠 JS 点亮，
- *      动画一丢内容就永久不可见 —— 这正是本仓 2026-09-30 第六轮修掉的 bug 类型。
- *      这里反过来：**内容默认可见**，入场动画只是"提前把它藏起来"、再用 CSS 终态放出来。
+ *   2. **绝不效仿上游的「整站 SSR opacity:0」**：上游把首页写成靠 JS 点亮，动画一丢内容就
+ *      永久不可见 —— 这正是本仓 2026-09-30 第六轮修掉的 bug 类型。这里反过来：
+ *      **内容默认可见**，入场动画只是"提前把它藏起来"、再用 CSS 终态放出来。
  *   3. 装饰子树 `aria-hidden="true"`，而 skip 按钮是它的**兄弟** ——
  *      `aria-hidden` 子树里不许有可聚焦元素。skip 的类名是 `.bi-skip`（**不是** `.skip`，
  *      base.css 已占了 `.skip` 当"跳到正文"，照抄会继承 `left:-9999px`）。
  *
- * ── 手机（≤767px）──────────────────────────────────────────────────────
- *   不取消，改成一版 1.5 s 的极简版：只做「∞ 落笔 + 线一闪 + 收束」，不做字标、不揭帘。
- *   实现方式是**同一套关键帧** + 另一组 `--bi-*` 时长变量（见 :global(html.boot-mini)）——
- *   不复制一份 CSS，也就不会两版各自跑偏。
- *   ★ 首屏的揭帘 / 逐字只在**非 mini** 下跑（`html.boot-on:not(.boot-mini)`）。
+ * ── 层叠：一个元素只干一件事（这样"淡出到谁"永远不会搞错）────────────────
+ *   `.bi`          fixed 定位 + overflow:hidden —— **自己不画任何东西**（透明）
+ *   `.bi-curtain`  暗场幕布（背景渐变 + 底部绿洗色）；剪幕的 clip-path 挂**这一层**
+ *   `.bi-field`    ∞ 笔画（在幕布之上）；aria-hidden
+ *   `.bi-skip`     **在幕布之外** —— 剪幕裁不到它，它自己按时间淡出
+ *   `.bi-clock`    0 尺寸时长钟，只用来触发一次 animationend
+ *   ★ 第七版的教训：剪幕挂在 `.bi-stage`（内容层）上，而幕布色在 `.bi`（父层）上 ⇒
+ *     "剪幕"裁的是内容、不透明底色一直留到最后，撤走时硬切 ⇒ 最后 700ms 一整屏墨绿。
+ *     现在**色和裁切在同一层**，从结构上不可能再错。
+ *
+ * ── 手机（≤767px）────────────────────────────────────────────────────────
+ *   照播，1.5 s 极简版：同一套关键帧 + tokens.css 里 `html.boot-mini` 覆写的一组 `--bi-*`
+ *   （错峰倍率 `--bi-k` 压到 0.02）。不复制一份 CSS ⇒ 两版不会各自跑偏。
  */
-// 竖线条数：与首屏 #rhGrid 的列距同量级（1280 视口下首屏约 105 条 / 12.2px 一列，
-// 这里 96 条 / 12.8px 一列）⇒ 遮罩撤走时"线密度"几乎不变，人眼读作同一个东西换了密度。
-const N = 96;
-const TAU = Math.PI * 2;
-
-/**
- * `--k`：这条线在 ∞ 路径上的**横向位置**（-1..1，双纽线 x = cos θ）。
- * 崩解的起始 x 就是它 —— 保住血缘：观众能认出"这是刚才那个 ∞ 散开的"，
- * 而不是一堆线凭空出现。采样按 i 递增 ⇒ 顺序即 ∞ 的描绘顺序。
- * `--x1`：最终列位（vw，遮罩期间没有滚动条 ⇒ 100vw 就是视口宽，与 .bi-stage 一致）。
- * `--d` / `--g`：崩解 / 收束的错峰延迟，**从两端向中间**（m = min(i, N-1-i)），
- *   与首屏 #rhGrid 的"从两端向中间被画出来"同向 —— 方向不打架才是"顺"的第一因。
- * `--h`：竖线高度（%），两个不同频率的正弦叠加造"不规则"；收束时按同一比例缩到看不见。
- */
-const lines = Array.from({ length: N }, (_, i) => {
-  const k = Math.cos((TAU * i) / N);
-  const h = Math.min(72, Math.max(26, 34 + 30 * (0.5 + 0.5 * Math.sin(i * 2.3999)) + 6 * Math.sin(i * 0.7)));
-  const m = Math.min(i, N - 1 - i);
-  return {
-    x1: (((i + 0.5) / N) * 100).toFixed(3),
-    k: k.toFixed(4),
-    h: h.toFixed(1),
-    d: `${m * 7}ms`,
-    g: `${m * 5}ms`,
-  };
-});
-
 /**
  * ∞ 的单段连续轮廓（起点落在印刷缺口那一端）。
  * ★ 为什么必须**单段**：dash 图案在子路径边界上不能可靠环绕，两段路径会让第二段起点附近
@@ -76,29 +71,24 @@ const MARK = 'M19.04 2.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4c-2-2.67-4-4-6-4a4 4
 ---
 
 <div class="bi" data-boot-overlay>
-  {/* .bi-stage 是**唯一**被剪幕裁切的东西 —— skip 按钮放在它里面，剪幕一开始
-      （4150 ms）它就随裁切一起不可点，那正是想要的：开场已经结束了。 */}
-  <div class="bi-stage">
-    <div class="bi-field" aria-hidden="true">
-      <div class="bi-wash"></div>
-
-      {/* 竖线：由 96 个 <i> 组成，位置/高度/错峰全部走内联自定义属性（零 JS） */}
-      <div class="bi-lines">
-        {lines.map((l) => (
-          <i class="bi-line" style={`--x1:${l.x1}vw;--k:${l.k};--h:${l.h}%;--d:${l.d};--g:${l.g}`} />
-        ))}
-      </div>
-
-      <svg class="bi-mark" viewBox="0 0 24 12" aria-hidden="true">
-        <path class="bi-mark-path" pathLength="1" d={MARK} />
-      </svg>
-    </div>
-
-    <p class="bi-hint" role="status">开场动画播放中。按 Escape 或空格跳过。</p>
-    <button class="bi-skip" type="button">跳过</button>
-    {/* 时长钟：0 尺寸，只用来在总时长走完时触发一次 animationend（子元素事件会冒泡，必须认 target） */}
-    <span class="bi-clock"></span>
+  {/* 幕布：唯一承载不透明底色的层 ⇒ 剪幕就裁它。绿洗色是它的子元素（同样被裁掉，
+      不会像第七版那样"幕布没了、洗色还在"）。 */}
+  <div class="bi-curtain">
+    <div class="bi-wash"></div>
   </div>
+
+  {/* ∞ 笔画：在幕布**之上**（DOM 在后的非定位元素盖住前者），所以剪幕裁不到它，
+      它按自己的溶解曲线淡出 —— 第七版里它被剪幕拦腰切片。 */}
+  <div class="bi-field" aria-hidden="true">
+    <svg class="bi-mark" viewBox="0 0 24 12" aria-hidden="true">
+      <path class="bi-mark-path" pathLength="1" d={MARK} />
+    </svg>
+  </div>
+
+  <p class="bi-hint" role="status">开场动画播放中。按 Escape 或空格跳过。</p>
+  <button class="bi-skip" type="button">跳过</button>
+  {/* 时长钟：0 尺寸，只用来在总时长走完时触发一次 animationend（子元素事件会冒泡，必须认 target） */}
+  <span class="bi-clock"></span>
 </div>
 
 {/* ===== 开场行为（目标 <900 B）=====
@@ -107,6 +97,8 @@ const MARK = 'M19.04 2.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4c-2-2.67-4-4-6-4a4 4
      ③ 收尾时**先**把焦点交回主标题、再移除覆盖层（反过来焦点会掉到 <body>）
      ★ 空格必须 preventDefault —— 默认行为是向下滚页；而"空格只在遮罩还在时劫持"
        靠的是 close() 之后本监听器随覆盖层一起失效（overlay.remove() + boot-on 摘掉）。
+     ★ skip 按钮在 2900ms 起自己淡出（见 .bi-skip 的 bi-skip-out），但 Esc / 空格的
+       监听器**一直有效到 close()** —— 键盘用户不会因为按钮先退场而失去跳过能力。
 */}
 <script>
   (() => {
@@ -152,29 +144,9 @@ const MARK = 'M19.04 2.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4c-2-2.67-4-4-6-4a4 4
 
 <style>
   /* ============================================================================
-     开场覆盖层样式（本组件唯一的一份；旧的 boot.css 57 KB 生成物已删除）
-     ★ 时长**只有**这一组 --bi-* 变量是"设计决定"；各段的缓动与几何都在下面。
+     开场覆盖层样式（本组件唯一的一份）。时间轴不在这里 —— 在 src/styles/tokens.css
+     的 --bi-*（首屏也要消费，见文件头注释）。
      ============================================================================ */
-  :global(html) {
-    /* 全量版：5300 ms（站主 2026-09-30 定的硬上限，参考站 wodniack.dev 实测 5.0 s） */
-    --bi-total: var(--dur-boot);
-    --bi-draw-at: 180ms;   --bi-draw: 1150ms;   /* 落笔 */
-    --bi-scat-at: 1400ms;  --bi-scat: 1350ms;   /* 崩解 */
-    --bi-gath-at: 3000ms;  --bi-gath: 1100ms;   /* 收束 */
-    --bi-wipe-at: 4150ms;  --bi-wipe: 450ms;    /* 剪幕 */
-    --bi-fade-at: 4600ms;  --bi-fade: 700ms;    /* 退场 */
-    --bi-k: 1;                                   /* 错峰倍率（手机极简版压到 0.02） */
-  }
-  /* 手机极简版：1.5 s，只做「落笔 + 线一闪 + 收束」，不做剪幕后的任何东西 */
-  :global(html.boot-mini) {
-    --bi-total: var(--dur-boot-mini);
-    --bi-draw-at: 60ms;    --bi-draw: 620ms;
-    --bi-scat-at: 620ms;   --bi-scat: 480ms;
-    --bi-gath-at: 1050ms;  --bi-gath: 300ms;
-    --bi-wipe-at: 1150ms;  --bi-wipe: 180ms;
-    --bi-fade-at: 1200ms;  --bi-fade: 300ms;
-    --bi-k: 0.02;
-  }
 
   /* ---------- 门控：默认不显示 ---------- */
   :global(html:not(.boot-on)) [data-boot-overlay] { display: none; }
@@ -183,41 +155,29 @@ const MARK = 'M19.04 2.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4c-2-2.67-4-4-6-4a4 4
     [data-boot-overlay] { display: none !important; }
   }
 
+  /* 定位壳：故意**不画任何东西** —— 底色归 .bi-curtain，剪幕才裁得到它 */
   .bi {
     position: fixed;
     inset: 0;
     z-index: 60;
     overflow: hidden;
-    /* 深墨绿空场：与首屏 .band 同一族色（撤走时不出现色相跳变） */
-    background: radial-gradient(120% 80% at 12% 0%, #2d7d4626 0%, transparent 58%),
-      linear-gradient(178deg, #090c0c 0%, #0e1512 46%, #141d18 100%);
-    /* ★ 退场淡出必须挂在**根层** .bi 上，不能挂 .bi-stage ——
-       .bi 自己那层背景是不透明的：只让 stage 淡出的话，露出来的是这层背景（一整屏墨绿），
-       要等 5300 ms 把 .bi 整个从 DOM 移除才**硬切**到首屏 ⇒ 中间那 700 ms 是黑屏。
-       （5000 ms 截图实测：一片墨绿，看不到首屏。） */
-    animation: bi-fade var(--bi-fade) linear var(--bi-fade-at) both;
   }
-  .bi-stage {
+
+  /* ---------- 幕布 + 剪幕 ---------- */
+  .bi-curtain {
     position: absolute;
     inset: 0;
-    /* 剪幕只管裁切（clip-path）；淡出归 .bi 管（opacity）⇒ 仍是两个元素各管一个属性 */
+    /* 深墨绿空场：与首屏 .band 同一族色（收成一条线时不出现色相跳变） */
+    background: radial-gradient(120% 80% at 12% 0%, #2d7d4626 0%, transparent 58%),
+      linear-gradient(178deg, #090c0c 0%, #0e1512 46%, #141d18 100%);
+    /* 剪幕：上下对开、最后收成中间一条线。那一刻首屏的线正好也是"中间一条线" ⇒ 接上。 */
     animation: bi-wipe var(--bi-wipe) cubic-bezier(0.65, 0, 0.35, 1) var(--bi-wipe-at) both;
   }
   @keyframes bi-wipe {
     from { clip-path: inset(0 0 0 0); }
     to { clip-path: inset(50% 0 50% 0); }
   }
-  @keyframes bi-fade {
-    from { opacity: 1; }
-    to { opacity: 0; }
-  }
-
-  .bi-field {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-  /* 底部一层极淡绿洗色，呼应首页 .bg-wash */
+  /* 底部一层极淡绿洗色，呼应首页 .bg-wash（是幕布的子元素 ⇒ 随幕布一起被裁掉） */
   .bi-wash {
     position: absolute;
     left: 0;
@@ -227,7 +187,14 @@ const MARK = 'M19.04 2.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4c-2-2.67-4-4-6-4a4 4
     background: linear-gradient(0deg, #2d7d4622, transparent);
   }
 
-  /* ---------- 1. ∞ 落笔 ---------- */
+  /* ---------- 装饰层（∞ 在其上）---------- */
+  .bi-field {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  /* ---------- 1. ∞ 落笔 → 溶解 ---------- */
   .bi-mark {
     position: absolute;
     left: 50%;
@@ -236,7 +203,8 @@ const MARK = 'M19.04 2.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4c-2-2.67-4-4-6-4a4 4
     aspect-ratio: 2 / 1;
     color: var(--logo-ink);
     filter: drop-shadow(0 0 18px #8fe0b040);
-    animation: bi-mark-out var(--bi-scat) cubic-bezier(0.5, 0, 0.75, 0) var(--bi-scat-at) both;
+    /* 溶解的 translate(-50%,-50%) 走动画的 both 填充，元素自己不写 transform ⇒ 不打架 */
+    animation: bi-mark-out var(--bi-mark-out) cubic-bezier(0.5, 0, 0.75, 0) var(--bi-mark-out-at) both;
   }
   @keyframes bi-mark-out {
     from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
@@ -258,56 +226,6 @@ const MARK = 'M19.04 2.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4c-2-2.67-4-4-6-4a4 4
     to { stroke-dashoffset: 0; }
   }
 
-  /* ---------- 2/3. 竖线：崩解展开 → 收束成线 ---------- */
-  .bi-lines {
-    position: absolute;
-    inset: 0;
-    color: var(--logo-ink);
-    opacity: 0.5;
-  }
-  .bi-line {
-    position: absolute;
-    top: 0;
-    left: var(--x1);
-    width: 1px;
-    height: 100%;
-    margin-left: -0.5px;
-    opacity: 0;
-    /* 外层管「横向展开」（transform + opacity）；竖向收束交给伪元素 ⇒ 属性不打架 */
-    animation: bi-scatter var(--bi-scat) cubic-bezier(0.16, 1, 0.3, 1)
-      calc(var(--bi-scat-at) + var(--d) * var(--bi-k)) both;
-  }
-  @keyframes bi-scatter {
-    from {
-      opacity: 0;
-      /* 起点 = 这条线在 ∞ 上的采样点（--k × ∞ 的半宽）；min(23vw,260px) 与 .bi-mark 的 46vw/520px 对应 */
-      transform: translate3d(calc(50vw - var(--x1) + var(--k) * min(23vw, 260px)), 0, 0);
-    }
-    22% { opacity: 0.78; }
-    to {
-      opacity: 1;
-      transform: translate3d(0, 0, 0);
-    }
-  }
-  /* 竖线本体放在伪元素上：96 个元素干活，DOM 只要一半 */
-  .bi-line::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    width: 100%;
-    height: var(--h);
-    top: calc(50% - var(--h) / 2);
-    background: currentColor;
-    transform-origin: 50% 50%;
-    animation: bi-gather var(--bi-gath) cubic-bezier(0.65, 0, 0.35, 1)
-      calc(var(--bi-gath-at) + var(--g) * var(--bi-k)) both;
-  }
-  @keyframes bi-gather {
-    from { transform: scaleY(1); }
-    /* 不同 --h 乘同一比例后落在 0.2%–0.6% 视口高（≈2–5px）⇒ 读作"一条横线" */
-    to { transform: scaleY(0.008); }
-  }
-
   /* ---------- skip / 提示 / 时长钟 ---------- */
   .bi-skip {
     position: absolute;
@@ -321,6 +239,14 @@ const MARK = 'M19.04 2.14a4 4 0 0 0-1.04-.14c-2 0-4 1.33-6 4c-2-2.67-4-4-6-4a4 4
     background: none;
     border: 0;
     opacity: 0.5;
+    /* 与揭帘同时退场 —— 首屏内容一上来，幕布期的控件就该消失，别在页面上飘着。
+       ★ 只写 forwards、不写 both：延迟期不填充 ⇒ :hover 的 opacity:1 照常生效
+         （both 会在整个延迟期用 from 按住 opacity，把 hover 反馈压死）。 */
+    animation: bi-skip-out 320ms linear var(--bi-copy-at) forwards;
+  }
+  @keyframes bi-skip-out {
+    from { opacity: 0.5; }
+    to { opacity: 0; pointer-events: none; }
   }
   .bi-skip:hover,
   .bi-skip:focus-visible { opacity: 1; }

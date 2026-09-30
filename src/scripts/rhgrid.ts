@@ -24,6 +24,17 @@
 //
 // 性能：1440 宽 → 116 条 path，每帧只改 d 属性（不增删 DOM）。
 // 出视口停帧；reduced-motion 只画一帧静态。
+//
+// ---------------------------------------------------------------------------
+// ★ 2026-09-30 第八版：这批线**同时就是开场动画的线**
+//
+//   站主原话：「像 wodniack.dev 一样，开屏动画出现的线正好可以接上主页的线」。
+//   第七版是覆盖层自带 96 条 + 首屏 104 条，实测五轴全对不上（列距 / 高度 / 颜色 /
+//   明度 / 条数）⇒ 遮罩撤走时读作"换了一批线"。参考站的做法是**根本没有第二套线**：
+//   他开场的 drawSVG 就画在首屏那批 `.js-line` 上。
+//
+//   所以这里多落三个内联变量（见 build() 里的注释），把"这批线自己的列位与 ∞ 采样"
+//   交给 CSS 当动画参数用。draw() 每帧只写 d，**不碰 transform** ⇒ 两者不打架。
 
 const host = document.getElementById('rhGrid');
 const svg = document.getElementById('rhGridSvg');
@@ -123,9 +134,10 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
     const frag = document.createDocumentFragment();
     for (let c = 0; c <= nc; c++) {
       const col = [];
+      const cx = offX + GAP_X * c;
       for (let g = 0; g <= nr; g++) {
         col.push({
-          x: offX + GAP_X * c,
+          x: cx,
           y: offY + GAP_Y * g,
           wave: { x: 0, y: 0 },
           cursor: { x: 0, y: 0, vx: 0, vy: 0 },
@@ -133,6 +145,23 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
       }
       const f = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       f.setAttribute('class', 'rh-grid__path');
+      /* ★ 开场揭幕的三个内联变量（2026-09-30 第八版）—— 这里**只落数据，不做任何动画协调**，
+         动画全在 index.astro 的 @keyframes rh-bloom 里。这就是"开场那批线 = 首屏这批线"
+         的实现方式：同一批 DOM 拿自己的列位/采样点当动画参数，就没有"两批线对不齐"这回事。
+           --x    这条线的列位（px，= SVG 的 user unit）
+           --k    它在 ∞ 上的横向采样点（双纽线 x = cos θ）：崩解起点 = 中心 + --k × ∞ 半宽。
+                  顺序按列号递增 ⇒ 就是 ∞ 的描绘顺序，观众认得出"这是刚才那个 ∞ 散开的"。
+           --st   错峰延迟（**从两端向中间**，同 wodniack 的 stagger.from:'edges'）：
+                  两端的线先起飞、中间的线殿后，观感是"整片线向中间收拢着长起来"。 */
+      const k = Math.cos((Math.PI * 2 * c) / (nc || 1));
+      // ★ --x 必须带 px：CSS 那边是 calc(50vw + … - var(--x)) —— 少个单位就成了
+      //   "长度减纯数字"，整条 transform 声明在计算值阶段作废 ⇒ 动画恒为 transform:none。
+      //   （2026-09-30 实测踩到：所有读数正常，只有 scaleY 起飞那一下没了。）
+      f.style.setProperty('--x', cx.toFixed(1) + 'px');
+      f.style.setProperty('--k', k.toFixed(4));
+      // 错峰步长 4ms（共 nc/2 ≈ 52 档 ⇒ 最多 ~208ms）：太大时"还在飞的"和"已经长的"会同时
+      // 存在，两批线互相插穿 ⇒ 揭幕中段出现一团乱麻（实测 8ms 时很明显）。
+      f.style.setProperty('--st', Math.min(c, nc - c) * 4 + 'ms');
       frag.appendChild(f);
       paths.push(f);
       cols.push(col);

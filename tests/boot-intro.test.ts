@@ -3,18 +3,21 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * 首页开场动画的**静态契约**（2026-09-30 第七版整份重写后）。
+ * 首页开场动画的**静态契约**（2026-09-30 第八版：开场那批线 = 首屏那批线）。
  *
  * 这一版与上一版的分工没变：浏览器级的三态 / 逐帧抽样属于 CDP 探针（`_probe/`，不入库），
  * 本文件守"不打开浏览器也能查"的那一半。
  *
  * ★ 为什么这组断言值得重写而不是删掉：旧版守的是"25fps 逐帧复刻没抄错"，
- *   新开场的价值全在**四条不可退让的性质**上，它们全都能静态查出来：
+ *   新开场的价值全在**五条不可退让的性质**上，它们全都能静态查出来：
  *     ① 门控方向 fail-safe（默认不显示）—— 反向会在无 JS / JS 报错时把整站盖死；
  *     ② 首屏内容**不许**被 CSS 默认藏起来 —— 上游 wodniack.dev 就是整站 SSR opacity:0
  *        靠 JS 点亮，动画一丢内容永久不可见（本仓第六轮修掉的 bug 类型）；
- *     ③ 总时长有硬上限（站主定 5.3 s）；
- *     ④ 揭幕的逐字拆分不许把屏幕阅读器坑掉。
+ *     ③ 总时长有硬上限（站主定 5.3 s），且靠 `--bi-total` 走完时钟 —— 别名一断，
+ *        时钟动画整条作废，遮罩只能等脚本里 8s 的兜底（实测多挂 3.5 秒）；
+ *     ④ 揭幕的逐字拆分不许把屏幕阅读器坑掉；
+ *     ⑤ ★ 开场**不许**再有自己的一套线：线只有首屏 #rhGrid 那批，且它们必须拿到
+ *        `--x/--k/--st`、绕 view-box 中心（不是各自 bbox）塌缩。
  *
  * 输出规矩（台账 21a5c66）：每条断言都要能反推出「验的是什么、实测多少」，禁止裸 PASS。
  */
@@ -87,20 +90,47 @@ describe('开场动画：源文件与 token', () => {
     expect(full, '--dur-boot 没解析出来').toBeGreaterThan(0);
     expect(full, '开场总长超过站主定的 5.3 s 硬上限').toBeLessThanOrEqual(5300);
     expect(mini, '手机极简版应当明显更短').toBeLessThan(full);
-    // 组件必须**引用** token，不许把 5300 抄成字面量散在各处
-    expect(SRC, '组件没引用 --dur-boot').toContain('var(--dur-boot)');
-    expect(SRC, '组件没引用 --dur-boot-mini').toContain('var(--dur-boot-mini)');
+    // 组件引用的是总时长别名，别名指向 token —— 不许把 5300 抄成字面量散在各处
+    expect(SRC, '组件没引用 --bi-total').toContain('var(--bi-total)');
+    expect(tokens, '--bi-total 没定义 ⇒ .bi-clock 的动画整条作废 ⇒ 时钟不跑，遮罩要等 8s 兜底才撤')
+      .toMatch(/--bi-total:\s*var\(--dur-boot\)/);
+    expect(tokens, '手机版没把 --bi-total 改成 --dur-boot-mini').toMatch(/--bi-total:\s*var\(--dur-boot-mini\)/);
   });
 
-  it('竖线：96 条，几何全部走内联自定义属性（零 JS 排布）', () => {
-    const n = (SRC.match(/const N = (\d+);/) ?? [])[1];
-    console.log(`判据 竖线 对象 BootIntro.astro 实测: N=${n} 条 · 每条带 --x1/--k/--h/--d/--g`);
-    expect(Number(n), '竖线条数').toBe(96);
-    for (const v of ['--x1', '--k', '--h', '--d', '--g']) {
-      expect(SRC, `内联样式里没写 ${v}`).toContain(`${v}:`);
+  it('开场**不再有自己的一套线**（第八版的核心不变量）', () => {
+    // 第七版是「覆盖层 96 条 + 首屏 104 条」，实测五轴全对不上（条数/列距/高度/颜色/明度）
+    // ⇒ 遮罩撤走时人眼读作"换了一批线"。第八版把揭幕搬到**首屏那批 path 自己身上**：
+    // rhgrid 落 --x/--k/--st，index.astro 出 rh-bloom。
+    // ★ 这条守的就是"别哪天又给覆盖层加回一套线"。
+    //   只看标记之后的部分 —— 文件头的注释本来就要讲这段历史。
+    const body = SRC.slice(SRC.indexOf('<div class="bi"'));
+    const legacy = (body.match(/bi-line|bi-lines|--x1/g) ?? []).length;
+    console.log(`判据 只有一套线 对象 BootIntro.astro 实测: 覆盖层里旧线相关符号 ${legacy} 处（应为 0）· ${body.length} 字节`);
+    expect(legacy, '覆盖层里又出现自己的一套竖线 —— 那就回到"两批线对不齐"了').toBe(0);
+
+    // 首屏那批线必须拿到三个动画参数（缺一个，动画会悄悄退化成不动的直线）
+    const grid = readFileSync('src/scripts/rhgrid.ts', 'utf8');
+    for (const v of ['--x', '--k', '--st']) {
+      expect(grid, `rhgrid 没落 ${v}`).toContain(`setProperty('${v}'`);
     }
-    // 崩解的起点取自 ∞ 上的采样点（保住血缘）—— k 必须是 cos 采样，不是随机数
-    expect(SRC, '崩解起点没走 ∞ 采样（--k 不是 cos）').toMatch(/Math\.cos\(\(TAU \* i\) \/ N\)/);
+    // ★ --x 必须带单位：CSS 那边是 calc(50vw + … − var(--x))，少个单位就是"长度减纯数字"
+    //   ⇒ 整条 transform 在计算值阶段作废 ⇒ 动画恒为 transform:none。
+    //   （2026-09-30 实测踩到：夹逼/时长/透明度读数全正常，只有"从采样点起飞"没了。）
+    expect(grid, '--x 没带 px ⇒ calc(长度 − 纯数字) 非法 ⇒ transform 整条作废')
+      .toMatch(/setProperty\('--x',[^\n]*\+\s*'px'\)/);
+    // 崩解起点取自 ∞ 上的采样点（保住"这是刚才那个 ∞ 散开的"血缘）：k 必须是 cos 采样
+    expect(grid, '崩解起点没走 ∞ 采样（--k 不是 cos）').toMatch(/Math\.cos\(\(Math\.PI \* 2 \* c\)/);
+
+    const page = readFileSync('src/pages/index.astro', 'utf8');
+    expect(page, '首页没出揭幕动画').toContain('@keyframes rh-bloom');
+    const body1 = ruleBody(page, ':global(html.boot-on) .rh-grid :global(path)');
+    console.log(`判据 揭幕宿主 对象 index.astro 实测: rh-bloom 挂在首屏 path 上 · ${body1.replace(/\s+/g, ' ').slice(0, 90)}`);
+    expect(body1, '揭幕动画没挂在首屏那批 path 上').toContain('rh-bloom');
+    // ★ transform-box 必须是 view-box：fill-box 是"每条线绕自己的包围盒中心"塌缩，
+    //   而 Perlin 位移会把 bbox 整体上下挪 ±16px ⇒ 104 条塌成 32px 宽的带，接不上幕布那条线。
+    //   实测（fill-box）y=371–373，幕布收拢在视口中心 360 —— 差 11px。
+    expect(body1, 'transform-box 不是 view-box ⇒ 塌缩出的线对不上幕布收拢的位置')
+      .toContain('transform-box: view-box');
   });
 
   it('装饰子树里没有任何文字（"摒弃冷静机器感"的硬判据）', () => {
@@ -143,7 +173,7 @@ describe.skipIf(!hasDist)('开场动画：产物契约', () => {
     const css = allCss();
     // ★ 这是本组最要紧的一条。判据是「**每一条**用到这些动效的选择器都必须带 html.boot-on」——
     //   只要有一条漏了，无 JS / reduced-motion / 已播的访客就会看到被藏起来或动不了的首屏。
-    const gated = ['ch-rise', 'copy-veil', 'rh-reveal'];
+    const gated = ['ch-rise', 'copy-veil', 'topbar-in', 'rh-field', 'rh-bloom'];
     for (const kf of gated) {
       const sels = selectorsWith(css, kf);
       expect(sels.length, `产物里没有任何规则用到 ${kf}`).toBeGreaterThan(0);
@@ -188,17 +218,17 @@ describe.skipIf(!hasDist)('开场动画：产物契约', () => {
     expect(open, '没切出装饰子树到按钮的那一段').toBeGreaterThan(0);
     expect(open - close, 'skip 按钮被包进了 aria-hidden 装饰子树').toBe(0);
     expect(html, 'skip 必须是真 button').toMatch(/<button[^>]*class="bi-skip"[^>]*type="button"/);
-    // 竖线在产物里也是 96 条
+    // 产物里覆盖层**一根线都没有**（线全部归首屏 #rhGrid，由 rhgrid.ts 运行时建）
     const n = (html.match(/class="bi-line"/g) ?? []).length;
-    console.log(`判据 竖线产物 对象 dist/index.html 实测: ${n} 条 · dch ${(html.match(/class="dch"/g) ?? []).length} 个`);
-    expect(n, '产物里的竖线条数').toBe(96);
+    console.log(`判据 线归属 产物 对象 dist/index.html 实测: 覆盖层 .bi-line ${n} 条（应为 0）· 逐字 .dch ${(html.match(/class="dch"/g) ?? []).length} 个`);
+    expect(n, '产物里覆盖层又有了自己的一套线 ⇒ 又会跟首屏那批对不齐').toBe(0);
   });
 
   it('9 组关键帧都在产物 CSS 里', () => {
     const css = allCss();
     const kfs = [
-      'bi-draw', 'bi-scatter', 'bi-gather', 'bi-wipe', 'bi-fade', 'bi-clock', // 覆盖层
-      'copy-veil', 'ch-rise', 'rh-reveal', // 首屏交接
+      'bi-draw', 'bi-mark-out', 'bi-wipe', 'bi-clock', // 覆盖层
+      'topbar-in', 'copy-veil', 'ch-rise', 'rh-field', 'rh-bloom', // 首屏交接
     ];
     const missing = kfs.filter((k) => !css.includes(`@keyframes ${k}`));
     console.log(`判据 关键帧 对象 产物 CSS 实测: ${kfs.length - missing.length}/${kfs.length} 就位`);
