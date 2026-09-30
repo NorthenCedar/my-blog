@@ -922,3 +922,9 @@ intro(){
 本地全量 **5725 ms**（`--dur-boot` 5750）、幕布 3687 ms 收拢（= 3400 + 挂载 248）、
 线在 3744 ms 开始横向散开、交接读数 `lines:104 / legacyNodes:0` 不变；
 `tests/boot-intro.test.ts` **9 passed**。
+
+线上：遮罩在 **7223 ms** 撤走（含约 1.5 s 加载），∞ 的 `dashoffset` 在 600 ms 内平滑走过 48%。
+★ **线上确认部署的判据要写构建后的形态**：esbuild 会把 `5750ms` 压成 `5.75s`、`2150ms` 压成
+`2.15s`（我第一遍拿 `bi-draw:2150ms` 去 grep，白等了 4 分钟）。实际产物里是这样：
+`--dur-boot:5.75s` / `--bi-draw:2.15s` / `--bi-draw-at:.18s`（都在 `_astro/Base.*.css`，
+不在 `index.*.css` —— 变量随 `:root` 走，别只查首页那份）。
