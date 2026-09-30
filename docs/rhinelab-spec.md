@@ -248,3 +248,23 @@
 3. **横向溢出的真凶不是刚改的元素** ⇒ 390 视口多出 12px，先怀疑 RhGrid 的 path，加两层 `overflow:hidden` 都没用。
    用「逐个 `display:none`，看 `scrollWidth` 是否回落」二分定位，才发现是滚动带的 `.dup` 副本排到 1813px。
    `.marquee` 自己的 `overflow:hidden` 只裁**视觉**，`scrollWidth` 要**父级**收（用 `overflow-x:clip`）。
+
+### 6.6 three.js 的加载策略（2026-09-30 补：整包 → 具名导出收口）
+
+首屏那个真 3D DNA 是全站**唯一**的第三方库（站主拍板「用 three.js，接受破例」）。它分三层下载，
+其中第二层曾经踩过一个不报错、只在体积上显现的坑：
+
+| 层 | 做法 | 为什么 |
+|---|---|---|
+| ① `dna3d.ts` | 被首页 `<script>` 静态引用，打成小 chunk | 首页内联 JS 有 7168 B 预算，three 装不进去 |
+| ② `dna-scene.ts` | **具名静态 re-export** three 的 9 个符号 | ★ 见下 |
+| ③ three + GLTFLoader | 动态 `import`，只在「容器在 + 非 reduced-motion + WebGL 可用 + 首屏在视口」时才下载 | 不满足条件的用户一个字节都不付 |
+
+**★ 为什么必须有第 ② 层**：原先写的是 `await import('three')` —— 拿到的是**整个命名空间对象**，
+打包器判断不出哪些导出最终没被用到，只能把整包全留着。实测产物 **657.2 KB**。
+改成「动态 import 一个只做具名 re-export 的小文件」之后，打包器看得到「只有 9 个符号被用到」，
+其余全部摇掉 ⇒ **541.9 KB（−115.3 KB / −17.5%）**，页面总 JS 从 734 KB 降到 619 KB。
+
+**维护约定**：`dna3d.ts` 每多用一个新的 three 符号，就要在 `dna-scene.ts` 补一条导出。
+漏了不会报错 —— 运行时 `THREE.XXX` 是 `undefined`，属于静默故障，所以那里刻意不做 `export *`。
+回归网在 `tests/build-output.test.ts` 的「首页 DNA：three.js 不许退回整包」（源码扫描 + 产物实测字节两条）。

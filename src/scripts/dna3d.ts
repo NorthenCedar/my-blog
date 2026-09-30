@@ -11,9 +11,14 @@
 //   本站有 JS 预算守护（tests/build-output.test.ts：首页内联 ≤ 7168 B），
 //   所以拆成两层：
 //     · 本文件（小）→ 被首页 <script> 静态引用，Astro 打成 /_astro/dna3d.*.js；
-//     · three + GLTFLoader（大，约 690 KB）→ 走**动态 import**，
+//     · three + GLTFLoader（大）→ 走**动态 import**，
 //       只在「容器在 + 非 reduced-motion + WebGL 可用 + 首屏在视口」时才真正下载。
-//   于是：减弱动效的用户、不支持 WebGL 的设备、直接滚过首屏的访问，都不付这 690 KB。
+//  于是：减弱动效的用户、不支持 WebGL 的设备、直接滚过首屏的访问，都不付这份流量。
+//
+//  ★ 第二层为什么是 `./dna-scene` 而不是直接 `import('three')`：
+//    直接动态 import 拿到的是**整个命名空间对象**，打包器判断不出哪些导出最终没被使用
+//    ⇒ 整包 657 KB 只能全部保留。改经 dna-scene.ts 的**具名静态 re-export** 之后，
+//    打包器就能摇掉用不到的部分。详见该文件头部注释。
 //
 // ---------------------------------------------------------------------------
 // ★★★ 缩放与平移的施加顺序（v10.3 的根本坑，别改）★★★
@@ -53,9 +58,10 @@ async function boot(host: HTMLElement) {
   // ---- 首屏在视口里才启动（直接锚点到 #s2 进来的访问不用付这份流量）----
   const inView = await onceVisible(host);
 
-  // ---- 到这里才真正下载 three + GLTFLoader（独立 chunk，约 690 KB）----
+  // ---- 到这里才真正下载 three + GLTFLoader（独立 chunk）----
+  //      走 ./dna-scene 而不是裸 'three'：只有具名导出才能让打包器摇掉用不到的部分（见文件头）。
   const [THREE, loaderMod] = await Promise.all([
-    import('three'),
+    import('./dna-scene'),
     import('../vendor/GLTFLoader.js'),
   ]);
   if (!inView) return; // 下载期间滚走了：别白烧 GPU

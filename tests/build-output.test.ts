@@ -951,6 +951,43 @@ describe.skipIf(!hasDist)('首页 JS 预算（B2 动效层）', () => {
   });
 });
 
+describe.skipIf(!hasDist)('首页 DNA：three.js 不许退回整包', () => {
+  // 2026-09-30：这是本站唯一的第三方库（站主拍板「用 three.js，接受破例」），
+  // 所以它的体积必须有人盯着 —— 否则破例会慢慢变成默认。
+  //
+  // 起因：dna3d.ts 原本写的是 `await import('three')`，拿到的是**整个命名空间对象**，
+  //   打包器判断不出哪些导出最终没被用到 ⇒ three 整包 657.2 KB 原样进了产物。
+  // 修法：改成「动态 import ./dna-scene + 该文件具名静态 re-export」——
+  //   懒加载行为一点没变，打包器却能看到「只有 9 个符号被用到」⇒ 降到 541.9 KB（−115.3 KB / −17.5%）。
+  // 两条判据一起守，缺一条都会漏：
+  //   ① 源码扫描：裸的 import('three') 一回来，整包就回来了（这是**根因**，先看它）；
+  //   ② 产物实测字节：换了 vendor 文件、或 dna3d 多用了一个大件，都会在这里冒出来。
+  it('走具名导出收口，且产物 chunk 在预算内', () => {
+    // ⚠️ 扫描前必须剥注释：这份文件的头部注释正在解释「为什么不能 import('three')」，
+    //   字面就写着它 —— 不剥注释的话这条断言会被自己脚下的注释引爆（与上面光标那条同理）。
+    const stripComments = (t: string) =>
+      t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, ' ');
+    const src = stripComments(readFileSync('src/scripts/dna3d.ts', 'utf8'));
+    // ⚠️ 必须排除**类型位置**：dna3d.ts 里有 `let renderer: import('three').WebGLRenderer`
+    // 这类写法（类型注解，编译后会被擦掉、不参与打包），硬匹配会当场假阳性 ——
+    // 这条断言第一版就栽在这上面。区分办法是看后面有没有跟 `.`：
+    // 类型位置一定是 `import('three').XXX`（取某个类型），值位置不是。
+    expect(
+      src,
+      "dna3d.ts 又直接 import('three') 了 ⇒ 拿到整命名空间，打包器无法摇树，657 KB 会原样回来",
+    ).not.toMatch(/import\(\s*['"]three['"]\s*\)(?!\s*\.)/);
+    expect(existsSync('src/scripts/dna-scene.ts'), 'dna-scene.ts 收口层被删了（three 会退回整包）').toBe(true);
+
+    const chunks = walk(DIST, (n) => /^three\.module\.min\.[A-Za-z0-9_-]+\.js$/.test(n));
+    expect(chunks.length, '产物里找不到 three 的 chunk（vendor 改名了？这里要跟着改）').toBe(1);
+    const kb = statSync(chunks[0]).size / 1024;
+    console.log(`判据 DNA three 体积 对象 ${chunks[0]} 实测: ${kb.toFixed(1)} KB（基线 541.9 · 上限 600）`);
+    // 上限取基线 + 约 10% 余量：正常加一两个 three 功能不会撞线，
+    // 但「退回整包」会（657 KB）。撞线时应当先确认是不是又用了命名空间导入。
+    expect(kb, `three chunk ${kb.toFixed(1)} KB，超过 600 KB 上限`).toBeLessThan(600);
+  });
+});
+
 describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
   // 2026-09-26 站主拍板 E：/gallery 独立一条预算，上限 6144。
   // 与首页同理，不跟文章页那条合并 —— 合并会让「放宽某一页」顺手放宽其它页。

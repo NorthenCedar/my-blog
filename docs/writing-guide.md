@@ -1254,3 +1254,25 @@ JS 给 `html` 加 `.cursor-none` 把原生光标全站藏掉，白点当指针�
 **想整套关掉**：把 `src/styles/transition.css` 里的 `.pt` 保持 `display: none` 即可（或者删掉
 `src/layouts/Base.astro` 里的 `<div class="pt">` 那段标记 + `src/scripts/transition.ts` 的引入）。
 
+---
+
+## 29. 首页那个 3D DNA（站上唯一的第三方库）
+
+首屏那根会转的双螺旋是**真 3D**，用的是 three.js —— 这是本站「零第三方」原则唯一的一处破例
+（你 2026-09-30 拍板：「用 three.js，接受破例」）。
+
+**你平时不用管它**，下面三点只在你要动它的时候才看：
+
+1. **它是懒加载的**，不会拖慢首屏。只有同时满足「容器在 + 你没开系统的减少动效 + 浏览器支持 WebGL +
+   首屏真的滚进了视口」才会下载。开了减少动效、或用不支持 WebGL 的设备访问，一个字节都不下。
+2. **模型是 `public/dna-slim.glb`**（328 KB），three 本体在 `src/vendor/` 下三个文件里。
+   ⚠️ 它们**不能**挪进 `public/` —— 有一条测试守着「产物的 JS 必须都在 `dist/_astro/` 下」，
+   从 `public/` 直拷出来的 `.js` 会被判成「手拷进来的」。
+3. **★ 想在 DNA 里多用 three 的某个功能时，先改 `src/scripts/dna-scene.ts`** ——
+   那里逐个登记了本站用到的 three 符号。原因是打包器只能对**具名**导入做瘦身：
+   直接写 `import('three')` 拿到的是整个命名空间，它判断不出哪些没用到，整包 657 KB 会原样进产物；
+   走这一层收口后是 542 KB。漏登记不会报错、只会静默变成 `undefined`，所以那里刻意不做 `export *`。
+
+想整体关掉 DNA：删掉 `src/pages/index.astro` 里 `<script>` 那段对 `../scripts/dna3d` 的引用即可，
+首屏会退回纯深墨绿场（这不是降级，原型里那块底色本来就是完整的）。
+
