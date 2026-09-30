@@ -65,25 +65,28 @@ describe.skipIf(!hasDist)('B2 动效层：产物静态契约', () => {
     expect(pages.map(rel), '门控脚本应当只出现在首页').toEqual(['dist/index.html']);
   });
 
-  it('无 JS 时正文不被弱化（弱化只在 html.js 下，fail-safe 方向不能反）', () => {
-    // ★ 2026-09-30 换判据（站主拍板「去掉 console 外壳，换成原型 topbar」）。
-    //   原来守的是 `html:not(.js) .hud-progress / .band-readout` —— 那两个是仪表读数，
-    //   随外壳一起删了（没有 JS 就该藏，否则会挂着 000% 这种死指针）。
+  it('无 JS 时正文不被弱化（弱化机制已随 console 外壳删除）', () => {
+    // ★ 2026-09-30 再次换判据（站主拍板「直接换成原型，不要改本站的像原型」）。
+    //   上一版守的是 `html.js .field-item { opacity: var(--focus-min) }` —— 那套
+    //   「正文默认 65% 不透明、只有中线压住的才亮起来」是 console 外壳的东西，
+    //   原型根本没有，本轮连同 CSS 一起删掉了（不是留着不用）。
     //
-    //   这条不变的**内核**是：门控方向必须是 fail-safe —— 默认（无 JS）页面完整可读，
-    //   JS 到位才启用增强。现在首页唯一还"弱化内容"的增强是入场揭示/聚焦
-    //   （`.field-item` 透明度压到 --focus-min），所以判据换成：
-    //     ① 弱化规则**必须**挂在 html.js 下（反过来写就是"没 JS 时正文永久半透明"）；
-    //     ② 并且 reduced-motion 下把它压回 1。
+    //   **内核没变**：门控方向必须 fail-safe —— 无 JS 时页面完整可读。
+    //   现在的机制是「揭示的初值由 JS 写」，所以判据换成两条：
+    //     ① 产物里**没有**任何 .field-item 弱化规则（旧机制连根删）；
+    //     ② 揭示的 opacity:0 初值出现在**脚本**里 —— 若写进 CSS，
+    //        动画一旦没跑成（无 JS / JS 报错）就是整页空白，方向就反了。
     const css = allCss();
-    expect(css, '弱化规则没有挂在 html.js 下（无 JS 时正文会被永久半透明）').toMatch(
-      /html\.js[^{,]*\.field-item[^{]*\{[^}]*opacity:\s*var\(--focus-min\)/,
+    expect(css, '首页不该再有 .field-item 的聚焦弱化（已随 console 外壳删除）').not.toMatch(
+      /\.field-item/,
     );
-    const blocks = mediaBlocks(css, 'prefers-reduced-motion');
-    const joined = blocks.join('\n');
-    expect(joined, 'reduced-motion 下没把 .field-item 的弱化压回 1').toMatch(
-      /\.field-item[^{]*\{[^}]*opacity:\s*1/,
-    );
+    const idx = readFileSync(join(DIST, 'index.html'), 'utf8');
+    expect(
+      idx,
+      '揭示的 opacity:0 初值必须由 JS 写（写进 CSS ⇒ 无 JS 时整页空白）',
+    // ★ 三种引号都要认：esbuild 会把源码里的 '0' / "0" 统一压成**反引号**的 `0`，
+    //   只写 ["'] 会匹配不上（本轮实测撞到的）。
+    ).toMatch(/\.style\.opacity\s*=\s*[`"']0[`"']/);
   });
 
   it('prefers-reduced-motion 下关掉动画并压平位移', () => {
@@ -101,10 +104,13 @@ describe.skipIf(!hasDist)('B2 动效层：产物静态契约', () => {
     // ★ 2026-09-30 换清单：旧的七组里 sweep-in / type-in / wipe-in 是给
     //   扫描带 / HUD / 磁带水印做入场的，sweep-x / orbit / blink 是常驻循环 ——
     //   这六组的宿主 DOM 已随 console 外壳全部删除，留着断言就是"守空气"。
-    //   新的两组：rise-in（首屏文案错位入场）、logo-sway（∞ 落款常驻小幅摆动）。
+    //   现在的清单 = 首页真实在用的五组：∞ 落款摆动、语言占比条的「生长/淡入」、
+    //   SCROLL 跑光、背景网格呼吸、字母滚动带。
+    //   （rise-in 是首屏文案的错位入场，原型用 IntersectionObserver + Web Animations，
+    //    不靠 CSS keyframes ⇒ 本轮删除，别再往这个清单里加回去。）
     //   产物里还有 base/comment 侧的其它 @keyframes，所以只查名字不查总数。
     const css = allCss();
-    for (const k of ['rise-in', 'logo-sway']) {
+    for (const k of ['logo-sway', 'lang-grow', 'lang-fade', 'hint', 'breathe']) {
       expect(css, `产物 CSS 缺 @keyframes ${k}`).toContain(`@keyframes ${k}`);
     }
   });
@@ -125,10 +131,15 @@ describe.skipIf(!hasDist)('B2 动效层：产物静态契约', () => {
     }
   });
 
-  it('四个状态类在 CSS 里都有规则（不是只在 JS 里加类）', () => {
+  it('console 外壳的四个状态类已连根删除（不是留着不用）', () => {
+    // ★ 2026-09-30 判据**方向反过来**（站主拍板「直接换成原型」）。
+    //   is-revealed / is-focused / is-yielding / is-flash 都是 console 时代的动效状态类
+    //   （入场揭示 / 聚焦弱化 / 穿字让位 / 点击闪烁）—— 原型一件都没有。
+    //   所以这里守的是「必须不存在」：留着样式却没人加类、或加了类却没有样式，
+    //   两种都是死代码，上一版那条断言只防住了后者。
     const css = allCss();
     for (const c of ['is-revealed', 'is-focused', 'is-yielding', 'is-flash']) {
-      expect(css, `CSS 里没有 .${c} 的规则 —— 加了类却没有样式等于没做`).toContain(c);
+      expect(css, `.${c} 还在产物 CSS 里 —— console 外壳的残留没删干净`).not.toContain(c);
     }
   });
 
@@ -141,9 +152,11 @@ describe.skipIf(!hasDist)('B2 动效层：产物静态契约', () => {
     const decos: [string, RegExp][] = [
       ['rh-grid', /class="rh-grid"[^>]*aria-hidden="true"/],
       ['dna-stack', /class="dna-stack"[^>]*aria-hidden="true"/],
-      ['hero-glass g1', /class="hero-glass g1"[^>]*aria-hidden="true"/],
-      ['hero-glass g2', /class="hero-glass g2"[^>]*aria-hidden="true"/],
-      ['hero-glass g3', /class="hero-glass g3"[^>]*aria-hidden="true"/],
+      /* ★ 类名换回原型原名 .band-glass（2026-09-30：本轮以原型为源逐段照抄，
+         上一版为了避开「中扫描带」而改名 .hero-glass，那套扫描带早已删除）。 */
+      ['band-glass g1', /class="band-glass g1 par-fast"[^>]*aria-hidden="true"/],
+      ['band-glass g2', /class="band-glass g2 par-fast"[^>]*aria-hidden="true"/],
+      ['band-glass g3', /class="band-glass g3 par-fast"[^>]*aria-hidden="true"/],
       ['dusk', /class="dusk"[^>]*aria-hidden="true"/],
       ['paper-inf', /class="paper-inf"[^>]*aria-hidden="true"/],
     ];
@@ -155,6 +168,11 @@ describe.skipIf(!hasDist)('B2 动效层：产物静态契约', () => {
 
   it('正文层显式抬到装饰层之上（否则 fixed 装饰会盖住静态正文）', () => {
     const css = allCss();
-    expect(css, '正文层没有 position:relative（装饰层是 fixed + z-index:0）').toMatch(/\.tier\[[^\]]*\][^{]*\{[^}]*position:\s*relative/);
+    // ★ 2026-09-30：承载者从 .tier 换成 .paper-wrap —— 本轮类名换回原型原名
+    //   （.section / .paper-wrap），而 .section 在原型里是**静态**的（没有 position）。
+    //   真正把正文抬到 fixed 装饰层之上的是 .paper-wrap 的 position:relative + isolation。
+    expect(css, '纸白正文区没有 position:relative（装饰层是 fixed + z-index:0）').toMatch(
+      /\.paper-wrap\[[^\]]*\][^{]*\{[^}]*position:\s*relative/,
+    );
   });
 });

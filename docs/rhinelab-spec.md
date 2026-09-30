@@ -324,3 +324,77 @@
 - S3 = 4 张卡、S4 = 5 段条 + 5 条图例，条本体 `transform` 收敛到 `matrix(1,0,0,1,0,0)`（= 生长完成）
 - `npm run verify`：134 passed；唯一失败是本机已知环境故障 `spawnSync node EBUSY`，
   用绝对路径 node 直跑 `scripts/assert-tokens.mjs` 11 项全达标（含新增的 SCROLL 跑光那处）
+
+### 6.8 以原型为源重写（2026-09-30 · 站主指令「直接换成原型，不要改本站的像原型」）
+
+站主澄清了做法：**不要拿本站现有代码去逼近原型，要以原型文件为源改完直接上**。
+所以 `src/pages/index.astro` 本轮**整体重写** —— 结构、类名、CSS、动效逐段照抄原型 v10.6。
+
+#### 与原型逐字一致的部分
+
+- 类名**全部换回原型原名**：`.band` / `.band-inner` / `.band-copy` / `.band-glass` /
+  `.bg-inf-logo` / `.section` / `.entry-list` / `.marquee` / `.paper-wrap` / `.foot`。
+  （上一版为避开「中扫描带」把 `.band` 改名 `.hero`；那套扫描带早已删除，本轮还回去。）
+- **四层滚动视差照原样加上**（CSS scroll-driven、零 JS、`@supports` 降级）：
+  `.bg-grid.par` -9vh ／ `.band-glass.par-fast` -26 / -18 / -34vh ／
+  `.band-copy.par` +6vh 且 `opacity → .55`。
+  ⚠️ 这一条**推翻了 §6.7 的「不跟」决定** —— 站主本轮明确点名要视差。
+  它与指针视差写同一个 `transform`（滚动时滚动驱动动画覆盖指针视差），
+  这正是原型自身的行为，站主已知情并选择照原型。
+- 动效 JS 换成原型那三段：指针视差（两段式 rAF，静止自停）、百褶 ∞ 显隐、
+  IntersectionObserver 揭示（Web Animations，播完不留 CSS 状态）。
+
+#### 必须做的接驳（6 处，不做就上不了线）
+
+| 处 | 原型 | 站上 |
+|---|---|---|
+| 导航 | `href="#"` / `#s2` | `NAV_LINKS` 9 项 + `/rss.xml` |
+| 文章 | 3 条 demo 标题 | `getVisiblePosts()` 前 3 篇（可点进正文） |
+| 站名 / 自述 | 写死文案 | `content/site.md`（主题不持有文案，有测试守着） |
+| 素材 | `./inf-mask.png` / `./inf-orig.webp` / `./dna-glb/…` | `/art/…`、`/dna-slim.glb` |
+| S3 卡片 | 原型自己的迭代史 | `content/pages/log.md` 最新 4 条（站主拍板） |
+| 技术栈数字 | 手抄旧数据 | 构建期实测（站主拍板「根据现在的数据做」） |
+
+#### 刻意不搬
+
+`.panel` 调试面板（原型注释自己写明「原型专用」）、页脚占位文本（→ `SiteStats` 真实计数）、
+`@font-face`（本站 fonts.css 已自托管）、`importmap` + 内联 three
+（→ `src/scripts/dna3d.ts`，懒加载 + 具名导出收口，见 §6.6）。
+
+#### 本站特有的 4 处本土化（不改就会坏，不是「优化」）
+
+1. `.band` / `.paper-wrap` 加 `margin-inline: calc(50% - 50vw)`。
+   原型里它们是顶层元素、直接吃满视口；本站多一层 Base 的 `.shell`（`max-width` + `padding`）
+   会把**背景一起框窄**（站主报过「主页为什么是这个比例，不是整个屏幕」）。
+   ★ 不写 `width:100vw` —— vw 含滚动条宽度 ⇒ 横向溢出。
+2. `:global(:root)` 补原型那批本站没有的变量（`--line-1` / `--paper-0` / `--ink-3` /
+   `--mono` / `--font-display` / `--tilt` / `--shift-a,b,c`）。
+   scoped 的 `:root` 会被写成 `:root[cid]`，而 `<html>` 上没有这个属性 ⇒ 整块静默失效。
+3. 运行时注入的 DOM 一律 `:global()`：three 的 canvas、rhgrid 造的 SVG `<path>`。
+   不写就是 `stroke:none` + `fill:rgb(0,0,0)` —— 线一根都画不出来，反而糊一堆黑块。
+4. 原型的全局重置（`*{box-sizing}` / `body{font}` / `html{scroll-behavior}`）**不搬**：
+   scoped 下 `*` 会变成 `*[cid]`，只匹配带 cid 的元素；这些重置本站 `base.css` 本来就有。
+
+#### 连带作废的旧契约（测试同步改写，方向反过来）
+
+`is-revealed` / `is-focused` / `is-yielding` / `is-flash` 四个状态类与 `@keyframes rise-in`
+是 console 外壳的动效残留（正文默认 65% 不透明、穿字让位、点击闪绿、文案错位入场），
+原型一件都没有 ⇒ 连同 CSS 一起删。`tests/b2-motion.test.ts` 四条断言相应改写：
+
+- 「无 JS 时正文不被弱化」→ 改守「产物里不再有 `.field-item` 弱化规则」
+  **且**「揭示的 `opacity: '0'` 初值由 JS 写」（写进 CSS 就方向反了：无 JS 时整页空白）
+- keyframes 清单：`rise-in` → `logo-sway` / `lang-grow` / `lang-fade` / `hint` / `breathe`
+- 「四个状态类都要有规则」→ **反向**：四个类都不许再出现在产物 CSS 里
+- 装饰层类名 `hero-glass` → `band-glass`；正文层 `.tier` → `.paper-wrap`
+
+★ 写断言时又踩到一个坑：esbuild 会把源码里的 `'0'` / `"0"` 统一压成**反引号**的 `` `0` ``，
+正则只写 `["']` 匹配不上（本轮实测撞到，已把三种引号都写进判据）。
+
+#### 验收（1440×900 headless Chrome 实测）
+
+- 六档视口 1920/1440/1280/1024/768/390：`.band` 满宽（左缘恒为 0）、**横向溢出 0px**
+- 滚动视差实测生效：`animation-timeline` 解析为 `scroll(root)`；
+  滚 700px 后网格 `scale 1.047 / translateY -63px`、玻璃卡 g1 `translateY -182px`、标题 `opacity .55`
+- S2 = 3 篇真实文章、S3 = 4 张日志卡、S5 = 5 段占比条 + 5 条图例 + 明细
+- 首页内联脚本 **5040 B**（预算 7168，余量 2128）
+- `npm run verify`：134 passed；唯一失败为本机已知环境故障 `spawnSync node EBUSY`
