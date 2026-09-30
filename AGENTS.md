@@ -30,7 +30,7 @@
 | ④ | `tests/*.test.ts`（12 个） | **这才是真正的规格书**：站的硬约束都写成了断言 | 全读，尤其 `build-output` / `content-invariants` / `tokens` |
 | ⑤ | `src/styles/tokens.css` | 全部设计 token（颜色/间距/字号）。**组件里不许出现字面色值** | 全读 |
 | ⑥ | `src/layouts/Base.astro` · `src/lib/posts.ts` · `src/content.config.ts` · `src/tag-registry.ts` | 外壳（head/脚本/过渡标记）、文章管线、内容契约、标签注册表 | 全读 |
-| ⑦ | `docs/boot-intro-work-order.md` | **工作日志**：做过什么、踩过什么坑、怎么验证的 | **只读目录 + 搜关键词**（155 KB，别通读） |
+| ⑦ | `docs/boot-intro-work-order.md` | **（已作废）**开场动画的旧施工工单：20.16 s 逐帧复刻版。v1.15 把开场整份重走后它不再是现行契约 | 只在考古时搜关键词（155 KB，别通读） |
 | ⑧ | `docs/comment-system-plan.md` · `functions/api/**` | 评论/点赞接口与 D1 | 改后端时读 |
 
 **不要**通读 `docs/session-log-*.md`（历史会话流水，500 KB+，只用来考古）。
@@ -95,7 +95,7 @@
 
 1. 做完**跑到真的通过**再汇报，并给出**证据**（命令、日志、截图），不要只说"已修复"。
 2. 新改动写进两处文档：**手册** `docs/writing-guide.md`（用户要看"怎么用/怎么调"）+ **工作日志**
-   `docs/boot-intro-work-order.md`（下一个 AI 要看"为什么这么做、踩了什么坑"）。
+   （首页视觉 / 开场这类改动记进 `docs/rhinelab-spec.md` **§6**；`docs/boot-intro-work-order.md` 是开场旧工单，已作废）。
 3. 站上的 **`/log/` 日志页**（内容在 `content/pages/log.md`）由 AI 代笔：加一条 `date/version/changes`
    记这次改了什么。**版本号按数值排序**（见 `src/lib/log-order.ts`）。
 4. 提交信息用中文，写清"为什么"（不只写"改了什么"）。
@@ -106,8 +106,8 @@
 ## 8. 常跑的命令
 
 ```bash
-npm run dev      # 本地开发（会先跑两个生成脚本）
-npm run build    # 构建（含首页美术、开场 CSS、相册 WebP、草稿资源清理）
+npm run dev      # 本地开发
+npm run build    # 构建（含首页美术、相册 WebP、草稿资源清理）
 npm run test     # 只跑测试
 npm run verify   # 构建 + 测试 —— 推送前必跑
 npm run dev:cf   # 用 wrangler 起本地 Pages（含 Functions/评论接口）

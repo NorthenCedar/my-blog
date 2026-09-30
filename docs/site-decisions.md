@@ -813,6 +813,10 @@ DIB 32bpp BGRA 手写，无第三方依赖）。复测：`/favicon.ico` 从缺�
 
 **修复**：选择器放宽成 `.hero-copy h1, h1.display, h1`。
 
+> **后续（v1.15）**：首页骨架已按原型整份重写（见 `docs/rhinelab-spec.md` §6.8），
+> `.hero-copy` 这个名字不复存在 ⇒ 该选择器同步改为 `.band-copy h1, h1.display, h1`。
+> 「放宽选择器」这个决定本身没变，只是跟着新骨架换了宿主。
+
 ### 验收结论（`_probe/v3-shots.mjs` + `_probe/_ovf.mjs` 实测）
 
 | 项 | 1440 | 1024 | 768 | 390 |

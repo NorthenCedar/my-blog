@@ -556,12 +556,13 @@ logo 配色 `#e9efe9` / `#8fe0b0`、大标题 `clamp(2.4rem, 9.2vw, 6.4rem)`。
 
 （另有几条专项时长不在这里，改前先看 `tokens.css` 里的注释：`--dur-orbit` 循环层、
 `--dur-blink` 硬切闪烁、页面过渡那套在 `src/styles/transition.css`、
-首页开场那两个是 `--dur-boot` / `--dur-boot-out`。）
+首页开场那两个是 `--dur-boot`（桌面，5300 ms 硬上限）/ `--dur-boot-mini`（手机极简版，1500 ms）；
+开场各段的具体时刻在 `src/components/BootIntro.astro` 的 `--bi-*` 变量上。）
 
 ### 8.6 改完必须做的事
 
 ```powershell
-npm run verify        # 构建 + 134 个测试
+npm run verify        # 构建 + 全量测试（当前 136 passed）
 cd <博客仓库>
 node scripts/assert-tokens.mjs   # 单独复算对比度
 ```
