@@ -435,7 +435,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
      ★ 这份 CSS 是**首页专属**（产物里是独立的 /_astro/index.*.css，内页只加载 Base.css），
        所以在这里覆盖变量不会外溢到其余 13 页。 */
 
-  /* ★★ 2026-09-30 第四轮（站主拍板「以原型为源、照搬原型」）——
+  /* ★★ 2026-09-30 第五轮（站主拍板「以原型为源、照搬原型」）——
      上一轮我在这个块里**多写了三行**，把原型里本来是「死」的声明救活了，
      这正是「本站跟原型不一样」的根因之一，已删除，别再补：
        --line-1 / --paper-0  →  原型 `.marquee` 用了但**从未定义** ⇒ 那两条 border 与 background
@@ -453,9 +453,18 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
        ⇒ 谁要是"顺手"把空格补上，首页标题就会从 17px 跳到 54.4px、跟原型对不上。 */
     --fs-item: clamp(1.6rem,1rem+4.2vw,3.4rem);
     --fs-h2: clamp(1.45rem,1.05rem+1.5vw,2.1rem);
-    --mono: 'IBM Plex Mono';
-    --font-display: Archivo, 'IBM Plex Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    --font-mono: 'IBM Plex Mono';
+    /* ★★ 2026-09-30 第五轮（同一晚的第二批）——`--mono` / `--font-display` / `--font-mono`
+       也一并删掉了，理由和上面三条**完全同类**：原型引用了它们、却从未定义。
+       我们一旦定义，原型那些**带 fallback** 的声明就会改取我们的值：
+         `.marquee-item`      原型 `font-family:var(--font-display,inherit)` ⇒ 取 inherit
+                              ⇒ 实测渲染 **IBM Plex Sans**；我们定义成 Archivo ⇒ 渲染成 **Archivo**（字形明显不同）
+         `.marquee-item .num` 原型 `font-family:var(--font-mono,monospace)` ⇒ 取 monospace
+         `.langbar`           原型 `font-family:var(--mono,'IBM Plex Mono',ui-monospace,monospace)`
+       处理办法：删除变量，并把下面每处 font-family **照抄原型那一行的原文**（连它自带的 fallback 一起抄）
+       ⇒ 变量找不到，自然落回与原型同一个值。谁再把这三个变量加回来，上面前两处就又会"复活"。
+       护栏：`tests/build-output.test.ts` 的「首页 CSS：照搬原型的『故意保留的无效声明』」。
+       （★ 站点字体名与原型不同：原型 @font-face 叫 `'Plex Mono'`，本站叫 `'IBM Plex Mono'` ⇒
+         照抄时只把这个**字体名**换成本站的，`,` 及其后的 `monospace` 泛型族必须原样保留。） */
     --tilt: 1deg;
     --shift-a: 14px;
     --shift-b: 7px;
@@ -809,7 +818,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     flex-wrap: wrap;
   }
   .wordmark {
-    font-family: var(--font-display);
+    font-family: Archivo, sans-serif;
     font-weight: 700;
     letter-spacing: 0.14em;
     font-size: 0.9rem;
@@ -836,7 +845,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     color: var(--on-band-sub);
     border: 1px solid transparent;
     overflow: hidden;
-    /* ★ 2026-09-30 第四轮补：原型第 78 行有一条全局 `a{color:inherit;text-decoration:none}`，
+    /* ★ 2026-09-30 第五轮补：原型第 78 行有一条全局 `a{color:inherit;text-decoration:none}`，
        上一轮我按「不搬全局 reset」的原则整体没带 ⇒ 首页导航成了全站唯一带下划线的链接
        （其余组件 Topbar / NavDrawer / PostIndex / Toc / 首页 .entry a 都各自补过这一条）。
        这里按同样的局部写法补上，不改全局 base.css。 */
@@ -883,7 +892,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     padding-bottom: 2.6rem;
   }
   .eyebrow {
-    font-family: var(--font-mono);
+    font-family: 'IBM Plex Mono', monospace;
     font-size: var(--fs-mono);
     letter-spacing: 0.22em;
     color: var(--on-band-meta);
@@ -904,7 +913,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     box-shadow: 0 0 8px 2px #e8772266;
   }
   .display {
-    font-family: var(--font-display);
+    font-family: Archivo, sans-serif;
     font-weight: 700;
     font-size: clamp(2.4rem, 9.2vw, 6.4rem); /* 原型 --fs-display 原值 */
     line-height: 0.88;
@@ -925,7 +934,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     gap: 2rem;
     flex-wrap: wrap;
     margin: 1.5rem 0 0; /* 原型只有 margin-top:1.5rem，下外边距靠全局 reset 抹掉 ⇒ 这里显式归零 */
-    font-family: var(--font-mono);
+    font-family: 'IBM Plex Mono', monospace;
     font-size: var(--fs-mono);
     color: var(--on-band-meta);
     letter-spacing: 0.06em;
@@ -936,7 +945,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     left: var(--gutter);
     bottom: 1rem;
     z-index: 2;
-    font-family: var(--font-mono);
+    font-family: 'IBM Plex Mono', monospace;
     font-size: var(--fs-mono);
     color: var(--on-band-meta);
     letter-spacing: 0.2em;
@@ -1033,7 +1042,9 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     align-items: baseline;
     gap: 1.4rem;
     padding-right: 2.6rem;
-    font-family: var(--font-display);
+    /* ★ 照抄原型 830 行的**原文**（含 fallback）：原型没定义 --font-display ⇒ 取 inherit
+       ⇒ 实测渲染 IBM Plex Sans。上一轮本站把它定义成 Archivo ⇒ 这里渲染成 Archivo（跑马灯大字字形不同）。 */
+    font-family: var(--font-display, inherit);
     font-size: clamp(1.9rem, 4.6vw, 4.2rem);
     line-height: 1;
     letter-spacing: -0.018em;
@@ -1057,7 +1068,8 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     transform: translateY(-0.06em);
   }
   .marquee-item .num {
-    font-family: var(--font-mono);
+    /* ★ 照抄原型 850 行原文：原型 --font-mono 未定义 ⇒ 取 monospace。 */
+    font-family: var(--font-mono, monospace);
     font-size: 0.3em;
     letter-spacing: 0.14em;
     /* ★★ 照搬原型：原型 `.marquee-item .num` 写的就是 `color:var(--ink-3)`，而
@@ -1090,7 +1102,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     margin: 0;
   }
   .section-head span {
-    font-family: var(--font-mono);
+    font-family: 'IBM Plex Mono', monospace;
     font-size: var(--fs-mono);
     color: var(--muted);
     letter-spacing: 0.14em;
@@ -1155,7 +1167,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
   .entry a:hover::after,
   .entry a:focus-visible::after { height: 62%; }
   .entry time {
-    font-family: var(--font-mono);
+    font-family: 'IBM Plex Mono', monospace;
     font-size: var(--fs-xs);
     color: var(--muted);
     font-variant-numeric: tabular-nums;
@@ -1175,7 +1187,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     margin-top: 0.5rem;
   }
   .entry .tags {
-    font-family: var(--font-mono);
+    font-family: 'IBM Plex Mono', monospace;
     font-size: var(--fs-xs);
     color: var(--muted);
     letter-spacing: 0.08em;
@@ -1241,7 +1253,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     font-size: var(--fs-sm);
   }
   .card .k {
-    font-family: var(--font-mono);
+    font-family: 'IBM Plex Mono', monospace;
     font-size: var(--fs-mono);
     color: var(--accent-ink);
     letter-spacing: 0.1em;
@@ -1259,7 +1271,8 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
         它们就永久停在"还没开始播放" = 整块内容凭空消失。这是可用性问题。 */
   .langbar {
     margin-top: var(--sp-5);
-    font-family: var(--mono);
+    /* ★ 照抄原型 380-381 行原文（--sp-5 本站 tokens.css 就是 1.5rem = 原型 fallback；--mono 已删） */
+    font-family: var(--mono, 'IBM Plex Mono', ui-monospace, monospace);
   }
   .langbar-hd {
     display: flex;
@@ -1387,7 +1400,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     max-width: var(--wrap);
     margin: 0 auto;
     padding: 2.4rem var(--gutter);
-    font-family: var(--font-mono);
+    font-family: 'IBM Plex Mono', monospace;
     font-size: var(--fs-xs);
     color: var(--muted);
   }

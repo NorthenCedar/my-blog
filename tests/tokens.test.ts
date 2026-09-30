@@ -33,7 +33,7 @@ describe('低对比 token 越界（--accent-bright 只许用在深色底上）',
   const ALLOWED = [
     'nav a:hover',
     'nav a[aria-current=page]',
-    // 2026-09-30 第四轮追加：首页首屏导航（在深墨绿场 .band 上）的**当前页**那一项。
+    // 2026-09-30 第五轮追加：首页首屏导航（在深墨绿场 .band 上）的**当前页**那一项。
     // 站主要求「照搬原型」（原型 nav a[aria-current] 写的就是裸 var(--accent-bright) + #4caf50 系字面量），
     // 上一轮被改成 --on-band 后「主页」两个字不变绿 —— 站主报的正是这条。
     // 与上面一条同属「深色底上的亮绿」（对 --ink 6.26:1）。

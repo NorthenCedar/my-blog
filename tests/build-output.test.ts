@@ -266,7 +266,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       /\.paper-inf[^{}]*\{[^}]*pointer-events:\s*none[^}]*\}/,
     );
     expect(all, '.paper-inf 没把底纹作为背景接上').toMatch(/\.paper-inf[^{}]*\{[^}]*background:[^;}]*\/art\/inf-orig\.webp/);
-    // ★★ 2026-09-30 第四轮补的**关键一条**：上面所有断言查的都是 `dist/art/`，
+    // ★★ 2026-09-30 第五轮补的**关键一条**：上面所有断言查的都是 `dist/art/`，
     //    而 dist 是 `npm run build` 从 public/ 拷出来的 —— **本地永远有，线上不一定有**。
     //    这一条才是真正止血的：`.gitignore` 里 `public/art/*` 会把整个目录忽略掉，
     //    必须有逐条 `!` 例外才进得了 git。上一轮漏了 inf-orig.webp ⇒ 它从没进过仓库
@@ -938,7 +938,7 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
   });
 });
 
-describe.skipIf(!hasDist)('首页 CSS：照搬原型的「故意保留的无效声明」（2026-09-30 第四轮）', () => {
+describe.skipIf(!hasDist)('首页 CSS：照搬原型的「故意保留的无效声明」（2026-09-30 第五轮）', () => {
   // 这组守的不是"我们写的值是对的"，而是**"我们没有比原型更聪明"**。
   //
   // 背景：视觉原型 nc-rhine-v7/index.html 自己的 CSS 有两类"死"声明，
@@ -956,7 +956,18 @@ describe.skipIf(!hasDist)('首页 CSS：照搬原型的「故意保留的无效�
   // ② `--line-1` / `--paper-0` / `--ink-3`：原型在多处引用了这三个变量但**从未定义** ⇒
   //    `.marquee` 的上下横线与实色底、`.marquee-item .num` 的 color 全部作废。
   //    上一轮在首页 :global(:root) 里给它们赋了值，把死声明救活了 ⇒ 原型本来没有的横线冒出来。
-  //    ⇒ 这两个变量在**任何**产物 CSS 里都不许有定义。
+  //    ⇒ 这些变量在**任何**产物 CSS 里都不许有定义。
+  //
+  // ③ `--mono` / `--font-display` / `--font-mono`：**同一类问题，只是表现不同** ——
+  //    原型也是引用了、从未定义，但那几处声明**自带 fallback**：
+  //      `.marquee-item`      `var(--font-display, inherit)`   ⇒ 原型取 inherit
+  //      `.marquee-item .num` `var(--font-mono, monospace)`    ⇒ 原型取 monospace
+  //      `.langbar`           `var(--mono, 'IBM Plex Mono', ui-monospace, monospace)`
+  //    ⇒ 原型里这些声明没死，只是落到 fallback 上。本站一旦定义这三个变量，它们就改取本站的值：
+  //      实测（1258×802 + CDP `CSS.getPlatformFontsForNode`）`.marquee-item` 由原型的
+  //      **IBM Plex Sans** 变成 **Archivo SemiBold** —— 跑马灯大字字形明显不同。
+  //    ⇒ 同样不许在任何产物 CSS 里定义；首页每处 font-family 照抄原型那一行（连 fallback 一起）。
+  const DEAD_VARS = ['--line-1', '--paper-0', '--ink-3', '--mono', '--font-display', '--font-mono'];
   const css = () => {
     const files = walk(DIST, (n) => n.endsWith('.css'));
     return { files, all: files.map((f) => readFileSync(f, 'utf8')).join('\n') };
@@ -988,13 +999,13 @@ describe.skipIf(!hasDist)('首页 CSS：照搬原型的「故意保留的无效�
     console.log(`判据 首页字号 对象 ${refs.join(' + ')}（取最后一处定义 = 级联胜出者）实测: --fs-item=${item} · --fs-h2=${h2}（无空格 ⇒ 声明作废 ⇒ 标题继承 17px，与原型一致）`);
   });
 
-  it('--line-1 / --paper-0 / --ink-3 在整份产物里都没有定义（原型也没定义）', () => {
+  it('原型引用但从未定义的变量（--line-1/--paper-0/--ink-3/--mono/--font-display/--font-mono）在整份产物里都没有定义', () => {
     const { all } = css();
-    for (const name of ['--line-1', '--paper-0', '--ink-3']) {
+    for (const name of DEAD_VARS) {
       const hit = all.match(new RegExp(`${name}:\\s*[^;}]+`));
-      expect(hit?.[0] ?? '', `${name} 被定义了（${hit?.[0]}）⇒ 原型里本来是"死"的声明会复活（跑马灯冒横线 / 实色底 / 数字显形）`).toBe('');
+      expect(hit?.[0] ?? '', `${name} 被定义了（${hit?.[0]}）⇒ 原型里"死掉"或"落到 fallback"的声明会改取本站的值（跑马灯冒横线/实色底、数字显形、跑马灯大字字形由 Plex Sans 变 Archivo）`).toBe('');
     }
-    console.log('判据 原型死变量 对象 dist/**/*.css 实测: --line-1 / --paper-0 / --ink-3 均无定义 ⇒ .marquee 无横线透明底、.num 退回继承色，与原型一致');
+    console.log(`判据 原型未定义变量 对象 dist/**/*.css 实测: ${DEAD_VARS.join(' / ')} 均无定义 ⇒ 与原型一致`);
   });
 });
 
