@@ -477,6 +477,32 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       windows.some((w) => /nav[^{}]*\{display:none\}/.test(w)),
       '≤1023px 没有隐藏横排导航（会和抽屉同时出现）',
     ).toBe(true);
+
+    /* ⑥ ★ 2026-10-01 补：上面那条只要求「某处隐藏」，是**弱判据** —— 站主截图报家门口
+       那排横排导航在手机上没被藏起来，而这条断言一直绿着，根因就在这：
+       首页的 CSS 是**独立分片**（`index.*.css`），Base 分片里 Topbar / Brandline 那两条
+       1023px 规则早就让 `windows.some()` 成立了，首页自己那份写没写它根本管不到。
+       ⇒ 改成**认页面自己的分片**：从首页 HTML 解析出它引用的 CSS，只取 `index.*.css`
+         （不能连 Base 一起读，否则又会被别的页面的规则兜过去）。 */
+    const homeHtml = readFileSync(join(DIST, 'index.html'), 'utf8');
+    const homeCssHrefs = [
+      ...new Set([...homeHtml.matchAll(/_astro\/([A-Za-z0-9_.-]+\.css)/g)].map((m) => m[1])),
+    ];
+    const homeOwn = homeCssHrefs.filter((f) => f.startsWith('index.'));
+    expect(homeOwn.length, '首页没有自己的 CSS 分片（index.*.css）—— 检查产物结构').toBeGreaterThan(0);
+    const homeCss = homeOwn
+      .map((f) => readFileSync(join(DIST, '_astro', f), 'utf8'))
+      .join('\n')
+      .replace(/\s+/g, '');
+    const homeWindows = [...homeCss.matchAll(/1023px/g)].map((m) => homeCss.slice(m.index!, m.index! + 400));
+    console.log(
+      `判据 导航 对象 首页自己的 CSS 分片 实测: ${homeOwn.join(', ')} · 1023px 断点 ${homeWindows.length} 处`,
+    );
+    expect(homeWindows.length, '首页自己的 CSS 里没有 1023px 断点').toBeGreaterThan(0);
+    expect(
+      homeWindows.some((w) => /nav[^{}]*\{display:none\}/.test(w)),
+      '首页 ≤1023px 没隐藏横排导航 —— 手机上会同时出现「一排胶囊 + 抽屉汉堡」',
+    ).toBe(true);
   });
 
   it('归档：年份分组与筛选选项都从内容推导（明年发文会自动多出那一年）', () => {

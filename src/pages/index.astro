@@ -1003,6 +1003,20 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     background: #4caf5014;
     border-color: #4caf5038;
   }
+  /* ---------- 窄屏：横排胶囊交给抽屉（站主 2026-10-01 定案）----------
+     ★ 站主原话：「把手机端的（那排 主页/关于/归档/…/RSS）去掉，留导航菜单就行」。
+     ★ 这是**补漏**不是新设计：内页那两套外壳早就这么做了 ——
+         Brandline:61 与 Topbar:167 都在 `max-width: 1023px` 把横排 nav 藏掉。
+         首页当时没写，于是手机上「10 个胶囊 + 抽屉汉堡」同时出现（截图里一眼能看到）。
+     ★ 断点取 1023 而不是 767，是为了对齐 NavDrawer 自己的门控：
+       抽屉在 ≤1023 接管；这里若写 767，768–1023 会落进「有汉堡、横排也还在」的矛盾档。
+     ★ 本文件是 scoped `<style>`，选择器会被编译成 `.topbar[data-astro-cid-…] > nav[data-astro-cid-…]`
+       ⇒ 只命中首页这个 nav，碰不到 NavDrawer 内的 `<nav class="navpanel">`（不同 cid）。 */
+  @media (max-width: 1023px) {
+    .topbar > nav {
+      display: none;
+    }
+  }
   .band-copy {
     margin-top: auto;
     padding-bottom: 2.6rem;
