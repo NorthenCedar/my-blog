@@ -80,17 +80,17 @@ const selectorsWith = (css: string, token: string): string[] => {
 };
 
 describe('开场动画：源文件与 token', () => {
-  it('总时长有硬上限（站主定 5.3 s），且只有一处定义', () => {
+  it('总时长有上限（站主 2026-09-30 定 5.3 s ⇒ 2026-10-01 授权放宽到 6 s），且只有一处定义', () => {
     const tokens = readFileSync('src/styles/tokens.css', 'utf8');
     const full = Number((tokens.match(/--dur-boot:\s*(\d+)ms/) ?? [])[1]);
     const mini = Number((tokens.match(/--dur-boot-mini:\s*(\d+)ms/) ?? [])[1]);
     console.log(
-      `判据 开场时长 对象 tokens.css 实测: --dur-boot=${full}ms（上限 5300）· --dur-boot-mini=${mini}ms`,
+      `判据 开场时长 对象 tokens.css 实测: --dur-boot=${full}ms（上限 6000）· --dur-boot-mini=${mini}ms`,
     );
     expect(full, '--dur-boot 没解析出来').toBeGreaterThan(0);
-    expect(full, '开场总长超过站主定的 5.3 s 硬上限').toBeLessThanOrEqual(5300);
+    expect(full, '开场总长超过站主授权的 6 s 上限').toBeLessThanOrEqual(6000);
     expect(mini, '手机极简版应当明显更短').toBeLessThan(full);
-    // 组件引用的是总时长别名，别名指向 token —— 不许把 5300 抄成字面量散在各处
+    // 组件引用的是总时长别名，别名指向 token —— 不许把 6000 抄成字面量散在各处
     expect(SRC, '组件没引用 --bi-total').toContain('var(--bi-total)');
     expect(tokens, '--bi-total 没定义 ⇒ .bi-clock 的动画整条作废 ⇒ 时钟不跑，遮罩要等 8s 兜底才撤')
       .toMatch(/--bi-total:\s*var\(--dur-boot\)/);

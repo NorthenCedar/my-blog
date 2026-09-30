@@ -556,7 +556,8 @@ logo 配色 `#e9efe9` / `#8fe0b0`、大标题 `clamp(2.4rem, 9.2vw, 6.4rem)`。
 
 （另有几条专项时长不在这里，改前先看 `tokens.css` 里的注释：`--dur-orbit` 循环层、
 `--dur-blink` 硬切闪烁、页面过渡那套在 `src/styles/transition.css`、
-首页开场那两个是 `--dur-boot`（桌面，当前 4750 ms，站主定的 5.3 s 硬上限）/ `--dur-boot-mini`（手机极简版，1500 ms）；
+首页开场那两个是 `--dur-boot`（桌面，当前 5750 ms；站主 2026-09-30 定 5.3 s 上限，
+2026-10-01 因「∞ 绘制再慢一秒」授权放宽到 6 s）/ `--dur-boot-mini`（手机极简版，1500 ms）；
 开场各段的具体时刻在 **`src/styles/tokens.css` 的 `--bi-*` 变量**上 —— v1.16 从组件里搬出来的，
 因为首屏那批线现在也要消费这组变量（开场最后「收拢成一条线」的就是首屏那批线本身），
 留在 `BootIntro.astro` 会让 `index.astro` 依赖兄弟组件的 `<style>`。）
