@@ -77,6 +77,7 @@
 | 只改「一处」外壳就以为导航的窄屏行为全站生效 | 「横排导航 ≤1023px 收进抽屉」这条散在**三处**：`Topbar.astro`（内页）/ `Brandline.astro`（深色带）/ `index.astro`（首页，写在自己 scoped style 里 ⇒ 是**独立 CSS 分片**）。2026-10-01：首页漏写 ⇒ 手机上「10 个胶囊 + 抽屉汉堡」同时出现（站主截图报的），而且原断言用 `windows.some()`（**弱判据**：Base 分片里别的页面写了就算过）。已补「认页面自己的分片」那一半。改完逐视口验：`_probe/cdp-nav.mjs <url>` |
 | 断言绑死产物形态 | 反复踩：产物里 `<li>` 会多 class、`body::before` 被压成 `body:before`、元素会带 `data-astro-cid-*`。断言要容忍这些形态差异 |
 | 删掉 `prefers-reduced-motion` 分支 | 站上有明确的减少动效支持，删了等于对这部分用户不负责 |
+| 把 `rhgrid.ts` 的 `T = now` 改成 `T = now / 1000` | 它**看起来**像漏了 /1000 的单位 bug，其实不是：参考站 wodniack.dev 的 ticker 发的是**毫秒**（`$.emit("tick", t*1e3)`，GSAP 的 t 是秒、它自己乘了 1000）。写成秒 ⇒ 噪声项慢 1000 倍 ⇒ 首屏那批线**肉眼静止**（实测 0.006 px/s）。2026-10-01 站主报的「线不缓慢移动」就是它。护栏：`tests/flow-field.test.ts`（断言已验过会红）· 量法：`_probe/cdp-flow-drift.mjs <url>` 的 `② 运动` 那一行（应 ≈4 px/s） |
 
 ---
 

@@ -35,6 +35,15 @@
 //
 //   所以这里多落三个内联变量（见 build() 里的注释），把"这批线自己的列位与 ∞ 采样"
 //   交给 CSS 当动画参数用。draw() 每帧只写 d，**不碰 transform** ⇒ 两者不打架。
+//
+// ---------------------------------------------------------------------------
+// ★ 2026-10-01 第九版：时间基准回到**毫秒**（这批线才真的会"缓慢流动"）
+//
+//   站主原话：「像 wodniack.dev 一样视觉感官上那些线在缓慢移动」。
+//   量出来的事实：本站顶点位移 0.006 px/s（等于静止）。根因不是参数、是**单位** ——
+//   参考站 ticker 发毫秒（`$.emit("tick", t*1e3)`，GSAP 的 t 是秒、它乘了 1000），
+//   本站移植时写成 `now / 1000` ⇒ 噪声项慢 1000 倍。
+//   ⇒ 详见 tick() 里的注释；回归读数见 `_probe/cdp-flow-drift.mjs`（② 运动 那一行）。
 
 const host = document.getElementById('rhGrid');
 const svg = document.getElementById('rhGridSvg');
@@ -218,7 +227,14 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
   };
 
   const tick = (now: number) => {
-    T = now / 1000;
+    /* ★★ 时间基准 = **毫秒**（2026-10-01 修，站主：「像 wodniack.dev 一样视觉感官上那些线在缓慢移动」）
+       参考站给噪声项喂的是毫秒 —— 它的 ticker 是 `$.emit("tick", t*1e3)`
+       （GSAP ticker 的 t 是秒，参考站在 emit 时自己乘了 1000）。
+       本站在第七版移植时写成了 `now / 1000`（秒）⇒ 噪声项慢 **1000 倍**
+       ⇒ 实测顶点位移 0.006 px/s，视觉上完全静止（"冻住"）。
+       换回毫秒后 ≈ 12 px/s：噪声场以 0.0125 px/ms 横向流过，正是参考站那种"缓慢移动"。
+       ★ 这个 T 只喂给 move() 的噪声项，不参与鼠标弹簧（那套用鼠标位移算，与 T 无关）。 */
+    T = now;
     mouse.sx += (mouse.x - mouse.sx) * 0.1;
     mouse.sy += (mouse.y - mouse.sy) * 0.1;
     const dx = mouse.x - mouse.lx, dy = mouse.y - mouse.ly;
