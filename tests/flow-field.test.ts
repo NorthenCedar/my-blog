@@ -34,13 +34,22 @@ import { readFileSync } from 'node:fs';
  *        ω₀ = 0.70 rad/s ⇒ 截止波长 ≈ 112 px
  *    ⇒ 断言钉三条：ζ 欠阻尼但不过分（0.45–0.75）、ω₀ 有滤但没把线滤塌（0.4–3.0）、
  *      以及呼吸的两件套（sin 调制 + 与列位相关）必须在。
+ *
+ * ④ 弹簧必须**帧率无关**（2026-10-01 补）。
+ *    ★★ 第一版用的是"每帧固定系数"（`v += (T-x)*S; v *= D`）—— 看着最自然，实则等效
+ *      ω₀ = √S × **实际帧率** ⇒ 120 Hz 屏上弹性快一倍、掉帧时又变慢，**观感随设备变**。
+ *      抓出它的不是观感而是**验收失效**：同一版本在线上跑两遍，逐点差 **7.4–12.3 px**，
+ *      正好等于要测的"弹性效果本身"（无弹性版噪声底只有 0.04–0.40 px，
+ *      形状本该是 seed + t 的确定函数）。参见 _probe/cdp-flow-sync.mjs。
+ *    ⇒ 改用物理量 + 真实 dt 的半隐式欧拉：`a = ω₀²(T−x) − 2ζω₀·v; v += a·dt; x += v·dt`，
+ *      两个常量由原系数**推导**（60 fps 行为不变）：ω₀² = S × 60²、2ζω₀ = (1−D) × 60。
  */
 const SRC = readFileSync('src/scripts/rhgrid.ts', 'utf8');
 const CODE = SRC.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, ' ');
 // ★ 要能读科学计数法（参数写成 7.5e-5 时只抓到 7.5 会让整条断言变成假的）
 const num = (name: string) => Number((SRC.match(new RegExp(`${name}\\s*=\\s*([\\d.]+(?:e[-+]?\\d+)?)`, 'i')) ?? [])[1]);
 
-describe('首屏流场线：时间基准、流速与弹性', () => {
+describe('首屏流场线：时间基准、流速、弹性与帧率无关', () => {
   it('时间基准是毫秒：T = now（不是 now / 1000）', () => {
     console.log(
       `判据 流场时间基准 对象 src/scripts/rhgrid.ts 实测: `
@@ -87,14 +96,14 @@ describe('首屏流场线：时间基准、流速与弹性', () => {
   });
 
   it('流场带弹性：wave 用二阶弹簧跟随，不是直接赋值', () => {
-    const spring = /pt\.wv\.[xy]\s*\+=\s*\(\s*t[xy]\s*-\s*pt\.wave\.[xy]\s*\)\s*\*\s*WAVE_S/.test(CODE);
+    const spring = /pt\.wv\.[xy]\s*\+=\s*\(\s*WAVE_W2\s*\*\s*\(\s*t[xy]\s*-\s*pt\.wave\.[xy]\s*\)\s*-\s*WAVE_Z2\s*\*\s*pt\.wv\.[xy]\s*\)\s*\*\s*dt/.test(CODE);
     console.log(
       `判据 流场弹性 对象 src/scripts/rhgrid.ts 实测: `
-      + `${spring ? 'v += (target - x) * WAVE_S ✓' : '没找到弹簧积分'} · `
+      + `${spring ? 'v += (ω₀²(target - x) - 2ζω₀·v) * dt ✓' : '没找到弹簧积分'} · `
       + `${/pt\.wave\.x\s*=\s*Math\.cos/.test(CODE) ? '⚠️ wave 仍被直接赋值' : '无直接赋值 ✓'}`,
     );
     expect(CODE, '弹簧的积分式没了（wave 退化成直接赋值 ⇒ 弹性消失）').toMatch(
-      /pt\.wv\.[xy]\s*\+=\s*\(\s*t[xy]\s*-\s*pt\.wave\.[xy]\s*\)\s*\*\s*WAVE_S/,
+      /pt\.wv\.[xy]\s*\+=\s*\(\s*WAVE_W2\s*\*\s*\(\s*t[xy]\s*-\s*pt\.wave\.[xy]\s*\)\s*-\s*WAVE_Z2\s*\*\s*pt\.wv\.[xy]\s*\)\s*\*\s*dt/,
     );
     expect(
       CODE,
@@ -106,10 +115,39 @@ describe('首屏流场线：时间基准、流速与弹性', () => {
     ).toMatch(/pt\.ini/);
   });
 
+  it('弹簧帧率无关：用真实 dt 积分（"每帧固定系数"会让观感随显示器刷新率变）', () => {
+    const S = num('WAVE_S');
+    const D = num('WAVE_D');
+    // 两个常量必须是**从上面对系数推导**出来的（不是魔法数字）：
+    //   ω₀²  = S × 60²   ·   2ζω₀ = (1 − D) × 60
+    const w2expr = /WAVE_W2\s*=\s*WAVE_S\s*\*\s*3600/.test(CODE);
+    const z2expr = /WAVE_Z2\s*=\s*\(\s*1\s*-\s*WAVE_D\s*\)\s*\*\s*60/.test(CODE);
+    // 每帧固定系数的老写法必须**不**在了
+    const fixedStep = /pt\.wv\.[xy]\s*\*=\s*WAVE_D/.test(CODE);
+    const usesDt = /const\s+dt\s*=\s*Math\.min\(\s*DT_MAX/.test(CODE);
+    const passesDt = /move\(\s*T\s*,\s*dt\s*\)/.test(CODE);
+    console.log(
+      `判据 帧率无关 对象 src/scripts/rhgrid.ts 实测: `
+      + `ω₀²=WAVE_S×3600=${(S * 3600).toFixed(4)}（推导式 ${w2expr ? '✓' : '✗'}）· `
+      + `2ζω₀=(1−WAVE_D)×60=${((1 - D) * 60).toFixed(4)}（推导式 ${z2expr ? '✓' : '✗'}）· `
+      + `${fixedStep ? '⚠️ 还有每帧固定系数' : '无每帧固定系数 ✓'} · `
+      + `${usesDt && passesDt ? 'dt 由 rAF 真实间隔算出并传进 move ✓' : '⚠️ 没接上 dt'}`,
+    );
+    expect(w2expr, 'WAVE_W2 不是从 WAVE_S 推导的（WAVE_W2 = WAVE_S * 3600）—— 别写魔法数字').toBe(true);
+    expect(z2expr, 'WAVE_Z2 不是从 WAVE_D 推导的（WAVE_Z2 = (1 - WAVE_D) * 60）').toBe(true);
+    expect(
+      fixedStep,
+      '还在用"每帧固定系数"（v *= WAVE_D）—— 等效 ω₀ 随帧率变：120 Hz 屏上弹性快一倍。'
+      + '必须改成 a = ω₀²(T−x) − 2ζω₀·v; v += a·dt; x += v·dt',
+    ).toBe(false);
+    expect(usesDt, '没有从 rAF 真实间隔算 dt（并有 DT_MAX 上限兜底）').toBe(true);
+    expect(passesDt, 'dt 没传给 move()（弹簧还在按帧积分）').toBe(true);
+  });
+
   it('弹性参数停在"看得见"的那一段（ζ 欠阻尼但不过分、ω₀ 有滤但没把线滤塌）', () => {
     const S = num('WAVE_S');
     const D = num('WAVE_D');
-    const w0 = Math.sqrt(S) * 60;              // rad/s（离散刚度 → 固有频率，60 fps）
+    const w0 = Math.sqrt(S) * 60;              // rad/s —— 现在就是弹簧真正用的 ω₀（WAVE_W2 = S×60²）
     const zeta = (1 - D) / (2 * Math.sqrt(S)); // 阻尼比
     // 截止**空间**波长 λ = 流速 × 截止周期 = v × 2π/ω₀（流速取实测的 WAVE_TX×1000）
     const lam = ((num('WAVE_TX') * 1000) * 2 * Math.PI) / w0;

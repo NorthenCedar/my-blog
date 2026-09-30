@@ -63,7 +63,7 @@ cd <博客仓库>
 ```powershell
 npm run dev       # 启动本地预览，改完立刻能看到（按 Ctrl+C 停止）
 npm run build     # 只构建，不跑测试
-npm run verify    # 构建 + 跑全部测试（共 146 条：144 通过 / 1 设计内跳过 / 1 已知环境故障）—— 推送前必跑
+npm run verify    # 构建 + 跑全部测试（共 147 条：145 通过 / 1 设计内跳过 / 1 已知环境故障）—— 推送前必跑
 npm test          # 只跑测试
 git add -A        # 把改动标记为"要提交"
 git commit -m "说明"   # 存成一个版本
@@ -186,7 +186,7 @@ npm run dev
 npm run verify
 ```
 
-看到 `Tests 144 passed` 就对了。旁边两行都不是代码问题：`1 skipped` 是设计内的跳过
+看到 `Tests 145 passed` 就对了。旁边两行都不是代码问题：`1 skipped` 是设计内的跳过
 （「上游镜像已清」「未构建」这类前提缺失的占位，见 `tests/` 里的 `skipIf` 条件）；
 `1 failed` 是本机已知环境故障 `spawnSync node EBUSY`（`tests/tokens.test.ts` 用相对路径 `node`
 起子进程在本机必失败），用绝对路径直跑 `node scripts/assert-tokens.mjs` 复核那 11 项即可。
@@ -568,7 +568,7 @@ logo 配色 `#e9efe9` / `#8fe0b0`、大标题 `clamp(2.4rem, 9.2vw, 6.4rem)`。
 ### 8.6 改完必须做的事
 
 ```powershell
-npm run verify        # 构建 + 全量测试（当前 144 passed / 1 skipped / 1 已知环境故障）
+npm run verify        # 构建 + 全量测试（当前 145 passed / 1 skipped / 1 已知环境故障）
 cd <博客仓库>
 node scripts/assert-tokens.mjs   # 单独复算对比度
 ```

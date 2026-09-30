@@ -63,6 +63,12 @@
 //        实测"有呼吸"的摆幅起伏 8.5% **小于**"无呼吸"的 12.3%（同种子同 t）。
 //        接线见 move() 里的 ②；回归断言在 tests/flow-field.test.ts。
 //
+//   ★★ 第二课：弹簧必须**帧率无关**。第一版用的是"每帧固定系数"（`v += (T-x)*S; v *= D`）
+//      ⇒ 等效 ω₀ = √S × **实际帧率** ⇒ 120 Hz 屏上弹性快一倍、掉帧时又变慢。
+//      症状是**验收直接失效**：同一版本线上跑两遍，逐点差 7.4–12.3 px，
+//      正好等于要测的"弹性效果本身"（无弹性版噪声底只有 0.04–0.40 px）。
+//      ⇒ 改用物理量 + 真实 dt 的半隐式欧拉（`WAVE_W2`/`WAVE_Z2` 由原系数推导，60 fps 行为不变）。
+//
 //   回归工具（三层，缺一层就会得出错误结论）：
 //     · `_probe/cdp-flow-drift.mjs` —— 同 t 的统计量（摆幅 / 转角 / 帧率）。
 //     · `_probe/cdp-flow-sync.mjs`  —— **同种子 + 同 performance.now() 逐点比对**：
@@ -145,11 +151,11 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
   /* ★ 流场弹性（2026-10-01 第十版，站主：「把本站的线改的更有弹性一点，不要太多」）
      由**两层**组成 —— 只做第二层是没用的，原因见下。
 
-     ① 跟随弹簧：noise 的目标值不再直接赋值给 wave，而是让 wave 用二阶弹簧去"追"：
+     ① 跟随弹簧：noise 的目标值不再直接赋值给 wave，而是让 wave 用二阶弹簧去"追"
+        （**帧率无关**：物理量 ω₀/ζ + 真实 dt 的半隐式欧拉，见 WAVE_W2/WAVE_Z2）：
 
-            v += (target - x) * WAVE_S      ← 刚度（每帧²）
-            v *= WAVE_D                     ← 阻尼（每帧）
-            x += v
+            a = ω₀²·(target − x) − 2ζω₀·v      ← 加速度（px/s²）
+            v += a · dt ;  x += v · dt          ← 半隐式欧拉
 
      ② 横向呼吸：弯曲强度沿 x 按波长起伏、并随时间缓慢流过（`WAVE_BR` 那一行）。
 
@@ -171,8 +177,23 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
 
      ★★ 比版本必须**固定噪声种子**：场来自 `new Noise(Math.random())`，不固定的话
         两次加载的摆幅能差 25%（实测 31 vs 40），比的是种子不是版本 —— 踩过。 */
-  const WAVE_S = 1.36e-4;   // 刚度/帧² ⇒ ω₀ = √S × 60 ≈ 0.70 rad/s（周期 ≈ 9 s）
-  const WAVE_D = 0.9860;    // 阻尼/帧 ⇒ ζ ≈ 0.6（< 0.707 ⇒ 约 9% 的轻微过冲）
+  const WAVE_S = 1.36e-4;   // 刚度/帧²（**以 60 fps 为基准**）⇒ ω₀ = √S × 60 ≈ 0.70 rad/s
+  const WAVE_D = 0.9860;    // 阻尼/帧（**以 60 fps 为基准**）⇒ ζ ≈ 0.6（< 0.707 ⇒ 约 9% 的轻微过冲）
+  /* ★★ 帧率无关化（2026-10-01 补，接在弹性之后）：
+     上面两个系数是"**每帧**"的，直接拿去积分意味着等效 ω₀ = √S × **实际帧率** ——
+     而真实帧间隔是变的（掉帧、后台标签、120 Hz 屏）⇒ **线的弹性会随显示器刷新率变**：
+     60 Hz 上是 0.70 rad/s，120 Hz 上就是 1.40 rad/s（快一倍、过冲也更大）。
+     实测症状：同一版本的线上跑两遍，逐点差 **7.4–12.3 px** ——
+     而无弹性版的噪声底只有 0.04–0.40 px（形状本该是 seed + t 的确定函数）。
+     这个量级**正好等于**要验收的"弹性效果本身"⇒ 不修的话什么都验不出来。
+     ⇒ 改成物理量 + **真实 dt** 的半隐式欧拉（v 的单位从 px/帧 变成 px/s）：
+            a = ω₀²(target − x) − 2ζω₀·v ;  v += a·dt ;  x += v·dt
+     下面两个常量就是从上面对系数**推导**出来的，取值不变（60 fps 下行为一致）：
+        ω₀²  = S × 60²  = 0.4896
+        2ζω₀ = (1 − D) × 60 = 0.8400   （因为 ζ = (1−D)/(2√S)、ω₀ = √S × 60） */
+  const WAVE_W2 = WAVE_S * 3600;          // ω₀² ≈ 0.4896
+  const WAVE_Z2 = (1 - WAVE_D) * 60;      // 2ζω₀ ≈ 0.8400
+  const DT_MAX = 0.05;                    // dt 上限（秒）：切回标签 / 长卡顿时别让弹簧"跳过去"
   const WAVE_BR = 0.20;     // 呼吸深度 ±20% —— ★ 不是拍脑袋，是按"能不能被测出来"定的：
                             //   场自身的摆幅起伏就有 ±12%（同种子同 t 实测，10 帧极差 12.3%），
                             //   呼吸比它小就淹没在里面。±13% 实测只把起伏抬到 14.7%（+20%，
@@ -195,7 +216,7 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
     cursor: { x: number; y: number; vx: number; vy: number };
   }[][] = [];
   let paths: SVGPathElement[] = [];
-  let raf = 0, T = 0;
+  let raf = 0, T = 0, lastNow = 0;
 
   const setSize = () => {
     const r = host.getBoundingClientRect();
@@ -251,7 +272,7 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
     svg.appendChild(frag);
   };
 
-  const move = (t: number) => {
+  const move = (t: number, dt: number) => {
     const mx = mouse.sx, my = mouse.sy;
     const mA = mouse.a, mvs = mouse.vs;
     const c = Math.max(CUR_R, mvs);
@@ -267,18 +288,18 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
         const o = noise.perlin2((pt.x + t * WAVE_TX) * WAVE_SC, (pt.y + t * WAVE_TY) * WAVE_SC2) * 12;
         const tx = Math.cos(o) * WAVE_AMP_X;
         const ty = Math.sin(o) * WAVE_AMP_Y;
-        // ① 弹簧追的是**纯噪声目标**（不带呼吸 —— 见下面 ② 的注释）
-        if (pt.ini) {
-          pt.wv.x += (tx - pt.wave.x) * WAVE_S;
-          pt.wv.y += (ty - pt.wave.y) * WAVE_S;
-          pt.wv.x *= WAVE_D;
-          pt.wv.y *= WAVE_D;
-          pt.wave.x += pt.wv.x;
-          pt.wave.y += pt.wv.y;
+        // ① 弹簧追的是**纯噪声目标**（不带呼吸 —— 见下面 ② 的注释）。
+        //   用**真实 dt**（秒）做半隐式欧拉 ⇒ 帧率无关，见 WAVE_W2/WAVE_Z2 的注释。
+        if (pt.ini && dt > 0) {
+          pt.wv.x += (WAVE_W2 * (tx - pt.wave.x) - WAVE_Z2 * pt.wv.x) * dt;
+          pt.wv.y += (WAVE_W2 * (ty - pt.wave.y) - WAVE_Z2 * pt.wv.y) * dt;
+          pt.wave.x += pt.wv.x * dt;
+          pt.wave.y += pt.wv.y * dt;
         } else {
-          // 首帧（含 resize 重建）**直接落位**：否则开场那 1–2 秒线是"平"的、
+          // 首帧（含 resize 重建、dt=0）**直接落位**：否则开场那 1–2 秒线是"平"的、
           // 要慢慢才起褶；改窗宽时也会看到一次"从平到皱"的过渡。
           pt.wave.x = tx; pt.wave.y = ty; pt.ini = true;
+          pt.wv.x = 0; pt.wv.y = 0;
         }
         // ② ★ 呼吸必须作用在弹簧**输出**上（绕过滤波）。
         //   一开始是乘在"目标"上的，实测等于没做：弹簧在 r≈1（呼吸周期 9 s、
@@ -333,13 +354,17 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
        换回毫秒后 ≈ 12 px/s：噪声场以 0.0125 px/ms 横向流过，正是参考站那种"缓慢移动"。
        ★ 这个 T 只喂给 move() 的噪声项，不参与鼠标弹簧（那套用鼠标位移算，与 T 无关）。 */
     T = now;
+    /* ★ 真实帧间隔（秒），喂给弹簧 ⇒ 帧率无关（见 WAVE_W2/WAVE_Z2 的注释）。
+       上限 DT_MAX：切回标签页 / 长卡顿后别让弹簧一次"跳"过头。 */
+    const dt = Math.min(DT_MAX, Math.max(0, (now - lastNow) / 1000));
+    lastNow = now;
     mouse.sx += (mouse.x - mouse.sx) * 0.1;
     mouse.sy += (mouse.y - mouse.sy) * 0.1;
     const dx = mouse.x - mouse.lx, dy = mouse.y - mouse.ly;
     mouse.vs = Math.min(100, mouse.vs + (Math.sqrt(dx * dx + dy * dy) - mouse.vs) * 0.1);
     mouse.lx = mouse.x; mouse.ly = mouse.y;
     mouse.a = Math.atan2(dy, dx);
-    move(T); draw();
+    move(T, dt); draw();
     raf = requestAnimationFrame(tick);
   };
 
@@ -359,7 +384,7 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
   setSize(); build();
   mouse.sx = mouse.sy = mouse.lx = mouse.ly = W / 2;
 
-  if (reduce) { move(0); draw(); return; } // 降级：只画一帧静态
+  if (reduce) { move(0, 0); draw(); return; } // 降级：只画一帧静态
 
   addEventListener('mousemove', onMove, { passive: true });
   addEventListener('touchmove', onMove, { passive: true });
@@ -367,7 +392,7 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
   let rt = 0;
   addEventListener('resize', () => {
     clearTimeout(rt);
-    rt = window.setTimeout(() => { setSize(); build(); move(T); draw(); }, 160);
+    rt = window.setTimeout(() => { setSize(); build(); move(T, 0); draw(); }, 160);
   });
 
   if ('IntersectionObserver' in window) {
