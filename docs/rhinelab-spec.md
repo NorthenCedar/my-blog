@@ -439,13 +439,50 @@
   （父级多为 `transparent` + 自己 `-webkit-text-stroke:0`）⇒ **非 `3n+1` 的那些「0」在原型的渲染里本来就是看不见的**。
   实测两端 `numCol` 都是 `rgba(0,0,0,0)`。要它显形就得给 `--ink-3` 赋值 —— 那就不再是原型的样子了。
 
+#### 第二批（同晚，实测发现）：字体栈也要照抄
+
+站主报的 6 处闭环、推上线之后，用 CDP 的 `CSS.getPlatformFontsForNode` 读**实际渲染字体**
+（不是读 CSS —— 这一轮的教训就是"光读 CSS 会漏"），两端同视口复测，又抓出一条**同类**残留：
+
+原型还引用了 `--mono` / `--font-display` / `--font-mono` 三个变量，同样**从未定义**；
+但那几处声明**自带 fallback**，所以原型里它们没有"死"，只是落到了 fallback 上 ——
+而上一轮我在首页 `:global(:root)` 里把这三个变量定义了，原型的 fallback 在本站**失效**：
+
+| 选择器 | 原型声明 | 原型实际取值 | 本站（改前） |
+|---|---|---|---|
+| `.marquee-item`（跑马灯大字） | `var(--font-display, inherit)` | `inherit` ⇒ **IBM Plex Sans** | **Archivo SemiBold** ✗ |
+| `.marquee-item .num` | `var(--font-mono, monospace)` | `monospace` ⇒ NSimSun | IBM Plex Mono（该元素 color 透明 ⇒ 不可见） |
+| `.langbar` | `var(--mono, 'IBM Plex Mono', ui-monospace, monospace)` | `'IBM Plex Mono'` | 同 ✓ |
+| `.coord` / `.eyebrow` / `.entry time|.tags` / `.card .k` / `.foot-in` 等 8 处小字 | `'Plex Mono', monospace` | IBM Plex Mono，**中文落 `monospace`** | IBM Plex Mono，中文落 Noto Sans SC |
+
+改法：**删掉这三个变量的定义**，首页 13 处 `font-family` 一律照抄原型那一行的**原文**（连 fallback 一起）。
+变量找不到 ⇒ 自然落回与原型同一个值。
+
+★ 唯一必须改动的是**字体名**：原型的 `@font-face` 叫 `'Plex Mono'`，本站叫 `'IBM Plex Mono'`
+⇒ `'Plex Mono',monospace` 抄成 `'IBM Plex Mono', monospace`；**逗号后面的泛型族必须原样保留**
+（中文的 fallback 就靠它）。`--sp-5` 不用动：本站 tokens.css 就是 `1.5rem` = 原型的 fallback 值。
+`--color-secondary` 全站零引用，也不用动。
+
+实测（1258×802 同视口，改后**线上**）：`.marquee-item` = **IBM Plex Sans(7)**（原型同）、
+`.marquee-item:nth-child(3n+1)` = **IBM Plex Sans(7)**（原型同）、
+`.marquee-item .num` = **NSimSun(1)**（原型同）、`.coord` = **NSimSun(4) + IBM Plex Mono(41)**（原型同）、
+`.display` = Archivo SemiBold(18)（原型同）、`.entry .t` / `.section-head h2` = 与原型同族。
+
+★ 站主需要知道的变化：**凡「等宽小字里的中文」现在都落回泛型 `monospace`**（Windows Chrome = 新宋体 NSimSun），
+`页脚的本站已经运行…` / `.coord` / `.section-head span` / `.entry .tags` 这几处的中文观感会变。
+**这是原型字体栈本身的行为**（原型没有给这些位置配可用的中文字体），不是新加的样式；
+若觉得新宋体不好看，就把那几处写成 `'IBM Plex Mono', 'Microsoft YaHei', monospace` —— 但那就**不是原型的样子**了。
+
 #### 本轮新增的 3 条护栏
 
 1. `tests/build-output.test.ts` 新 describe「首页 CSS：照搬原型的『故意保留的无效声明』」：
    断言首页 CSS 里 `--fs-item` / `--fs-h2` 的**生效值**（取最后一处定义 = 级联胜出者）
    必须是那个无空格 clamp。★ esbuild 会把它压成 `1rem4.2vw`（依然非法，结果不变），
    所以判据只拒绝"运算符两侧带空格"的**有效**写法，不锁死字符串。
-2. 同 describe：`--line-1` / `--paper-0` / `--ink-3` 在**整份产物 CSS** 里都不许有定义。
+2. 同 describe：**原型引用过但从未定义的 6 个变量**
+   （`--line-1` / `--paper-0` / `--ink-3` / `--mono` / `--font-display` / `--font-mono`）
+   在**整份产物 CSS** 里都不许有定义。前三个会"复活"死声明（横线/实色底/数字显形），
+   后三个会让原型**自带 fallback** 的声明改取本站的值（跑马灯大字由 Plex Sans 变 Archivo）。
 3. ∞ 那条老断言补一刀：`.gitignore` 必须逐条放行三张素材。
    **老断言查的是 `dist/art/`，而 dist 是 `npm run build` 从 `public/` 拷出来的 —— 本地永远有**，
    所以它当年也在过。查 `.gitignore` 才管得住「没进 git ⇒ 线上 404」这个真实故障模式。
@@ -466,6 +503,9 @@
 | `.marquee` background | transparent | **transparent** | rgb(250,250,247) |
 | `.marquee` margin-bottom | 62.9px | **62.9px** | 0 |
 | `.marquee-item .num` color | rgba(0,0,0,0) | **一致** | — |
+| `.marquee-item` 实际字体（第二批） | IBM Plex Sans | **IBM Plex Sans** | Archivo SemiBold |
+| `.marquee-item .num` 实际字体 | NSimSun | **NSimSun** | IBM Plex Mono |
+| `.coord` 实际字体 | NSimSun + IBM Plex Mono | **一致** | Noto Sans SC + IBM Plex Mono |
 | `.display` font-size | 102.4px | 102.4px | 102.4px |
 | `.dusk` 位置 / 高 / 渐变 | y802 h369 | 一致 | 一致 |
 | 英雄区末行亮度（y=800） | 111 | **113** | 85 |
