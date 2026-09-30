@@ -599,3 +599,52 @@
 **已知取舍**：③ 的 `pageshow` 兜底会在"动画播到一半被丢弃"时直接把内容放出来（没有入场动效）——
 宁可不播，也不要不可见。
 
+
+
+### 6.11 首屏主标题的绿框（2026-09-30 第七轮 · 站主报「刚进站的这个绿色框框」）
+
+**症状**：一进站，首屏大标题 `North_Cedar's notes` 被一个细绿框套住（站主给的是截图）。
+
+**定位**（先实测、后动手）：
+
+1. 对截图做像素采样 —— 框的四边颜色 ≈ `rgb(41,102,61)`，最接近的站内颜色是
+   `--accent-ink: #266b3b`（`rgb(38,107,59)`，JPEG 有色偏）。框的几何恰好等于 h1 的边框盒。
+2. `grep` 全站 `outline`：唯一命中绿色的是 `base.css` 的全局
+   `:focus-visible { outline: 3px solid var(--accent-ink); outline-offset: 3px }`。
+3. CDP 实测（线上）：`document.activeElement` 就是那个 h1。链条是
+   `BootIntro.astro` 收尾时 `title.focus()` 交回焦点 → `index.astro` 为此给 h1 挂了
+   `tabindex="-1"` → Chrome 把「**脚本聚焦的 `tabindex=-1` 非交互元素**」也判成
+   `:focus-visible` ⇒ 绿框。
+4. **关键环境坑**：无头窗口默认「没有被聚焦」⇒ `:focus` / `:focus-visible` **恒不匹配**，
+   不开 `Emulation.setFocusEmulationEnabled` 就会得出「线上没有绿框」的错误结论
+   （本轮第一次跑就是这么被骗的：`focusVisible:false, outline:none`）。
+   打开后立即复现：`focusVisible:true, outline: solid 3px rgb(38,107,59) 3px`。
+5. **原型没有这一出**：原型 `<h1 class="display">` 既没有 `tabindex`，全文也搜不到
+   `tabindex` / `.focus()` / `:focus` ⇒ 又一个「本站自己长出来的」，与第六轮同源。
+
+**改法**（只收程序化聚焦，不动键盘焦点环）：
+
+```css
+/* base.css，紧接全局 :focus-visible 之后 */
+[tabindex='-1']:focus-visible { outline: none; }
+```
+
+- 特异性 (0,2,0) > (0,1,0)，能盖住全局那条。
+- `tabindex="-1"` 的元素 **Tab 永远到不了**，只可能是脚本聚焦 ⇒ 收掉焦点环不损可用性。
+- **不能**图省事写成全局 `:focus-visible{outline:none}` —— 那是把 a/button/input 的键盘
+  焦点环一起砍了（过度修复）。本轮加了反证断言：`a[href]` 聚焦时仍必须算出绿环。
+- 保留焦点交接本身（它是站主的 a11y 决定：遮罩收尾别把焦点掉到 `<body>`）。
+
+**护栏**（`tests/build-output.test.ts` 第七轮那条）：一条断言同时钉住两件事 ——
+`[tabindex="-1"]:focus-visible` 里必须是 `outline:none`，**且**全局
+`:focus-visible` 的 `3px solid var(--accent-ink)` 必须还在。
+
+#### 第七轮的验收对照
+
+| 项 | 改前 | 改后 |
+|---|---|---|
+| `document.activeElement`（Esc 跳过后） | `H1.display[tabindex=-1]` | 同（a11y 行为保留） |
+| `h1.matches(':focus-visible')` | `true` | `true` |
+| h1 计算 `outline` | `solid 3px rgb(38,107,59) 3px` | **`none 3px … 3px`**（不画） |
+| `a[href]` 聚焦（反证） | `solid 3px rgb(38,107,59)` | **同（未受影响）** |
+| 截图 | 大标题套绿框 | **无框** |

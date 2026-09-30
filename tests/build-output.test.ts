@@ -1070,6 +1070,37 @@ describe.skipIf(!hasDist)('首页：宽视口的接缝 / ∞ 淡入淡出 / 揭�
   });
 });
 
+describe.skipIf(!hasDist)('首屏焦点环：程序化交焦点不画绿框（2026-09-30 第七轮）', () => {
+  // 站主报：刚进站时首屏大标题「North_Cedar's notes」被一个绿框套住。
+  //
+  // 根因（两件事同时成立才会出现，CDP 实测）：
+  //   ① `BootIntro.astro` 收尾时把焦点交回主标题（`title.focus()`，免得掉到 <body>），
+  //      所以 `index.astro` 给 h1 挂了 `tabindex="-1"`；
+  //   ② `base.css` 的全局 `:focus-visible { outline: 3px solid var(--accent-ink) }` ——
+  //      Chrome 会把**脚本聚焦的 `tabindex="-1"` 非交互元素**也判成 :focus-visible。
+  //   实测（线上 + `Emulation.setFocusEmulationEnabled`，不开这个开关 :focus 恒不匹配、
+  //   会得出"没有绿框"的错误结论）：`focusVisible:true`、
+  //   `outline: solid 3px rgb(38,107,59)`（= `--accent-ink` #266b3b，与站主截图采样一致），
+  //   几何恰好等于 h1 的边框盒。
+  //   ★ 原型没有这一出：原型 `<h1 class="display">` 既无 tabindex、全文也无任何 .focus()/
+  //     :focus 规则 ⇒ 又一个"本站自己长出来的"。
+  //
+  // ⇒ 只对 `tabindex="-1"` 收掉焦点环（这类元素 Tab 永远到不了，只可能是脚本聚焦）；
+  //    a/button/input 的键盘焦点环必须留着 ⇒ **不能**图省事写成全局 `:focus-visible{outline:none}`。
+  it('产物 CSS 有 [tabindex="-1"]:focus-visible{outline:none}，且全局焦点环没被砍', () => {
+    const all = walk(DIST, (n) => n.endsWith('.css')).map((f) => readFileSync(f, 'utf8')).join('\n');
+    expect(
+      /\[tabindex=["']?-1["']?\]:focus-visible\{[^}]*outline:\s*none/.test(all),
+      '产物里没有 `[tabindex="-1"]:focus-visible{outline:none}` ⇒ 开场把焦点交给主标题后，首屏大标题又会被套上那个绿框',
+    ).toBe(true);
+    expect(
+      /:focus-visible\{[^}]*outline:\s*3px solid var\(--accent-ink\)/.test(all),
+      '全局 :focus-visible 的 3px outline 不见了 ⇒ 为了消一个绿框把键盘焦点环全砍了（过度修复）',
+    ).toBe(true);
+    console.log('判据 首屏焦点环 对象 dist/**/*.css 实测: 有 [tabindex="-1"]:focus-visible{outline:none}，且全局 :focus-visible 的 3px --accent-ink 环仍在 ⇒ 只收程序化聚焦，键盘焦点环不受影响');
+  });
+});
+
 describe.skipIf(!hasDist)('首页 JS 预算（B2 动效层）', () => {
   // 2026-09-26 站主拍板：首页动效内联脚本**另立一条**预算，上限 7 KB。
   // 文章页仍守 4096 B（上面的「JS 预算」），且产物里不得有独立 .js 文件

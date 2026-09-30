@@ -49,6 +49,18 @@ button {
   outline-offset: 3px;
 }
 
+/* ★ 程序化交焦点用的 `tabindex="-1"` 元素不画焦点环（2026-09-30 第六轮补）。
+   开场遮罩（BootIntro）收尾时会把焦点交回主标题，免得掉到 <body>；而 Chrome 会把
+   「脚本聚焦的 tabindex=-1 非交互元素」也判成 :focus-visible ⇒ 首屏大标题被套上
+   一个 3px 的绿框（--accent-ink #266b3b）。站主报的就是这个。
+   ★ 不是原型的样子：原型 <h1 class="display"> 既没有 tabindex 也没有任何 .focus()
+     （grep 过，原型全文无 tabindex / :focus），这条框是本站自己的 a11y 增强长出来的。
+   ★ 只收 `tabindex="-1"`，**不动** a/button/input 的键盘焦点环 —— 那些是 Tab 能走到的，
+     焦点环必须留着。`tabindex="-1"` 的元素 Tab 永远到不了，只可能是脚本聚焦。 */
+[tabindex='-1']:focus-visible {
+  outline: none;
+}
+
 /* ===== 光标（2026-09-27 站主最终决定：那枚"正常选择"结晶箭头删掉）=====
    站主原话："把之前的正常选择的光标删了，要不然有时会蹦出来"。
    确实会蹦：它只在 JS 把 `html.cursor-none` 加上之后才被白点顶掉，于是**加类之前的那一瞬**
