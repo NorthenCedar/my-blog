@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/gen-boot-css.mjs && astro dev",
-    "build": "node scripts/gen-boot-css.mjs && node scripts/gen-gallery-webp.mjs && astro build && node scripts/prune-draft-assets.mjs",
+    "dev": "astro dev",
+    "build": "node scripts/gen-gallery-webp.mjs && astro build && node scripts/prune-draft-assets.mjs",
     "preview": "astro preview",
     "preview:note": "看效果请用 npm run preview（不要双击 dist/index.html）—— 本站资源全走 / 开头的绝对路径，file:// 下会解析到盘根目录，整站 CSS 与 DNA/logo 素材全部 404。",
     "test": "vitest run",

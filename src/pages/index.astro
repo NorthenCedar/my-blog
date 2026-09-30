@@ -66,11 +66,27 @@ const hasCoord = Boolean(site.lat && site.lon && site.status);
 // 滚动带要用到的品牌词：从 wordmark 里取第一段（去掉空格与撇号之后的部分）。
 // 不写死字面量 —— tests/content-invariants.test.ts 禁止站点文案出现在 src/ 里。
 const brandWord = site.wordmark.split(/[\s']/)[0];
+
+// 首屏主标题的逐字切分（开场揭幕时"一个字一个字滑上来"用）。
+//   · 断行规则与原型一致：按**第一个空格**断（原型那里是硬 <br>）。
+//   · 这里的 index 是**整串累计**的，不按行重置 ⇒ 两行连着一路滑上来。
+//   · ★ 拆字后必须另给一份视觉隐藏的完整原文（视觉那半标 aria-hidden），
+//     否则屏幕阅读器会把标题一个字母一个字母念出来。
+const titleLines: { ch: string; i: number }[][] = (() => {
+  const w = site.wordmark;
+  const cut = w.indexOf(' ');
+  const rows = cut > 0 ? [w.slice(0, cut), w.slice(cut + 1)] : [w];
+  let acc = 0;
+  return rows
+    .filter((r) => r.length > 0)
+    .map((row) => [...row].map((ch) => ({ ch, i: acc++ })));
+})();
 ---
 
 <Base description={site.metaDescription} current="index" chrome="console">
-  {/* ===== 开场门控（B3）：必须在覆盖层之前**同步**执行，否则会先闪一下再隐藏 =====
-       不播的四种情形：reduced-motion / 无 JS / 本会话已播 / ≤767px。
+  {/* ===== 开场门控：必须在覆盖层之前**同步**执行，否则会先闪一下再隐藏 =====
+       不播的两情形：reduced-motion / 无 JS / 本会话已播。
+       ≤767px **照播**，但换成 1.5 s 的极简版（加 .boot-mini，由 CSS 压时间轴）。
        方向是 fail-safe：默认不显示，只有判定"该播"才挂 .boot-on。
        `.js` 这个字面量有断言守着（tests/b2-motion.test.ts「门控脚本只落首页」），别改。 */}
   <script is:inline>
@@ -78,9 +94,11 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     try {
       var play =
         !matchMedia('(prefers-reduced-motion: reduce)').matches &&
-        innerWidth >= 768 &&
         !sessionStorage.getItem('boot-intro');
-      if (play) document.documentElement.classList.add('boot-on');
+      if (play) {
+        document.documentElement.classList.add('boot-on');
+        if (innerWidth < 768) document.documentElement.classList.add('boot-mini');
+      }
       sessionStorage.setItem('boot-intro', '1'); /* 进入播放即记：刷新不重播；skip 也不重播 */
     } catch (e) {
       /* 无痕 / 禁用 storage：退化成"可能重播一次"，不影响可用性 */
@@ -157,17 +175,19 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
       <div class="band-copy par">
         <p class="eyebrow"><i></i>POD 01 · 身份 · {site.status}</p>
         {/* ★ 原型这里是一条固定文案 + 硬 <br> 折行。本站 wordmark 是内容层字段，不能写死，
-            所以按第一个空格断行 —— 与原型一致；若 wordmark 是一个词，照常单行渲染。 */}
+            所以按第一个空格断行 —— 与原型一致；若 wordmark 是一个词，照常单行渲染。
+            ★ 2026-09-30：为了开场揭幕的"逐字上滑"，整串被拆成逐字 <span>（见 titleLines）。
+              拆了字就必须**另给一份完整原文给屏幕阅读器**（.display-sr），视觉那半标 aria-hidden。
+              .dch 是裸的 inline-block、不改行高 ⇒ 排版与拆字之前逐字节等宽等高（见样式表注释）。 */}
         <h1 class="display" tabindex="-1">
-          {site.wordmark.includes(' ') ? (
-            <>
-              {site.wordmark.slice(0, site.wordmark.indexOf(' '))}
-              <br />
-              {site.wordmark.slice(site.wordmark.indexOf(' ') + 1)}
-            </>
-          ) : (
-            site.wordmark
-          )}
+          <span class="display-sr">{site.wordmark}</span>
+          {titleLines.map((row) => (
+            <span class="dline" aria-hidden="true">
+              {row.map((c) => (
+                <span class="dch" style={`--i:${c.i}`}>{c.ch}</span>
+              ))}
+            </span>
+          ))}
         </h1>
         <p class="lede">{site.intro}</p>
         {hasCoord && (
@@ -393,6 +413,9 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
       /* 3) 揭示：首次进视口播一次，播完即 unobserve。
             ★ 初值 opacity:0 由**这里**写（不是 CSS）⇒ 无 JS / JS 报错时内容照常可见，
               不会出现「动画没跑成 ⇒ 整页空白」这种最坏情况。
+            ★ `.band-copy > :not(.display)` ——
+              主标题（.display）2026-09-30 起改由开场揭幕的**逐字上滑**负责，
+              不再叠一层整体 reveal（两层同时改 opacity/transform 会互相顶）。
             ★★ 2026-09-30 第六轮（站主报「最近写的有时鼠标不放上去文章不显示」）——
               上面那条只保住了"脚本没跑"这一种失败，漏了更常见的一种：**动画丢了**。
               原来靠 `fill:'both'` 的脚本动画一直撑着元素可见，而内联 opacity:0 **始终留着** ⇒
@@ -405,7 +428,7 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
               可见性不再依赖任何活着的动画（动画只负责那 820ms 的入场观感）。
               settle 里"先摘内联、再取消"写在同一微任务内，中间不落帧 ⇒ 不会闪一下。 */
       if (!reduce && 'IntersectionObserver' in window) {
-        const blocks = document.querySelectorAll('.band-copy > *, .section-head, .entry, .card');
+        const blocks = document.querySelectorAll('.band-copy > :not(.display), .section-head, .entry, .card');
         const io = new IntersectionObserver((entries) => {
           entries.forEach((en, i) => {
             if (!en.isIntersecting) return;
@@ -703,8 +726,28 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     /* ★ 必须裁掉溢出的 path：JS 建 SVG 时两侧各外扩 90px，这些点在 .band 的
        overflow:hidden 之外**仍计入文档 scrollWidth**（390px 视口实测多 12px）。 */
     overflow: hidden;
-    mask-image: radial-gradient(ellipse 74% 64% at 56% 46%, #000 14%, transparent 84%);
-    -webkit-mask-image: radial-gradient(ellipse 74% 64% at 56% 46%, #000 14%, transparent 84%);
+    /* ★ 2026-09-30：暗角（vignette）挪到内层 .rh-grid__svg —— 本层现在专职做
+       「开场揭幕时线从两端向中间被画出来」的那层遮罩，两层遮罩套在一起才是最终形。 */
+  }
+  /* ★ 开场揭幕：整片竖线从**两端向中间**生长出来（对应 wodniack 的 `stagger.from:"edges"`）。
+     做法是两层纯色遮罩各占半宽，从 0% 长到 50% —— mask-size 是可插值的，不依赖 @property。
+     ★ 只在 html.boot-on 且非 mini 时挂；摘掉 .boot-on（skip / 结束）后无遮罩 ⇒ 完整可见。
+     与上游的区别：上游是给 160 条 path 逐条挂 drawSVG（他必须逐条画，因为是曲线）；
+     我们的线是**竖直直线**，一层横向遮罩就能得到同样的"从外向内"错落，代价是一行 CSS。 */
+  :global(html.boot-on:not(.boot-mini)) .rh-grid {
+    -webkit-mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
+    mask-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
+    -webkit-mask-position: left center, right center;
+    mask-position: left center, right center;
+    -webkit-mask-repeat: no-repeat, no-repeat;
+    mask-repeat: no-repeat, no-repeat;
+    -webkit-mask-size: 0% 100%, 0% 100%;
+    mask-size: 0% 100%, 0% 100%;
+    animation: rh-reveal 1200ms var(--ease) 4000ms both;
+  }
+  @keyframes rh-reveal {
+    from { -webkit-mask-size: 0% 100%, 0% 100%; mask-size: 0% 100%, 0% 100%; }
+    to { -webkit-mask-size: 50% 100%, 50% 100%; mask-size: 50% 100%, 50% 100%; }
   }
   .rh-grid__svg {
     position: absolute;
@@ -714,6 +757,9 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     overflow: hidden;
     display: block;
     pointer-events: none;
+    /* 暗角：让流场在首屏中间最实、四角淡出（原型值） */
+    mask-image: radial-gradient(ellipse 74% 64% at 56% 46%, #000 14%, transparent 84%);
+    -webkit-mask-image: radial-gradient(ellipse 74% 64% at 56% 46%, #000 14%, transparent 84%);
   }
   /* ★★ :global() 必须：这些 <path> 是运行时 createElementNS 造的，没有 cid。
      不带 :global() 时 computed 是 stroke:none / fill:rgb(0,0,0) ⇒
@@ -923,6 +969,47 @@ const brandWord = site.wordmark.split(/[\s']/)[0];
     margin-top: auto;
     padding-bottom: 2.6rem;
   }
+
+  /* ====================== 首屏入场（开场揭幕的交接）======================
+     ★★ 全部只在 `html.boot-on`（且非手机极简版）下挂 —— 这是 fail-safe 的方向：
+        无 JS / reduced-motion / 本会话已播 / skip 之后 ⇒ 这组规则**根本不存在**，
+        首屏内容默认就是终态、完整可读。绝不写成"默认藏起来、靠 JS 放出来"
+        （上游 wodniack.dev 就是整站 SSR `opacity:0` 靠 JS 点亮，动画一丢内容永久不可见 ——
+          那正是本仓 2026-09-30 第六轮修掉的 bug 类型）。
+     ★ 三段故意与遮罩重叠：遮罩 5300 ms 才撤，而揭帘 3550–4500、竖线 4000–5200、
+        逐字 3850–4970 ⇒ 观感是"遮罩打开的同时首屏正在成形"，不是"揭幕完再放一段"。 */
+  :global(html.boot-on:not(.boot-mini)) .band-copy {
+    animation: copy-veil 950ms cubic-bezier(0.65, 0, 0.35, 1) 3550ms both;
+  }
+  @keyframes copy-veil {
+    from { clip-path: inset(0 0 100% 0); }
+    to { clip-path: inset(0 0 0 0); }
+  }
+  :global(html.boot-on:not(.boot-mini)) .display .dch {
+    animation: ch-rise 640ms var(--ease) both;
+    animation-delay: calc(3850ms + var(--i, 0) * 30ms);
+  }
+  @keyframes ch-rise {
+    from { opacity: 0; transform: translateY(0.6em); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* 拆字壳：**只有 display:inline-block**，不动字号/行高/字距 ——
+     inline-block 装单字时，基线与行盒高度都与原文本相同 ⇒ 拆字前后排版逐字节一致。
+     letter-spacing 是"每字之后各加一份"，拆开后总宽也不变。 */
+  .display .dline { display: block; }
+  .display .dch { display: inline-block; }
+  /* 给屏幕阅读器的那份完整原文（视觉上不存在，但留在无障碍树里） */
+  .display-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   .eyebrow {
     font-family: 'IBM Plex Mono', monospace;
     font-size: var(--fs-mono);

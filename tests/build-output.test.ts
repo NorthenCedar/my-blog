@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { bootCss } from '../src/lib/boot-css';
 
 const DIST = 'dist';
 const hasDist = existsSync(DIST);
@@ -396,8 +395,8 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     const stripComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, ' ');
     const ALLOW = /^(none|auto|text|default|inherit|not-allowed|pointer)$/;
     const offenders: string[] = [];
-    for (const f of [...srcFiles, 'src/lib/boot-css.ts']) {
-      const text = stripComments(f.endsWith('boot-css.ts') ? bootCss() : readFileSync(f, 'utf8'));
+    for (const f of srcFiles) {
+      const text = stripComments(readFileSync(f, 'utf8'));
       for (const m of text.matchAll(/cursor:\s*([^;{}]+)[;}]/g)) {
         const value = m[1].trim().replace(/\s+/g, ' ');
         if (!ALLOW.test(value)) offenders.push(`${f}: cursor:${value}`);
