@@ -137,16 +137,21 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     const ariaHidden = /class="bath"[^>]*aria-hidden="true"/.test(ASTRO);
     const reveals = /host\.hidden\s*=\s*false/.test(CODE);
     const hiddenCss = /\.bath\[hidden\]/.test(ASTRO);
+    /* ★ 露面**不许等**首图下载完：静止态一个像素都不画（纯色），等图只会让板在慢网络下
+       晚好几秒才出现 —— 线上实测 t≈4.1 s 时板还没露面（`host.hidden` 仍是 true）。 */
+    const noWait = !/await\s+ready\(|addEventListener\('load'/.test(CODE);
     console.log(
       `判据 无 JS 降级 实测: ${hiddenAttr ? 'SSR 就带 hidden ✓' : '⚠️ 首屏没有 hidden'} · `
       + `${ariaHidden ? 'aria-hidden ✓' : '⚠️ 缺 aria-hidden'} · `
       + `${reveals ? '脚本到位才解除 ✓' : '⚠️ 脚本没解除'} · `
-      + `${hiddenCss ? '显式 [hidden] 规则 ✓' : '⚠️ 没有 [hidden] 兜底规则'}`,
+      + `${hiddenCss ? '显式 [hidden] 规则 ✓' : '⚠️ 没有 [hidden] 兜底规则'} · `
+      + `${noWait ? '不等首图下载 ✓' : '⚠️ 在等首图下载完才露面'}`,
     );
     expect(hiddenAttr, '板没带 hidden ⇒ 无 JS 时会看到一块空的深色板（板上没有可用信息）').toBe(true);
     expect(ariaHidden, '板是纯装饰，应 aria-hidden —— 否则读屏会念一段无意义的读数').toBe(true);
     expect(reveals, '脚本没有解除 hidden（板永远不出现）').toBe(true);
     expect(hiddenCss, '上游若给 .bath 加了 display，[hidden] 会被覆盖 ⇒ 必须显式写一条').toBe(true);
+    expect(noWait, '板在等首图下载完才露面 ⇒ 慢网络下页头会空几秒（线上实测 4.1 s 时还没露面）').toBe(true);
   });
 
   it('reduced-motion：静止整张照片，不跑 rAF', () => {

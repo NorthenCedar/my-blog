@@ -486,15 +486,6 @@
   }, { rootMargin: '160px' });
   io.observe(host);
 
-  /* 首张就绪再露面 —— 否则会先看到一块纯墨绿在页头 */
-  const ready = (im: HTMLImageElement) =>
-    new Promise<void>((res) => {
-      if (im.complete && im.naturalWidth) return res();
-      im.addEventListener('load', () => res(), { once: true });
-      im.addEventListener('error', () => res(), { once: true });
-      setTimeout(res, 3000);   // 兜底：网络慢也照常露面
-    });
-
   /* ★ bfcache 回来的页面**不会重新执行脚本** ⇒ 不补这一下，站主要的
      「每次打开相册页随机一张」在"从文章返回相册"那条路径上就不成立。
      ★ 判据是 `persisted`：普通加载会自己走上面的初始化，别在这里重抽（会闪）。 */
@@ -506,14 +497,15 @@
     else render(performance.now());
   });
 
-  (async () => {
-    if (!openRandom()) return;       // 没有横幅照片 ⇒ 板不出现（无 JS 同款结局）
-    const im = cur;
-    if (!im) return;
-    await ready(im);
+  /* ★ 这里**不等照片下载完**：静止态本来就一个像素都不画（纯色），
+     等图只会让板在慢网络下晚好几秒才出现（线上实测 ~4 s 时板还没露面）。
+     照片迟到没有副作用 —— 指针进来时 drawCover 自己会看 `complete`。 */
+  if (openRandom()) {                // 没有横幅照片 ⇒ 板不出现（与无 JS 同款结局）
     host.hidden = false;             // 必须先露面再量尺寸（display:none 时 rect 全是 0）
-    if (!resize()) { host.hidden = true; return; }
-    render(performance.now());
-    sync();
-  })();
+    if (!resize()) host.hidden = true;
+    else {
+      render(performance.now());
+      sync();
+    }
+  }
 })();
