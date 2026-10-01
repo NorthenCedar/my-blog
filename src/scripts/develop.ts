@@ -35,6 +35,20 @@
  *        竖幅铺进来只能裁成中间一条。
  *      ⇒ 笔触的尺度基准（短边）从 185 px 变成 800 px ⇒ R_HOLE 必须按参考站的比例重算。
  *
+ * ★★★ 同日第五轮（站主：「打开相册那个直接顶头，把导航栏什么的直接放在上面，
+ *   另外学一下 lowkeytp.art/liquid-reveal/ 是怎么处理鼠标上去的效果，做到和它一样」）：
+ *
+ *   · **板顶到页面最顶端**（不再让出顶栏那 3.4rem）：顶栏改成 absolute 浮在板上
+ *     （它本来就是半透明毛玻璃 ⇒ 浮在深墨绿板上正好）。见 gallery/index.astro。
+ *   · **鼠标上去时多一个跟着手的白圈**（参考站的 `.pointer-dot`）—— 见 markDot()。
+ *   · ★★ 顺手纠正三处**照抄错了**的参考站参数（都是扒它 JS 才发现的）：
+ *       ① **笔触半径**：我上一版按"旋钮 82 是直径 / 720"推成短边的 0.057；
+ *          它的 shader 里其实是 `size*1.35/height` = **画面高度的 0.15375**
+ *          ⇒ 上一版比它**小 2.7 倍**。
+ *       ② **跟随**：我用的是二阶弹簧（有过冲）；它是一阶指数平滑 `1−e^(−t·18)`（不过冲）。
+ *       ③ **形状**：它只有两个 sin（5 瓣 + 9 瓣），我用的是两层 fbm 噪声。
+ *     ⇒ 三处现在全部照抄它的原文，细褶那层 0.06 是本站补的（它没有 display 层的 fbm 边缘）。
+ *
  * ---------------------------------------------------------------------------
  * 实现选择：Canvas2D，不是 SVG feTurbulence
  *
@@ -85,32 +99,49 @@
 
   const TAU2 = Math.PI * 2;
 
-  /* 洞 —— 只在指针周围出现的那一块 */
+  /* 笔触 —— 只在指针周围出现的那一块 */
   const N_WIDE = 96;       // 轮廓采样点数（板小了，96 点间距 ≈ 6px，够平滑）
   const N_NARROW = 64;     // 窄视口减半
-  /* ★★ 笔触大小**照抄参考站**（lowkeytp.art/liquid-reveal）：它的旋钮「笔触大小」默认
-     **82**，画布 1280×720 ⇒ 82 / 720 ≈ **短边的 0.114**（站主原话：「跟 lowkeytp 保持一致就好」）。
-     ⇒ 半径 = 短边 × 0.057。整屏（1280×800）时一笔的直径 ≈ 91 px。
-     ★★ 注意这条**取代**了上一版"洞的直径 = 短边 0.92"那个数：板从页头小板变成**整屏首屏**后，
-        尺度基准（短边）从 185 px 变成 800 px，系数必须跟着换，否则一笔就有半屏大。
-     ★ 搅动的两个尺度按同一比例（见 R_INF_K / PUSH_K），否则"影响半径 > 笔触半径"⇒
-       局部鼓包变成整块被推走。 */
-  const R_HOLE = 0.057;    // 笔触半径 = 短边 × 0.057 ⇒ 一笔直径 ≈ 短边的 0.114（= 参考的 82/720）
-  /* ★★ 小板（手机档）必须**另算一档**：上面的比例是按**整屏**定的（短边 ≈ 800 px ⇒ 一笔 91 px），
-     照搬到手机那块 300×200 的小板上只有 17 px —— 手指根本擦不动（站主：触屏涂抹不习惯）。
-     0.22 是早先"页头小板"那版调出来的数，直接沿用。
+  /* ★★★ 笔触大小**照抄参考站 lowkeytp.art/liquid-reveal/ 的 shader 原文**
+     （站主 2026-10-01：「学一下它是怎么处理鼠标上去的效果，做到和它一样」）。
+     从它的 JS（_probe/ref/lr-app.js）里扒出来的原文是：
+         this.uniform(a, "radius", this.size * 1.35 / this.height);   // size=82, height=720
+         float d = length(off) / (radius * irregular);
+         float brush = 1.0 - smoothstep(0.45, 1.2, d);
+     ⇒ **半径 = 82 × 1.35 / 720 = 画面高度的 0.15375**；实心核心到 0.45R，外围渐隐到 1.2R。
+     ★★ 三个必须记住的点：
+        ① 单位是**画面高度**，不是短边 —— 上一版我按"旋钮 82 是直径、82/720=0.114 再折半"
+           推成短边的 0.057，**比参考站小了 2.7 倍**（这就是"跟参考站不一样"的第一因）。
+           整屏 1280×800 上：参考站一笔可见直径 ≈ 0.369×800 = **295 px**，上一版只有 91 px。
+        ② 82 那个旋钮**不是像素**，shader 里还要 ×1.35 ⇒ 别再拿它跟画布尺寸直接比。
+        ③ 搅动的两个尺度按同一比例缩放（见 R_INF_K / PUSH_K），否则"影响半径 > 笔触半径"
+           ⇒ 局部鼓包变成整块被推走。 */
+  const RADIUS_K = 0.15375;  // 笔触半径 = **画面高度** × 0.15375（= 参考站 82 × 1.35 / 720）
+  const CORE_K = 0.45;       // 实心核心到 0.45R（参考站 smoothstep 的下沿）
+  const FADE_K = 1.2;        // 外围渐隐到 1.2R（参考站 smoothstep 的上沿）
+  /* ★★ 小板（手机档）必须**另算一档**：整屏那档是按 800 px 的板高定的（一笔 ≈ 295 px），
+     照搬到手机那块 ~160 px 高的小板上只有 59 px —— 手指根本擦不动（站主：触屏涂抹不习惯）。
+     ★ 0.19 是按"可见直径与上一版小板持平"反推的（上一版 2×1.04×0.22 ≈ 短边的 0.458，
+       新形状 2×1.2×R = 0.458 ⇒ R ≈ 0.19）⇒ 换形状后小板的手感不变。
      ★ 判定用**板的短边**，不是视口：同一个视口下两种版面尺寸差 4 倍，按视口分会判错。 */
-  const R_HOLE_SMALL = 0.22;
+  const RADIUS_SMALL_K = 0.19;
   const SMALL_PLATE = 420;   // 短边小于这个 ⇒ 按小板算
+  /* ★★ 形状**照抄参考站**的 irregular（sim shader 原文）：
+         float angle = atan(off.y, off.x);
+         float irregular = 1.0 + 0.14 * sin(angle * 5.0 + time * 1.6)
+                               + 0.08 * sin(angle * 9.0 - time * 1.1);
+     ⇒ 5 瓣（幅度 0.14）+ 9 瓣（幅度 0.08）；两个分量的**时间系数不同号** ⇒ 形状持续变形。
+     ★ time 在它那里是**秒**（引擎里 `this.time += dt`，dt 是秒）⇒ 这里必须 `t / 1000`，
+       照抄成毫秒会快 1000 倍（形状抖成一团）。 */
+  const IRR_A5 = 0.14, IRR_A9 = 0.08;
+  const IRR_S5 = 1.6, IRR_S9 = 1.1;
+  /* ★ 本站比参考站**多**的一层细褶：参考站的轮廓不规则只有上面两个 sin，
+     它那种"破碎的水渍边缘"来自 **display** shader 里的 fbm 噪声（`smoothstep(.19,.215, d+(edge-.5)*.15)`）
+     —— 那是**显示**阶段加的，本站没有那一层（蒙版是 canvas 画的、边缘就是轮廓本身）
+     ⇒ 在轮廓上补一层 0.06 的细褶，免得照抄两个 sin 之后形状太规整。 */
   const R2_FINE = 0.85;    // 细褶：环上一圈 ≈ 5.3 个噪声格（五六个起伏）
-  const AMP_FINE = 0.11;   // 细褶幅度（相对半径）
-  const R2_LOBE = 0.30;    // 低频分量：≈ 2 个格
-  const AMP_LOBE = 0.25;   // ★ 这一层才是"水渍"而不是"规整圆"的来源 ——
-                           //   它让形状一头大一头小、整体歪斜；细褶只负责边缘的毛感。
-                           //   对着抖音参考的抽帧（_probe/ref/liquid-reveal/t08.png）调过：
-                           //   参考那块水渍的轮廓是明显偏心 + 一头大一头小，不是圆。
-  /* ★ 边缘流动的速度。板从满宽（短边 300+）缩到页头这块小板（短边 ~190）后，
-     同样的相位推进换算成像素只有原来的 1/3 ⇒ 照旧值会"看着像不动"。
+  const AMP_FINE = 0.06;   // 细褶幅度（相对半径）
+  /* ★ 边缘流动的速度：细褶那层噪声的相位推进。
      ★ 实测（_probe/cdp-bath.mjs --hold）：3.2e-4 时边界只有 1.6 px/s（太小，读成静止）；
        9e-4 ⇒ 约 5 px/s，看得出"液体在动"但不会跳。 */
   const PH_SPD = 9e-4;
@@ -120,22 +151,23 @@
   const TAU_OUT = 280;
   const PW_EPS = 0.004;    // 小于这个就算"没有指针" ⇒ 整版不画（纯色）
 
-  /* ★ 跟随弹簧：洞被指针"拽"着走。
-     滞后是"搅动"的来源 —— 指针快速划过时洞会落在后面、被拉出一个包；
-     停手后它才慢慢贴上来。ζ<1 ⇒ 有一点点过冲，那是液体的手感。 */
-  /* ★ 角频率要挑：太小 ⇒ 快速划过时笔触整个落在指针后面（像没响应）；
-     太大 ⇒ 硬贴着指针，"被拽着走"的手感全丢。
-     ★★ 这一版笔触变小 + 变成"涂抹"了 ⇒ 滞后太大就变成"笔不跟着手走"（涂抹最忌讳这个）。
-     所以比上一版调紧：26/0.65 ⇒ 稳态滞后 ≈ 2ζv/ω，500 px/s 落后约 25 px、
-     甩一下（2300 px/s）约 115 px（这时拖尾正好由**擦痕**接手，不是靠弹簧硬撑）。 */
-  const LAG_W = 26;        // 角频率（rad/s）⇒ 稳定时间 ~0.15 s
-  const LAG_Z = 0.65;      // 阻尼比（1 = 临界阻尼，不过冲）
+  /* ★★ 跟随**照抄参考站**：它是**一阶指数平滑**，不是本站原先那个二阶弹簧。
+     引擎 `advance()` 的原文：
+         const n = 1 - Math.exp(-t * 18);
+         this.point = this.point.map((s, c) => s + (this.target[c] - s) * n);
+     ⇒ 速率 **18 / 秒**（时间常数 ≈ 56 ms），**一阶 ⇒ 没有过冲**。
+     ★★ 换掉上一版那个二阶弹簧（LAG_W=26 / LAG_Z=0.65）的理由：ζ=0.65 是欠阻尼，
+        有约 6% 的过冲 ⇒ 涂抹时"笔尖会抖一下"；参考站观感是**干净地贴上来**。
+     ★ 稳态滞后 = v / 18：500 px/s 落后 ≈ 28 px、甩一下（2300 px/s）≈ 128 px
+       （这时拖尾由**擦痕**接手，不是靠跟随硬撑）。
+     ★ ds 必须是**秒**（18 的单位是 1/s）且是真实 dt ⇒ 帧率无关。 */
+  const FOLLOW_K = 18;     // 跟随速率（1/s）⇒ 时间常数 ≈ 56 ms
 
   /* 搅动：指针附近那段边界被**推开**（局部，不是整体充气） */
-  /* ★ 这两个必须跟着 R_HOLE 一起收（同上）：比值 R_INF/R = 0.42/0.46 ≈ 0.91 保持不变
-     ⇒ 洞缩小后搅动仍是"局部鼓一个包"，不会变成"整块被推走"。 */
-  const R_INF_K = 0.05;    // 影响半径 = 短边 × 这个系数（≈ 笔触半径的 0.9）
-  const PUSH_K = 0.019;    // 最大推开距离（同上口径；≈ 笔触半径的 1/3，与改前手感一致）
+  /* ★ 这两个按**比值**跟着 RADIUS_K 走（同上）：R_INF/R = 0.877、PUSH/R = 0.333 保持不变
+     ⇒ 笔触放大 2.7 倍后搅动仍是"局部鼓一个包"，不会变成"整块被推走"。 */
+  const R_INF_K = 0.135;   // 影响半径 = 板高 × 这个系数（≈ 笔触半径的 0.88）
+  const PUSH_K = 0.0512;   // 最大推开距离（同上口径；≈ 笔触半径的 1/3，与改前手感一致）
 
   /* ★★ 擦痕的停留（参考 lowkeytp.art 那个旋钮「显影停留时间」，它默认 2.8s）
      · 实现：整版蒙版每帧按 `1 − e^(−dt/τ)` 衰减（destination-out）⇒ 蒙版 alpha 指数下降。
@@ -202,8 +234,9 @@
 
   let W = 0, H = 0, dpr = 1, N = N_WIDE;
   let COS = new Float32Array(0), SIN = new Float32Array(0), PX = new Float32Array(0);
+  let TH = new Float32Array(0);               // 每个采样点的极角（irregular 要用 atan 的结果）
   let RINF = 10, PUSH = 10;
-  let RB = R_HOLE;                            // 当前笔触比例（resize 里按板的短边选档）
+  let RB = RADIUS_K;                          // 当前笔触比例（resize 里按板的短边选档）
 
   /* ★★ 擦痕蒙版：一张和板同尺寸的离屏 canvas，只有**擦过的地方**有 alpha。
      每帧两件事 —— ① 整版乘性衰减（destination-out）② 在指针处盖一个有机形状的笔触。
@@ -214,7 +247,7 @@
 
   let raf = 0, running = false, onScreen = true, last = 0;
   let mx = 0, my = 0;                          // 指针（板内坐标）
-  let cx = 0, cy = 0, cvx = 0, cvy = 0;        // 洞心（跟随弹簧的位置与速度）
+  let cx = 0, cy = 0;                          // 笔触中心（一阶指数平滑跟随指针，无速度项）
   let pw = 0, pwT = 0;                         // 影响强度（实际值、目标值）
   let trail = 0;                               // 擦痕残留（最新一笔的强度；1 = 刚擦过）
   let cur: HTMLImageElement | null = null, curUrl = '';
@@ -243,16 +276,20 @@
     mkx.clearRect(0, 0, W, H);
     COS = new Float32Array(N);
     SIN = new Float32Array(N);
+    TH = new Float32Array(N);
     for (let i = 0; i < N; i++) {
       const th = (i / N) * TAU2;
       COS[i] = Math.cos(th);
       SIN[i] = Math.sin(th);
+      TH[i] = th;                    // = atan2(SIN, COS)，参考站 shader 里的 angle
     }
     PX = new Float32Array(N * 2);
-    /* ★ 笔触分两档：整屏走参考站那档，小板（手机）走另一档 —— 见 R_HOLE_SMALL。 */
-    RB = Math.min(W, H) < SMALL_PLATE ? R_HOLE_SMALL : R_HOLE;
-    RINF = Math.min(W, H) * R_INF_K;
-    PUSH = Math.min(W, H) * PUSH_K;
+    /* ★ 笔触分两档：整屏走参考站那档，小板（手机）走另一档 —— 见 RADIUS_SMALL_K。
+       ★★ 半径一律按**板高 H**（参考站是 `size*1.35/height`，不是短边）；
+          选哪一档才看短边（同一个视口下两种版面尺寸差 4 倍）。 */
+    RB = Math.min(W, H) < SMALL_PLATE ? RADIUS_SMALL_K : RADIUS_K;
+    RINF = H * R_INF_K;
+    PUSH = H * PUSH_K;
     // 尺寸变了 ⇒ 指针/洞心坐标失效，强度归零（免得形状上突然鼓一个错位的包）；
     // 蒙版尺寸也变了 ⇒ 擦痕作废（旧坐标的擦痕会出现在错误的位置）
     pw = 0;
@@ -278,17 +315,23 @@
      ★ 形状**每帧都在变**（噪声相位跟着 t 走）⇒ 划一道出去，带子的两边是起伏的，
        不会是"一条等宽的规整笔道"—— 站主这条要求是"不能太规整"。 */
   const stamp = (t: number) => {
-    const ph = t * PH_SPD;
-    const phL = ph * 0.45;   // 低频分量的相位推进更慢 ⇒ 两个分量不同步 ⇒ 形状持续变形
+    /* ★ 单位换算：参考站 shader 的 `time` 是**秒**（引擎里 `this.time += dt`，dt 是秒）
+       ⇒ 它的两个 sin 相位必须吃秒；本站 t 是 `performance.now()`（毫秒）。 */
+    const ts = t / 1000;
+    const ph = t * PH_SPD;             // 本站额外那层细褶的相位（沿用毫秒口径，原值不动）
+    const ph5 = ts * IRR_S5;
+    const ph9 = ts * IRR_S9;
     const s = pw * pw * (3 - 2 * pw);          // 进出都平滑（不是线性淡入）
-    const R = Math.min(W, H) * RB * s;
+    const R = H * RB * s;                      // ★ 按**板高**（参考站 = size*1.35/height）
     const active = RINF > 1;
 
     for (let i = 0; i < N; i++) {
-      // 细褶 + 低频偏斜：各自在环上采 2D 噪声，θ=0 与 2π 是同一点 ⇒ 闭合
+      /* ★★ 照抄参考站的 irregular：5 瓣 + 9 瓣，两个分量时间系数不同号 ⇒ 持续变形。
+         本站再加一层环上 2D 噪声的细褶（θ=0 与 2π 同点 ⇒ 天然闭合）。 */
       const k = 1
-        + AMP_FINE * fbm2(COS[i] * R2_FINE + ph, SIN[i] * R2_FINE, hA)
-        + AMP_LOBE * fbm2(COS[i] * R2_LOBE + phL, SIN[i] * R2_LOBE, hB);
+        + IRR_A5 * Math.sin(5 * TH[i] + ph5)
+        + IRR_A9 * Math.sin(9 * TH[i] - ph9)
+        + AMP_FINE * fbm2(COS[i] * R2_FINE + ph, SIN[i] * R2_FINE, hA);
       let x = cx + R * k * COS[i];
       let y = cy + R * k * SIN[i];
 
@@ -325,13 +368,22 @@
     }
     mkx.closePath();
     mkx.clip();
-    // 软边：中心实心、外围渐隐（不是 0，免得笔触边缘永远擦不干净）
-    const g = mkx.createRadialGradient(cx, cy, R * 0.3, cx, cy, Math.max(1, R * 1.04));
+    /* ★★ 软边**照抄参考站**的 `brush = 1 - smoothstep(0.45, 1.2, d)`：
+       实心核心到 0.45R，外围渐隐到 1.2R（smoothstep 是 S 形，不是线性）。
+       ★★ 但蒙版在合成时要**平方**（见 render ③，为了绕开 8 位 alpha 的乘性衰减下限）
+          ⇒ 这里存的是 `sqrt(brush)`，平方之后才正好等于参考站的 brush。
+          五个采样点是按 `sqrt(1 - smoothstep(t))` 算的（t = 0/.25/.5/.75/1）：
+          1 · 0.919 · 0.707 · 0.395 · 0 —— 别照着"看起来均匀"改，改了就不等于参考站那条曲线。 */
+    const r0 = R * CORE_K;
+    const r1 = Math.max(r0 + 0.5, R * FADE_K);
+    const g = mkx.createRadialGradient(cx, cy, r0, cx, cy, r1);
     g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.7, 'rgba(255,255,255,1)');
-    g.addColorStop(1, 'rgba(255,255,255,0.55)');   // ★ 蒙版要平方 ⇒ 终点抬到 0.55（0.55² ≈ 0.30）
+    g.addColorStop(0.25, 'rgba(255,255,255,0.919)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.707)');
+    g.addColorStop(0.75, 'rgba(255,255,255,0.395)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
     mkx.fillStyle = g;
-    mkx.fillRect(cx - R * 1.2, cy - R * 1.2, R * 2.4, R * 2.4);
+    mkx.fillRect(cx - r1, cy - r1, r1 * 2, r1 * 2);
     mkx.restore();
     mkx.globalCompositeOperation = 'source-over';
   };
@@ -444,13 +496,10 @@
       // 影响强度：指数平滑的**帧率无关**写法（1 − e^(−dt/τ)），不是每帧乘固定系数
       const tau = pwT > pw ? TAU_IN : TAU_OUT;
       pw += (pwT - pw) * (1 - Math.exp(-dt / tau));
-      // 跟随弹簧：半隐式欧拉 + **真实 dt**（"每帧固定系数" ⇒ 手感随刷新率变）
-      const ax = LAG_W * LAG_W * (mx - cx) - 2 * LAG_Z * LAG_W * cvx;
-      const ay = LAG_W * LAG_W * (my - cy) - 2 * LAG_Z * LAG_W * cvy;
-      cvx += ax * ds;
-      cvy += ay * ds;
-      cx += cvx * ds;
-      cy += cvy * ds;
+      // ★ 跟随：一阶指数平滑（`1 − e^(−ds·18)`，照抄参考站）⇒ 帧率无关、且**不过冲**
+      const kf = 1 - Math.exp(-ds * FOLLOW_K);
+      cx += (mx - cx) * kf;
+      cy += (my - cy) * kf;
       if (mix < 1) {
         mix = Math.min(1, mix + dt / SWAP_MS);
         if (mix >= 1) { cur = nxt; curUrl = nxtUrl; nxt = null; nxtUrl = ''; }
@@ -531,20 +580,44 @@
     my = e.clientY - r.top;
   };
 
+  /* ★★ 指针**在板上**时显示那个白圈 —— 照抄参考站的 `.pointer-dot`
+     （站主：「学一下 lowkeytp 是怎么处理鼠标上去的效果，做到和它一样」）。
+     它的原文（_probe/ref/lr-app.js）：
+         if (!n) { …; l.dot.classList.remove("visible"); return; }
+         l.dot.style.left = `${t*100}%`;  l.dot.style.top = `${r*100}%`;
+         l.dot.classList.add("visible");
+     三个必须照抄的细节：
+       ① 用**百分比**定位（不是 px）⇒ resize 后不用重算；
+       ② 指针出界就摘掉 `visible`（不是移到边界上）；
+       ③ **没有 transition** —— 圈是**硬跟手**的。滞后的那个是**笔触**（一阶平滑），
+          不是圈 ⇒ 圈 = "手在哪"、笔触 = "液体到哪了"，两个位置差就是"被拽着走"的读数。 */
+  const dot = host.querySelector<HTMLElement>('[data-bath-dot]');
+  const markDot = () => {
+    if (!dot) return;
+    const inside = mx >= 0 && mx <= W && my >= 0 && my <= H;
+    if (!inside) { dot.classList.remove('on'); return; }
+    dot.style.left = `${(mx / W) * 100}%`;
+    dot.style.top = `${(my / H) * 100}%`;
+    dot.classList.add('on');
+  };
+
   host.addEventListener('pointerenter', (e) => {
     toLocal(e);
-    // 洞是从"没有"长出来的 ⇒ 洞心直接落在指针上（否则会从上一处位置飞过来）
-    if (pw <= PW_EPS) { cx = mx; cy = my; cvx = 0; cvy = 0; }
+    // 笔触是从"没有"长出来的 ⇒ 中心直接落在指针上（否则会从上一处位置飞过来）
+    if (pw <= PW_EPS) { cx = mx; cy = my; }
     if (!reduce.matches) pwT = 1;
+    markDot();
     sync();
   });
   host.addEventListener('pointermove', (e) => {
     toLocal(e);
     if (pwT === 0 && !reduce.matches) pwT = 1;   // 指针已在板内但没触发过 enter（例如刚露面）
+    markDot();
     sync();
   });
   host.addEventListener('pointerleave', () => {
-    pwT = 0;      // ⇒ 洞收回去，收完自动停帧，板回到纯色
+    pwT = 0;      // ⇒ 笔触收回去，收完自动停帧，板回到纯色
+    dot?.classList.remove('on');
     sync();
   });
 

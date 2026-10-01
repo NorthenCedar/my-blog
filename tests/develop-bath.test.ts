@@ -16,8 +16,20 @@ import { existsSync } from 'node:fs';
  *   · 洞变成**涂抹的擦痕**：走过的路径留在板上、停留约 3 s 再褪回纯色。
  *   · 板从「页头右侧的小板」改成**相册页的整屏首屏**（往下滚才看到相册内容）；
  *     照片按 cover 铺满（会裁）⇒ "不裁不拉伸"那条口径作废。
- *   · 板上有**手写花体「北杉札记」**（DOM 层，不在 canvas 里 ⇒ 擦痕擦不掉）+ **胶片颗粒**
+ *   · 板上有**手写花体的站名**（DOM 层，不在 canvas 里 ⇒ 擦痕擦不掉）+ **胶片颗粒**
  *     （CSS 层，不进 canvas ⇒ 不给形状掺随机源）。
+ *
+ * ★★★ 同日第五轮（站主：「打开相册那个直接顶头，把导航栏什么的直接放在上面，
+ *   另外学一下 lowkeytp 是怎么处理鼠标上去的效果，做到和它一样」）：
+ *
+ *   · 板**顶到页面最顶端**：顶栏改 absolute 浮在板上（它本来就是半透明毛玻璃）。
+ *   · 鼠标上去时多一个**跟着手的白圈**（照抄它的 `.pointer-dot`）。
+ *   · ★★ 扒它的 JS（`_probe/ref/lr-app.js`）才发现**三处上一版照抄错了**：
+ *       ① 笔触半径是 `size*1.35/height` = 板高的 **0.15375**，
+ *          不是我推的"短边 0.057"（**小了 2.7 倍** —— 旋钮 82 不是像素，还要 ×1.35）；
+ *       ② 跟随是**一阶指数平滑** `1−e^(−t·18)`，不是二阶弹簧（后者 ζ<1 会过冲）；
+ *       ③ 形状只有两个 sin（5 瓣 + 9 瓣），不是两层 fbm 噪声。
+ *   ⇒ 判据因此**整体换了一批**：钉"照抄了参考站原文"，不再钉上一版那些自推的数。
  *
  * 仍然是同一台装置的底子（照片在下 / 深墨绿在上 / 有机形状的洞里露出照片 /
  * 文字压最上层不参与显影），所以下面这些老规矩**照旧成立**：
@@ -90,36 +102,43 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     expect(smooth, '指针附近的推开没有平滑衰减（边缘会出现一个尖角）').toBe(true);
     expect(offBoard, '指针离开后没把强度归零 ⇒ 洞会赖在板上不收（违反"纯色"口径）').toBe(true);
     /* ★★ 手感参数钉的是**相对笔触半径的比例**，不是绝对数值：
-       笔触大小是照参考站的比例定的（82/720），板从"小板"变"整屏"时尺度基准（短边）
+       笔触大小照参考站的 shader 定（`size*1.35/height`），板从"小板"变"整屏"时尺度基准
        从 185 px 变成 800 px ⇒ 写死绝对区间会在换尺寸那天误报，而比例是尺度无关的。
-       · R_INF / R_HOLE ≈ 0.9：影响半径略小于笔触 ⇒ 鼓的是"局部一个包"，不是整块被推走
-       · PUSH / R_HOLE ≈ 1/3：大到像被咬一口 / 小到看不见，两头都挡住 */
-    const rHole = num('R_HOLE');
+       · R_INF / R ≈ 0.9：影响半径略小于笔触 ⇒ 鼓的是"局部一个包"，不是整块被推走
+       · PUSH / R ≈ 1/3：大到像被咬一口 / 小到看不见，两头都挡住
+       ★ RADIUS_K 的区间是**照抄参考站反推的硬区间**：82 × 1.35 / 720 = 0.15375。
+         上一版误把旋钮 82 当成直径、推成短边的 0.057 ⇒ 比参考站小 2.7 倍（扒它的 JS 才发现）。
+         区间取 0.12~0.20：既不会退回上一版那个 0.057，也不会大过半屏。 */
+    const rHole = num('RADIUS_K');
     const rInfRatio = rinf / rHole;
     const pushRatio = push / rHole;
     console.log(
-      `判据 局部搅动 实测（尺度无关）: R_HOLE=${rHole} · R_INF/R=${rInfRatio.toFixed(2)} · `
+      `判据 局部搅动 实测（尺度无关）: RADIUS_K=${rHole} · R_INF/R=${rInfRatio.toFixed(2)} · `
       + `PUSH/R=${pushRatio.toFixed(2)}`,
     );
-    expect(rHole > 0.02 && rHole < 0.12, `R_HOLE=${rHole} 越界（参考站 82/720 ⇒ 半径 ≈ 短边 0.057）`).toBe(true);
+    expect(rHole > 0.12 && rHole < 0.2, `RADIUS_K=${rHole} 越界（参考站 82×1.35/720 ⇒ 板高的 0.15375）`).toBe(true);
     expect(rInfRatio > 0.5 && rInfRatio <= 1.2, `R_INF/R=${rInfRatio.toFixed(2)} 越界（影响半径应≈笔触大小）`).toBe(true);
     expect(pushRatio > 0.12 && pushRatio <= 0.6, `PUSH/R=${pushRatio.toFixed(2)} 越界（≈1/3 笔触半径）`).toBe(true);
   });
 
-  it('平滑与跟随弹簧都帧率无关：1−e^(−dt/τ) + 半隐式欧拉吃真实 dt', () => {
+  it('平滑与跟随都帧率无关：1−e^(−dt/τ) + 跟随吃真实 dt', () => {
+    /* ★★ 跟随这一项在第五轮**换了实现**：原来是二阶弹簧（LAG_W/LAG_Z + cvx/cvy），
+       现在照抄参考站改成一阶指数平滑 `1 − e^(−ds·FOLLOW_K)`。
+       ⇒ 判据要钉的是"吃真实 dt 的指数平滑"，**不再**钉半隐式欧拉那两个式子。 */
     const expo = /Math\.exp\(\s*-dt\s*\/\s*tau\s*\)/.test(CODE);
-    const springA = /LAG_W\s*\*\s*LAG_W\s*\*\s*\(\s*mx\s*-\s*cx\s*\)\s*-\s*2\s*\*\s*LAG_Z\s*\*\s*LAG_W\s*\*\s*cvx/.test(CODE);
-    const springV = /cvx\s*\+=\s*ax\s*\*\s*ds/.test(CODE) && /cx\s*\+=\s*cvx\s*\*\s*ds/.test(CODE);
+    const follow = /1\s*-\s*Math\.exp\(\s*-ds\s*\*\s*FOLLOW_K\s*\)/.test(CODE);
+    const followEats = /cx\s*\+=\s*\(\s*mx\s*-\s*cx\s*\)\s*\*\s*kf/.test(CODE)
+      && /cy\s*\+=\s*\(\s*my\s*-\s*cy\s*\)\s*\*\s*kf/.test(CODE);
     const perFrame = /pw\s*\*=\s*[\d.]+/.test(CODE);
     const dtCap = /Math\.min\(DT_MAX,\s*Math\.max\(0,\s*now\s*-\s*last\)\)/.test(CODE);
     console.log(
       `判据 帧率无关 实测: ${expo ? '1 − e^(−dt/τ) ✓' : '⚠️ 不是指数平滑'} · `
-      + `${springA && springV ? '跟随弹簧吃真实 dt ✓' : '⚠️ 弹簧没吃真实 dt'} · `
+      + `${follow && followEats ? '跟随吃真实 dt ✓' : '⚠️ 跟随没吃真实 dt'} · `
       + `${perFrame ? '⚠️ 还有每帧固定系数' : '无每帧固定系数 ✓'} · `
       + `${dtCap ? 'dt 取自 rAF 真实间隔并设上限 ✓' : '⚠️ 没接真实 dt / 没上限'}`,
     );
     expect(expo, '指针强度用"每帧乘固定系数"平滑 ⇒ 时间常数随刷新率变').toBe(true);
-    expect(springA && springV, '跟随弹簧没吃真实 dt ⇒ 洞跟随的快慢取决于显示器刷新率').toBe(true);
+    expect(follow && followEats, '跟随没吃真实 dt ⇒ 笔触跟随的快慢取决于显示器刷新率').toBe(true);
     expect(perFrame, '还有每帧固定系数（*= 常数）：这一条在流场弹簧上已经栽过一次').toBe(false);
     expect(dtCap, 'dt 没从 rAF 真实间隔算 / 没有上限（切标签回来会跳变）').toBe(true);
   });
@@ -144,15 +163,21 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     expect(stopClears, '停帧没清屏 ⇒ 指针离开后洞的残影会赖在板上').toBe(true);
   });
 
-  it('笔触跟着指针走：进板即落点，之后由滞后弹簧跟随', () => {
+  it('笔触跟着指针走：进板即落点，之后一阶指数平滑跟随（照抄参考站）', () => {
     const snap = /if\s*\(\s*pw\s*<=\s*PW_EPS\s*\)\s*\{\s*cx\s*=\s*mx;\s*cy\s*=\s*my/.test(CODE);
-    const spring = /const\s+ax\s*=\s*LAG_W/.test(CODE);
+    /* ★ 参考站引擎原文：`const n = 1 - Math.exp(-t * 18); point += (target - point) * n`
+       ⇒ 本站是 FOLLOW_K = 18（1/秒）。★ 单位是**秒** ⇒ 必须乘 ds 不是 dt（毫秒）。 */
+    const follow = num('FOLLOW_K');
+    const expForm = /1\s*-\s*Math\.exp\(\s*-ds\s*\*\s*FOLLOW_K\s*\)/.test(CODE);
+    const noSpring = !/LAG_W/.test(CODE) && !/cvx/.test(CODE);
     console.log(
       `判据 跟随 实测: ${snap ? '刚进板笔触落在指针上 ✓' : '⚠️ 笔触会从上一处飞过来'} · `
-      + `${spring ? '有滞后弹簧 ✓' : '⚠️ 笔触硬跟指针（没有"被拽着走"的手感）'}`,
+      + `${expForm ? `一阶指数平滑 FOLLOW_K=${follow} ✓` : '⚠️ 跟随不是 1−e^(−ds·FOLLOW_K)'} · `
+      + `${noSpring ? '无二阶弹簧残留 ✓' : '⚠️ 还留着 LAG_W/cvx（过冲会读成"笔尖抖一下"）'}`,
     );
     expect(snap, '笔触不落到指针上 ⇒ 指针刚进板时痕迹出现在上一处位置（读成 bug）').toBe(true);
-    expect(spring, '笔触直接等于指针位置 ⇒ 没有滞后，"搅动"的手感全丢').toBe(true);
+    expect(expForm && follow > 8 && follow < 40, '跟随不是照抄参考站的一阶指数平滑（18/s）').toBe(true);
+    expect(noSpring, '还留着二阶弹簧 ⇒ ζ<1 的过冲在涂抹时会读成"笔尖抖一下"').toBe(true);
   });
 
   it('★ 擦痕会停留一段时间再褪回纯色（参考站的「显影停留时间」）', () => {
@@ -346,8 +371,22 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     /* ★★ 2026-10-01 第四轮：站主「不如直接把这个放在相册页整屏」⇒ 这条判据**翻过来**了：
        上一版钉的是"不是满宽条"，现在钉的是"**是**满宽 + 一屏高"。 */
     const bleed = /margin-inline:\s*calc\(50%\s*-\s*50vw\)/.test(ACSS);
-    const svh = /height:\s*calc\(100svh\s*-\s*var\(--topbar-h\)\)/.test(ACSS);
+    /* ★★ 第五轮：站主「打开相册那个直接顶头」⇒ 顶栏改成 absolute 浮在板上，
+       板自己就是纯 `100svh`（**不再**减顶栏高度）。 */
+    const svh = /height:\s*100svh/.test(ACSS);
     const noVw = !/\bwidth:\s*100vw/.test(ACSS);
+    /* ★★ 还有第二个 48px：板在 `.shell` 里，`.shell` 有 `padding: var(--sp-7) …`（3rem）
+       ⇒ 光把顶栏浮起来，板仍被推到 y=48（实测过，别再只改一半）。
+          正解是给板一个**负 margin-top 抵消**（不去改共用的 `.shell`）；
+          ★ 手机档必须撤掉它 —— 那边板是页头里的小板，负 margin 会让它骑到页头上边。 */
+    const negTop = /\.bath\s*\{[^}]*margin-top:\s*calc\(-1\s*\*\s*var\(--sp-7\)\)/.test(ACSS);
+    const mNegZero = /@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.bath\s*\{[^}]*margin-top:\s*0/.test(ACSS);
+    /* ★ 顶栏浮层：必须是 absolute（不是 fixed —— fixed 会一直跟着滚，本站内页顶栏是滚走的），
+       且**包在 min-width:768px 里**（手机档是页头旁边的小板，顶栏要回到普通文档流）。 */
+    /* ★ 本页是 scoped style ⇒ 选择器写成 `:global(body.chrome-page .topbar.topbar)`
+       ⇒ 正则里 `.topbar.topbar` 后面是 `)` 而不是 `{`，别漏了这一个字符。 */
+    const tbAbs = /@media\s*\(min-width:\s*768px\)\s*\{[\s\S]*?\.topbar\.topbar\s*\)\s*\{[^}]*position:\s*absolute/.test(ACSS);
+    const tbZ = /\.topbar\.topbar\s*\)\s*\{[^}]*z-index:\s*30/.test(ACSS);
     /* ★ 桌面：板是页头的**第一个**子元素（整屏），标题被它顶到首屏之下。
        手机（≤767px）：同一份 DOM 用 order 把板排到标题**右边**，变回小板。 */
     const firstChild = ASTRO.indexOf('class="bath"') > 0
@@ -360,23 +399,106 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     /* ★ flex: 0 0 auto 必须有：flex 子项默认可收缩，缺了它标题一挤就把板压扁
        （实测 390 视口：CSS 写 179 px，实测被压到 133 px）。 */
     const mNoShrink = /\.bath\s*\{[^}]*flex:\s*0\s+0\s+auto/.test(ACSS);
-    /* ★ 笔触在**小板**上要另算一档：整屏那档（短边的 0.057）搬到 300px 小板上只有 17 px */
-    const small = /R_HOLE_SMALL\s*=\s*0\.22/.test(CODE) && /RB\s*=\s*Math\.min\(W,\s*H\)\s*<\s*SMALL_PLATE/.test(CODE);
+    /* ★ 笔触在**小板**上要另算一档：整屏那档（板高的 0.15375）搬到 160px 小板上只有 25 px */
+    const small = /RADIUS_SMALL_K\s*=\s*0\.19/.test(CODE) && /RB\s*=\s*Math\.min\(W,\s*H\)\s*<\s*SMALL_PLATE/.test(CODE);
+    /* ★★ 半径必须按**板高 H**算（参考站是 `size*1.35/height`），不是短边、不是 min(W,H)。
+       本站两种版面都是横的（H 就是短边）⇒ 现在两者相等，但**写法**必须钉住：
+       哪天板变成竖的，按短边算就会跟参考站差一个宽高比。 */
+    const byHeight = /const\s+R\s*=\s*H\s*\*\s*RB\s*\*\s*s/.test(CODE);
     console.log(
       `判据 整屏 实测: ${bleed ? '逃出 .shell 铺满宽 ✓' : '⚠️ 没有满宽手法（会被 .shell 框窄）'} · `
-      + `${svh ? '高 = 100svh − 顶栏 ✓' : '⚠️ 高度不是一屏'} · `
+      + `${svh ? '高 = 100svh（顶到页面最顶端）✓' : '⚠️ 高度不是一屏'} · `
+      + `${tbAbs && tbZ ? '顶栏 absolute 浮在板上 ✓' : '⚠️ 顶栏没浮起来（板顶不到头）'} · `
+      + `${negTop ? '负 margin 抵消 .shell 内边距 ✓' : '⚠️ 没抵消 .shell 的 48px（板仍被推到 y=48）'} · `
+      + `${mNegZero ? '手机档撤掉负 margin ✓' : '⚠️ 手机档还留着负 margin（板会骑到页头上）'} · `
       + `${noVw ? '没有 width:100vw ✓' : '⚠️ 用了 width:100vw（含滚动条宽度 ⇒ 会溢出）'} · `
       + `${firstChild ? '是页头第一个子元素 ✓' : '⚠️ 不在页头最前（首屏不是它）'} · `
       + `${noPadTop ? '页头上内边距清零 ✓' : '⚠️ 首屏顶上留了一条空'} · `
       + `${mq && mOrder && mAr && mW && mNoShrink ? '手机档回到页头旁的小板 ✓' : '⚠️ 手机档没回到小板'} · `
-      + `${small ? '小板另算一档笔触 ✓' : '⚠️ 小板沿用了整屏的笔触（17px，手指擦不动）'}`,
+      + `${small ? '小板另算一档笔触 ✓' : '⚠️ 小板沿用了整屏的笔触（25px，手指擦不动）'} · `
+      + `${byHeight ? '半径按板高算 ✓' : '⚠️ 半径不是按板高（参考站是 size*1.35/height）'}`,
     );
     expect(bleed, '没有满宽手法 ⇒ 整屏会被 .shell 框成"中间一块"（首页 .band 踩过同一处）').toBe(true);
-    expect(svh, '高度不是 100svh − 顶栏 ⇒ 不是"进来就是一整屏"').toBe(true);
+    expect(svh, '高度不是 100svh ⇒ 板没顶到页面最顶端（站主：「直接顶头」）').toBe(true);
+    expect(tbAbs && tbZ, '顶栏没有 absolute 浮起来 ⇒ 板被顶栏挤下去，不是"顶头"').toBe(true);
+    expect(negTop, '没抵消 .shell 的 padding-top（3rem）⇒ 板仍被推到 y=48，顶不到头').toBe(true);
+    expect(mNegZero, '手机档还留着负 margin ⇒ 小板会骑到页头上边').toBe(true);
     expect(noVw, 'width:100vw 含滚动条宽度 ⇒ 横向溢出').toBe(true);
     expect(firstChild, '板不是页头第一个子元素 ⇒ 打开相册页先看到标题，不是整屏装置').toBe(true);
     expect(noPadTop, '页头还有上内边距 ⇒ 首屏顶上多一条空白，不是从顶部铺到底').toBe(true);
     expect(mq && mOrder && mAr && mW && mNoShrink, '手机档没回到"页头旁边的小板"（站主：触屏涂抹不习惯）').toBe(true);
-    expect(small, '小板沿用整屏的笔触比例 ⇒ 一笔只有 17 px，手指擦不动').toBe(true);
+    expect(small, '小板沿用整屏的笔触比例 ⇒ 一笔只有 25 px，手指擦不动').toBe(true);
+    expect(byHeight, '笔触半径不是按板高算 ⇒ 与参考站 size*1.35/height 的口径不一致').toBe(true);
+  });
+
+  it('★ 鼠标上去显示那个跟着手的白圈（照抄参考站 .pointer-dot）', () => {
+    /* ★★ 站主 2026-10-01 第五轮：「学一下 lowkeytp 是怎么处理鼠标上去的效果，做到和它一样」。
+       参考站的原文（_probe/ref/lr.css + lr-app.js）：
+         .pointer-dot{…width:16px;height:16px;border:1px solid #fff;border-radius:50%;
+                      pointer-events:none;transform:translate(-50%,-50%);
+                      box-shadow:0 0 0 2px #0002;opacity:0}
+         .pointer-dot.visible{opacity:1}
+         if(!n){ …; l.dot.classList.remove("visible"); return; }
+         l.dot.style.left=`${t*100}%`; l.dot.style.top=`${r*100}%`;
+         l.dot.classList.add("visible"); */
+    const hasEl = /data-bath-dot/.test(ASTRO);
+    const dotCss = /\.bath-dot\s*\{[^}]*width:\s*16px[^}]*opacity:\s*0/.test(ACSS);
+    const onCss = /\.bath-dot\.on\s*\{[^}]*opacity:\s*1/.test(ACSS);
+    /* ★ 圈必须**硬跟手**：加了 transition 就变成"圈也在追"，
+       跟滞后的笔触混在一起 ⇒ 反而看不出"被拽着走"。 */
+    const noTrans = !/\.bath-dot\s*\{[^}]*transition/.test(ACSS);
+    /* ★ 用**百分比**定位（参考站原文就是百分比）⇒ resize 后不用重算。 */
+    const pct = /dot\.style\.left\s*=\s*`\$\{\(mx\s*\/\s*W\)\s*\*\s*100\}%`/.test(CODE)
+      && /dot\.style\.top\s*=\s*`\$\{\(my\s*\/\s*H\)\s*\*\s*100\}%`/.test(CODE);
+    /* ★ 出界必须摘掉：只在 pointerenter/move 加、从不 remove ⇒ 圈会赖在板上不消失。 */
+    const add = /dot\.classList\.add\('on'\)/.test(CODE);
+    const rmInMark = /dot\.classList\.remove\('on'\)/.test(CODE);
+    const rmOnLeave = /pointerleave[\s\S]{0,200}?dot\?\.classList\.remove\('on'\)/.test(CODE);
+    console.log(
+      `判据 白圈 实测: ${hasEl ? '有 .bath-dot 元素 ✓' : '⚠️ 没有白圈元素'} · `
+      + `${dotCss && onCss ? '默认透明 + .on 才显示 ✓' : '⚠️ 显隐不是 opacity 0/1 两态'} · `
+      + `${noTrans ? '硬跟手（无 transition）✓' : '⚠️ 圈有 transition（会跟笔触混在一起）'} · `
+      + `${pct ? '百分比定位 ✓' : '⚠️ 不是百分比定位'} · `
+      + `${add && rmInMark && rmOnLeave ? '出界/离开会摘掉 ✓' : '⚠️ 圈不会消失'}`,
+    );
+    expect(hasEl, '没有白圈元素 ⇒ 鼠标上去没有任何提示（参考站最显眼的那个特征）').toBe(true);
+    expect(dotCss && onCss, '白圈的显隐不是"默认透明 + 加类才显示"⇒ 没指针时也会有一个圈').toBe(true);
+    expect(noTrans, '白圈加了 transition ⇒ 它也在追，跟滞后的笔触混在一起就看不出"被拽着走"').toBe(true);
+    expect(pct, '白圈不是百分比定位 ⇒ resize 后位置会错（参考站原文就是百分比）').toBe(true);
+    expect(add && rmInMark && rmOnLeave, '白圈不会消失 ⇒ 指针移出板后圈赖在最后位置').toBe(true);
+  });
+
+  it('★ 笔触形状照抄参考站：irregular（5瓣+9瓣）+ smoothstep(0.45,1.2) 软边', () => {
+    /* ★★ 参考站 sim shader 原文（_probe/ref/lr-app.js）：
+         float irregular = 1.0 + 0.14*sin(angle*5.0 + time*1.6) + 0.08*sin(angle*9.0 - time*1.1);
+         float brush = 1.0 - smoothstep(0.45, 1.2, d);
+       ★ time 在它那里是**秒**（引擎 `this.time += dt`）⇒ 本站 t 是毫秒，必须 /1000。 */
+    const a5 = num('IRR_A5') === 0.14 && num('IRR_A9') === 0.08;
+    const s5 = num('IRR_S5') === 1.6 && num('IRR_S9') === 1.1;
+    const lobes = /Math\.sin\(\s*5\s*\*\s*TH\[i\]\s*\+\s*ph5\s*\)/.test(CODE)
+      && /Math\.sin\(\s*9\s*\*\s*TH\[i\]\s*-\s*ph9\s*\)/.test(CODE);
+    const secs = /const\s+ts\s*=\s*t\s*\/\s*1000/.test(CODE);
+    /* 软边：实心核心 0.45R、渐隐到 1.2R（smoothstep 的两个沿） */
+    const core = num('CORE_K') === 0.45 && num('FADE_K') === 1.2;
+    /* ★★ 蒙版在合成时会**平方**（绕开 8 位 alpha 的乘性衰减下限）
+       ⇒ 这里存的必须是 `sqrt(brush)`，五个 stop = sqrt(1 − smoothstep(t))：
+          1 · 0.919 · 0.707 · 0.395 · 0。改了任何一个就不等于参考站那条曲线。 */
+    const stops = /addColorStop\(0,\s*'rgba\(255,255,255,1\)'\)/.test(CODE)
+      && /addColorStop\(0\.25,\s*'rgba\(255,255,255,0\.919\)'\)/.test(CODE)
+      && /addColorStop\(0\.5,\s*'rgba\(255,255,255,0\.707\)'\)/.test(CODE)
+      && /addColorStop\(0\.75,\s*'rgba\(255,255,255,0\.395\)'\)/.test(CODE)
+      && /addColorStop\(1,\s*'rgba\(255,255,255,0\)'\)/.test(CODE);
+    console.log(
+      `判据 形状照抄 实测: ${a5 ? '幅度 0.14/0.08 ✓' : '⚠️ 幅度不是 0.14/0.08'} · `
+      + `${s5 ? '时间系数 1.6/1.1 ✓' : '⚠️ 时间系数不是 1.6/1.1'} · `
+      + `${lobes ? '5 瓣 + 9 瓣 ✓' : '⚠️ 不是 5 瓣 + 9 瓣'} · `
+      + `${secs ? 'time 换算成秒 ✓' : '⚠️ 没换算成秒（会快 1000 倍，形状抖成一团）'} · `
+      + `${core ? '软边 0.45R→1.2R ✓' : '⚠️ 软边不是 0.45R→1.2R'} · `
+      + `${stops ? 'sqrt(brush) 五点采样 ✓' : '⚠️ 渐变 stop 不等于 sqrt(1−smoothstep)'}`,
+    );
+    expect(a5 && s5 && lobes, '形状不是参考站的 irregular（5 瓣 0.14 + 9 瓣 0.08）').toBe(true);
+    expect(secs, 'irregular 的时间没换算成秒 ⇒ 形状变化快 1000 倍，抖成一团').toBe(true);
+    expect(core, '软边不是 smoothstep(0.45, 1.2) ⇒ 与参考站的笔触边缘不一致').toBe(true);
+    expect(stops, '渐变 stop 不等于 sqrt(1−smoothstep) ⇒ 蒙版平方后不是参考站那条 brush 曲线').toBe(true);
   });
 });

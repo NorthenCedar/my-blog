@@ -63,7 +63,7 @@ cd <博客仓库>
 ```powershell
 npm run dev       # 启动本地预览，改完立刻能看到（按 Ctrl+C 停止）
 npm run build     # 只构建，不跑测试
-npm run verify    # 构建 + 跑全部测试（共 163 条：161 通过 / 1 设计内跳过 / 1 已知环境故障）—— 推送前必跑
+npm run verify    # 构建 + 跑全部测试（共 165 条：163 通过 / 1 设计内跳过 / 1 已知环境故障）—— 推送前必跑
 npm test          # 只跑测试
 git add -A        # 把改动标记为"要提交"
 git commit -m "说明"   # 存成一个版本
@@ -186,7 +186,7 @@ npm run dev
 npm run verify
 ```
 
-看到 `Tests 161 passed` 就对了（数字会随新增护栏上升；旁边两行都不是代码问题）：`1 skipped` 是设计内的跳过
+看到 `Tests 163 passed` 就对了（数字会随新增护栏上升；旁边两行都不是代码问题）：`1 skipped` 是设计内的跳过
 （「上游镜像已清」「未构建」这类前提缺失的占位，见 `tests/` 里的 `skipIf` 条件）；
 `1 failed` 是本机已知环境故障 `spawnSync node EBUSY`（`tests/tokens.test.ts` 用相对路径 `node`
 起子进程在本机必失败），用绝对路径直跑 `node scripts/assert-tokens.mjs` 复核那 11 项即可。
@@ -568,7 +568,7 @@ logo 配色 `#e9efe9` / `#8fe0b0`、大标题 `clamp(2.4rem, 9.2vw, 6.4rem)`。
 ### 8.6 改完必须做的事
 
 ```powershell
-npm run verify        # 构建 + 全量测试（当前 161 passed / 1 skipped / 1 已知环境故障）
+npm run verify        # 构建 + 全量测试（当前 163 passed / 1 skipped / 1 已知环境故障）
 cd <博客仓库>
 node scripts/assert-tokens.mjs   # 单独复算对比度
 ```
@@ -958,7 +958,10 @@ npm run build
 
 ### 17.7 相册页首屏那块「显影板」（2026-10-01 上线）
 
-进 `/gallery/` 首先看到的是一整屏深墨绿的板，中间有一行手写花体的英文站名。
+进 `/gallery/` 首先看到的是一整屏深墨绿的板 —— **它从页面最顶端开始，导航栏浮在它上面**
+（导航是半透明的，能透出底下的板）。板中间有一行手写花体的英文站名。
+**鼠标移上去会有一个小白圈跟着手**（这是参考站 lowkeytp.art/liquid-reveal/ 的做法），
+圈是硬跟手的，滞后的那个是擦出来的痕迹本身。
 **不动鼠标它就是一块纯色**；鼠标（或手指）在上面划过，会像擦掉玻璃上的雾一样擦出下面那张照片，
 擦痕**停留约 3 秒**再慢慢褪回纯色。往下滚才是相册本身。
 
@@ -971,9 +974,9 @@ npm run build
 
 | 想改什么 | 改哪个 |
 |---|---|
-| 笔触多粗 | `R_HOLE`（整屏）/ `R_HOLE_SMALL`（手机小板）—— 都是"短边的多少倍" |
+| 笔触多粗 | `RADIUS_K`（整屏）/ `RADIUS_SMALL_K`（手机小板）—— 都是"**板高**的多少倍"（参考站 `size*1.35/height`） |
 | 擦痕留多久 | `TRAIL_TAU`（毫秒；**观感上是它的一半**，因为蒙版在合成时平方了一次） |
-| 笔"跟不跟手" | `LAG_W`（越大越贴手）/ `LAG_Z` |
+| 笔"跟不跟手" | `FOLLOW_K`（一阶指数平滑速率，越大越贴手；参考站是 18） |
 | 板多高 | `src/pages/gallery/index.astro` 里 `.bath` 的 `height: calc(100svh - var(--topbar-h))` |
 | 花体字内容 | `content/site.md` 的 `wordmark`（**不要写死在代码里**） |
 

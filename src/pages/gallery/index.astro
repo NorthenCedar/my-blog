@@ -70,6 +70,9 @@ const firstBig = at(firstFrame, LIGHT_W);
     <div class="bath" data-bath hidden aria-hidden="true">
       <canvas class="bath-cv" data-bath-cv></canvas>
       <span class="bath-mark">{siteWordmark}</span>
+      {/* ★ 跟着鼠标的那个白圈 —— 照抄参考站 lowkeytp.art 的 `.pointer-dot`。
+          脚本只在指针**在板内**时给它加 `.on`（出界就摘掉）。 */}
+      <span class="bath-dot" data-bath-dot aria-hidden="true"></span>
     </div>
 
     <div class="pagehead-main">
@@ -162,6 +165,51 @@ const firstBig = at(firstFrame, LIGHT_W);
        ★ 不写 width:100vw —— vw 含滚动条宽度 ⇒ 横向溢出。
      ★ 100svh：手机地址栏收放时不跳（同首页 .band）。
      ★ 照片按 cover 整屏铺满（会裁）⇒ 只收横幅：竖幅只能裁成中间一条。 */
+  /* ★★ 顶栏**浮在板上**（站主 2026-10-01 第五轮：「打开相册那个直接顶头，
+       把导航栏什么的直接放在上面」）。
+     · 做法：顶栏从文档流里拿出来（`position: absolute` 贴文档顶部）⇒ 板就顶到了页面最顶端；
+       再用 `z-index` 把它压在板**上面**（板是 relative、z-index auto ⇒ 顶栏只要 > 0 就在它之上）。
+     · 为什么是 absolute 不是 fixed：fixed 会一直跟着滚 —— 本站内页顶栏本来是**滚走**的，
+       没必要为这一页改掉全站的手感。absolute 是"贴在文档顶部 ⇒ 滚下去就跟着走"。
+     · ★ 选择器写两条 `.topbar.topbar`：外壳那条是 `body.chrome-page .topbar`（特异性 0,2,0），
+       本页这条要压过它 —— 靠特异性，不靠"谁在后面"（CSS 分片的先后顺序不该拿来赌）。
+     · ★ 只在本页的 CSS 分片里 ⇒ 其余 13 页的顶栏**逐字节不变**。
+     · ★★ 顶栏原本是**半透明毛玻璃**（`--glass-bg` 渐变 + backdrop-filter），
+       压在深墨绿的板上正好；但它的字色是 `--muted`（中灰）⇒ 在深底上对比度不够，
+       所以下面连同字色一起改成浅色（只改这一页）。
+     · ★★ 整段包在 `min-width: 768px` 里：**手机档是页头旁边的小板、不是整屏**
+       ⇒ 顶栏必须回到普通文档流。★ 用断点包住而不是写一堆"恢复默认"的规则 ——
+         恢复式写法漏一条就留一个 bug（本站 `.topbar` 有 5 条声明要还原）。 */
+  @media (min-width: 768px) {
+    :global(body.chrome-page .topbar.topbar) {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 30;   /* ★ 站上 z-index 阶梯：抽屉 40/41 · 过渡蒙版 45 · 灯箱 50 · 开场 60 · 光标 64+ */
+      color: rgb(255 255 255 / 76%);
+      border-bottom-color: rgb(255 255 255 / 14%);
+      background: linear-gradient(180deg, rgb(0 0 0 / 26%), transparent);
+      box-shadow: none;   /* 原版那道"顶部高光"是给浅底用的，压在深底上是一道白边 */
+    }
+    :global(body.chrome-page .topbar.topbar .site) {
+      color: #fff;
+    }
+    /* ⚠️ 同外壳那条：`> nav:not(.navpanel)` —— 漏了 `:not()` 会把抽屉自己按成横排（踩过）。 */
+    :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a) {
+      color: rgb(255 255 255 / 76%);
+      border-color: rgb(255 255 255 / 22%);
+    }
+    :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a:hover),
+    :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a:focus-visible) {
+      color: #fff;
+      border-color: rgb(255 255 255 / 55%);
+    }
+    :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a[aria-current='page']) {
+      color: #fff;
+      border-color: var(--accent-ink);
+    }
+  }
   /* ★ 桌面：页头不能有上内边距 —— 首屏要从顶部一路铺到底。
      写两条 `.pagehead` 是为了压过外壳那条 `body.chrome-page .pagehead`（它的特异性更高）。 */
   .pagehead.pagehead {
@@ -169,13 +217,17 @@ const firstBig = at(firstFrame, LIGHT_W);
   }
   .bath {
     position: relative;
-    /* ★ 顶栏（Topbar）是**静态**的、占在文档流最前面 ⇒ 首屏要把这段让出来，
-       才真的是"进来就是一整屏"。实测 ~3.4rem（padding .7rem×2 + 一行 mono）。
-       ★ 抽成变量而不是写死成魔法数：以后动顶栏只改这一处。
-         探针可复核：_probe/cdp-bath.mjs 会报 .topbar 的 offsetHeight。 */
-    --topbar-h: 3.4rem;
+    /* ★★ 板**顶到页面最顶端**（第五轮）：顶栏已经 absolute 出文档流 ⇒ 这里就是纯 100svh，
+       不再减 `--topbar-h`。
+       ★ 100svh：手机地址栏收放时不跳（同首页 .band）。
+       ★★ 还有第二个 48px：板在 `.shell` 里，而 `.shell` 有 `padding: var(--sp-7) …`
+       （3rem = 48px）⇒ 光把顶栏浮起来还不够，板仍被这层内边距推到 y=48（实测过）。
+          用**负 margin-top 抵消**，不去改 `.shell` 本身 —— `.shell` 是全部内页共用的，
+          改它等于替别的页面决定排版；负 margin 只动这一块板。
+          ★ 用同一个 token 而不是抄 48 这个数 ⇒ token 一改，两边一起改。 */
+    margin-top: calc(-1 * var(--sp-7));
     margin-inline: calc(50% - 50vw);
-    height: calc(100svh - var(--topbar-h));
+    height: 100svh;
     min-height: 420px;
     overflow: hidden;
     background:
@@ -245,6 +297,35 @@ const firstBig = at(firstFrame, LIGHT_W);
     user-select: none;
     z-index: 2;             /* ★ 压在颗粒层之上：颗粒可以盖照片，但不能盖花体字 */
   }
+  /* ★★ 跟着鼠标的那个白圈 —— **照抄参考站** `.pointer-dot` 的原文
+     （_probe/ref/lr.css，16px 白圈 + 一圈极淡暗描边）：
+       .pointer-dot{position:absolute;z-index:3;width:16px;height:16px;border:1px solid #fff;
+                    border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);
+                    box-shadow:0 0 0 2px #0002;opacity:0}
+       .pointer-dot.visible{opacity:1}
+     ★ 三个照抄的点别动：
+       ① **没有 transition** —— 圈是硬跟手的（滞后的那个是笔触），加了 transition 就变成
+          "两个都在追"，反而看不出"被拽着走"；
+       ② 定位由脚本写 `left/top` **百分比**（参考站原文就是百分比）⇒ resize 不用重算；
+       ③ `opacity` 默认 0、只由脚本加 `.on` ⇒ 没有 JS 时它压根不出现（不是"藏起来"）。
+     ★ z-index 3 = 参考站在 art-copy(2) 之上那个位置：本站对应"压在花体字之上"。 */
+  .bath-dot {
+    position: absolute;
+    z-index: 3;
+    width: 16px;
+    height: 16px;
+    border: 1px solid #fff;
+    border-radius: 50%;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 2px rgb(0 0 0 / 13%);   /* 参考站 #0002 */
+    opacity: 0;
+    left: 0;
+    top: 0;
+  }
+  .bath-dot.on {
+    opacity: 1;
+  }
 
   /* ===== 手机：改回"页头旁边的小板" =====
      ★★ 站主 2026-10-01 第四轮：「到了手机上不要整屏了，因为涂抹的效果不好
@@ -255,7 +336,7 @@ const firstBig = at(firstFrame, LIGHT_W);
      · 尺寸：**高走照片原比例**（--bath-ar 由脚本按抽中的照片设 ⇒ 不裁不拉伸），
        宽由版面定（min(46%, 300px)）。★ 这正是"只收横幅"的原因 —— 竖幅会撑成竖条。
      · 笔触在**小板**上是另一档尺寸（参考站那 82/720 的比例是按整屏定的，
-       照搬到 300 px 的小板上只有 17 px，手指根本擦不动）⇒ 见 develop.ts 的 R_HOLE_SMALL。 */
+       照搬到 ~160 px 高的小板上只有 25 px，手指根本擦不动）⇒ 见 develop.ts 的 RADIUS_SMALL_K。 */
   @media (max-width: 767px) {
     .pagehead.pagehead {
       padding-top: var(--sp-8);   /* 回到普通页头的上内边距（首屏不再从顶部铺起） */
@@ -280,6 +361,9 @@ const firstBig = at(firstFrame, LIGHT_W);
       min-height: 0;
       aspect-ratio: var(--bath-ar, 3 / 2);
       margin-inline: 0;
+      /* ★ 手机档是"页头旁边的小板" ⇒ 抵消 .shell 内边距的那个负 margin 必须撤掉，
+         否则板会骑到页头上边去。 */
+      margin-top: 0;
     }
     .bath-mark {
       font-size: clamp(1.1rem, 5vw, 1.6rem);
