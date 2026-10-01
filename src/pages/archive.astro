@@ -14,6 +14,31 @@ const groups = await getArchive();
 const years = groups.map((g) => g.year);
 const months = [...new Set(groups.flatMap((g) => g.posts.map((p) => p.date.slice(5, 7))))].sort();
 const total = groups.reduce((n, g) => n + g.posts.length, 0);
+
+/* ===== INDEX TAPE 索引卷尺（2026-10-01）—— 刻度数据在构建期算好，输出纯 HTML =====
+   ★ 刻度从内容推导，不写死年份：明年发文自动多一根 2027 刻度（同既有归档口径，
+     tests/build-output.test.ts 守着「年份分组与文章日期对得上」）。
+   ★ 位置用「百分比」打进 data-pos —— 年份等距分布在竖条上（卷尺的「刚性等分刻度」）。
+     百分比是计算值，不是写死的文案/色值，不触「不写死」红线。 */
+const tapeYearCount = groups.length;
+/* 主刻度：年份。等距分布（i / (n-1)），单年时居中 50%。 */
+const tapeTicks = groups.map((g, i) => ({
+  year: g.year,
+  count: g.posts.length,
+  pos: tapeYearCount === 1 ? 50 : (i / (tapeYearCount - 1)) * 100,
+  months: [...new Set(g.posts.map((p) => p.date.slice(5, 7)))].sort(),
+}));
+/* 次级刻度：月份。散布在「本年份刻度 → 下一个年份刻度」之间（时间上介于两年之间）。
+   最早一年没有下方空间 ⇒ 省略它的月份刻度（竖条底部就是终点）。 */
+const tapeMonthTicks: { month: string; pos: number }[] = [];
+for (let i = 0; i < tapeTicks.length - 1; i++) {
+  const from = tapeTicks[i].pos;
+  const to = tapeTicks[i + 1].pos;
+  const ms = tapeTicks[i].months;
+  ms.forEach((m, j) => {
+    tapeMonthTicks.push({ month: m, pos: from + (to - from) * ((j + 1) / (ms.length + 1)) });
+  });
+}
 ---
 {
   /* 归档迁移（2026-09-26）：chrome='band' → 'page'（内页外壳）。
@@ -70,6 +95,36 @@ const total = groups.reduce((n, g) => n + g.posts.length, 0);
     ))}
   </div>
   <p class="f-empty" data-empty hidden>没有匹配的文章。</p>
+
+  {/* ===== INDEX TAPE 索引卷尺（2026-10-01）—— 右侧 sticky 竖向刻度尺 =====
+      ★ 装置是**叠加层**：归档列表本身服务端渲染完整，卷尺默认 hidden + aria-hidden，
+        脚本到位才露面；无 JS 时它**不存在**（不是藏起来）。
+      ★ 数据全从上面 tapeTicks / tapeMonthTicks 来（构建期算好，纯 HTML）。
+      ★ 读数区显示「当前年份 · N 篇」，游标随滚动连续走 + 惯性过冲，卷过的刻度留墨。 */}
+  <aside class="tape" data-tape hidden aria-hidden="true">
+    <span class="tape-readout" data-tape-readout>
+      <em data-tape-year>{years[0]}</em>
+      <i data-tape-count>0</i>
+    </span>
+    <div class="tape-track" data-tape-track>
+      {tapeMonthTicks.map((t) => (
+        <span class="tape-tick is-month" style={`top: ${t.pos}%`} data-pos={t.pos.toFixed(2)}></span>
+      ))}
+      {tapeTicks.map((t) => (
+        <span
+          class="tape-tick is-year"
+          style={`top: ${t.pos}%`}
+          data-year={t.year}
+          data-count={t.count}
+          data-pos={t.pos.toFixed(2)}
+        >
+          <i>{t.year}</i>
+          <b>{t.count}</b>
+        </span>
+      ))}
+    </div>
+    <span class="tape-cursor" data-tape-cursor></span>
+  </aside>
 </Base>
 
 <script>
@@ -135,6 +190,12 @@ const total = groups.reduce((n, g) => n + g.posts.length, 0);
     });
     apply();
   }
+</script>
+
+<script>
+  // 索引卷尺装置（与上面的筛选脚本刻意分开成独立入口）：
+  // 只读 DOM（刻度 data-pos / 年份分组），不引用筛选脚本的任何状态。
+  import '../scripts/index-tape';
 </script>
 
 <style>
@@ -226,6 +287,118 @@ const total = groups.reduce((n, g) => n + g.posts.length, 0);
     .f-count {
       margin-left: 0;
       flex-basis: 100%;
+    }
+  }
+
+  /* ===== INDEX TAPE 索引卷尺（2026-10-01）=====
+     ★ 右侧 fixed 竖条，垂直居中 —— 「进度尺」形态，游标沿刻度随滚动走。
+     ★ 逃出 .shell 铺到视口右缘：固定定位相对视口，不占文档流，不推挤列表。
+       归档列表 .title/.summary 都限宽，右侧有留白 ⇒ 竖条（约 44px 宽）不遮正文。
+     ★ 颜色全 token：未卷过的刻度淡灰 --hair，卷过的 --accent-ink（脚本加 .past 类），
+       游标 --accent-ink，读数数字 --ink。 */
+  .tape {
+    position: fixed;
+    right: var(--gutter);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;               /* 在正文之上（正文 z-index:1），在顶栏浮层/灯箱之下 */
+    width: 44px;
+    height: min(60vh, 460px);
+    min-height: 180px;
+    pointer-events: auto;
+  }
+  /* 无 JS 时整块不出现（脚本到位才摘 [hidden]）；显式写，免得上游给 .tape 加 display */
+  .tape[hidden] {
+    display: none;
+  }
+  .tape-readout {
+    position: absolute;
+    top: -1.4rem;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .tape-readout em {
+    font-style: normal;
+    color: var(--accent-ink);
+    font-weight: 700;
+    font-size: var(--fs-sm);
+  }
+  .tape-readout i {
+    font-style: normal;
+    color: var(--muted);
+  }
+  /* 轨道：竖条本体，刻度从这里向**左**伸出（右缘对齐竖条右边） */
+  .tape-track {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 20px;
+  }
+  .tape-tick {
+    position: absolute;
+    right: 0;
+    transform: translateY(-50%);
+    display: block;
+  }
+  /* 年份主刻度：长横线 + 年份数字（刻度的「大齿」） */
+  .tape-tick.is-year {
+    width: 20px;
+    height: 1px;
+    background: var(--hair);
+  }
+  .tape-tick.is-year i {
+    position: absolute;
+    right: 26px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-style: normal;
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .tape-tick.is-year b {
+    display: none;   /* 篇数放读数区，刻度旁只印年份（避免拥挤） */
+  }
+  /* 月份次级刻度：短横线（刻度的「小齿」） */
+  .tape-tick.is-month {
+    width: 8px;
+    height: 1px;
+    background: var(--hair);
+    opacity: 0.6;
+  }
+  /* 卷过的刻度留墨（脚本按「已滚过」加 .past） */
+  .tape-tick.past {
+    background: var(--accent-ink);
+  }
+  .tape-tick.past.is-year i {
+    color: var(--accent-ink);
+  }
+  /* 游标：一根横贯的短横，指示当前位置 */
+  .tape-cursor {
+    position: absolute;
+    right: -6px;
+    left: -6px;
+    top: 0;
+    height: 2px;
+    background: var(--accent-ink);
+    transform: translateY(-50%);
+    box-shadow: 0 0 0 1px var(--paper);
+  }
+
+  /* ===== 移动端（≤767px）：完全隐藏卷尺（口径 #9 展示型留极简版 → 此处拍板「完全不渲染」）=====
+     ★ 手机屏幕窄，右侧竖条没地方放；归档列表本身完整可读，装置是纯叠加层。 */
+  @media (max-width: 767px) {
+    .tape {
+      display: none;
     }
   }
 </style>
