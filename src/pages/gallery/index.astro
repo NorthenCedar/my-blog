@@ -35,31 +35,52 @@ const at = (f: Frame, w: number) => f.files.find((x) => x.w === w) ?? f.files[0]
 // ⇒ 打开灯箱之前不会产生这次请求（有探针断言守着）。
 const firstFrame = albums[0].frames[0];
 const firstBig = at(firstFrame, LIGHT_W);
+
+/* 显影板的 SSR 占位：**只从横幅里取**（脚本端抽照片的口径与此一致）。
+   板是 hidden + aria-hidden 的，这段文本在脚本到位前根本不会显示 ——
+   留它的意义是"万一脚本没跑完就被看到，也得是一张横幅照片的说明"，不是给读屏的。
+   ★ 连"共几张"也要用**横幅张数**，不能用全站帧数：脚本一跑就会把它改成横幅数，
+     两处口径不一致的话，脚本没跑完的那一瞬间会露出一个对不上的分母。 */
+/* ★★ 判横竖必须用**网格档（800）**的尺寸，不能用灯箱档（1280）的 ——
+   manifest 里的 `w` 是**请求的目标宽**不是实际宽：源图窄于目标宽时 sharp 的
+   `withoutEnlargement` 生效，文件就停在源宽上（实测 1280 档有 **19/82** 条 w 是假的、
+   800 档有 4 条），**只有 `h` 永远是真的**。照 1280 档判会有 **6 张横竖判反**
+   （例：「苏州的美」manifest 1280×1184 看着是横幅，实际文件 896×1184 是竖幅）；
+   照 800 档判**一张都不反**（逐帧读过真实像素验过）。
+   脚本端读的正是 `<img>` 上的 800 档 width/height ⇒ 两处口径这才对上。 */
+const landFrames = albums
+  .flatMap((a) => a.frames.map((f) => ({ f, a: a, g: at(f, GRID_W) })))
+  .filter((x) => x.g.w > x.g.h);
+const seedLandscape = landFrames[0] ?? { f: firstFrame, a: albums[0], g: at(firstFrame, GRID_W) };
+const landTotal = landFrames.length || total;
 ---
 
 <Base title="相册" chrome="page" current="gallery">
   <header class="pagehead">
-    <h1 class="pagehead-title">相册</h1>
-    <p class="readout">
-      <span>FRAMES <em>{total}</em></span>
-      <span>ALBUMS <em>{albums.length}</em></span>
-      <span>VIEWING <em id="viewing">{total}</em></span>
-    </p>
-  </header>
+    <div class="pagehead-main">
+      <h1 class="pagehead-title">相册</h1>
+      <p class="readout">
+        <span>FRAMES <em>{total}</em></span>
+        <span>ALBUMS <em>{albums.length}</em></span>
+        <span>VIEWING <em id="viewing">{total}</em></span>
+      </p>
+    </div>
 
-  {/* 显影槽（站主 2026-10-01 定）：页头那块可互动的装置。
-      深墨绿的有机形状在板上缓慢生长、变形，形状里透出相册的照片；
-      划过下方网格里任意一张，板里就淡入那一张；指针靠近会把边界推开。
-      整块默认 hidden —— 脚本到位才露面。没有 JS 时它**不存在**（不是藏起来）：
-      板是装饰，内容在网格里本来就完整，不需要靠它承载任何东西。
-      aria-hidden：同一批照片在网格里已经读过一遍，不必让读屏再听一回。 */}
-  <div class="bath" data-bath hidden aria-hidden="true">
-    <canvas class="bath-cv" data-bath-cv></canvas>
-    <p class="bath-read">
-      <em data-bath-cap>{firstFrame.alt}</em>
-      <span data-bath-meta>{albums[0].title} · 1 / {total}</span>
-    </p>
-  </div>
+    {/* 显影板（站主 2026-10-01 改口径）：页头右侧这块**小板**。
+        ★ 没有指针 = 一块纯色 —— 板里没有洞，也不自己动、不自己换片；
+        只有指针能把照片"搅"出来（洞跟着指针走、边缘流动）；离开就收回纯色。
+        每次打开**随机一张横幅照片**，板按那张照片的原比例裁形（不裁不拉伸）。
+        整块默认 hidden —— 脚本到位才露面。没有 JS 时它**不存在**（不是藏起来）：
+        板是装饰，内容在网格里本来就完整，不需要靠它承载任何东西。
+        aria-hidden：同一批照片在网格里已经读过一遍，不必让读屏再听一回。 */}
+    <div class="bath" data-bath hidden aria-hidden="true">
+      <canvas class="bath-cv" data-bath-cv></canvas>
+      <p class="bath-read">
+        <em data-bath-cap>{seedLandscape.f.alt}</em>
+        <span data-bath-meta>{seedLandscape.a.title} · 1 / {landTotal}</span>
+      </p>
+    </div>
+  </header>
 
   <div class="filters" role="group" aria-label="按相册筛选">
     <button type="button" data-filter="all" aria-pressed="true">全部 <b>{total}</b></button>
@@ -130,18 +151,32 @@ const firstBig = at(firstFrame, LIGHT_W);
     color: var(--accent-ink);
   }
 
-  /* ===== 显影槽（页头装置，2026-10-01）=====
+  /* ===== 页头：标题/读数在左，显影板在右 =====
+     ★ 只改**本页**的 .pagehead（外壳那条 `body.chrome-page .pagehead` 给的是
+       padding / 底线 / 四角定位点，两者不冲突，别去动外壳）。 */
+  .pagehead {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--sp-5);
+  }
+  .pagehead-main {
+    min-width: 0;   /* 让读数那排在窄视口能换行，而不是把板顶出去 */
+  }
+
+  /* ===== 显影板（页头右侧的小板，2026-10-01 改口径）=====
      板底那层深墨绿是**照搬首页 .band 的同一支色**（含左上角那道极淡绿），
      形状由 canvas 画（透明）⇒ 形状外没有像素，露出的就是这块底色。
-     这样既和首页同一色系，也让 canvas 每帧少一次全屏填充。 */
+     这样既和首页同一色系，也让 canvas 每帧少一次全屏填充。
+
+     ★ 尺寸：宽由版面定，**高按抽中照片的原比例**（--bath-ar 由脚本设）⇒
+       照片整张铺进板里，不裁不拉伸。这也是"只收横幅"的原因 ——
+       竖幅会把这块小板撑成一个竖条，跟"放在旁边"打架。 */
   .bath {
     position: relative;
-    /* 逃出 .shell 铺满视口 —— 与首页 .band 同一手法；
-       实测（_probe/_fullbleed.mjs）：.shell 内左右对称，rightGap = 0。
-       html 上的 overflow-x: clip 收掉 50vw 含滚动条宽度的那点溢出。 */
-    margin-inline: calc(50% - 50vw);
-    margin-block: var(--sp-5) 0;
-    height: clamp(240px, 42vh, 440px);
+    flex: 0 0 auto;
+    width: clamp(184px, 22vw, 288px);
+    aspect-ratio: var(--bath-ar, 3 / 2);
     overflow: hidden;
     background:
       radial-gradient(110% 70% at 12% 0%, #2d7d462e 0%, transparent 58%),
@@ -151,38 +186,49 @@ const firstBig = at(firstFrame, LIGHT_W);
   .bath[hidden] {
     display: none;
   }
+  /* ★ absolute + inset：板的高度来自 aspect-ratio，用百分比高度会有解析上的意外，
+     铺满定位则永远等于板的盒子（canvas 尺寸就是板的尺寸，探针读的也是同一个盒子）。 */
   .bath-cv {
+    position: absolute;
+    inset: 0;
     display: block;
     width: 100%;
     height: 100%;
   }
   .bath-read {
     position: absolute;
-    inset: auto var(--gutter) 0.9rem;
+    inset: auto 0.55rem 0.45rem;
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-4);
+    flex-direction: column;
+    gap: 0;
     margin: 0;
     font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
     font-size: var(--fs-xs);
+    line-height: 1.35;
     font-variant-numeric: tabular-nums;
     /* 差值混合：在深墨绿底上是近白、在照片上是反色 —— 一套色走两种底，不用两套配色 */
     color: #ffffff;
     mix-blend-mode: difference;
     pointer-events: none;
   }
-  .bath-read em {
+  .bath-read em,
+  .bath-read span {
     font-style: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .bath-read span {
     opacity: 0.72;
   }
   @media (max-width: 767px) {
-    .bath {
-      height: 190px;
+    .pagehead {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--sp-4);
     }
-    .bath-read {
-      gap: var(--sp-2);
+    .bath {
+      width: min(64%, 240px);
     }
   }
 
