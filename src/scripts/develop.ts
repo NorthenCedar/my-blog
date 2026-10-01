@@ -352,14 +352,18 @@
   /* ---------------------------------------------------------------- 内容 */
 
   /* 每次都重新收集 ⇒ 相册筛选（只改 figure 的 hidden）自动生效，不用跨脚本接线。
-     ★ 只收**横幅**（w > h）：板要按照片原比例裁形，竖幅会把页头这块小板撑成竖条。 */
+     ★ 只收**横幅**（w > h）：板要按照片原比例裁形，竖幅会把页头这块小板撑成竖条。
+     ★★ 图源用**网格档（800）**那张（`img` 的 src），**不是**灯箱档（1280，`a.frame` 的 href）：
+        板只有 277×184 css px（dpr 2 也只要 554 px），800 档绰绰有余；
+        而 1280 档单张能到 **486 KB**，线上实测某张图 842 ms 才到、更重的要好几秒
+        ⇒ 那几秒里指针**搅不出任何东西**（`drawCover` 看 `complete`，没图就不画）。
+        换成 800 档后：图源与"判横竖/定板形"用的那对 width/height **同源**，也没有这段空窗。 */
   const collect = (): Frame[] =>
     Array.from(document.querySelectorAll<HTMLElement>('.wf figure:not([hidden])'))
       .map((fig) => {
-        const a = fig.querySelector<HTMLAnchorElement>('a.frame');
         const im = fig.querySelector<HTMLImageElement>('img');
         return {
-          url: a?.getAttribute('href') ?? '',
+          url: im?.getAttribute('src') ?? '',
           cap: fig.dataset.cap ?? '',
           album: fig.querySelector('figcaption span')?.textContent ?? '',
           w: Number(im?.getAttribute('width') ?? 0),
@@ -437,13 +441,12 @@
   for (const fig of document.querySelectorAll<HTMLElement>('.wf figure')) {
     fig.addEventListener('pointerenter', () => {
       if (reduce.matches) return;
-      const a = fig.querySelector<HTMLAnchorElement>('a.frame');
-      const url = a?.getAttribute('href');
+      const im = fig.querySelector<HTMLImageElement>('img');
+      const url = im?.getAttribute('src');            // 同 collect()：走 800 档
       if (!url || url === curUrl) return;
       /* ★ 竖幅不接（站主：「只要横着的照片，不放竖着的」）：
          板的形状是照着开场那张照片定死的，换一张竖幅进来就只能裁 —— 那会破坏
          「整张铺进板里、不裁不拉伸」这条口径。所以划过竖幅时板不动。 */
-      const im = fig.querySelector<HTMLImageElement>('img');
       const fw = Number(im?.getAttribute('width') ?? 0);
       const fh = Number(im?.getAttribute('height') ?? 0);
       if (!(fw > 0 && fh > 0 && fw > fh)) return;

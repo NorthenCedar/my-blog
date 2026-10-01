@@ -184,15 +184,21 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
 
   it('与页面互动：划过网格任意一张 ⇒ 板里换成那一张', () => {
     const binds = /querySelectorAll<HTMLElement>\('\.wf figure'\)/.test(CODE);
-    const reads = /fig\.querySelector<HTMLAnchorElement>\('a\.frame'\)/.test(CODE);
+    /* ★ 图源必须走**网格档（800）**：`im.getAttribute('src')`。
+       走灯箱档（`a.frame` 的 href，1280）时单张能到 486 KB，线上实测 842 ms 才到、
+       更重的要好几秒 ⇒ 那几秒里指针搅不出任何东西（板是纯色，画不出来）。 */
+    const reads = /\.getAttribute\('src'\)/.test(CODE);
+    const noBigTier = !/getAttribute\('href'\)/.test(CODE);
     const reads2 = /read\(f, idx \+ 1, list\.length, tag\)/.test(CODE);
     console.log(
       `判据 页面互动 实测: ${binds ? '订阅 .wf figure ✓' : '⚠️ 没订阅'} · `
-      + `${reads ? '取 a.frame 的 href ✓' : '⚠️ 没取图源'} · `
+      + `${reads ? '取网格档 img 的 src ✓' : '⚠️ 没取图源'} · `
+      + `${noBigTier ? '没走灯箱档（1280）✓' : '⚠️ 在拿 a.frame 的 href'} · `
       + `${reads2 ? '板内读数同步 ✓' : '⚠️ 读数没同步'}`,
     );
     expect(binds, '没有把网格里的图接进来（站主的核心诉求：底下的影要能和那页互动）').toBe(true);
     expect(reads, '没从 figure 取图片地址').toBe(true);
+    expect(noBigTier, '板在拿灯箱档（1280，数百 KB）当图源 ⇒ 图到位前指针搅不出东西').toBe(true);
     expect(reads2, '板内读数没跟着换（读数与画面不一致，仪器感就假了）').toBe(true);
   });
 
