@@ -76,49 +76,52 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
   });
 
   it('时间基准是 performance.now() 的绝对值，不是"每帧累加"', () => {
-    const absPh = /const\s+ph\s*=\s*t\s*\*\s*PH_SPD/.test(CODE);
-    const accum = /\bph\s*\+=/.test(CODE);
+    const absT = /\bT\s*=\s*t\s*\/\s*1000/.test(CODE);
+    const accum = /\bT\s*\+=/.test(CODE);
     console.log(
-      `判据 时间基准 实测: ${absPh ? '相位 = t × PH_SPD ✓' : '⚠️ 相位不是由 t 直接算'} · `
+      `判据 时间基准 实测: ${absT ? 'T = t / 1000（绝对值，秒）✓' : '⚠️ 相位不是由 t 直接算'} · `
       + `${accum ? '⚠️ 相位在累加' : '无累加 ✓'}`,
     );
-    expect(absPh, '形状相位不是 t 的绝对函数（改成累加 ⇒ 观感随帧率变、跨加载不可比）').toBe(true);
-    expect(accum, '形状相位在"每帧累加" —— 30 Hz 屏上会慢一倍').toBe(false);
+    expect(absT, '噪声相位不是 t 的绝对函数（改成累加 ⇒ 观感随帧率变、跨加载不可比）').toBe(true);
+    expect(accum, '噪声相位在"每帧累加" —— 30 Hz 屏上会慢一倍').toBe(false);
   });
 
-  it('指针搅动是局部的：按距离衰减，不是整块充气', () => {
-    const near = /d2\s*<\s*RINF\s*\*\s*RINF/.test(CODE);
-    const smooth = /w\s*\*\s*w\s*\*\s*\(\s*3\s*-\s*2\s*\*\s*w\s*\)/.test(CODE);
+  it('★ 指针的影响是局部的：笔触只算包围盒，速度按高斯核拖曳场', () => {
+    /* ★★ 参考站**没有**"把边界推开"这回事（上一版本站自己加的 R_INF_K / PUSH_K，
+       第六轮照抄它时一并删了）：它让指针参与的方式是
+       `flow += velocity * vec2(aspect,1.) * influence * .18` —— 指针**速度**把场沿运动
+       方向拖走，影响范围是一个**高斯核**（`influence = exp(-r²/(radius²*4))`）。 */
+    const bbox = /let\s+i0\s*=\s*Math\.floor\(\(pu\s*-\s*rx\)\s*\*\s*FW\)/.test(CODE);
+    const gauss = /infl\s*=\s*Math\.exp\(-\(ox\s*\*\s*ox\s*\+\s*oy\s*\*\s*oy\)\s*\/\s*Math\.max\(radius\s*\*\s*radius\s*\*\s*INF_K/.test(CODE);
+    const drag = /FLX\[k\]\s*=\s*a\s*\*\s*FLOW_A\s*\+\s*vx\s*\*\s*aspect\s*\*\s*infl\s*\*\s*VEL_K/.test(CODE);
+    const clamp = /Math\.max\(-VEL_MAX,\s*Math\.min\(VEL_MAX/.test(CODE);
+    /* ★ 速度取自**平滑后**笔触中心的实际位移（参考站原文 `(point − 旧point)/dt`），
+       不是指针本身 ⇒ 拖曳与"被拽着走"的滞后是同一个来源。 */
+    const fromPoint = /vx\s*=\s*Math\.max\(-VEL_MAX[\s\S]{0,120}?\(cx\s*-\s*pcx\)\s*\/\s*W\s*\/\s*ds/.test(CODE);
     const offBoard = /addEventListener\('pointerleave'[\s\S]{0,120}?pwT\s*=\s*0/.test(CODE);
-    const push = num('PUSH_K');
-    const rinf = num('R_INF_K');
+    const velK = num('VEL_K');
+    const infK = num('INF_K');
     console.log(
-      `判据 局部搅动 实测: ${near ? '有影响半径判断 ✓' : '⚠️ 没有距离判断'} · `
-      + `${smooth ? 'smoothstep 衰减 ✓' : '⚠️ 没有平滑衰减'} · `
+      `判据 局部影响 实测: ${bbox ? '笔触只算指针周围的包围盒 ✓' : '⚠️ 整版都算（且不是局部）'} · `
+      + `${gauss ? '影响是高斯核 ✓' : '⚠️ 没有距离衰减'} · `
+      + `${drag ? '速度把场拖走 ✓' : '⚠️ 指针没参与流场'} · `
+      + `${clamp && fromPoint ? '速度取自平滑后的笔触中心、clamp ±2 ✓' : '⚠️ 速度口径不对'} · `
       + `${offBoard ? '指针离开即收回 ✓' : '⚠️ 缺"指针无效"的路'} · `
-      + `PUSH_K=${push} R_INF_K=${rinf}`,
+      + `VEL_K=${velK} INF_K=${infK}`,
     );
-    expect(near, '指针影响只按"是否在板内"生效 ⇒ 整块一起动，读作充气而不是被搅动').toBe(true);
-    expect(smooth, '指针附近的推开没有平滑衰减（边缘会出现一个尖角）').toBe(true);
-    expect(offBoard, '指针离开后没把强度归零 ⇒ 洞会赖在板上不收（违反"纯色"口径）').toBe(true);
-    /* ★★ 手感参数钉的是**相对笔触半径的比例**，不是绝对数值：
-       笔触大小照参考站的 shader 定（`size*1.35/height`），板从"小板"变"整屏"时尺度基准
-       从 185 px 变成 800 px ⇒ 写死绝对区间会在换尺寸那天误报，而比例是尺度无关的。
-       · R_INF / R ≈ 0.9：影响半径略小于笔触 ⇒ 鼓的是"局部一个包"，不是整块被推走
-       · PUSH / R ≈ 1/3：大到像被咬一口 / 小到看不见，两头都挡住
-       ★ RADIUS_K 的区间是**照抄参考站反推的硬区间**：82 × 1.35 / 720 = 0.15375。
-         上一版误把旋钮 82 当成直径、推成短边的 0.057 ⇒ 比参考站小 2.7 倍（扒它的 JS 才发现）。
-         区间取 0.12~0.20：既不会退回上一版那个 0.057，也不会大过半屏。 */
+    expect(bbox, '笔触整版都算 ⇒ 既慢（atan2+2×sin 每像素）又不再是"指针周围"这一口径').toBe(true);
+    expect(gauss, '指针影响没有按距离衰减 ⇒ 整块一起动，读作充气而不是被搅动').toBe(true);
+    expect(drag, '指针速度没有进流场 ⇒ 快速划过时没有"被拽出去"的拖尾').toBe(true);
+    expect(clamp && fromPoint, '速度不是"平滑后笔触中心的实际位移/真实 dt，clamp ±2" ⇒ 甩一下会拖爆').toBe(true);
+    expect(offBoard, '指针离开后没把强度归零 ⇒ 笔触会赖在板上不收（违反"纯色"口径）').toBe(true);
+    expect(velK > 0.05 && velK < 0.5, `VEL_K=${velK} 越界（参考站 velocity*influence*.18）`).toBe(true);
+    expect(infK >= 2 && infK <= 8, `INF_K=${infK} 越界（参考站 radius*radius*4 ⇒ 高斯核 ≈ 笔触大小）`).toBe(true);
+    /* ★ RADIUS_K 的区间是**照抄参考站反推的硬区间**：82 × 1.35 / 720 = 0.15375。
+       上一版误把旋钮 82 当成直径、推成短边的 0.057 ⇒ 比参考站小 2.7 倍（扒它的 JS 才发现）。
+       区间取 0.12~0.20：既不会退回上一版那个 0.057，也不会大过半屏。 */
     const rHole = num('RADIUS_K');
-    const rInfRatio = rinf / rHole;
-    const pushRatio = push / rHole;
-    console.log(
-      `判据 局部搅动 实测（尺度无关）: RADIUS_K=${rHole} · R_INF/R=${rInfRatio.toFixed(2)} · `
-      + `PUSH/R=${pushRatio.toFixed(2)}`,
-    );
+    console.log(`判据 局部影响 实测: RADIUS_K=${rHole}`);
     expect(rHole > 0.12 && rHole < 0.2, `RADIUS_K=${rHole} 越界（参考站 82×1.35/720 ⇒ 板高的 0.15375）`).toBe(true);
-    expect(rInfRatio > 0.5 && rInfRatio <= 1.2, `R_INF/R=${rInfRatio.toFixed(2)} 越界（影响半径应≈笔触大小）`).toBe(true);
-    expect(pushRatio > 0.12 && pushRatio <= 0.6, `PUSH/R=${pushRatio.toFixed(2)} 越界（≈1/3 笔触半径）`).toBe(true);
   });
 
   it('平滑与跟随都帧率无关：1−e^(−dt/τ) + 跟随吃真实 dt', () => {
@@ -145,7 +148,8 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
 
   it('★ 没有指针（且擦痕褪尽）= 一块纯色：不画洞、不自己漫、不自己换片', () => {
     const clears = /ctx\.clearRect\(0,\s*0,\s*W,\s*H\)/.test(CODE);
-    const gate = /if\s*\(\s*trail\s*<=\s*TRAIL_EPS\s*\)/.test(CODE);
+    /* ★ DEAD = REV0 − EDGE_A/2：场峰值低于它 ⇒ 无论 edge 噪声怎么抖都不可能再显 */
+    const gate = /if\s*\(\s*peak\s*<=\s*DEAD\s*\)/.test(CODE);
     const noGrow = !/T_GROW/.test(CODE) && !/T_ROLL/.test(CODE);
     const noAuto = !/advance\s*\(/.test(CODE) && !/lastPeak/.test(CODE) && !/LOCK_MS/.test(CODE);
     const stopClears = /const\s+stop\s*=\s*\(\)[\s\S]{0,400}?ctx\.clearRect/.test(CODE);
@@ -180,30 +184,92 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     expect(noSpring, '还留着二阶弹簧 ⇒ ζ<1 的过冲在涂抹时会读成"笔尖抖一下"').toBe(true);
   });
 
-  it('★ 擦痕会停留一段时间再褪回纯色（参考站的「显影停留时间」）', () => {
-    const tau = num('TRAIL_TAU');
-    const eps = num('TRAIL_EPS');
-    /* 蒙版衰减必须是 `1 − e^(−dt/τ)`（帧率无关）写成 destination-out 的一层 */
-    const decay = /1\s*-\s*Math\.exp\(-dt\s*\/\s*TRAIL_TAU\)/.test(CODE);
-    const dstOut = /globalCompositeOperation\s*=\s*'destination-out'/.test(CODE);
-    const masked = /globalCompositeOperation\s*=\s*'destination-in'/.test(CODE);
-    /* ★ 停帧必须**连蒙版一起清**：擦痕是累积的，只清主画布 ⇒ 下次进来带着上次的痕 */
-    const stopMk = /const\s+stop\s*=\s*\(\)[\s\S]{0,700}?mkx\.clearRect/.test(CODE);
-    /* ★ 指针离开后不能立刻停帧，否则擦痕冻在最后一帧、永远不会褪（正是这条要求的反面） */
-    const keepWhileTrail = /trail\s*>\s*TRAIL_EPS/.test(CODE);
+  it('★ 擦痕被流场输运 —— 边缘一直在动（站主「像水一样」的第一因）', () => {
+    /* ★★ 参考站 sim shader 的原文（第六轮扒出来的）：
+             vec2 flow = vec2(a, -b) * .5;            // curl noise：无散度 ⇒ 像水流
+             vec2 sampleUv = uv - flow * motion / vec2(aspect,1.) * dt;
+             density = texture2D(field, clamp(sampleUv,0.,1.)).r;   // ★ 半拉格朗日回溯
+       ⇒ **擦痕不是盖上去就冻住，而是每帧被水流推着走**。上一版就是漏了这一行，
+         所以站主读到的是"抹出来一块、然后整块淡掉"，不是"水"。 */
+    const curl = /const\s+a\s*=\s*vn2\(nx,\s*ny\s*\+\s*FLOW_EP\)\s*-\s*vn2\(nx,\s*ny\s*-\s*FLOW_EP\)/.test(CODE);
+    const curlY = /const\s+b\s*=\s*vn2\(nx\s*\+\s*FLOW_EP,\s*ny\)\s*-\s*vn2\(nx\s*-\s*FLOW_EP,\s*ny\)/.test(CODE);
+    const back = /let\s+su\s*=\s*u\s*-\s*samp\(FLX,\s*FW2,\s*FH2,\s*u,\s*v\)\s*\*\s*invA\s*\*\s*ds/.test(CODE);
+    const advect = /samp\(FD,\s*FW,\s*FH,\s*su,\s*sv\)/.test(CODE);
+    /* ★ 输运要读上一帧的场 ⇒ 必须 ping-pong 两张，原地改会把流场写成" smear " */
+    const pingpong = /FD\s*=\s*FD2;[\s\S]{0,40}?FD2\s*=\s*tmpD/.test(CODE);
     console.log(
-      `判据 擦痕停留 实测: TRAIL_TAU = ${tau} ms（≈ ${(tau * Math.log(1 / (eps || 0.06)) / 1000).toFixed(1)} s 褪尽）· `
-      + `${decay ? '指数衰减（帧率无关）✓' : '⚠️ 衰减不是 1−e^(−dt/τ)'} · `
-      + `${dstOut ? '蒙版 destination-out ✓' : '⚠️ 蒙版没在衰减'} · `
-      + `${masked ? '照片按蒙版抠出 ✓' : '⚠️ 没按蒙版抠图（擦痕不会显影）'} · `
-      + `${stopMk ? '停帧连蒙版一起清 ✓' : '⚠️ 停帧只清主画布，擦痕会残留到下次'} · `
-      + `${keepWhileTrail ? '指针走了还继续画到褪尽 ✓' : '⚠️ 指针一走就停帧，擦痕会冻住'}`,
+      `判据 输运 实测: ${curl && curlY ? 'curl noise（中心差分 ⇒ 无散度）✓' : '⚠️ 流场不是 curl noise'} · `
+      + `${back && advect ? '半拉格朗日回溯 ✓' : '⚠️ 没有输运（擦痕会冻住）'} · `
+      + `${pingpong ? '双缓冲 ping-pong ✓' : '⚠️ 原地改场（输运会变成 smear）'}`,
     );
-    expect(tau, '没有擦痕停留时间常数 ⇒ 抹过就没了（站主：「鼠标移动过的路径要有擦除效果」）').toBeGreaterThanOrEqual(800);
-    expect(decay, '擦痕衰减不是 1−e^(−dt/τ) ⇒ 停留时长随刷新率变（60Hz 与 120Hz 差一倍）').toBe(true);
-    expect(dstOut && masked, '没有"蒙版衰减 + 按蒙版抠图" ⇒ 擦痕要么不累积、要么不显影').toBe(true);
-    expect(stopMk, '停帧没清蒙版 ⇒ 擦痕累积，下次进板会带着上一次没褪完的痕').toBe(true);
-    expect(keepWhileTrail, '指针一离开就停帧 ⇒ 擦痕冻在最后一帧，永远褪不回纯色').toBe(true);
+    expect(curl && curlY, '流场不是 curl noise ⇒ 到处是"源"和"汇"，画面会被推散而不是流动').toBe(true);
+    expect(back && advect, '场没有被输运 ⇒ 擦痕盖上去就冻住，边缘不会动（"像水一样"全靠这一行）').toBe(true);
+    expect(pingpong, '输运没有双缓冲 ⇒ 原地读写同一个场，拖影会被自己抹开').toBe(true);
+  });
+
+  it('★ 擦痕会停留一段时间、沿路径退回、再回到纯色（站主：「过一到两秒就跟着路径回来了」）', () => {
+    const life = num('LIFE');
+    /* ★★ 参考站是**线性**衰减（`density = max(0, density - dt/life)`），不是本站上一版
+       那个乘性 `× e^(−dt/τ)`。
+       线性 + 极窄阈值 ⇒ 退去时是**等值线向内收缩**（边缘先消失），不是整块一起淡
+       ⇒ 这才是"跟着路径回来"的观感。上一版用乘性衰减 + 软边渐变，正好把它抹平了。
+       ★ 顺带解决了上一版那个 8 位 alpha 的衰减下限（α 卡在 42 的鬼影）：
+         Float32 线性减到 0 就是 0，蒙版不必再平方。 */
+    const linear = /const\s+decay\s*=\s*ds\s*\/\s*LIFE/.test(CODE);
+    const sub = /samp\(FD,\s*FW,\s*FH,\s*su,\s*sv\)\s*-\s*decay/.test(CODE);
+    const clamp0 = /if\s*\(\s*d\s*<\s*0\s*\)\s*d\s*=\s*0/.test(CODE);
+    /* ★ 阈值带只有 0.025 ⇒ 边界是**硬**的；"破碎的水渍边"由 display 那层 fbm 给 */
+    const rev0 = num('REV0'), rev1 = num('REV1');
+    const thresh = /sstep\(REV0,\s*REV1,\s*d\s*\+\s*\(edge\s*-\s*0\.5\)\s*\*\s*EDGE_A\)/.test(CODE);
+    const narrow = rev1 - rev0;
+    const masked = /globalCompositeOperation\s*=\s*'destination-in'/.test(CODE);
+    /* ★ 停帧必须**连场一起清**：擦痕是累积的，只清主画布 ⇒ 下次进来带着上次的痕 */
+    const stopField = /const\s+stop\s*=\s*\(\)[\s\S]{0,700}?FD\.fill\(0\)/.test(CODE);
+    /* ★ 指针离开后不能立刻停帧，否则擦痕冻在最后一帧、永远不会褪（正是这条要求的反面） */
+    const keepWhile = /peak\s*>\s*DEAD/.test(CODE);
+    const visibleS = (1 - rev0) * life;   // density 从 1 降到阈值下沿所需的时间
+    console.log(
+      `判据 擦痕停留 实测: LIFE=${life}s ⇒ 从满到看不见约 ${visibleS.toFixed(2)} s · `
+      + `${linear && sub ? '线性衰减（−dt/life）✓' : '⚠️ 衰减不是线性'} · `
+      + `${clamp0 ? '夹到 0 ✓' : '⚠️ 会变负'} · `
+      + `${thresh ? `硬阈值 ${rev0}~${rev1}（带宽 ${narrow.toFixed(3)}）✓` : '⚠️ 阈值不是参考站那一条'} · `
+      + `${masked ? '照片按蒙版抠出 ✓' : '⚠️ 没按蒙版抠图（擦痕不会显影）'} · `
+      + `${stopField ? '停帧连场一起清 ✓' : '⚠️ 停帧只清主画布，擦痕会残留到下次'} · `
+      + `${keepWhile ? '指针走了还继续画到褪尽 ✓' : '⚠️ 指针一走就停帧，擦痕会冻住'}`,
+    );
+    expect(linear && sub && clamp0, '衰减不是"线性 −dt/life 且夹到 0" ⇒ 要么褪不尽，要么会变负').toBe(true);
+    expect(life >= 1 && life <= 4, `LIFE=${life}s 越界（参考站旋钮「显影停留时间」默认 2.8）`).toBe(true);
+    expect(visibleS >= 0.9 && visibleS <= 3.2, `可见时长 ${visibleS.toFixed(2)}s 越界（站主：「一到两秒」）`).toBe(true);
+    expect(thresh && narrow > 0 && narrow <= 0.05,
+      `阈值带宽 ${narrow.toFixed(3)} ⇒ 边是软的，读成"整块一起淡"而不是"水退回去"`).toBe(true);
+    expect(masked, '没有按蒙版抠图 ⇒ 擦痕不会显影').toBe(true);
+    expect(stopField, '停帧没清场 ⇒ 擦痕累积，下次进板会带着上一次没褪完的痕').toBe(true);
+    expect(keepWhile, '指针一离开就停帧 ⇒ 擦痕冻在最后一帧，永远褪不回纯色').toBe(true);
+  });
+
+  it('★ display 照抄参考站：域扭曲采样 + edge 扰动 + 只算可能显影的块', () => {
+    /* 它的原文：
+         vec2 q  = vec2(fbm(p*7 + vec2(time*.28,0)), fbm(p*7 + vec2(8,-time*.22))) - .5;
+         vec2 at = clamp(uv + q*.055*motion/vec2(aspect,1.), 0., 1.);
+         float edge = fbm(p*22. + q*3. + time*.12);
+       ⇒ 采样点被一个**低频**噪声推歪（整个边界跟着扭），边缘再叠一层**高频**噪声（破碎）。 */
+    const q = /QX\[k\]\s*=\s*fbm3\(x7\s*\+\s*T\s*\*\s*Q_SPD,\s*y7\)\s*-\s*0\.5/.test(CODE);
+    const warp = /let\s+au\s*=\s*u\s*\+\s*qx\s*\*\s*Q_A\s*\*\s*invA/.test(CODE);
+    const edge = /fbm3\(u\s*\*\s*aspect\s*\*\s*EDGE_F\s*\+\s*qx\s*\*\s*3\s*\+\s*T\s*\*\s*EDGE_SPD/.test(CODE);
+    const fbmW = /vn2\(x,\s*y\)\s*\*\s*0\.57\s*\+\s*vn2\(x\s*\*\s*2\.03,\s*y\s*\*\s*2\.03\)\s*\*\s*0\.28\s*\+\s*vn2\(x\s*\*\s*4\.01,\s*y\s*\*\s*4\.01\)\s*\*\s*0\.15/.test(CODE);
+    /* ★ 边缘那层 fbm（p*22，三个八度）是全场最贵的一步 ⇒ 块峰值 < DEAD 就整块跳过。
+       不跳的话 320×225 的场要 20+ ms/帧（实测 bench-field.mjs），跳完 9.1 ms。 */
+    const skip = /if\s*\(\s*m\s*<\s*DEAD\s*\)\s*\{\s*data\[o\]\s*=\s*0;\s*continue;\s*\}/.test(CODE);
+    console.log(
+      `判据 display 实测: ${q && warp ? '域扭曲采样 ✓' : '⚠️ 没有域扭曲'} · `
+      + `${edge ? 'edge 高频扰动 ✓' : '⚠️ 没有 edge 扰动（边界会是规整的）'} · `
+      + `${fbmW ? 'fbm 权重 .57/.28/.15 ✓' : '⚠️ fbm 权重不是参考站那三个'} · `
+      + `${skip ? '空块跳过 edge ✓' : '⚠️ 整版都算 edge（跑不满 60fps）'}`,
+    );
+    expect(q && warp, '没有域扭曲 ⇒ 边界不会跟着扭，"水"的观感少一半').toBe(true);
+    expect(edge, '没有 edge 扰动 ⇒ 边界是规整的圆，不像水渍').toBe(true);
+    expect(fbmW, 'fbm 权重不是 .57/.28/.15 ⇒ 与参考站的噪声形态不一致').toBe(true);
+    expect(skip, '空块不跳过 ⇒ 整版都算三层 fbm，实测跑不满 60fps').toBe(true);
   });
 
   it('★ 手写花体（英文站名）不在 canvas 里 ⇒ 擦痕擦不掉它', () => {
@@ -296,8 +362,8 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
   it('停帧三态：视口外 / 切标签 / 没指针', () => {
     const io = /IntersectionObserver/.test(CODE);
     const vis = /visibilitychange/.test(CODE);
-    /* ★ 判据里**必须带上 trail**：擦痕还在褪的时候要继续跑（否则冻在最后一帧） */
-    const idle = /const\s+want\s*=\s*onScreen[\s\S]{0,220}?\(\s*pwT\s*>\s*0\s*\|\|\s*pw\s*>\s*PW_EPS\s*\|\|\s*trail\s*>\s*TRAIL_EPS\s*\)/.test(CODE);
+    /* ★ 判据里**必须带上场峰值 peak**：擦痕还在褪的时候要继续跑（否则冻在最后一帧） */
+    const idle = /const\s+want\s*=\s*onScreen[\s\S]{0,220}?\(\s*pwT\s*>\s*0\s*\|\|\s*pw\s*>\s*PW_EPS\s*\|\|\s*peak\s*>\s*DEAD\s*\)/.test(CODE);
     console.log(
       `判据 停帧 实测: ${io ? 'IntersectionObserver ✓' : '⚠️ 没有'} · `
       + `${vis ? '切标签停帧 ✓' : '⚠️ 没处理 visibilitychange'} · `
@@ -404,7 +470,11 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     /* ★★ 半径必须按**板高 H**算（参考站是 `size*1.35/height`），不是短边、不是 min(W,H)。
        本站两种版面都是横的（H 就是短边）⇒ 现在两者相等，但**写法**必须钉住：
        哪天板变成竖的，按短边算就会跟参考站差一个宽高比。 */
-    const byHeight = /const\s+R\s*=\s*H\s*\*\s*RB\s*\*\s*s/.test(CODE);
+    /* ★★ 半径的单位必须是**板高**（参考站 `size*1.35/height`）：场是 uv 空间的，
+       `off = (uv − pointer) * vec2(aspect, 1)` ⇒ |off| 的单位就是"板高的比例"
+       ⇒ 半径直接取 RB（= RADIUS_K = 0.15375），**不要再乘一次 H**（乘了就是平方量纲）。 */
+    const byHeight = /const\s+radius\s*=\s*RB;/.test(CODE)
+      && /const\s+ox\s*=\s*\(u\s*-\s*pu\)\s*\*\s*aspect/.test(CODE);
     console.log(
       `判据 整屏 实测: ${bleed ? '逃出 .shell 铺满宽 ✓' : '⚠️ 没有满宽手法（会被 .shell 框窄）'} · `
       + `${svh ? '高 = 100svh（顶到页面最顶端）✓' : '⚠️ 高度不是一屏'} · `
@@ -475,30 +545,28 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
        ★ time 在它那里是**秒**（引擎 `this.time += dt`）⇒ 本站 t 是毫秒，必须 /1000。 */
     const a5 = num('IRR_A5') === 0.14 && num('IRR_A9') === 0.08;
     const s5 = num('IRR_S5') === 1.6 && num('IRR_S9') === 1.1;
-    const lobes = /Math\.sin\(\s*5\s*\*\s*TH\[i\]\s*\+\s*ph5\s*\)/.test(CODE)
-      && /Math\.sin\(\s*9\s*\*\s*TH\[i\]\s*-\s*ph9\s*\)/.test(CODE);
-    const secs = /const\s+ts\s*=\s*t\s*\/\s*1000/.test(CODE);
-    /* 软边：实心核心 0.45R、渐隐到 1.2R（smoothstep 的两个沿） */
+    /* ★ 现在笔触是**逐像素**写进密度场（不再是多边形轮廓），所以瓣数写在 `ang * 5 / ang * 9` 上 */
+    const lobes = /IRR_A5\s*\*\s*Math\.sin\(ang\s*\*\s*5\s*\+\s*ir5\)/.test(CODE)
+      && /IRR_A9\s*\*\s*Math\.sin\(ang\s*\*\s*9\s*-\s*ir9\)/.test(CODE);
+    /* ★ time 必须换算成**秒**：本站 T = t / 1000（参考站引擎里 `this.time += dt`，dt 是秒） */
+    const secs = /\bT\s*=\s*t\s*\/\s*1000/.test(CODE) && /const\s+ir5\s*=\s*T\s*\*\s*IRR_S5/.test(CODE);
+    /* 软边：实心核心 0.45R、渐隐到 1.2R（smoothstep 的两个沿）
+       ★★ 上一版蒙版要平方（绕开 8 位 alpha 的乘性衰减下限）⇒ 存的是 sqrt(brush) 的五点采样；
+          这一版场是 Float32 + **线性**衰减，减到 0 就是 0 ⇒ **直接存 brush**，不再平方。 */
     const core = num('CORE_K') === 0.45 && num('FADE_K') === 1.2;
-    /* ★★ 蒙版在合成时会**平方**（绕开 8 位 alpha 的乘性衰减下限）
-       ⇒ 这里存的必须是 `sqrt(brush)`，五个 stop = sqrt(1 − smoothstep(t))：
-          1 · 0.919 · 0.707 · 0.395 · 0。改了任何一个就不等于参考站那条曲线。 */
-    const stops = /addColorStop\(0,\s*'rgba\(255,255,255,1\)'\)/.test(CODE)
-      && /addColorStop\(0\.25,\s*'rgba\(255,255,255,0\.919\)'\)/.test(CODE)
-      && /addColorStop\(0\.5,\s*'rgba\(255,255,255,0\.707\)'\)/.test(CODE)
-      && /addColorStop\(0\.75,\s*'rgba\(255,255,255,0\.395\)'\)/.test(CODE)
-      && /addColorStop\(1,\s*'rgba\(255,255,255,0\)'\)/.test(CODE);
+    const brush = /1\s*-\s*sstep\(CORE_K,\s*FADE_K,\s*Math\.sqrt\(ox\s*\*\s*ox\s*\+\s*oy\s*\*\s*oy\)\s*\/\s*\(radius\s*\*\s*irr\)\)/.test(CODE);
+    const noSquare = !/addColorStop/.test(CODE);
     console.log(
       `判据 形状照抄 实测: ${a5 ? '幅度 0.14/0.08 ✓' : '⚠️ 幅度不是 0.14/0.08'} · `
       + `${s5 ? '时间系数 1.6/1.1 ✓' : '⚠️ 时间系数不是 1.6/1.1'} · `
       + `${lobes ? '5 瓣 + 9 瓣 ✓' : '⚠️ 不是 5 瓣 + 9 瓣'} · `
       + `${secs ? 'time 换算成秒 ✓' : '⚠️ 没换算成秒（会快 1000 倍，形状抖成一团）'} · `
-      + `${core ? '软边 0.45R→1.2R ✓' : '⚠️ 软边不是 0.45R→1.2R'} · `
-      + `${stops ? 'sqrt(brush) 五点采样 ✓' : '⚠️ 渐变 stop 不等于 sqrt(1−smoothstep)'}`,
+      + `${core && brush ? '软边 0.45R→1.2R ✓' : '⚠️ 软边不是 smoothstep(0.45,1.2)'} · `
+      + `${noSquare ? '直接存 brush（不再平方）✓' : '⚠️ 还留着平方用的渐变 stop'}`,
     );
     expect(a5 && s5 && lobes, '形状不是参考站的 irregular（5 瓣 0.14 + 9 瓣 0.08）').toBe(true);
     expect(secs, 'irregular 的时间没换算成秒 ⇒ 形状变化快 1000 倍，抖成一团').toBe(true);
-    expect(core, '软边不是 smoothstep(0.45, 1.2) ⇒ 与参考站的笔触边缘不一致').toBe(true);
-    expect(stops, '渐变 stop 不等于 sqrt(1−smoothstep) ⇒ 蒙版平方后不是参考站那条 brush 曲线').toBe(true);
+    expect(core && brush, '软边不是 smoothstep(0.45, 1.2) ⇒ 与参考站的笔触边缘不一致').toBe(true);
+    expect(noSquare, '还留着平方用的渐变 stop ⇒ 与"线性衰减的 Float32 场"这套口径冲突').toBe(true);
   });
 });

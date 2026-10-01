@@ -49,6 +49,42 @@
  *       ③ **形状**：它只有两个 sin（5 瓣 + 9 瓣），我用的是两层 fbm 噪声。
  *     ⇒ 三处现在全部照抄它的原文，细褶那层 0.06 是本站补的（它没有 display 层的 fbm 边缘）。
  *
+ * ★★★ 同日第六轮（站主：「鼠标扫过的地方画面出来的但边缘还在动像水一样，
+ *   过了一到两秒就跟着路径回来了且画面也会回到纯色，整个观感像水一样」）：
+ *
+ *   ⇒ ★★ 上一版**漏了参考站最核心的一环**：它的密度场每帧都被一个**流场输运**
+ *     （sim shader 里的半拉格朗日回溯）。擦痕不是"盖上去就冻在那儿"，而是被水流
+ *     一直推着走、边缘一直在扭 —— **"像水一样"的全部来源就在这一行**。
+ *
+ *     它的 sim shader 原文（_probe/ref/lr-app.js）：
+ *         vec2 flow = vec2(a, -b) * .5;                    // curl noise
+ *         flow += velocity * vec2(aspect,1.) * influence * .18;
+ *         vec2 sampleUv = uv - flow * motion / vec2(aspect,1.) * dt;
+ *         float density = texture2D(field, clamp(sampleUv,0.,1.)).r;   // ★ 输运
+ *         density = max(0., density - dt/life);                        // ★ 线性衰减
+ *         float brush = 1. - smoothstep(.45, 1.2, d);
+ *         density = max(density, brush*down);
+ *     它的 display shader 原文：
+ *         vec2 q  = vec2(fbm(p*7 + vec2(time*.28,0)), fbm(p*7 + vec2(8,-time*.22))) - .5;
+ *         vec2 at = clamp(uv + q*.055*motion/vec2(aspect,1.), 0., 1.);
+ *         float edge = fbm(p*22. + q*3. + time*.12);
+ *         float revealed = smoothstep(.19, .215, d + (edge-.5)*.15*motion);
+ *
+ *   ★★ 三条必须记住的（每一条都是"上一版为什么不像"的答案）：
+ *     ① **衰减是线性的**（`− dt/life`），不是上一版那个乘性 `× e^(−dt/τ)`。
+ *        线性衰减 + 极窄阈值 ⇒ 退去时是**等值线向内收缩**（边缘先消失、往回收），
+ *        不是整块一起淡 ⇒ 这才是"跟着路径回来"的观感。
+ *        ★ 顺带把上一版那个 8 位 alpha 的衰减下限（α 卡在 42 的鬼影）一并解决了：
+ *          线性减到 0 就是 0，蒙版**不需要再平方**。
+ *     ② **阈值带只有 0.025**（0.19 → 0.215）⇒ 边界是**硬**的。它那种"破碎的水渍边"
+ *        来自 display 那层 fbm 扰动（±0.075），不是软边渐变 —— 上一版靠径向渐变做
+ *        软边，正好把"水"的观感抹平了。
+ *     ③ 场每帧被流场**输运**（advection）⇒ 擦痕自己会漂、会扭、边缘一直在动。
+ *
+ *   ★★ 为什么本站不直接用 WebGL 照抄：本装置的其余部分（随机换片、交叉淡入、
+ *      花体字、颗粒、降级、探针）全都建在 Canvas2D 上，换成 GL 要连探针一起重写
+ *      （WebGL canvas 读不了 getImageData）。⇒ 用 CPU 跑同一个场，见下面「性能」。
+ *
  * ---------------------------------------------------------------------------
  * 实现选择：Canvas2D，不是 SVG feTurbulence
  *
@@ -97,11 +133,7 @@
 
   /* ---------------------------------------------------------------- 参数 */
 
-  const TAU2 = Math.PI * 2;
-
   /* 笔触 —— 只在指针周围出现的那一块 */
-  const N_WIDE = 96;       // 轮廓采样点数（板小了，96 点间距 ≈ 6px，够平滑）
-  const N_NARROW = 64;     // 窄视口减半
   /* ★★★ 笔触大小**照抄参考站 lowkeytp.art/liquid-reveal/ 的 shader 原文**
      （站主 2026-10-01：「学一下它是怎么处理鼠标上去的效果，做到和它一样」）。
      从它的 JS（_probe/ref/lr-app.js）里扒出来的原文是：
@@ -114,8 +146,7 @@
            推成短边的 0.057，**比参考站小了 2.7 倍**（这就是"跟参考站不一样"的第一因）。
            整屏 1280×800 上：参考站一笔可见直径 ≈ 0.369×800 = **295 px**，上一版只有 91 px。
         ② 82 那个旋钮**不是像素**，shader 里还要 ×1.35 ⇒ 别再拿它跟画布尺寸直接比。
-        ③ 搅动的两个尺度按同一比例缩放（见 R_INF_K / PUSH_K），否则"影响半径 > 笔触半径"
-           ⇒ 局部鼓包变成整块被推走。 */
+        ③ 笔触写进的是**密度场**（uv 单位）⇒ 半径直接就是 RB，不需要再乘板高。 */
   const RADIUS_K = 0.15375;  // 笔触半径 = **画面高度** × 0.15375（= 参考站 82 × 1.35 / 720）
   const CORE_K = 0.45;       // 实心核心到 0.45R（参考站 smoothstep 的下沿）
   const FADE_K = 1.2;        // 外围渐隐到 1.2R（参考站 smoothstep 的上沿）
@@ -135,18 +166,8 @@
        照抄成毫秒会快 1000 倍（形状抖成一团）。 */
   const IRR_A5 = 0.14, IRR_A9 = 0.08;
   const IRR_S5 = 1.6, IRR_S9 = 1.1;
-  /* ★ 本站比参考站**多**的一层细褶：参考站的轮廓不规则只有上面两个 sin，
-     它那种"破碎的水渍边缘"来自 **display** shader 里的 fbm 噪声（`smoothstep(.19,.215, d+(edge-.5)*.15)`）
-     —— 那是**显示**阶段加的，本站没有那一层（蒙版是 canvas 画的、边缘就是轮廓本身）
-     ⇒ 在轮廓上补一层 0.06 的细褶，免得照抄两个 sin 之后形状太规整。 */
-  const R2_FINE = 0.85;    // 细褶：环上一圈 ≈ 5.3 个噪声格（五六个起伏）
-  const AMP_FINE = 0.06;   // 细褶幅度（相对半径）
-  /* ★ 边缘流动的速度：细褶那层噪声的相位推进。
-     ★ 实测（_probe/cdp-bath.mjs --hold）：3.2e-4 时边界只有 1.6 px/s（太小，读成静止）；
-       9e-4 ⇒ 约 5 px/s，看得出"液体在动"但不会跳。 */
-  const PH_SPD = 9e-4;
 
-  /* 进出：指针进 ⇒ 洞张开；离开 ⇒ 洞收回（收回更慢，像显影痕迹慢慢褪掉） */
+  /* 进出：指针进 ⇒ 笔触张开；离开 ⇒ 收回（收回更慢，像显影痕迹慢慢褪掉） */
   const TAU_IN = 130;      // 影响强度的平滑时间常数（ms，指数平滑）
   const TAU_OUT = 280;
   const PW_EPS = 0.004;    // 小于这个就算"没有指针" ⇒ 整版不画（纯色）
@@ -163,56 +184,108 @@
      ★ ds 必须是**秒**（18 的单位是 1/s）且是真实 dt ⇒ 帧率无关。 */
   const FOLLOW_K = 18;     // 跟随速率（1/s）⇒ 时间常数 ≈ 56 ms
 
-  /* 搅动：指针附近那段边界被**推开**（局部，不是整体充气） */
-  /* ★ 这两个按**比值**跟着 RADIUS_K 走（同上）：R_INF/R = 0.877、PUSH/R = 0.333 保持不变
-     ⇒ 笔触放大 2.7 倍后搅动仍是"局部鼓一个包"，不会变成"整块被推走"。 */
-  const R_INF_K = 0.135;   // 影响半径 = 板高 × 这个系数（≈ 笔触半径的 0.88）
-  const PUSH_K = 0.0512;   // 最大推开距离（同上口径；≈ 笔触半径的 1/3，与改前手感一致）
+  /* =========================================================================
+   * ★★ 密度场 —— 照抄参考站的 sim / display 两个 shader（第六轮）
+   *    上一版的"离屏 alpha 蒙版 + 乘性衰减"整块作废，换成它这个场。
+   * ======================================================================= */
 
-  /* ★★ 擦痕的停留（参考 lowkeytp.art 那个旋钮「显影停留时间」，它默认 2.8s）
-     · 实现：整版蒙版每帧按 `1 − e^(−dt/τ)` 衰减（destination-out）⇒ 蒙版 alpha 指数下降。
-     · ★★ 蒙版在合成时**平方**了一次（见 render ③）⇒ 观感上的时间常数是 **τ/2**。
-       配 τ = 1500 ⇒ 有效 750 ms，擦痕约 **2.9 s** 褪到看不见（= 参考站那个 2.8 s）。
-     · TRAIL_EPS 是"判褪尽"的阈值，它必须跟着平方一起算：可见阈值取 α_eff ≈ 0.02
-       ⇒ 蒙版 0.14（0.14² ≈ 0.02）⇒ 停帧与"看不见"落在同一时刻（实测都在 ~2.9 s）。
-     · ★ 必须吃真实 dt（"每帧固定系数" ⇒ 停留时长随刷新率变，60Hz 与 120Hz 差一倍）。
-     · ★ 早擦的那段先褪：衰减是**逐帧乘**的，先盖上的笔触乘的次数多 ⇒ 擦痕有先后，
-       这是"擦玻璃"该有的样子；反过来（全场一起淡）就看不出路径了。 */
-  const TRAIL_TAU = 1500;  // 停留时间常数（ms；观感上是它的**一半** —— 蒙版在合成时平方了）
-  const TRAIL_EPS = 0.14;  // 低于这个就当"褪尽了" ⇒ 清屏 + 停帧（0.14² ≈ 0.02 = 看不见）
+  /* ★★ 停留时长（参考站构造函数里的原文 `this.returnTime = 2.8`）：
+         this.uniform(a, "life", this.returnTime);
+         density = max(0., density - dt/life);
+     ⇒ **线性**衰减：从 1 褪到 0 正好 **2.8 s**，早擦的那段先褪 ⇒ 擦痕有先后。
+     ★★ 它那个 dt 是**秒** —— 本站 dt 是毫秒，一律先转秒（ds = dt / 1000）。
+     ★★ 线性衰减顺带把上一版那个 8 位 alpha 的下限问题解决了：减到 0 就是 0，
+        不再需要"蒙版平方一次"那个 workaround（α 卡在 42 的鬼影）。 */
+  const LIFE = 2.8;
+
+  /* display 的阈值带（原文 `smoothstep(.19, .215, d + (edge-.5)*.15*motion)`）
+     ★★ 带子只有 **0.025** ⇒ 边界是**硬**的。它那种"破碎的水渍边"来自下面 EDGE_A
+        那层 fbm 扰动（±0.075），**不是**软边渐变 —— 上一版用径向渐变做软边，
+        正好把"水"的观感抹平了（整块一起淡，没有"边缘往回收"这回事）。 */
+  const REV0 = 0.19, REV1 = 0.215;
+  const EDGE_A = 0.15;      // edge 的扰动幅度（`(edge-.5)*.15*motion`）
+  const EDGE_F = 22;        // edge 的 fbm 频率（p*22 —— 全场最贵的一步）
+  const EDGE_SPD = 0.12;    // edge 的相位推进（time*.12）
+  /* ★ 场峰值低于这个就**不可能**再显（阈值下沿 − 扰动上限）⇒ 两个用处：
+       ① 判"褪尽"（停帧 + 清场）② display 时整块跳过 edge 计算。 */
+  const DEAD = REV0 - EDGE_A * 0.5;   // = 0.115
+
+  /* display 的域扭曲（原文 `at = clamp(uv + q*.055*motion/vec2(aspect,1.), 0., 1.)`） */
+  const Q_F = 7;            // 那两个 fbm 的频率（p*7）
+  const Q_A = 0.055;        // 扭曲幅度
+  const Q_SPD = 0.28, Q_SPD2 = 0.22;
+
+  /* sim 的流场（原文 `vec2(a, -b) * .5`：a/b 是 noise 的中心差分 ⇒ **curl noise**，
+     无散度 ⇒ 像水流，不会把画面越推越空） */
+  const FLOW_F = 5;         // 噪声频率（p*5）
+  const FLOW_SPD_X = 0.24, FLOW_SPD_Y = -0.18;   // 噪声场自己的平移（time*.24 / -time*.18）
+  const FLOW_A = 0.5;       // curl 的幅度
+  const FLOW_EP = 0.08;     // 中心差分的步长
+  const VEL_K = 0.18;       // 指针速度把场沿运动方向拖走（velocity*influence*.18）
+  const INF_K = 4;          // influence = exp(-r² / (radius²*4))
+  const VEL_MAX = 2;        // velocity 的 clamp（原文 ±2）
+
+  /* ★★ 场的分辨率：照搬参考站的 `min(512, width)` 在 CPU 上跑不动 —— 实测
+     （_probe/bench-field.mjs）512×360 要 **37 ms/帧**（27 fps）、384×270 要 21 ms。
+     ⇒ 取 **CSS 宽的 1/4、上限 320**：实测 320×225 满场 **9.1 ms**（bench-field3.mjs）。
+     ★ 场只是**蒙版**：照片照旧按 canvas 全分辨率画，只有显影的边界是场分辨率
+       ⇒ 放大 4× 后边界有约 4 px 的软过渡（参考站自己也是 512 → 1280 放大 2.5×）。 */
+  const FW_MAX = 320, FW_MIN = 96;
+  /* 粗块边长：整块峰值 < DEAD 就跳过这一块的 edge 计算（display 是全场最贵的一步）。
+     ★ 块要比域扭曲的位移（±0.055/2 uv ≈ ±9 px @FW320）大 ⇒ 判定时看 3×3 邻域。 */
+  const BS = 32;
 
   const SWAP_MS = 700;     // 划过网格照片时的交叉淡入时长
   const DT_MAX = 50;       // 帧间隔上限：切标签页回来 / 长卡顿后别让相位跳过头
 
-  /* -------------------------------------------------- 噪声（边缘的"有机"来源） */
+  /* -------------------------------------------------- 噪声
+     ★★ 参考站的 hash 是 `fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453)`，
+        本站沿用自己那张预计算表（同样是值噪声，统计特性一致 ⇒ 观感等价，
+        但省掉每帧几百万次 Math.sin —— 见下面「性能」）。 */
 
-  // 预计算哈希表：把 Math.sin 的调用从"每帧上千次"降到 0。
+  // 预计算哈希表：把 Math.sin 的调用从"每帧几百万次"降到 0。
   const HT = new Float32Array(2048);
   for (let i = 0; i < 2048; i++) {
     const s = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
     HT[i] = s - Math.floor(s);
   }
   const hA = (i: number, j: number) => HT[(i * 73 + j * 151) & 2047];
-  const hB = (i: number, j: number) => HT[(i * 29 + j * 313 + 977) & 2047];
 
   /* 2D 值噪声（smoothstep 双线性），返回 0..1 */
-  const vn2 = (x: number, y: number, h: (i: number, j: number) => number) => {
+  const vn2 = (x: number, y: number) => {
     const ix = Math.floor(x), iy = Math.floor(y);
     const fx = x - ix, fy = y - iy;
     const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
-    const a = h(ix, iy), b = h(ix + 1, iy), c = h(ix, iy + 1), d = h(ix + 1, iy + 1);
+    const a = hA(ix, iy), b = hA(ix + 1, iy), c = hA(ix, iy + 1), d = hA(ix + 1, iy + 1);
     const top = a + (b - a) * sx, bot = c + (d - c) * sx;
     return top + (bot - top) * sy;
   };
-  /* 一个分量 = 两个八度 */
-  const fbm2 = (x: number, y: number, h: (i: number, j: number) => number) =>
-    (vn2(x, y, h) * 0.66 + vn2(x * 2.3, y * 2.3, h) * 0.34) * 2 - 1;
+  /* ★★ fbm **照抄参考站的权重**（它的原文）：
+         float fbm(vec2 p){ return noise(p)*.57 + noise(p*2.03)*.28 + noise(p*4.01)*.15; }
+     ⇒ 三个八度，权重 .57 / .28 / .15（和为 1 ⇒ 值域仍是 0..1）。 */
+  const fbm3 = (x: number, y: number) =>
+    vn2(x, y) * 0.57 + vn2(x * 2.03, y * 2.03) * 0.28 + vn2(x * 4.01, y * 4.01) * 0.15;
 
-  /* ★★ 在**半径为 R2 的圆上采 2D 噪声** ⇒ 天然闭合。
-     第一版走的是"1D 噪声 + 在 u 与 u−K 之间插值"那套周期化技巧，结果形状左上角
-     一直有一根"拉丝"尖角：值噪声要周期化，周期 K 必须是整数、而且哈希索引也得模 K，
-     两处漏一处就在接缝留下折痕。换成环上采样 ⇒ θ=0 与 2π 是同一个点，根本不存在接缝。
-     R2 直接决定瓣数（环上一圈约 2πR2 个噪声格）。 */
+  const sstep = (e0: number, e1: number, x: number) => {
+    let u = (x - e0) / (e1 - e0);
+    u = u < 0 ? 0 : u > 1 ? 1 : u;
+    return u * u * (3 - 2 * u);
+  };
+
+  /* 双线性采样一张 FW×FH 的 Float32 场（uv ∈ [0,1]，越界夹到边界） */
+  const samp = (F: Float32Array, fw: number, fh: number, u: number, v: number) => {
+    let gx = u * fw - 0.5, gy = v * fh - 0.5;
+    const ix = Math.floor(gx), iy = Math.floor(gy);
+    const tx = gx - ix, ty = gy - iy;
+    let x0 = ix < 0 ? 0 : ix >= fw ? fw - 1 : ix;
+    let x1 = x0 + 1; if (x1 >= fw) x1 = fw - 1;
+    let y0 = iy < 0 ? 0 : iy >= fh ? fh - 1 : iy;
+    let y1 = y0 + 1; if (y1 >= fh) y1 = fh - 1;
+    const r0 = y0 * fw, r1 = y1 * fw;
+    const top = F[r0 + x0] + (F[r0 + x1] - F[r0 + x0]) * tx;
+    const bot = F[r1 + x0] + (F[r1 + x1] - F[r1 + x0]) * tx;
+    return top + (bot - top) * ty;
+  };
 
   /* ---------------------------------------------------------------- 状态 */
 
@@ -232,24 +305,33 @@
     return im;
   };
 
-  let W = 0, H = 0, dpr = 1, N = N_WIDE;
-  let COS = new Float32Array(0), SIN = new Float32Array(0), PX = new Float32Array(0);
-  let TH = new Float32Array(0);               // 每个采样点的极角（irregular 要用 atan 的结果）
-  let RINF = 10, PUSH = 10;
+  let W = 0, H = 0, dpr = 1;
   let RB = RADIUS_K;                          // 当前笔触比例（resize 里按板的短边选档）
 
-  /* ★★ 擦痕蒙版：一张和板同尺寸的离屏 canvas，只有**擦过的地方**有 alpha。
-     每帧两件事 —— ① 整版乘性衰减（destination-out）② 在指针处盖一个有机形状的笔触。
-     最后把照片按这张蒙版"抠"出来（destination-in）⇒ 擦过的地方才露出照片。
-     ★★ 为什么必须离屏：擦痕是**累积**的，主 canvas 每帧清屏重画，存不住路径。 */
+  /* ★★ 密度场（照抄参考站的 `field` 纹理）—— 取代上一版那张离屏 alpha 蒙版。
+     每帧三步：① **输运**（场被流场推着走）② **线性衰减** ③ 在指针处盖一笔。
+     ★ 两张来回倒（ping-pong）：输运要读上一帧的场，不能原地改。
+     ★★ 为什么不再用 alpha 蒙版：8 位 alpha 的**乘性**衰减有下限（α 卡在 42 的鬼影），
+        Float32 的**线性**衰减没有 —— 减到 0 就是 0。 */
+  let FW = 0, FH = 0;                          // 场分辨率
+  let FW2 = 0, FH2 = 0;                        // flow / q 的分辨率（场的 1/4，它们是低频）
+  let BW = 0, BH = 0;                          // 粗块数
+  let FD = new Float32Array(0), FD2 = new Float32Array(0);
+  let FLX = new Float32Array(0), FLY = new Float32Array(0);   // flow（curl noise + 速度拖曳）
+  let QX = new Float32Array(0), QY = new Float32Array(0);     // display 的域扭曲
+  let PEAK = new Float32Array(0);              // 粗块峰值（用来整块跳过 edge）
+  /* 蒙版 canvas：场分辨率，只写 alpha ⇒ 放大 drawImage 时浏览器替我们插值 */
   const mk = document.createElement('canvas');
   const mkx = mk.getContext('2d');
+  let IMGD: ImageData | null = null;
 
   let raf = 0, running = false, onScreen = true, last = 0;
   let mx = 0, my = 0;                          // 指针（板内坐标）
   let cx = 0, cy = 0;                          // 笔触中心（一阶指数平滑跟随指针，无速度项）
+  let vx = 0, vy = 0;                          // 笔触速度（uv/秒，参考站 clamp 到 ±2）
   let pw = 0, pwT = 0;                         // 影响强度（实际值、目标值）
-  let trail = 0;                               // 擦痕残留（最新一笔的强度；1 = 刚擦过）
+  let peak = 0;                                // 场峰值（= 上一帧的最大 density；用来判褪尽）
+  let T = 0;                                   // ★ 累计时间（**秒**）—— 参考站的 `time` uniform
   let cur: HTMLImageElement | null = null, curUrl = '';
   let nxt: HTMLImageElement | null = null, nxtUrl = '';
   let mix = 1;                                 // 0 → 1：从 cur 淡入 nxt
@@ -264,37 +346,39 @@
     W = r.width;
     H = r.height;
     dpr = Math.min(2, window.devicePixelRatio || 1);
-    // ★ 判"窄"要看**视口**，不是板宽：板现在是页头里的小板，宽永远 < 768
-    N = window.innerWidth < 768 ? N_NARROW : N_WIDE;
     cvs.width = Math.round(W * dpr);
     cvs.height = Math.round(H * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // 蒙版同尺寸（也按 dpr）⇒ 擦痕不会被缩放糊掉
-    mk.width = cvs.width;
-    mk.height = cvs.height;
-    mkx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    mkx.clearRect(0, 0, W, H);
-    COS = new Float32Array(N);
-    SIN = new Float32Array(N);
-    TH = new Float32Array(N);
-    for (let i = 0; i < N; i++) {
-      const th = (i / N) * TAU2;
-      COS[i] = Math.cos(th);
-      SIN[i] = Math.sin(th);
-      TH[i] = th;                    // = atan2(SIN, COS)，参考站 shader 里的 angle
-    }
-    PX = new Float32Array(N * 2);
     /* ★ 笔触分两档：整屏走参考站那档，小板（手机）走另一档 —— 见 RADIUS_SMALL_K。
        ★★ 半径一律按**板高 H**（参考站是 `size*1.35/height`，不是短边）；
           选哪一档才看短边（同一个视口下两种版面尺寸差 4 倍）。 */
     RB = Math.min(W, H) < SMALL_PLATE ? RADIUS_SMALL_K : RADIUS_K;
-    RINF = H * R_INF_K;
-    PUSH = H * PUSH_K;
-    // 尺寸变了 ⇒ 指针/洞心坐标失效，强度归零（免得形状上突然鼓一个错位的包）；
-    // 蒙版尺寸也变了 ⇒ 擦痕作废（旧坐标的擦痕会出现在错误的位置）
+
+    /* ★★ 场分辨率 = CSS 宽的 1/4（上限 320）—— 见 FW_MAX 那条注释里的实测数据。
+       ★ 蒙版 canvas 就是场分辨率（不乘 dpr）：放大交给 drawImage，省掉 4× 的 CPU 成本。 */
+    const aspect = W / H;
+    FW = Math.max(FW_MIN, Math.min(FW_MAX, Math.round(W / 4)));
+    FH = Math.max(64, Math.round(FW / aspect));
+    FW2 = Math.max(8, FW >> 2);
+    FH2 = Math.max(8, FH >> 2);
+    BW = Math.ceil(FW / BS);
+    BH = Math.ceil(FH / BS);
+    FD = new Float32Array(FW * FH);
+    FD2 = new Float32Array(FW * FH);
+    FLX = new Float32Array(FW2 * FH2);
+    FLY = new Float32Array(FW2 * FH2);
+    QX = new Float32Array(FW2 * FH2);
+    QY = new Float32Array(FW2 * FH2);
+    PEAK = new Float32Array(BW * BH);
+    mk.width = FW;
+    mk.height = FH;
+    IMGD = mkx.createImageData(FW, FH);
+    // 尺寸变了 ⇒ 指针/笔触坐标失效，场作废（旧坐标的擦痕会出现在错误的位置）
     pw = 0;
     pwT = 0;
-    trail = 0;
+    peak = 0;
+    vx = 0;
+    vy = 0;
     return true;
   };
 
@@ -310,95 +394,171 @@
     ctx.globalAlpha = 1;
   };
 
-  /* ★ 在指针（洞心）处盖一个有机形状的笔触 —— 擦痕就是这些笔触的并集。
-     ★ 软边（径向渐变）：实心到 0.70R、外围渐隐 ⇒ 边界像"雾被擦开"，不是硬边圆。
-     ★ 形状**每帧都在变**（噪声相位跟着 t 走）⇒ 划一道出去，带子的两边是起伏的，
-       不会是"一条等宽的规整笔道"—— 站主这条要求是"不能太规整"。 */
-  const stamp = (t: number) => {
-    /* ★ 单位换算：参考站 shader 的 `time` 是**秒**（引擎里 `this.time += dt`，dt 是秒）
-       ⇒ 它的两个 sin 相位必须吃秒；本站 t 是 `performance.now()`（毫秒）。 */
-    const ts = t / 1000;
-    const ph = t * PH_SPD;             // 本站额外那层细褶的相位（沿用毫秒口径，原值不动）
-    const ph5 = ts * IRR_S5;
-    const ph9 = ts * IRR_S9;
-    const s = pw * pw * (3 - 2 * pw);          // 进出都平滑（不是线性淡入）
-    const R = H * RB * s;                      // ★ 按**板高**（参考站 = size*1.35/height）
-    const active = RINF > 1;
+  /* ★★★ sim —— 照抄参考站的 sim shader，一次推进一帧。
+     三步：① 流场（curl noise + 指针速度拖曳）② **输运** + 线性衰减 ③ 盖一笔。
+     ★ ds 必须是**秒**（参考站的 dt 就是秒，它的 `time` 也按秒累计）。 */
+  const step = (ds: number) => {
+    const aspect = W / H;
+    const invA = 1 / aspect;
+    const radius = RB;                    // ★ uv 单位（以板高为 1）—— 见 RADIUS_K
+    const pu = cx / W, pv = cy / H;       // 笔触中心（uv）
+    const decay = ds / LIFE;              // ★ 线性衰减量（`density −= dt/life`）
 
-    for (let i = 0; i < N; i++) {
-      /* ★★ 照抄参考站的 irregular：5 瓣 + 9 瓣，两个分量时间系数不同号 ⇒ 持续变形。
-         本站再加一层环上 2D 噪声的细褶（θ=0 与 2π 同点 ⇒ 天然闭合）。 */
-      const k = 1
-        + IRR_A5 * Math.sin(5 * TH[i] + ph5)
-        + IRR_A9 * Math.sin(9 * TH[i] - ph9)
-        + AMP_FINE * fbm2(COS[i] * R2_FINE + ph, SIN[i] * R2_FINE, hA);
-      let x = cx + R * k * COS[i];
-      let y = cy + R * k * SIN[i];
+    /* ① 流场：低频（p*5，跨屏只有 5 个周期）⇒ 在 FW/4 分辨率算，主循环双线性采样 */
+    for (let j = 0; j < FH2; j++) {
+      const v = (j + 0.5) / FH2;
+      const ny = v * FLOW_F + T * FLOW_SPD_Y;
+      for (let i = 0; i < FW2; i++) {
+        const u = (i + 0.5) / FW2;
+        const nx = u * aspect * FLOW_F + T * FLOW_SPD_X;
+        /* curl noise：对同一个标量噪声做中心差分 ⇒ **无散度** ⇒ 像水流，
+           不会把画面越推越空（直接用噪声当速度场会到处是"源"和"汇"）。 */
+        const a = vn2(nx, ny + FLOW_EP) - vn2(nx, ny - FLOW_EP);
+        const b = vn2(nx + FLOW_EP, ny) - vn2(nx - FLOW_EP, ny);
+        const ox = (u - pu) * aspect, oy = v - pv;
+        const infl = Math.exp(-(ox * ox + oy * oy) / Math.max(radius * radius * INF_K, 1e-4));
+        const k = j * FW2 + i;
+        FLX[k] = a * FLOW_A + vx * aspect * infl * VEL_K;
+        FLY[k] = -b * FLOW_A + vy * infl * VEL_K;
+      }
+    }
+    /* ① display 的域扭曲：同样是低频（p*7）⇒ 同样低分辨率 */
+    for (let j = 0; j < FH2; j++) {
+      const v = (j + 0.5) / FH2, y7 = v * Q_F;
+      for (let i = 0; i < FW2; i++) {
+        const u = (i + 0.5) / FW2, x7 = u * aspect * Q_F;
+        const k = j * FW2 + i;
+        QX[k] = fbm3(x7 + T * Q_SPD, y7) - 0.5;
+        QY[k] = fbm3(x7 + 8, y7 - T * Q_SPD2) - 0.5;
+      }
+    }
 
-      /* ★ 搅动是**局部**的：只有指针附近那段边界被推开，不会变成"整块充气"。
-         洞心是**滞后**于指针的（弹簧）⇒ 指针快速划过时，前缘落在影响半径内被拽出去，
-         后缘不受影响 —— 这就是"搅动"的形状来源。停手后洞心贴上指针 ⇒ 推开量自然归零。 */
-      if (active) {
-        const dx = x - mx, dy = y - my;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < RINF * RINF) {
-          const d = Math.sqrt(d2) || 1;
-          const w = 1 - d / RINF;
-          const e = w * w * (3 - 2 * w);
-          const f = (e * pw * PUSH) / d;
-          x += dx * f;
-          y += dy * f;
+    /* ② 输运（半拉格朗日回溯）+ **线性**衰减
+       ★★ 这一行就是"像水一样"的全部来源：擦痕不是盖上去就冻住，而是每帧被水流推着走。 */
+    let pk = 0;
+    for (let j = 0; j < FH; j++) {
+      const v = (j + 0.5) / FH;
+      for (let i = 0; i < FW; i++) {
+        const u = (i + 0.5) / FW;
+        let su = u - samp(FLX, FW2, FH2, u, v) * invA * ds;
+        let sv = v - samp(FLY, FW2, FH2, u, v) * ds;
+        su = su < 0 ? 0 : su > 1 ? 1 : su;
+        sv = sv < 0 ? 0 : sv > 1 ? 1 : sv;
+        let d = samp(FD, FW, FH, su, sv) - decay;
+        if (d < 0) d = 0;
+        FD2[j * FW + i] = d;
+        if (d > pk) pk = d;
+      }
+    }
+
+    /* ③ 笔触（`density = max(density, brush*down)`）
+       ★ 只在指针周围一个**包围盒**里算：盒外 brush 恒为 0，跳过不改变结果，
+         但省掉整版最贵的 atan2 + 2×sin（实测这一步是能不能跑满 60fps 的关键）。
+       ★ 参考站是 `brush * down`（down 是 0/1 硬切）；本站乘 `pw` 做进出平滑
+         ⇒ 进出不至于"啪"一下，笔触大小则严格等于参考站（`RB`，不缩放）。 */
+    if (pw > PW_EPS) {
+      const ir5 = T * IRR_S5, ir9 = T * IRR_S9;
+      // 包围盒：|off| < FADE_K * radius * 1.22（1.22 = irregular 的上限）
+      const rx = (FADE_K * radius * 1.22) / aspect, ry = FADE_K * radius * 1.22;
+      let i0 = Math.floor((pu - rx) * FW), i1 = Math.ceil((pu + rx) * FW);
+      let j0 = Math.floor((pv - ry) * FH), j1 = Math.ceil((pv + ry) * FH);
+      if (i0 < 0) i0 = 0;
+      if (i1 > FW) i1 = FW;
+      if (j0 < 0) j0 = 0;
+      if (j1 > FH) j1 = FH;
+      for (let j = j0; j < j1; j++) {
+        const v = (j + 0.5) / FH, oy = v - pv;
+        for (let i = i0; i < i1; i++) {
+          const u = (i + 0.5) / FW, ox = (u - pu) * aspect;
+          /* ★★ 照抄参考站的 irregular：5 瓣 + 9 瓣，两个分量**时间系数异号** ⇒ 持续变形 */
+          const ang = Math.atan2(oy, ox);
+          const irr = 1 + IRR_A5 * Math.sin(ang * 5 + ir5) + IRR_A9 * Math.sin(ang * 9 - ir9);
+          const br = (1 - sstep(CORE_K, FADE_K, Math.sqrt(ox * ox + oy * oy) / (radius * irr))) * pw;
+          const k = j * FW + i;
+          if (br > FD2[k]) {
+            FD2[k] = br;
+            if (br > pk) pk = br;
+          }
         }
       }
-      PX[i * 2] = x;
-      PX[i * 2 + 1] = y;
     }
 
-    mkx.save();
-    mkx.beginPath();
-    /* ★ 二次曲线经过相邻顶点的**中点**把轮廓平滑掉。
-       直接 lineTo 会出锯齿：形状被压扁的区段里相邻顶点的 dy 只有 2~3 px，
-       而噪声让 dx 能差 3 px ⇒ 折线在横向来回跳（肉眼就是边上一圈小毛刺）。 */
-    mkx.moveTo((PX[0] + PX[2]) / 2, (PX[1] + PX[3]) / 2);
-    for (let i = 1; i <= N; i++) {
-      const j = i % N;
-      const qx = PX[j * 2], qy = PX[j * 2 + 1];
-      const m = (j + 1) % N;
-      mkx.quadraticCurveTo(qx, qy, (qx + PX[m * 2]) / 2, (qy + PX[m * 2 + 1]) / 2);
+    /* ping-pong：输运要读上一帧的场，不能原地改 */
+    const tmpD = FD;
+    FD = FD2;
+    FD2 = tmpD;
+    peak = pk;
+  };
+
+  /* ★★★ display —— 照抄参考站的 display shader：把场转成 alpha 蒙版。
+         vec2 at   = clamp(uv + q*.055/vec2(aspect,1.), 0., 1.);
+         float edge = fbm(p*22. + q*3. + time*.12);
+         revealed  = smoothstep(.19, .215, d + (edge-.5)*.15); */
+  const display = () => {
+    const data = IMGD!.data;
+    const aspect = W / H;
+    const invA = 1 / aspect;
+
+    /* 粗块峰值：边缘那层 fbm（p*22，三个八度）是全场最贵的一步 ⇒
+       块峰值 < DEAD 时整块**必然不显**，直接跳过（不改变结果，只省算力）。
+       ★ 域扭曲会把采样点推到邻块 ⇒ 判定时看 3×3 邻域，不然边缘会被整块切掉。 */
+    for (let bj = 0; bj < BH; bj++) {
+      const ja = bj * BS, jb = Math.min(ja + BS, FH);
+      for (let bi = 0; bi < BW; bi++) {
+        const ia = bi * BS, ib = Math.min(ia + BS, FW);
+        let m = 0;
+        for (let j = ja; j < jb; j++) {
+          for (let i = ia; i < ib; i++) {
+            const d = FD[j * FW + i];
+            if (d > m) m = d;
+          }
+        }
+        PEAK[bj * BW + bi] = m;
+      }
     }
-    mkx.closePath();
-    mkx.clip();
-    /* ★★ 软边**照抄参考站**的 `brush = 1 - smoothstep(0.45, 1.2, d)`：
-       实心核心到 0.45R，外围渐隐到 1.2R（smoothstep 是 S 形，不是线性）。
-       ★★ 但蒙版在合成时要**平方**（见 render ③，为了绕开 8 位 alpha 的乘性衰减下限）
-          ⇒ 这里存的是 `sqrt(brush)`，平方之后才正好等于参考站的 brush。
-          五个采样点是按 `sqrt(1 - smoothstep(t))` 算的（t = 0/.25/.5/.75/1）：
-          1 · 0.919 · 0.707 · 0.395 · 0 —— 别照着"看起来均匀"改，改了就不等于参考站那条曲线。 */
-    const r0 = R * CORE_K;
-    const r1 = Math.max(r0 + 0.5, R * FADE_K);
-    const g = mkx.createRadialGradient(cx, cy, r0, cx, cy, r1);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.25, 'rgba(255,255,255,0.919)');
-    g.addColorStop(0.5, 'rgba(255,255,255,0.707)');
-    g.addColorStop(0.75, 'rgba(255,255,255,0.395)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    mkx.fillStyle = g;
-    mkx.fillRect(cx - r1, cy - r1, r1 * 2, r1 * 2);
-    mkx.restore();
-    mkx.globalCompositeOperation = 'source-over';
+
+    for (let j = 0; j < FH; j++) {
+      const v = (j + 0.5) / FH;
+      const bj = (j / BS) | 0;
+      const y22 = v * EDGE_F;
+      for (let i = 0; i < FW; i++) {
+        const o = (j * FW + i) * 4 + 3;
+        const bi = (i / BS) | 0;
+        let m = 0;
+        for (let dj = -1; dj <= 1; dj++) {
+          const jj = bj + dj;
+          if (jj < 0 || jj >= BH) continue;
+          for (let di = -1; di <= 1; di++) {
+            const ii = bi + di;
+            if (ii < 0 || ii >= BW) continue;
+            const p = PEAK[jj * BW + ii];
+            if (p > m) m = p;
+          }
+        }
+        if (m < DEAD) { data[o] = 0; continue; }
+        const u = (i + 0.5) / FW;
+        const qx = samp(QX, FW2, FH2, u, v);
+        const qy = samp(QY, FW2, FH2, u, v);
+        let au = u + qx * Q_A * invA;
+        let av = v + qy * Q_A;
+        au = au < 0 ? 0 : au > 1 ? 1 : au;
+        av = av < 0 ? 0 : av > 1 ? 1 : av;
+        const d = samp(FD, FW, FH, au, av);
+        const edge = fbm3(u * aspect * EDGE_F + qx * 3 + T * EDGE_SPD, y22 + qy * 3);
+        data[o] = sstep(REV0, REV1, d + (edge - 0.5) * EDGE_A) * 255;
+      }
+    }
+    mkx.putImageData(IMGD!, 0, 0);
   };
 
   const render = (t: number, dt = 0) => {
-    if (!W) return;
+    if (!W || !IMGD) return;
 
-    /* ① 擦痕衰减：整版乘性衰减 ⇒ **早擦的那段先褪**（e^(−dt/τ)，帧率无关）。
-       ★ 每帧都做，不管有没有指针 —— 指针停着不动时，早先划过的路径照样在褪。 */
-    if (dt > 0) {
-      mkx.globalCompositeOperation = 'destination-out';
-      mkx.fillStyle = `rgba(0,0,0,${1 - Math.exp(-dt / TRAIL_TAU)})`;
-      mkx.fillRect(0, 0, W, H);
-      mkx.globalCompositeOperation = 'source-over';
-    }
+    /* ★ 时间基准 = **performance.now() 的绝对值**（秒），不是"每帧累加"：
+       参考站是累加的（`this.time += dt`），本站按自己那条老规矩取绝对值 ——
+       ⇒ 所有噪声相位都是 t 的**确定函数**，可以跨加载逐点比对（形状类验收唯一的可靠手段）。
+       ★ 单位必须是**秒**（它 shader 里所有相位都吃秒）。 */
+    T = t / 1000;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
@@ -412,17 +572,17 @@
       return;
     }
 
-    /* ② 有指针就在当前位置盖一笔 */
-    if (pw > PW_EPS) {
-      stamp(t);
-      trail = 1;
-    }
+    /* ① 场推进（输运 + 线性衰减 + 笔触）—— 每帧都做，不管有没有指针；
+       指针停着不动时，早先划过的路径照样在被水流推着走、照样在褪。 */
+    if (dt > 0) step(dt / 1000);
 
     /* ★★ 站主的口径：**没有指针（且擦痕褪尽）就只是一块纯色**。
        ⇒ 清屏之后直接返回，一个像素都不画（canvas 整版 alpha = 0，露出 CSS 板底）。
        ★ 注意与上一版的差别：擦痕还在的时候**要继续画**（那就是"停留一段时间"）。 */
-    if (trail <= TRAIL_EPS) {
-      mkx.clearRect(0, 0, W, H);
+    if (peak <= DEAD) {
+      FD.fill(0);
+      FD2.fill(0);
+      peak = 0;
       return;
     }
 
@@ -430,17 +590,14 @@
     //   （两张都用 alpha 叠会是 (1−m)² 的曲线，中段发暗）
     drawCover(im, 1);
     if (nxt && mix > 0 && nxt.complete && nxt.naturalWidth) drawCover(nxt, mix);
-    /* ③ 照片按擦痕蒙版抠出来 ⇒ 只有擦过的地方露出照片。
-       ★★ 蒙版**乘两次**（destination-in = αd × αs ⇒ 两遍就是 α²）：
-       实测（_probe/cdp-bath.mjs --wipe）单乘一遍时擦痕的 α 会**卡在 42 不再降** ——
-       蒙版是 8 位 alpha，而衰减是**乘性**的：α 越小、每帧的减量 `α·αs` 越小，
-       减到不足 0.5 时四舍五入把它原样留下来 ⇒ 42/255 ≈ 17% 的一道鬼影僵在那里
-       整整两秒，然后才被"褪尽"那一步清掉 —— 观感是"擦痕淡不下去，突然消失"。
-       平方之后：僵住那档 0.165² ≈ 0.027（2.7%，看不见了），且整条衰减曲线在中段
-       也更陡 ⇒ 擦痕是"慢慢淡掉"而不是"淡到一半停住再突然没了"。
-       ★ 软边的渐变终点因此要从 0.28 抬到 0.55（0.55² ≈ 0.30 ≈ 原值）⇒ 手感不变。 */
+    display();
+
+    /* ③ 照片按显影蒙版抠出来 ⇒ 只有擦过的地方露出照片。
+       ★ 蒙版是**场分辨率**（FW×FH），drawImage 放大到 W×H ⇒ 浏览器替我们做双线性插值，
+         边界因此有约 4 px 的软过渡（参考站自己也是把 512 的场放大到 1280 画）。
+       ★★ 只乘**一次**（上一版要平方是为了绕开 8 位 alpha 的**乘性**衰减下限 ——
+           α 卡在 42 的鬼影；这一版是 Float32 场的**线性**衰减，减到 0 就是 0）。 */
     ctx.globalCompositeOperation = 'destination-in';
-    ctx.drawImage(mk, 0, 0, W, H);
     ctx.drawImage(mk, 0, 0, W, H);
     ctx.globalCompositeOperation = 'source-over';
   };
@@ -458,14 +615,15 @@
     mix = 1;
     pw = 0;
     pwT = 0;
-    trail = 0;
+    peak = 0;
+    vx = 0;
+    vy = 0;
     // ★ 停帧必须补一帧"全清" ⇒ 板回到纯色。少了这一步会留下最后一帧的形状残影。
-    //   ★★ 蒙版也要一起清：擦痕是**累积**的，只清主画布的话下次进来会带着上次没褪完的痕。
+    //   ★★ 场也要一起清：擦痕是**累积**的，只清主画布的话下次进来会带着上次没褪完的痕。
     if (W) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
-      mkx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      mkx.clearRect(0, 0, W, H);
+      if (FD.length) { FD.fill(0); FD2.fill(0); }
     }
   };
 
@@ -476,13 +634,13 @@
     raf = requestAnimationFrame(frame);
   };
 
-  /* 跑不跑 rAF，看"有没有指针"**或**"擦痕还在褪"：
+  /* 跑不跑 rAF，看"有没有指针"**或**"场还没褪尽"：
      ★ 只看指针的话，指针一离开就停帧 ⇒ 擦痕会**冻在最后一帧**上，永远不会褪回纯色
        （那正是"停留一段时间"这条要求的反面）。 */
   const sync = () => {
     const want =
       onScreen && !document.hidden && !reduce.matches
-      && (pwT > 0 || pw > PW_EPS || trail > TRAIL_EPS);
+      && (pwT > 0 || pw > PW_EPS || peak > DEAD);
     if (want) start();
     else stop();
   };
@@ -498,19 +656,22 @@
       pw += (pwT - pw) * (1 - Math.exp(-dt / tau));
       // ★ 跟随：一阶指数平滑（`1 − e^(−ds·18)`，照抄参考站）⇒ 帧率无关、且**不过冲**
       const kf = 1 - Math.exp(-ds * FOLLOW_K);
+      const pcx = cx, pcy = cy;
       cx += (mx - cx) * kf;
       cy += (my - cy) * kf;
+      /* ★ 速度 = 笔触中心**实际走过**的速度（参考站原文 `velocity = (point − 旧point)/dt`，
+         clamp 到 ±2，单位 uv/秒）⇒ 它把场沿运动方向拖走（`flow += velocity*influence*.18`）。
+         ★ 用的是**平滑后**的位置（不是指针本身）⇒ 甩一下时拖曳与滞后是同一个来源。 */
+      vx = Math.max(-VEL_MAX, Math.min(VEL_MAX, (cx - pcx) / W / ds));
+      vy = Math.max(-VEL_MAX, Math.min(VEL_MAX, (cy - pcy) / H / ds));
       if (mix < 1) {
         mix = Math.min(1, mix + dt / SWAP_MS);
         if (mix >= 1) { cur = nxt; curUrl = nxtUrl; nxt = null; nxtUrl = ''; }
       }
-      /* ★ 擦痕残留：与蒙版用**同一个**时间常数衰减（帧率无关）⇒ trail 就是"最新一笔
-         还剩多少"。它只用来决定"还要不要继续画 / 要不要停帧"。 */
-      trail *= Math.exp(-dt / TRAIL_TAU);
     }
 
-    // 指针走了**且**擦痕褪尽 ⇒ 停 ⇒ 板回到纯色（这一版**没有**"自己在动"这回事）
-    if (pw <= PW_EPS && pwT === 0 && trail <= TRAIL_EPS) { stop(); return; }
+    // 指针走了**且**场褪尽 ⇒ 停 ⇒ 板回到纯色（这一版**没有**"自己在动"这回事）
+    if (pw <= PW_EPS && pwT === 0 && peak <= DEAD) { stop(); return; }
 
     render(now, dt);
     raf = requestAnimationFrame(frame);
