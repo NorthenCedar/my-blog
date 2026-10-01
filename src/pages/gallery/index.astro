@@ -73,6 +73,10 @@ const firstBig = at(firstFrame, LIGHT_W);
       {/* ★ 跟着鼠标的那个白圈 —— 照抄参考站 lowkeytp.art 的 `.pointer-dot`。
           脚本只在指针**在板内**时给它加 `.on`（出界就摘掉）。 */}
       <span class="bath-dot" data-bath-dot aria-hidden="true"></span>
+      {/* ★ 左下角滚动提示（站主 2026-10-01：「往下划↓」）——
+          纯装饰 aria-hidden；压在颗粒层与花体字之上（z-index 3，与白圈同层）。
+          手机档显影板变回「页头旁边的小板」，这个提示没有意义 ⇒ 一并隐藏。 */}
+      <span class="bath-hint" aria-hidden="true">往下划 ↓</span>
     </div>
 
     <div class="pagehead-main">
@@ -204,10 +208,15 @@ const firstBig = at(firstFrame, LIGHT_W);
     :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a:focus-visible) {
       color: #fff;
       border-color: rgb(255 255 255 / 55%);
+      /* ★ 2026-10-01 顶栏改胶囊后补的抵消：外壳胶囊 hover/focus 给了 --accent-wash 浅绿底，
+         那是**纸白顶栏**用的；本页顶栏浮在深墨绿板上，第五轮定稿没有底色 ⇒ 显式归透明。 */
+      background: transparent;
     }
     :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a[aria-current='page']) {
       color: #fff;
       border-color: var(--accent-ink);
+      /* ★ 同上：当前页的浅绿底是纸白顶栏的配色，深板上回到定稿的「白字 + 绿描边、无底色」。 */
+      background: transparent;
     }
   }
   /* ★ 桌面：页头不能有上内边距 —— 首屏要从顶部一路铺到底。
@@ -326,6 +335,23 @@ const firstBig = at(firstFrame, LIGHT_W);
   .bath-dot.on {
     opacity: 1;
   }
+  /* ★★ 左下角滚动提示（站主 2026-10-01：「往下划↓」）。
+     语汇延续首页 .scroll-hint 的左下角横排位置，但更简 —— 就是一行白字。
+     白字压在深墨绿底与擦出来的照片上都读得清（同 .bath-mark 的取值思路），
+     给一层极淡投影兜底。z-index 3 = 与白圈同层、压在花体字之上。 */
+  .bath-hint {
+    position: absolute;
+    left: var(--gutter);
+    bottom: 1rem;
+    z-index: 3;
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    letter-spacing: 0.12em;
+    color: #fff;
+    text-shadow: 0 1px 8px rgb(0 0 0 / 45%);
+    pointer-events: none;
+    user-select: none;
+  }
 
   /* ===== 手机：改回"页头旁边的小板" =====
      ★★ 站主 2026-10-01 第四轮：「到了手机上不要整屏了，因为涂抹的效果不好
@@ -367,6 +393,9 @@ const firstBig = at(firstFrame, LIGHT_W);
     }
     .bath-mark {
       font-size: clamp(1.1rem, 5vw, 1.6rem);
+    }
+    .bath-hint {
+      display: none;   /* 手机档小板不提示「往下划」 */
     }
   }
 

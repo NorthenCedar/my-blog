@@ -139,29 +139,66 @@ const { wordmark, current } = Astro.props;
   body.chrome-page .topbar > nav:not(.navpanel) {
     display: flex;
     align-items: center;
-    gap: 1.1rem;
+    gap: 0.35rem;   /* 同首页胶囊：胶囊自带 padding，间距收小（原文字链是 1.1rem） */
     flex-wrap: wrap;
   }
+  /* ★ 2026-10-01 站主：「把其他页的导航栏格式改成主页同款」——
+     从「下划线文字链」改成「胶囊按钮」。形态逐条照搬首页 nav a：
+     圆角 999px + 透明描边 + overflow:hidden（收掠光）+ 悬停位移 + 掠光扫过 + 当前页绿底绿边。
+     ★★ 颜色**刻意不照搬**：首页胶囊是深墨绿底上的白字/白底/亮绿（--accent-bright），
+     内页顶栏是**浅色纸白底** —— 白字在纸白上不可见、--accent-bright 对纸只有 2.66:1
+     （tests/tokens.test.ts 白名单守着「亮绿只许在深色底」）。
+     所以这里用**浅底可用的 token 换肤**，形态一模一样：
+       默认  --muted 灰字 / 透明底
+       hover   --ink 墨字 + --accent-wash 浅绿底 + --accent 绿描边 + 上浮 2px + 掠光
+       当前页  --accent-ink 深绿字 + --accent-wash 浅绿底 + --accent-ink 深绿描边
+     （深绿字/深绿描边 vs 墨字/绿描边 ⇒ 当前页一眼可辨，等价于首页亮绿那一下。） */
   body.chrome-page .topbar > nav:not(.navpanel) a {
     /* 必须显式写颜色：UA 样式表的 `a:link { color: -webkit-link }` 是针对元素本身的声明，
        会压过从 .topbar 继承来的 color —— 不写就是浏览器默认蓝（放大截图逮到的）。
        深色带的 Brandline 显式声明了色所以没事，顶栏漏了。 */
+    position: relative;
+    padding: 0.42rem 0.82rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    overflow: hidden;   /* 收掠光的斜扫 */
     color: var(--muted);
     text-decoration: none;
-    border-bottom: 1px solid transparent;
-    padding-bottom: 1px;
+    transition:
+      transform var(--dur-fast) var(--ease-interact),
+      color var(--dur-fast) var(--ease-interact),
+      background-color var(--dur-fast) var(--ease-interact),
+      border-color var(--dur-fast) var(--ease-interact);
+  }
+  /* 掠光：悬停时一道斜光从左扫到右（照搬首页 nav a::before 的动效，
+     光色换成浅底可用的 --glass-bg-hot —— 白 59%，在浅绿底上是一道微弱高光）。 */
+  body.chrome-page .topbar > nav:not(.navpanel) a::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(115deg, transparent 30%, var(--glass-bg-hot) 50%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform var(--dur-hover) var(--ease-glass);
   }
   body.chrome-page .topbar > nav:not(.navpanel) a:hover,
   body.chrome-page .topbar > nav:not(.navpanel) a:focus-visible {
     color: var(--ink);
-    border-color: var(--accent-ink);
+    background: var(--accent-wash);
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  body.chrome-page .topbar > nav:not(.navpanel) a:hover::before,
+  body.chrome-page .topbar > nav:not(.navpanel) a:focus-visible::before {
+    transform: translateX(120%);
   }
   body.chrome-page .topbar > nav:not(.navpanel) a:focus-visible {
     outline: 2px solid var(--accent-ink);
-    outline-offset: 3px;
+    outline-offset: 2px;
   }
   body.chrome-page .topbar > nav:not(.navpanel) a[aria-current='page'] {
-    color: var(--ink);
+    color: var(--accent-ink);
+    background: var(--accent-wash);
     border-color: var(--accent-ink);
   }
   /* 窄屏隐藏站名，只留导航（站主 2026-09-26 定案）：
