@@ -228,9 +228,16 @@
   /* ★★ 场的分辨率：照搬参考站的 `min(512, width)` 在 CPU 上跑不动 —— 实测
      （_probe/bench-field.mjs）512×360 要 **37 ms/帧**（27 fps）、384×270 要 21 ms。
      ⇒ 取 **CSS 宽的 1/4、上限 320**：实测 320×225 满场 **9.1 ms**（bench-field3.mjs）。
-     ★ 场只是**蒙版**：照片照旧按 canvas 全分辨率画，只有显影的边界是场分辨率
-       ⇒ 放大 4× 后边界有约 4 px 的软过渡（参考站自己也是 512 → 1280 放大 2.5×）。 */
+     ★★ 场分辨率**只决定输运/衰减的细节**，不再决定边缘的清晰度 —— 见下面「轮廓」。
+        （上一版把整个 display 都跑在场分辨率上 ⇒ 放大 4× 后边缘又糊又有块。） */
   const FW_MAX = 320, FW_MIN = 96;
+  /* ★ 等值线阈值：`smoothstep(.19,.215,…)` 是极窄的一条带 ⇒ 取中点当硬阈值。
+     带上那 0.025 的软过渡由 canvas 自己的抗锯齿给出（1 px），观感等价。 */
+  const TH = (REV0 + REV1) * 0.5;
+  /* ★★ edge 位移的上限（px）。位移 = −Δ·∇d/|∇d|²（把阈值的扰动换算成位置偏移）：
+       场越平（|∇d|→0）位移越大 ⇒ 必须 clamp，否则边界会被甩出画面。
+       参考站笔触边缘的梯度下理论位移 ≈ ±7.7 px，这里放宽到 18。 */
+  const EDGE_MAX_PX = 18;
   /* 粗块边长：整块峰值 < DEAD 就跳过这一块的 edge 计算（display 是全场最贵的一步）。
      ★ 块要比域扭曲的位移（±0.055/2 uv ≈ ±9 px @FW320）大 ⇒ 判定时看 3×3 邻域。 */
   const BS = 32;
@@ -317,13 +324,20 @@
   let FW2 = 0, FH2 = 0;                        // flow / q 的分辨率（场的 1/4，它们是低频）
   let BW = 0, BH = 0;                          // 粗块数
   let FD = new Float32Array(0), FD2 = new Float32Array(0);
+  let DD = new Float32Array(0);                // display 域：扭曲采样后的 d（等值线在这上面提）
   let FLX = new Float32Array(0), FLY = new Float32Array(0);   // flow（curl noise + 速度拖曳）
   let QX = new Float32Array(0), QY = new Float32Array(0);     // display 的域扭曲
-  let PEAK = new Float32Array(0);              // 粗块峰值（用来整块跳过 edge）
-  /* 蒙版 canvas：场分辨率，只写 alpha ⇒ 放大 drawImage 时浏览器替我们插值 */
-  const mk = document.createElement('canvas');
-  const mkx = mk.getContext('2d');
-  let IMGD: ImageData | null = null;
+  let PEAK = new Float32Array(0), BLK = new Float32Array(0);  // 粗块峰值（膨胀后，用来整块跳过）
+  let FWm = 0, FHm = 0;                        // FW−1 / FH−1（夹取用）
+  /* ★ 轮廓（marching squares）的工作区 —— 见 contour()
+     · 边插值点 EX/EY（**格坐标**）；边编号见 ept()
+     · E2A/E2B：一条边最多属于两段 ⇒ 用来把段串成环
+     · SD0/SD1：第 n 段的两条边；SNS = 段数 */
+  let EX = new Float32Array(0), EY = new Float32Array(0);
+  let E2A = new Int32Array(0), E2B = new Int32Array(0);
+  let SD0 = new Int32Array(0), SD1 = new Int32Array(0), SEEN = new Uint8Array(0);
+  let SNS = 0;
+  const RX: number[] = [], RY: number[] = [], REND: number[] = [];   // 输出：环的点（CSS px）
 
   let raf = 0, running = false, onScreen = true, last = 0;
   let mx = 0, my = 0;                          // 指针（板内坐标）
@@ -370,9 +384,19 @@
     QX = new Float32Array(FW2 * FH2);
     QY = new Float32Array(FW2 * FH2);
     PEAK = new Float32Array(BW * BH);
-    mk.width = FW;
-    mk.height = FH;
-    IMGD = mkx.createImageData(FW, FH);
+    DD = new Float32Array(FW * FH);
+    BLK = new Float32Array(BW * BH);
+    FWm = FW - 1; FHm = FH - 1;
+    /* 边数 2*FW*FH；段数上限 = 每格两段 */
+    const nE = 2 * FW * FH, nS = 2 * FWm * FHm;
+    EX = new Float32Array(nE);
+    EY = new Float32Array(nE);
+    E2A = new Int32Array(nE);
+    E2B = new Int32Array(nE);
+    SD0 = new Int32Array(nS);
+    SD1 = new Int32Array(nS);
+    SEEN = new Uint8Array(nS);
+    REND.length = 0; RX.length = 0; RY.length = 0;
     // 尺寸变了 ⇒ 指针/笔触坐标失效，场作废（旧坐标的擦痕会出现在错误的位置）
     pw = 0;
     pwT = 0;
@@ -490,40 +514,111 @@
     peak = pk;
   };
 
-  /* ★★★ display —— 照抄参考站的 display shader：把场转成 alpha 蒙版。
-         vec2 at   = clamp(uv + q*.055/vec2(aspect,1.), 0., 1.);
-         float edge = fbm(p*22. + q*3. + time*.12);
-         revealed  = smoothstep(.19, .215, d + (edge-.5)*.15); */
-  const display = () => {
-    const data = IMGD!.data;
+  /* ★★★ 轮廓 —— 第七轮的核心改动：把「逐场像素算 alpha 蒙版」换成「矢量等值线」。
+
+     参考站的 display shader 是**逐屏幕像素**跑的（`vec2 p = uv*vec2(aspect,1.)`，
+     那条极窄的阈值带 `smoothstep(.19,.215, d + (edge-.5)*.15)` 也在屏幕像素上）
+     ⇒ 它**只有 `d`** 是从 512 的低分辨率场双线性采样的，高频细节是屏幕分辨率的。
+     上一版本站把整段 display（含那层决定“破碎水渍边”的 `edge` fbm）都跑在 320 的
+     场上、再 `drawImage` 放大 4× ⇒ 边缘又糊又有块（站主：「边缘好粗糙，分辨率好低」）。
+
+     ⇒ 解法：**把两件事分开** ——
+        · `d`（输运 / 衰减 / 笔触）是低频的 ⇒ 场照旧 320（再高就跑不动，见 FW_MAX）
+        · **边界改成矢量**：marching squares 从场里提出 `d = TH` 的等值线
+          （**线性插值 ⇒ 亚像素**，不再是 4 px 的台阶），再按参考站的 `edge` fbm
+          沿法线位移（噪声在**屏幕坐标**上采样 ⇒ 细节不受场分辨率限制），
+          最后把环填进 canvas ⇒ 边缘以 **dpr 全分辨率**光栅化。
+
+     ★ 位移量照抄参考站：`revealed = smoothstep(.19,.215, d + (edge-.5)*.15)`
+       ⇒ 边界落在 `d = TH − (edge−.5)*.15` 上 ⇒ 一阶展开：沿法线的位移
+         `δ = −Δ·∇d/|∇d|²`（Δ = (edge−.5)*EDGE_A）。**别写成“直接乘一个常数”** ——
+         场被衰减得越平（|∇d| 越小）边界该抖得越厉害，那正是“水”在退时的样子。 */
+
+  /* 双线性读 DD（格坐标；越界夹到边界 —— 板外本来就不显影） */
+  const dAt = (gx: number, gy: number) => {
+    const x = gx < 0 ? 0 : gx > FWm ? FWm : gx;
+    const y = gy < 0 ? 0 : gy > FHm ? FHm : gy;
+    const ix = x | 0, iy = y | 0;
+    const ix1 = ix < FWm ? ix + 1 : FWm, iy1 = iy < FHm ? iy + 1 : FHm;
+    const fx = x - ix, fy = y - iy;
+    const t = DD[iy * FW + ix] + (DD[iy * FW + ix1] - DD[iy * FW + ix]) * fx;
+    const b = DD[iy1 * FW + ix] + (DD[iy1 * FW + ix1] - DD[iy1 * FW + ix]) * fx;
+    return t + (b - t) * fy;
+  };
+
+  /* 一条边上的插值点（**亚像素** —— 这就是“不再是 4 px 台阶”的来源）。
+     边编号：水平边 h(i,j) = 2·(j·FW+i)，垂直边 v(i,j) = 2·(j·FW+i)+1。 */
+  const ept = (eid: number) => {
+    const k = eid >> 1;
+    const i = k % FW, j = (k / FW) | 0;
+    if ((eid & 1) === 0) {
+      const a = DD[k], b = DD[k + 1];
+      EX[eid] = i + (TH - a) / (b - a);
+      EY[eid] = j;
+    } else {
+      const a = DD[k], b = DD[k + FW];
+      EX[eid] = i;
+      EY[eid] = j + (TH - a) / (b - a);
+    }
+  };
+
+  const addSeg = (ea: number, eb: number) => {
+    if (E2A[ea] < 0) ept(ea);
+    if (E2A[eb] < 0) ept(eb);
+    SD0[SNS] = ea; SD1[SNS] = eb;
+    if (E2A[ea] < 0) E2A[ea] = SNS; else E2B[ea] = SNS;
+    if (E2A[eb] < 0) E2A[eb] = SNS; else E2B[eb] = SNS;
+    SNS++;
+  };
+
+  /* 一个顶点：格坐标 → CSS px，并按参考站的 edge 沿法线位移 */
+  const pushPt = (eid: number, aspect: number, sx: number, sy: number) => {
+    const gx = EX[eid], gy = EY[eid];
+    const u = gx / FW, v = gy / FH;
+    const qx = samp(QX, FW2, FH2, u, v);
+    const qy = samp(QY, FW2, FH2, u, v);
+    /* ★★ 照抄参考站的 `edge = fbm(p*22. + q*3. + time*.12)`（p = uv*vec2(aspect,1.)）
+       ⇒ 噪声在**屏幕坐标**上采样 ⇒ 细节不受场分辨率限制（上一版是卡在 320 上的）。 */
+    const e = fbm3(u * aspect * EDGE_F + qx * 3 + T * EDGE_SPD, v * EDGE_F + qy * 3);
+    const dlt = (e - 0.5) * EDGE_A;
+    /* 梯度（中心差分，格坐标）⇒ 换算成每 px */
+    const g1x = (dAt(gx + 1, gy) - dAt(gx - 1, gy)) * 0.5 / sx;
+    const g1y = (dAt(gx, gy + 1) - dAt(gx, gy - 1)) * 0.5 / sy;
+    const g2 = g1x * g1x + g1y * g1y;
+    let kx = 0, ky = 0;
+    if (g2 > 1e-9) {
+      const f = -dlt / g2;
+      kx = f * g1x; ky = f * g1y;
+      const len = Math.sqrt(kx * kx + ky * ky);
+      if (len > EDGE_MAX_PX) { const s = EDGE_MAX_PX / len; kx *= s; ky *= s; }
+    }
+    RX.push(gx * sx + kx);
+    RY.push(gy * sy + ky);
+  };
+
+  const contour = () => {
     const aspect = W / H;
     const invA = 1 / aspect;
+    const sx = W / FW, sy = H / FH;      // 格 → CSS px
+    const FM = FW - 1, FN = FH - 1;
+    REND.length = 0; RX.length = 0; RY.length = 0;
+    if (FW < 4 || FH < 4) return 0;
 
-    /* 粗块峰值：边缘那层 fbm（p*22，三个八度）是全场最贵的一步 ⇒
-       块峰值 < DEAD 时整块**必然不显**，直接跳过（不改变结果，只省算力）。
-       ★ 域扭曲会把采样点推到邻块 ⇒ 判定时看 3×3 邻域，不然边缘会被整块切掉。 */
+    /* ① 块峰值（再做一次 3×3 膨胀）⇒ 每格只查一次就能安全跳过。
+       ★ 膨胀是为了域扭曲：它会把采样点推到邻块，只查自己那块会把边缘整块切掉。 */
     for (let bj = 0; bj < BH; bj++) {
       const ja = bj * BS, jb = Math.min(ja + BS, FH);
       for (let bi = 0; bi < BW; bi++) {
         const ia = bi * BS, ib = Math.min(ia + BS, FW);
         let m = 0;
         for (let j = ja; j < jb; j++) {
-          for (let i = ia; i < ib; i++) {
-            const d = FD[j * FW + i];
-            if (d > m) m = d;
-          }
+          for (let i = ia; i < ib; i++) { const d = FD[j * FW + i]; if (d > m) m = d; }
         }
-        PEAK[bj * BW + bi] = m;
+        BLK[bj * BW + bi] = m;
       }
     }
-
-    for (let j = 0; j < FH; j++) {
-      const v = (j + 0.5) / FH;
-      const bj = (j / BS) | 0;
-      const y22 = v * EDGE_F;
-      for (let i = 0; i < FW; i++) {
-        const o = (j * FW + i) * 4 + 3;
-        const bi = (i / BS) | 0;
+    for (let bj = 0; bj < BH; bj++) {
+      for (let bi = 0; bi < BW; bi++) {
         let m = 0;
         for (let dj = -1; dj <= 1; dj++) {
           const jj = bj + dj;
@@ -531,11 +626,27 @@
           for (let di = -1; di <= 1; di++) {
             const ii = bi + di;
             if (ii < 0 || ii >= BW) continue;
-            const p = PEAK[jj * BW + ii];
+            const p = BLK[jj * BW + ii];
             if (p > m) m = p;
           }
         }
-        if (m < DEAD) { data[o] = 0; continue; }
+        PEAK[bj * BW + bi] = m;
+      }
+    }
+
+    /* ② DD = 域扭曲后采到的 d。
+       ★★ 这里**不再算 fbm3** —— 上一版每格一次，是全场最贵的一步；
+          它搬到 ④ 的**顶点**上去了（顶点只有几百到几千个，而不是 7 万个）。 */
+    for (let j = 0; j < FH; j++) {
+      const v = (j + 0.5) / FH;
+      const bj = (j / BS) | 0;
+      const rim = j === 0 || j === FN;
+      for (let i = 0; i < FW; i++) {
+        const k = j * FW + i;
+        /* ★ 最外一圈强制 0：保证等值线**一定闭合**（板外本来就不显影），
+           否则环会走到场边界变成开放路径 —— 开放路径是没法 fill 的。 */
+        if (rim || i === 0 || i === FM) { DD[k] = 0; continue; }
+        if (PEAK[bj * BW + ((i / BS) | 0)] < DEAD) { DD[k] = 0; continue; }
         const u = (i + 0.5) / FW;
         const qx = samp(QX, FW2, FH2, u, v);
         const qy = samp(QY, FW2, FH2, u, v);
@@ -543,16 +654,74 @@
         let av = v + qy * Q_A;
         au = au < 0 ? 0 : au > 1 ? 1 : au;
         av = av < 0 ? 0 : av > 1 ? 1 : av;
-        const d = samp(FD, FW, FH, au, av);
-        const edge = fbm3(u * aspect * EDGE_F + qx * 3 + T * EDGE_SPD, y22 + qy * 3);
-        data[o] = sstep(REV0, REV1, d + (edge - 0.5) * EDGE_A) * 255;
+        DD[k] = samp(FD, FW, FH, au, av);
       }
     }
-    mkx.putImageData(IMGD!, 0, 0);
+
+    /* ③ marching squares：把 d = TH 的等值线提出来。
+       角序（逆时针）v0 左下 · v1 右下 · v2 右上 · v3 左上；
+       四条边：底 = h(i,j) / 右 = v(i+1,j) / 顶 = h(i,j+1) / 左 = v(i,j)。 */
+    E2A.fill(-1); E2B.fill(-1);
+    SNS = 0;
+    for (let j = 0; j < FN; j++) {
+      for (let i = 0; i < FM; i++) {
+        const k = j * FW + i;
+        const v0 = DD[k], v1 = DD[k + 1], v2 = DD[k + FW + 1], v3 = DD[k + FW];
+        let st = 0;
+        if (v0 > TH) st |= 1;
+        if (v1 > TH) st |= 2;
+        if (v2 > TH) st |= 4;
+        if (v3 > TH) st |= 8;
+        if (st === 0 || st === 15) continue;
+        const EB = 2 * k, EL = 2 * k + 1, ET = 2 * (k + FW), ER = 2 * (k + 1) + 1;
+        switch (st) {
+          case 1: case 14: addSeg(EL, EB); break;
+          case 2: case 13: addSeg(EB, ER); break;
+          case 3: case 12: addSeg(EL, ER); break;
+          case 4: case 11: addSeg(ER, ET); break;
+          case 6: case 9: addSeg(EB, ET); break;
+          case 7: case 8: addSeg(EL, ET); break;
+          /* ★ 5 / 10 是**鞍点**：四条边都有交点，怎么连要看中心落在哪一侧 */
+          case 5: {
+            const cen = (v0 + v1 + v2 + v3) * 0.25;
+            if (cen > TH) { addSeg(EB, ER); addSeg(ET, EL); }
+            else { addSeg(EL, EB); addSeg(ER, ET); }
+            break;
+          }
+          case 10: {
+            const cen = (v0 + v1 + v2 + v3) * 0.25;
+            if (cen > TH) { addSeg(EL, EB); addSeg(ER, ET); }
+            else { addSeg(EB, ER); addSeg(ET, EL); }
+            break;
+          }
+        }
+      }
+    }
+    if (SNS === 0) return 0;
+
+    /* ④ 把段串成环：每条边属于**恰好两段** ⇒ 段图是 2-正则 ⇒ 走出来一定是环。 */
+    SEEN.fill(0, 0, SNS);
+    for (let s0 = 0; s0 < SNS; s0++) {
+      if (SEEN[s0]) continue;
+      const start = RX.length;
+      let s = s0, entry = SD0[s0];
+      for (let guard = 0; guard <= SNS; guard++) {
+        SEEN[s] = 1;
+        pushPt(entry, aspect, sx, sy);
+        const exit = SD0[s] === entry ? SD1[s] : SD0[s];
+        const nx = E2A[exit] === s ? E2B[exit] : E2A[exit];
+        if (nx < 0 || SEEN[nx]) break;
+        s = nx;
+        entry = exit;
+      }
+      if (RX.length - start > 2) REND.push(RX.length);
+      else { RX.length = start; RY.length = start; }   // 退化的环（<3 点）丢掉
+    }
+    return REND.length;
   };
 
   const render = (t: number, dt = 0) => {
-    if (!W || !IMGD) return;
+    if (!W) return;
 
     /* ★ 时间基准 = **performance.now() 的绝对值**（秒），不是"每帧累加"：
        参考站是累加的（`this.time += dt`），本站按自己那条老规矩取绝对值 ——
@@ -590,15 +759,32 @@
     //   （两张都用 alpha 叠会是 (1−m)² 的曲线，中段发暗）
     drawCover(im, 1);
     if (nxt && mix > 0 && nxt.complete && nxt.naturalWidth) drawCover(nxt, mix);
-    display();
-
-    /* ③ 照片按显影蒙版抠出来 ⇒ 只有擦过的地方露出照片。
-       ★ 蒙版是**场分辨率**（FW×FH），drawImage 放大到 W×H ⇒ 浏览器替我们做双线性插值，
-         边界因此有约 4 px 的软过渡（参考站自己也是把 512 的场放大到 1280 画）。
-       ★★ 只乘**一次**（上一版要平方是为了绕开 8 位 alpha 的**乘性**衰减下限 ——
-           α 卡在 42 的鬼影；这一版是 Float32 场的**线性**衰减，减到 0 就是 0）。 */
+    /* ③ 照片只留在轮廓里 ⇒ 只有擦过的地方露出照片。
+       ★★ 这里不再是“一张蒙版图放大 4×”，而是**矢量路径**：
+          · 等值线是 marching squares 的**亚像素**插值 ⇒ 没有 4 px 的台阶
+          · 顶点按参考站的 edge fbm 沿法线位移 ⇒ 高频细节不受场分辨率限制
+          · 路径用 **CSS px** 给、ctx 有 setTransform(dpr) ⇒ 边缘以画布全分辨率光栅化
+          （上一版的“分辨率好低”就是这三件事全丢了） */
+    const nR = contour();
+    if (nR === 0) { ctx.clearRect(0, 0, W, H); return; }
     ctx.globalCompositeOperation = 'destination-in';
-    ctx.drawImage(mk, 0, 0, W, H);
+    ctx.beginPath();
+    let a = 0;
+    for (let r = 0; r < nR; r++) {
+      const b = REND[r], n = b - a;
+      /* ★ 二次曲线经过相邻顶点的**中点** ⇒ C1 连续。
+         直接 lineTo 会有折角：顶点间距是 1 格（≈4 px）而位移能差出好几个 px。 */
+      ctx.moveTo((RX[a] + RX[a + 1]) / 2, (RY[a] + RY[a + 1]) / 2);
+      for (let i = 1; i <= n; i++) {
+        const p = a + (i % n), q = a + ((i + 1) % n);
+        ctx.quadraticCurveTo(RX[p], RY[p], (RX[p] + RX[q]) / 2, (RY[p] + RY[q]) / 2);
+      }
+      ctx.closePath();
+      a = b;
+    }
+    /* ★ evenodd：marching squares 输出的环**绕向不保证一致**，
+       evenodd 不管绕向都能把内环挖成洞（nonzero 必须靠绕向才对）。 */
+    ctx.fill('evenodd');
     ctx.globalCompositeOperation = 'source-over';
   };
 

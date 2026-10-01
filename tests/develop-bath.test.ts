@@ -220,7 +220,9 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     const clamp0 = /if\s*\(\s*d\s*<\s*0\s*\)\s*d\s*=\s*0/.test(CODE);
     /* ★ 阈值带只有 0.025 ⇒ 边界是**硬**的；"破碎的水渍边"由 display 那层 fbm 给 */
     const rev0 = num('REV0'), rev1 = num('REV1');
-    const thresh = /sstep\(REV0,\s*REV1,\s*d\s*\+\s*\(edge\s*-\s*0\.5\)\s*\*\s*EDGE_A\)/.test(CODE);
+    /* ★ 第七轮起阈值不再逐像素算 alpha，而是**等值线的硬阈值** `TH = (REV0+REV1)/2`；
+       那 0.025 的软过渡由 canvas 抗锯齿给出（实测过渡带 0.83 px，见 cdp-bath-edge.mjs）。 */
+    const thresh = /const\s+TH\s*=\s*\(REV0\s*\+\s*REV1\)\s*\*\s*0\.5/.test(CODE) && /v0\s*>\s*TH/.test(CODE);
     const narrow = rev1 - rev0;
     const masked = /globalCompositeOperation\s*=\s*'destination-in'/.test(CODE);
     /* ★ 停帧必须**连场一起清**：擦痕是累积的，只清主画布 ⇒ 下次进来带着上次的痕 */
@@ -259,18 +261,67 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     const fbmW = /vn2\(x,\s*y\)\s*\*\s*0\.57\s*\+\s*vn2\(x\s*\*\s*2\.03,\s*y\s*\*\s*2\.03\)\s*\*\s*0\.28\s*\+\s*vn2\(x\s*\*\s*4\.01,\s*y\s*\*\s*4\.01\)\s*\*\s*0\.15/.test(CODE);
     /* ★ 边缘那层 fbm（p*22，三个八度）是全场最贵的一步 ⇒ 块峰值 < DEAD 就整块跳过。
        不跳的话 320×225 的场要 20+ ms/帧（实测 bench-field.mjs），跳完 9.1 ms。 */
-    const skip = /if\s*\(\s*m\s*<\s*DEAD\s*\)\s*\{\s*data\[o\]\s*=\s*0;\s*continue;\s*\}/.test(CODE);
+    const skip = /if\s*\(\s*PEAK\[[^\]]+\]\s*<\s*DEAD\s*\)\s*\{\s*DD\[k\]\s*=\s*0;\s*continue;\s*\}/.test(CODE);
+    /* ★★ 第七轮：edge 那层 fbm 从\"每格一次\"搬到\"每个**顶点**一次\" ——
+       格有 7 万个、顶点只有几百到几千个 ⇒ 这是能不能把边界做成矢量的前提。
+       判据：脚本里不再出现 createImageData / putImageData（= 不再有逐格位图蒙版）。 */
+    const noBmp = !/createImageData|putImageData/.test(CODE);
     console.log(
       `判据 display 实测: ${q && warp ? '域扭曲采样 ✓' : '⚠️ 没有域扭曲'} · `
       + `${edge ? 'edge 高频扰动 ✓' : '⚠️ 没有 edge 扰动（边界会是规整的）'} · `
       + `${fbmW ? 'fbm 权重 .57/.28/.15 ✓' : '⚠️ fbm 权重不是参考站那三个'} · `
       + `${skip ? '空块跳过 edge ✓' : '⚠️ 整版都算 edge（跑不满 60fps）'}`,
+      + `${noBmp ? 'edge 只在顶点上算（不再逐格写位图）✓' : '⚠️ 还在逐格写位图蒙版'}`,
     );
     expect(q && warp, '没有域扭曲 ⇒ 边界不会跟着扭，"水"的观感少一半').toBe(true);
     expect(edge, '没有 edge 扰动 ⇒ 边界是规整的圆，不像水渍').toBe(true);
     expect(fbmW, 'fbm 权重不是 .57/.28/.15 ⇒ 与参考站的噪声形态不一致').toBe(true);
     expect(skip, '空块不跳过 ⇒ 整版都算三层 fbm，实测跑不满 60fps').toBe(true);
+    expect(noBmp, '还在逐格写位图蒙版 ⇒ 边界又被钉在场分辨率上（站主：「分辨率好低」）').toBe(true);
   });
+  it('★★ 边缘是**矢量等值线**，不是放大的位图（站主：「边缘好粗糙，分辨率好低」）', () => {
+    /* ★★ 根因（扒参考站 shader 才看清）：它的 display 是**逐屏幕像素**跑的
+         （`vec2 p = uv*vec2(aspect,1.)`，阈值带 `smoothstep(.19,.215,…)` 也在屏幕像素上）
+         ⇒ 只有 `d` 是从 512 的低分辨率场双线性采样的，高频细节是屏幕分辨率的。
+       上一版本站把整段 display（**含**决定"破碎水渍边"的 edge fbm）都跑在 320 的场上、
+       再 `drawImage` 放大 4× ⇒ 又糊又有块（实测过渡带 **2.97 px**、最大转角 68.5°）。
+       ⇒ 现在：场照旧低分辨率，边界改成矢量 —— 实测过渡带 **0.83 px**、转角 10.3°。
+       ★★ 注意**不是**靠提高场分辨率解决的：实测 512×360 要 37 ms/帧（27 fps），
+          而把场从 1/4 提到 1/3（320→426）本地就已经掉到 29 fps。 */
+    /* ① marching squares（含两个鞍点 case —— 漏了会在对角处撕开一个口子） */
+    const ms = /let\s+st\s*=\s*0;/.test(CODE) && /st\s*\|=\s*8/.test(CODE)
+      && /case\s+5:/.test(CODE) && /case\s+10:/.test(CODE);
+    /* ② 亚像素插值 —— "不再是 4 px 台阶"的来源 */
+    const sub = /EX\[eid\]\s*=\s*i\s*\+\s*\(TH\s*-\s*a\)\s*\/\s*\(b\s*-\s*a\)/.test(CODE);
+    /* ③ 段串成环（每条边属于恰好两段 ⇒ 2-正则 ⇒ 一定是环） */
+    const ring = /E2A\[exit\]\s*===\s*s\s*\?\s*E2B\[exit\]\s*:\s*E2A\[exit\]/.test(CODE);
+    /* ④ 外圈强制 0 ⇒ 等值线一定闭合（开放路径没法 fill） */
+    const closed = /if\s*\(\s*rim\s*\|\|\s*i\s*===\s*0\s*\|\|\s*i\s*===\s*FM\s*\)\s*\{\s*DD\[k\]\s*=\s*0/.test(CODE);
+    /* ⑤ 顶点位移**照抄参考站的阈值扰动**：δ = −Δ·∇d/|∇d|²（不是"直接乘一个常数"） */
+    const norm = /const\s+f\s*=\s*-dlt\s*\/\s*g2/.test(CODE);
+    const clamp = /if\s*\(\s*len\s*>\s*EDGE_MAX_PX\s*\)/.test(CODE);
+    /* ⑥ 填充：二次曲线过中点（C1）+ evenodd（绕向无关地挖洞） */
+    const curve = /ctx\.quadraticCurveTo\(RX\[p\],\s*RY\[p\],\s*\(RX\[p\]\s*\+\s*RX\[q\]\)\s*\/\s*2/.test(CODE);
+    const evenodd = /ctx\.fill\('evenodd'\)/.test(CODE);
+    console.log(
+      `判据 矢量轮廓 实测: ${ms ? 'marching squares（含鞍点）✓' : '⚠️ 没有等值线提取'} · `
+      + `${sub ? '亚像素插值 ✓' : '⚠️ 顶点落在整格上（会有 4 px 台阶）'} · `
+      + `${ring ? '段串成环 ✓' : '⚠️ 没把段连起来（fill 不了）'} · `
+      + `${closed ? '外圈置 0 保证闭合 ✓' : '⚠️ 环可能开放（fill 会横穿画面）'} · `
+      + `${norm ? '位移 = −Δ·∇d/|∇d|² ✓' : '⚠️ 位移不是照抄参考站的阈值扰动'} · `
+      + `${clamp ? '位移有上限 ✓' : '⚠️ 场一平位移就爆炸'} · `
+      + `${curve ? '二次曲线平滑 ✓' : '⚠️ 直连（有折角）'} · `
+      + `${evenodd ? 'evenodd 填充 ✓' : '⚠️ 没用 evenodd（洞可能挖不出来）'}`,
+    );
+    expect(ms, '没有等值线提取 ⇒ 边界只能是位图放大（又糊又有块）').toBe(true);
+    expect(sub, '顶点没有亚像素插值 ⇒ 边缘是 4 px 的台阶（站主：「分辨率好低」）').toBe(true);
+    expect(ring, '段没串成环 ⇒ 填充会退化成一堆独立线段').toBe(true);
+    expect(closed, '不保证环闭合 ⇒ 开放路径 fill 时会横穿画面').toBe(true);
+    expect(norm && clamp, '顶点位移不是"−Δ·∇d/|∇d|² 且带上限" ⇒ 与参考站的破碎边不一致/会爆炸').toBe(true);
+    expect(curve, '轮廓直连 ⇒ 4 px 间距上有折角（站主：「边缘好粗糙」）').toBe(true);
+    expect(evenodd, '不用 evenodd ⇒ 内环挖不成洞（marching squares 的绕向不保证一致）').toBe(true);
+  });
+
 
   it('★ 手写花体（英文站名）不在 canvas 里 ⇒ 擦痕擦不掉它', () => {
     /* ★ 站名不许写死在 src/ 里（架构契约：主题不持有正文/站名）⇒ 必须是从 content 读来的 */
