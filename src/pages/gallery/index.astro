@@ -47,6 +47,20 @@ const firstBig = at(firstFrame, LIGHT_W);
     </p>
   </header>
 
+  {/* 显影槽（站主 2026-10-01 定）：页头那块可互动的装置。
+      深墨绿的有机形状在板上缓慢生长、变形，形状里透出相册的照片；
+      划过下方网格里任意一张，板里就淡入那一张；指针靠近会把边界推开。
+      整块默认 hidden —— 脚本到位才露面。没有 JS 时它**不存在**（不是藏起来）：
+      板是装饰，内容在网格里本来就完整，不需要靠它承载任何东西。
+      aria-hidden：同一批照片在网格里已经读过一遍，不必让读屏再听一回。 */}
+  <div class="bath" data-bath hidden aria-hidden="true">
+    <canvas class="bath-cv" data-bath-cv></canvas>
+    <p class="bath-read">
+      <em data-bath-cap>{firstFrame.alt}</em>
+      <span data-bath-meta>{albums[0].title} · 1 / {total}</span>
+    </p>
+  </div>
+
   <div class="filters" role="group" aria-label="按相册筛选">
     <button type="button" data-filter="all" aria-pressed="true">全部 <b>{total}</b></button>
     {albums.map((a) => (
@@ -114,6 +128,62 @@ const firstBig = at(firstFrame, LIGHT_W);
   .readout em {
     font-style: normal;
     color: var(--accent-ink);
+  }
+
+  /* ===== 显影槽（页头装置，2026-10-01）=====
+     板底那层深墨绿是**照搬首页 .band 的同一支色**（含左上角那道极淡绿），
+     形状由 canvas 画（透明）⇒ 形状外没有像素，露出的就是这块底色。
+     这样既和首页同一色系，也让 canvas 每帧少一次全屏填充。 */
+  .bath {
+    position: relative;
+    /* 逃出 .shell 铺满视口 —— 与首页 .band 同一手法；
+       实测（_probe/_fullbleed.mjs）：.shell 内左右对称，rightGap = 0。
+       html 上的 overflow-x: clip 收掉 50vw 含滚动条宽度的那点溢出。 */
+    margin-inline: calc(50% - 50vw);
+    margin-block: var(--sp-5) 0;
+    height: clamp(240px, 42vh, 440px);
+    overflow: hidden;
+    background:
+      radial-gradient(110% 70% at 12% 0%, #2d7d462e 0%, transparent 58%),
+      linear-gradient(178deg, #090c0c 0%, #101814 34%, #1a251f 62%, #34413a 100%);
+  }
+  /* 无 JS 时整块不出现。显式写一条，免得上游给 .bath 加了 display 后 [hidden] 被覆盖 */
+  .bath[hidden] {
+    display: none;
+  }
+  .bath-cv {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .bath-read {
+    position: absolute;
+    inset: auto var(--gutter) 0.9rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-4);
+    margin: 0;
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    font-variant-numeric: tabular-nums;
+    /* 差值混合：在深墨绿底上是近白、在照片上是反色 —— 一套色走两种底，不用两套配色 */
+    color: #ffffff;
+    mix-blend-mode: difference;
+    pointer-events: none;
+  }
+  .bath-read em {
+    font-style: normal;
+  }
+  .bath-read span {
+    opacity: 0.72;
+  }
+  @media (max-width: 767px) {
+    .bath {
+      height: 190px;
+    }
+    .bath-read {
+      gap: var(--sp-2);
+    }
   }
 
   /* ===== 筛选：发丝线标签，不是圆角胶囊（原型 L57-67） ===== */
@@ -290,6 +360,12 @@ const firstBig = at(firstFrame, LIGHT_W);
     flex-shrink: 0;
   }
 </style>
+
+<script>
+  // 显影槽（页头装置）。与上面那两个行为（筛选 / 灯箱）刻意分开成独立入口：
+  // 它只读 DOM（.wf figure 的 href / data-cap），不引用它们的任何状态。
+  import '../../scripts/develop';
+</script>
 
 <script>
   // 相册页的两个行为：筛选 + 灯箱。零依赖，不引任何包。
