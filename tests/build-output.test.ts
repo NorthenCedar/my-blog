@@ -841,8 +841,21 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     }
   });
 
-  it('字体全部自托管（4 个 woff2，且没有任何外链字体）', () => {
-    expect(walk(DIST, (n) => n.endsWith('.woff2')).length).toBe(4);
+  /* ★ 2026-10-01 起是 **5 个**：多出来的 homemade-apple.woff2 是相册页整屏显影板上
+     那行手写花体用的（站主要"参考站同款字体" ⇒ Homemade Apple，OFL ⇒ 允许自托管）。
+     ★★ 钉**文件名**而不是只钉个数：只钉个数的话，删掉一个再多加一个也照样过。 */
+  it('字体全部自托管（5 个 woff2，且没有任何外链字体）', () => {
+    const fonts = walk(DIST, (n) => n.endsWith('.woff2')).map((p) => p.split(/[\\/]/).pop());
+    expect(fonts.length).toBe(5);
+    for (const want of [
+      'archivo-latin.woff2',
+      'plex-sans-400.woff2',
+      'plex-sans-600.woff2',
+      'plex-mono-400.woff2',
+      'homemade-apple.woff2',
+    ]) {
+      expect(fonts.includes(want), `缺字体 ${want}`).toBe(true);
+    }
     for (const f of htmlFiles()) {
       const html = readFileSync(f, 'utf8');
       expect(/fonts\.(googleapis|gstatic)\.com/.test(html), `${f} 引用了 Google Fonts`).toBe(false);

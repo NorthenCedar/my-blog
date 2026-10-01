@@ -17,6 +17,13 @@
  */
 import Base from '../../layouts/Base.astro';
 import manifest from '../../../public/gallery/manifest.json';
+/* ★ 板里那行手写花体是**站名** ⇒ 必须从 content/site.md 读，不能写死在 src/ 里
+   （架构契约：主题不持有正文/站名，有 tests/content-invariants.test.ts 守着）。 */
+import { getSite } from '../../lib/site';
+/* ★ 英文花体用 content/site.md 里的 `wordmark` 字段（不在这里抄一份字面量 ——
+     站名与字号都属于内容层，抄一份就会被 tests/content-invariants.test.ts 判违规）——
+   站名与字号都属于内容层，不写死在 src/ 里（有 tests/content-invariants.test.ts 守着）。 */
+const siteWordmark = (await getSite()).wordmark;
 
 type File = { w: number; h: number; url: string };
 type Frame = { alt: string; src: string; files: File[] };
@@ -36,27 +43,35 @@ const at = (f: Frame, w: number) => f.files.find((x) => x.w === w) ?? f.files[0]
 const firstFrame = albums[0].frames[0];
 const firstBig = at(firstFrame, LIGHT_W);
 
-/* 显影板的 SSR 占位：**只从横幅里取**（脚本端抽照片的口径与此一致）。
-   板是 hidden + aria-hidden 的，这段文本在脚本到位前根本不会显示 ——
-   留它的意义是"万一脚本没跑完就被看到，也得是一张横幅照片的说明"，不是给读屏的。
-   ★ 连"共几张"也要用**横幅张数**，不能用全站帧数：脚本一跑就会把它改成横幅数，
-     两处口径不一致的话，脚本没跑完的那一瞬间会露出一个对不上的分母。 */
-/* ★★ 判横竖必须用**网格档（800）**的尺寸，不能用灯箱档（1280）的 ——
+/* ★★ 网格里每张图挂的 width/height **必须是网格档（800）的**，不能用灯箱档（1280）——
+   整屏显影板（src/scripts/develop.ts）读的正是 `<img>` 上这对属性来判横竖与定图源。
    manifest 里的 `w` 是**请求的目标宽**不是实际宽：源图窄于目标宽时 sharp 的
    `withoutEnlargement` 生效，文件就停在源宽上（实测 1280 档有 **19/82** 条 w 是假的、
    800 档有 4 条），**只有 `h` 永远是真的**。照 1280 档判会有 **6 张横竖判反**
    （例：「苏州的美」manifest 1280×1184 看着是横幅，实际文件 896×1184 是竖幅）；
-   照 800 档判**一张都不反**（逐帧读过真实像素验过）。
-   脚本端读的正是 `<img>` 上的 800 档 width/height ⇒ 两处口径这才对上。 */
-const landFrames = albums
-  .flatMap((a) => a.frames.map((f) => ({ f, a: a, g: at(f, GRID_W) })))
-  .filter((x) => x.g.w > x.g.h);
-const seedLandscape = landFrames[0] ?? { f: firstFrame, a: albums[0], g: at(firstFrame, GRID_W) };
-const landTotal = landFrames.length || total;
+   照 800 档判**一张都不反**（逐帧读过真实像素验过）。 */
 ---
 
 <Base title="相册" chrome="page" current="gallery">
+  {/* ===== 整屏显影板（站主 2026-10-01 第四轮：「不如直接把这个放在相册页整屏，
+         鼠标往下滚的时候才看到相册页的内容」）=====
+      ★ 没有指针 = 一块纯色；指针**涂抹**过的地方擦出照片，擦痕停留约 3 s 后褪回纯色。
+      ★ 每次打开**随机一张横幅照片**，整屏铺满（cover，会裁）。
+      ★ 整块默认 hidden —— 脚本到位才露面。没有 JS 时它**不存在**（不是藏起来）：
+        板是装饰，内容在下面网格里本来就完整，不需要靠它承载任何东西。
+        aria-hidden：同一批照片在网格里已经读过一遍，不必让读屏再听一回。
+      ★★ 花体字是 canvas **外面**的 DOM ⇒ 擦痕擦不掉它（参考站 lowkeytp.art 里
+         画面文字同样压在显影层之上，不参与显影）。 */}
   <header class="pagehead">
+    {/* ★ 板在 DOM 上是页头的**第一个子元素**：
+        桌面 ⇒ 它整屏铺满、把标题顶到首屏之下（往下滚才看到标题与网格）；
+        手机 ⇒ 用 order 把它排到标题**右边**，变回"页头旁边的小板"。
+        同一个 DOM 两副版面 —— 不写两份结构，也不靠脚本搬节点。 */}
+    <div class="bath" data-bath hidden aria-hidden="true">
+      <canvas class="bath-cv" data-bath-cv></canvas>
+      <span class="bath-mark">{siteWordmark}</span>
+    </div>
+
     <div class="pagehead-main">
       <h1 class="pagehead-title">相册</h1>
       <p class="readout">
@@ -66,20 +81,6 @@ const landTotal = landFrames.length || total;
       </p>
     </div>
 
-    {/* 显影板（站主 2026-10-01 改口径）：页头右侧这块**小板**。
-        ★ 没有指针 = 一块纯色 —— 板里没有洞，也不自己动、不自己换片；
-        只有指针能把照片"搅"出来（洞跟着指针走、边缘流动）；离开就收回纯色。
-        每次打开**随机一张横幅照片**，板按那张照片的原比例裁形（不裁不拉伸）。
-        整块默认 hidden —— 脚本到位才露面。没有 JS 时它**不存在**（不是藏起来）：
-        板是装饰，内容在网格里本来就完整，不需要靠它承载任何东西。
-        aria-hidden：同一批照片在网格里已经读过一遍，不必让读屏再听一回。 */}
-    <div class="bath" data-bath hidden aria-hidden="true">
-      <canvas class="bath-cv" data-bath-cv></canvas>
-      <p class="bath-read">
-        <em data-bath-cap>{seedLandscape.f.alt}</em>
-        <span data-bath-meta>{seedLandscape.a.title} · 1 / {landTotal}</span>
-      </p>
-    </div>
   </header>
 
   <div class="filters" role="group" aria-label="按相册筛选">
@@ -151,32 +152,31 @@ const landTotal = landFrames.length || total;
     color: var(--accent-ink);
   }
 
-  /* ===== 页头：标题/读数在左，显影板在右 =====
-     ★ 只改**本页**的 .pagehead（外壳那条 `body.chrome-page .pagehead` 给的是
-       padding / 底线 / 四角定位点，两者不冲突，别去动外壳）。 */
-  .pagehead {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: var(--sp-5);
-  }
-  .pagehead-main {
-    min-width: 0;   /* 让读数那排在窄视口能换行，而不是把板顶出去 */
-  }
-
-  /* ===== 显影板（页头右侧的小板，2026-10-01 改口径）=====
+  /* ===== 整屏显影板（2026-10-01 第四轮：从"页头右侧的小板"改成整屏首屏）=====
      板底那层深墨绿是**照搬首页 .band 的同一支色**（含左上角那道极淡绿），
-     形状由 canvas 画（透明）⇒ 形状外没有像素，露出的就是这块底色。
+     擦痕由 canvas 画（透明）⇒ 没擦到的地方"没有像素"，露出的就是这块底色。
      这样既和首页同一色系，也让 canvas 每帧少一次全屏填充。
 
-     ★ 尺寸：宽由版面定，**高按抽中照片的原比例**（--bath-ar 由脚本设）⇒
-       照片整张铺进板里，不裁不拉伸。这也是"只收横幅"的原因 ——
-       竖幅会把这块小板撑成一个竖条，跟"放在旁边"打架。 */
+     ★ 逃出 .shell 铺满视口 —— 与首页 .band 同一手法
+       （本站多一层全局 .shell（max-width + padding），会把背景一起框窄）。
+       ★ 不写 width:100vw —— vw 含滚动条宽度 ⇒ 横向溢出。
+     ★ 100svh：手机地址栏收放时不跳（同首页 .band）。
+     ★ 照片按 cover 整屏铺满（会裁）⇒ 只收横幅：竖幅只能裁成中间一条。 */
+  /* ★ 桌面：页头不能有上内边距 —— 首屏要从顶部一路铺到底。
+     写两条 `.pagehead` 是为了压过外壳那条 `body.chrome-page .pagehead`（它的特异性更高）。 */
+  .pagehead.pagehead {
+    padding-top: 0;
+  }
   .bath {
     position: relative;
-    flex: 0 0 auto;
-    width: clamp(184px, 22vw, 288px);
-    aspect-ratio: var(--bath-ar, 3 / 2);
+    /* ★ 顶栏（Topbar）是**静态**的、占在文档流最前面 ⇒ 首屏要把这段让出来，
+       才真的是"进来就是一整屏"。实测 ~3.4rem（padding .7rem×2 + 一行 mono）。
+       ★ 抽成变量而不是写死成魔法数：以后动顶栏只改这一处。
+         探针可复核：_probe/cdp-bath.mjs 会报 .topbar 的 offsetHeight。 */
+    --topbar-h: 3.4rem;
+    margin-inline: calc(50% - 50vw);
+    height: calc(100svh - var(--topbar-h));
+    min-height: 420px;
     overflow: hidden;
     background:
       radial-gradient(110% 70% at 12% 0%, #2d7d462e 0%, transparent 58%),
@@ -185,6 +185,29 @@ const landTotal = landFrames.length || total;
   /* 无 JS 时整块不出现。显式写一条，免得上游给 .bath 加了 display 后 [hidden] 被覆盖 */
   .bath[hidden] {
     display: none;
+  }
+  /* ★★ 胶片颗粒（站主 2026-10-01：「照片加一点噪点颗粒感，参考站的效果」）
+     ★★ 放在 **CSS 层、不进 canvas**，两个理由：
+        ① canvas 里撒随机噪点会**掺进随机源** —— 那条硬规矩「形状必须是 t 的确定函数」
+           （同 t 逐点比对的验收手段）会直接失效；
+        ② 静态噪点**每帧零成本**（浏览器只栅格化一次并平铺），而 canvas 每帧重画一遍
+           全屏噪点在整屏尺寸下是实打实的开销。
+     ★ 噪点图是**内联 SVG（feTurbulence）的 data URI** —— 站内不许引外部资源，
+       这是自包含的，不发任何请求。
+       · fractalNoise + saturate 0 ⇒ 灰度噪点；feComponentTransfer 把 alpha 拉平到 1
+         （feTurbulence 的 alpha 本身也是噪声，不拉平会变成一团斑块而不是颗粒）。
+       · stitchTiles='stitch' ⇒ 平铺无缝。
+     ★ overlay 混合 + 中灰噪点 ⇒ 只轻微改变明暗，不改色相（正经胶片颗粒的做法）。 */
+  .bath::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;             /* 颗粒在擦痕之上、花体字之下 */
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0' intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 160px 160px;
+    opacity: 0.42;
+    mix-blend-mode: overlay;
   }
   /* ★ absolute + inset：板的高度来自 aspect-ratio，用百分比高度会有解析上的意外，
      铺满定位则永远等于板的盒子（canvas 尺寸就是板的尺寸，探针读的也是同一个盒子）。 */
@@ -195,40 +218,71 @@ const landTotal = landFrames.length || total;
     width: 100%;
     height: 100%;
   }
-  .bath-read {
+  /* ★★ 手写花体的**英文站名（wordmark）**—— 擦不掉的那一层
+     ★ 它是 canvas **外面**的 DOM（参考站 lowkeytp.art 里画面文字同样压在显影层之上）
+       ⇒ 擦痕再怎么擦也擦不到它，这条不需要任何脚本配合。
+     ★ 字体：站内不许引外部资源（无 CDN / 无自托管字体文件）⇒ 走**系统中文手写体栈**
+       —— 行楷优先（最像手写花体），落到楷体，再兜 `cursive`。
+       Windows 上落到 KaiTi（楷体），macOS 落到 STXingkai（行楷）。
+       ★★ 中文手写体必须写**中文名**那一档（"楷体"）一起兜：只写英文名的机器不一定有。
+       ★ 探针可验实际渲染字体：_probe/font-probe.mjs。
+     ★ 白字 + 极淡投影 ⇒ 在深墨绿底和擦出来的照片上都读得清（不用两套配色）。 */
+  .bath-mark {
     position: absolute;
-    inset: auto 0.55rem 0.45rem;
+    inset: 0;
     display: flex;
-    flex-direction: column;
-    gap: 0;
-    margin: 0;
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-    line-height: 1.35;
-    font-variant-numeric: tabular-nums;
-    /* 差值混合：在深墨绿底上是近白、在照片上是反色 —— 一套色走两种底，不用两套配色 */
-    color: #ffffff;
-    mix-blend-mode: difference;
+    align-items: center;
+    justify-content: center;
+    /* ★ Homemade Apple = 参考站同款手写花体（自托管在 public/fonts，OFL）；
+       它只有拉丁字形 ⇒ 后面跟系统中文手写体兜底（真出现中文时也不会掉成黑体）。 */
+    font-family: "Homemade Apple", "STXingkai", "Xingkai SC", "STKaiti", "Kaiti SC", "楷体", cursive;
+    font-size: clamp(2.4rem, 8vw, 4.6rem);
+    line-height: 1;
+    letter-spacing: 0.12em;
+    color: #fff;
+    text-shadow: 0 2px 14px rgb(0 0 0 / 45%);
     pointer-events: none;
+    user-select: none;
+    z-index: 2;             /* ★ 压在颗粒层之上：颗粒可以盖照片，但不能盖花体字 */
   }
-  .bath-read em,
-  .bath-read span {
-    font-style: normal;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .bath-read span {
-    opacity: 0.72;
-  }
+
+  /* ===== 手机：改回"页头旁边的小板" =====
+     ★★ 站主 2026-10-01 第四轮：「到了手机上不要整屏了，因为涂抹的效果不好
+        （触屏操作不习惯）。手机端改回之前的版本，放在页头右边（就是我之前说的旁边），
+        尺寸就用照片的原尺寸（只要横着的照片，不放竖着的）」。
+     · 版面：页头变回左右两栏（标题左、板右）—— 板在 DOM 上是页头**第一个**子元素
+        （桌面要它占满第一屏），靠 `order` 把它排到右边 ⇒ 一个 DOM 两副版面。
+     · 尺寸：**高走照片原比例**（--bath-ar 由脚本按抽中的照片设 ⇒ 不裁不拉伸），
+       宽由版面定（min(46%, 300px)）。★ 这正是"只收横幅"的原因 —— 竖幅会撑成竖条。
+     · 笔触在**小板**上是另一档尺寸（参考站那 82/720 的比例是按整屏定的，
+       照搬到 300 px 的小板上只有 17 px，手指根本擦不动）⇒ 见 develop.ts 的 R_HOLE_SMALL。 */
   @media (max-width: 767px) {
+    .pagehead.pagehead {
+      padding-top: var(--sp-8);   /* 回到普通页头的上内边距（首屏不再从顶部铺起） */
+    }
     .pagehead {
-      flex-direction: column;
-      align-items: stretch;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
       gap: var(--sp-4);
     }
+    .pagehead-main {
+      order: 1;
+      min-width: 0;   /* 让读数那排在窄视口能换行，而不是把板顶出去 */
+    }
     .bath {
-      width: min(64%, 240px);
+      order: 2;
+      /* ★ flex: 0 0 auto 必须写：flex 子项默认可收缩，不写的话标题一挤就把板压扁
+         （实测 390 视口下被压到 133 px，而 CSS 写的是 179 px）。 */
+      flex: 0 0 auto;
+      width: min(56%, 240px);
+      height: auto;
+      min-height: 0;
+      aspect-ratio: var(--bath-ar, 3 / 2);
+      margin-inline: 0;
+    }
+    .bath-mark {
+      font-size: clamp(1.1rem, 5vw, 1.6rem);
     }
   }
 

@@ -4,22 +4,36 @@
  * ★★ 站主 2026-10-01 改口径（这一版的行为与上一版**相反**，别照旧版理解）：
  *
  *   · **没有指针 = 一块纯色**。板里**不存在洞**，形状不是"长开—收缩"地自己漫，
- *     也不自己换片。静止时它就是一块深墨绿的实心板（+ 一行仪器读数）。
+ *     也不自己换片。静止时它就是一块深墨绿的实心板（+ 一行手写花体字）。
  *   · **只有指针能把照片"搅"出来**：指针进板 ⇒ 指针周围张开一块**有机形状的洞**，
  *     洞跟着指针走（带滞后，像液体被拽着），边缘持续流动变形；指针离开 ⇒ 洞收回去，
  *     板回到纯色。
  *   · **每次打开相册页随机一张照片**（只从**横幅**照片里抽）。
  *
+ * ★★★ 同日第三轮（站主给了参考 https://lowkeytp.art/liquid-reveal/ ）：
+ *
+ *   · 洞改成**涂抹的擦痕**（参考原话：「也可以直接在画面上涂抹」）：
+ *     指针走过的路径**留在板上**，不是"移开就没了"；
+ *     停留一段时间后再慢慢褪回纯色（参考的旋钮叫「显影停留时间」，默认 **2.8s**）。
+ *     实现 = 一张离屏的擦痕蒙版：每帧在指针处盖一个有机形状的笔触，
+ *     同时整版按 `1 − e^(−dt/τ)` 衰减 —— 早擦的那段先褪，于是擦痕有"先后"。
+ *   · 笔触变小（参考旋钮「笔触大小」）：洞的直径从短边的 0.92 收到 **0.44**。
+ *   · 板上那行**手写花体 "liquid-reveal" 擦不掉** —— 它是 canvas **外面**的 DOM
+ *     （参考里画面文字也是压在显影层之上的，不参与显影），canvas 怎么擦都擦不到它。
+ *
  * ---------------------------------------------------------------------------
  * 本站的三处换算（站主 2026-10-01 拍板）
  *
- *   · 底层照片  → 相册页的横幅照片（manifest 的 1280 档），**每次打开随机一张**
+ *   · 底层照片  → 相册页的横幅照片（网格档 800），**每次打开随机一张**
  *   · 纯色      → **深墨绿**（照搬首页 .band 那支色，站内语汇一致），不是参考里的克莱因蓝
- *   · 文字      → 板内左下角的仪器读数（`mix-blend-mode: difference` ⇒ 墨绿底与照片上都可读）
+ *   · 文字      → 板中央的手写花体 "liquid-reveal"（DOM 层，压在显影之上，不参与显影）
  *
- *   ★ 板的**尺寸 = 照片的原尺寸比例**（`aspect-ratio: w / h`，由本脚本按抽中的照片设）。
- *     所以照片是**整张铺进板里的，不裁不拉伸**；也正因为如此只收横幅照片 ——
- *     竖幅会把页头这块小板撑成一个竖条，和"放在旁边"冲突。
+ *   ★★ 同日第四轮：板从"页头右侧的小板"改成**相册页的整屏首屏**（站主原话：
+ *     「不如直接把这个放在相册页整屏，鼠标往下滚的时候才看到相册页的内容」）。
+ *      ⇒ 板的尺寸**不再**跟着照片比例走（整屏就是整屏），照片按 `cover` 铺满（会裁）。
+ *      ⇒ 原来"不裁不拉伸"那条口径随之作废；"只收横幅"保留 —— 整屏是横的，
+ *        竖幅铺进来只能裁成中间一条。
+ *      ⇒ 笔触的尺度基准（短边）从 185 px 变成 800 px ⇒ R_HOLE 必须按参考站的比例重算。
  *
  * ---------------------------------------------------------------------------
  * 实现选择：Canvas2D，不是 SVG feTurbulence
@@ -56,7 +70,7 @@
  *       而"显影完成"是这块装置**静止时最有信息量的那一帧**，且零运动。
  *   无 JS     ⇒ 整块不渲染（SSR 就带 hidden + aria-hidden）
  *   ≤767px    ⇒ 板缩到 min(64%, 240px)、轮廓采样点减半（搅动保留）
- *   视口外/切标签 ⇒ 停帧
+ *   视口外/切标签 ⇒ 停帧（★ 滚过首屏就自动停 —— 整屏装置的耗电只发生在它可见时）
  * ========================================================================== */
 (() => {
   const host = document.querySelector<HTMLElement>('[data-bath]');
@@ -65,8 +79,6 @@
   const ctx = cvs.getContext('2d');
   if (!ctx) return;
 
-  const capEl = host.querySelector<HTMLElement>('[data-bath-cap]');
-  const metaEl = host.querySelector<HTMLElement>('[data-bath-meta]');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
 
   /* ---------------------------------------------------------------- 参数 */
@@ -76,7 +88,20 @@
   /* 洞 —— 只在指针周围出现的那一块 */
   const N_WIDE = 96;       // 轮廓采样点数（板小了，96 点间距 ≈ 6px，够平滑）
   const N_NARROW = 64;     // 窄视口减半
-  const R_HOLE = 0.46;     // 半径 = 短边 × 0.46 ⇒ 直径 ≈ 短边的 0.92
+  /* ★★ 笔触大小**照抄参考站**（lowkeytp.art/liquid-reveal）：它的旋钮「笔触大小」默认
+     **82**，画布 1280×720 ⇒ 82 / 720 ≈ **短边的 0.114**（站主原话：「跟 lowkeytp 保持一致就好」）。
+     ⇒ 半径 = 短边 × 0.057。整屏（1280×800）时一笔的直径 ≈ 91 px。
+     ★★ 注意这条**取代**了上一版"洞的直径 = 短边 0.92"那个数：板从页头小板变成**整屏首屏**后，
+        尺度基准（短边）从 185 px 变成 800 px，系数必须跟着换，否则一笔就有半屏大。
+     ★ 搅动的两个尺度按同一比例（见 R_INF_K / PUSH_K），否则"影响半径 > 笔触半径"⇒
+       局部鼓包变成整块被推走。 */
+  const R_HOLE = 0.057;    // 笔触半径 = 短边 × 0.057 ⇒ 一笔直径 ≈ 短边的 0.114（= 参考的 82/720）
+  /* ★★ 小板（手机档）必须**另算一档**：上面的比例是按**整屏**定的（短边 ≈ 800 px ⇒ 一笔 91 px），
+     照搬到手机那块 300×200 的小板上只有 17 px —— 手指根本擦不动（站主：触屏涂抹不习惯）。
+     0.22 是早先"页头小板"那版调出来的数，直接沿用。
+     ★ 判定用**板的短边**，不是视口：同一个视口下两种版面尺寸差 4 倍，按视口分会判错。 */
+  const R_HOLE_SMALL = 0.22;
+  const SMALL_PLATE = 420;   // 短边小于这个 ⇒ 按小板算
   const R2_FINE = 0.85;    // 细褶：环上一圈 ≈ 5.3 个噪声格（五六个起伏）
   const AMP_FINE = 0.11;   // 细褶幅度（相对半径）
   const R2_LOBE = 0.30;    // 低频分量：≈ 2 个格
@@ -98,16 +123,31 @@
   /* ★ 跟随弹簧：洞被指针"拽"着走。
      滞后是"搅动"的来源 —— 指针快速划过时洞会落在后面、被拉出一个包；
      停手后它才慢慢贴上来。ζ<1 ⇒ 有一点点过冲，那是液体的手感。 */
-  /* ★ 角频率要挑：太小 ⇒ 快速划过时洞整个落在指针后面（像没响应）；
-     太大 ⇒ 洞硬贴着指针，"被拽着走"的手感全丢。
-     稳态滞后 ≈ 2ζv/ω（v = 指针速度）⇒ 14/0.62 时，500 px/s 约落后 44 px、
-     2300 px/s（甩一下）实测落后 60~70 px —— 板上明显拖尾，但洞始终还在指针脚下。 */
-  const LAG_W = 14;        // 角频率（rad/s）⇒ 稳定时间 ~0.25 s
-  const LAG_Z = 0.62;      // 阻尼比（1 = 临界阻尼，不过冲）
+  /* ★ 角频率要挑：太小 ⇒ 快速划过时笔触整个落在指针后面（像没响应）；
+     太大 ⇒ 硬贴着指针，"被拽着走"的手感全丢。
+     ★★ 这一版笔触变小 + 变成"涂抹"了 ⇒ 滞后太大就变成"笔不跟着手走"（涂抹最忌讳这个）。
+     所以比上一版调紧：26/0.65 ⇒ 稳态滞后 ≈ 2ζv/ω，500 px/s 落后约 25 px、
+     甩一下（2300 px/s）约 115 px（这时拖尾正好由**擦痕**接手，不是靠弹簧硬撑）。 */
+  const LAG_W = 26;        // 角频率（rad/s）⇒ 稳定时间 ~0.15 s
+  const LAG_Z = 0.65;      // 阻尼比（1 = 临界阻尼，不过冲）
 
   /* 搅动：指针附近那段边界被**推开**（局部，不是整体充气） */
-  const R_INF_K = 0.42;    // 影响半径 = 短边 × 这个系数
-  const PUSH_K = 0.16;     // 最大推开距离（同上口径）
+  /* ★ 这两个必须跟着 R_HOLE 一起收（同上）：比值 R_INF/R = 0.42/0.46 ≈ 0.91 保持不变
+     ⇒ 洞缩小后搅动仍是"局部鼓一个包"，不会变成"整块被推走"。 */
+  const R_INF_K = 0.05;    // 影响半径 = 短边 × 这个系数（≈ 笔触半径的 0.9）
+  const PUSH_K = 0.019;    // 最大推开距离（同上口径；≈ 笔触半径的 1/3，与改前手感一致）
+
+  /* ★★ 擦痕的停留（参考 lowkeytp.art 那个旋钮「显影停留时间」，它默认 2.8s）
+     · 实现：整版蒙版每帧按 `1 − e^(−dt/τ)` 衰减（destination-out）⇒ 蒙版 alpha 指数下降。
+     · ★★ 蒙版在合成时**平方**了一次（见 render ③）⇒ 观感上的时间常数是 **τ/2**。
+       配 τ = 1500 ⇒ 有效 750 ms，擦痕约 **2.9 s** 褪到看不见（= 参考站那个 2.8 s）。
+     · TRAIL_EPS 是"判褪尽"的阈值，它必须跟着平方一起算：可见阈值取 α_eff ≈ 0.02
+       ⇒ 蒙版 0.14（0.14² ≈ 0.02）⇒ 停帧与"看不见"落在同一时刻（实测都在 ~2.9 s）。
+     · ★ 必须吃真实 dt（"每帧固定系数" ⇒ 停留时长随刷新率变，60Hz 与 120Hz 差一倍）。
+     · ★ 早擦的那段先褪：衰减是**逐帧乘**的，先盖上的笔触乘的次数多 ⇒ 擦痕有先后，
+       这是"擦玻璃"该有的样子；反过来（全场一起淡）就看不出路径了。 */
+  const TRAIL_TAU = 1500;  // 停留时间常数（ms；观感上是它的**一半** —— 蒙版在合成时平方了）
+  const TRAIL_EPS = 0.14;  // 低于这个就当"褪尽了" ⇒ 清屏 + 停帧（0.14² ≈ 0.02 = 看不见）
 
   const SWAP_MS = 700;     // 划过网格照片时的交叉淡入时长
   const DT_MAX = 50;       // 帧间隔上限：切标签页回来 / 长卡顿后别让相位跳过头
@@ -144,7 +184,9 @@
 
   /* ---------------------------------------------------------------- 状态 */
 
-  type Frame = { url: string; cap: string; album: string; w: number; h: number };
+  /* ★ 只有 url / w / h：板里那行读数已经删掉了（站主 2026-10-01：「删掉左下角的字」），
+     照片说明与专辑名**不再进这个脚本** —— 留着就是没人读的死字段。 */
+  type Frame = { url: string; w: number; h: number };
 
   const cache = new Map<string, HTMLImageElement>();
   const load = (url: string) => {
@@ -161,11 +203,20 @@
   let W = 0, H = 0, dpr = 1, N = N_WIDE;
   let COS = new Float32Array(0), SIN = new Float32Array(0), PX = new Float32Array(0);
   let RINF = 10, PUSH = 10;
+  let RB = R_HOLE;                            // 当前笔触比例（resize 里按板的短边选档）
+
+  /* ★★ 擦痕蒙版：一张和板同尺寸的离屏 canvas，只有**擦过的地方**有 alpha。
+     每帧两件事 —— ① 整版乘性衰减（destination-out）② 在指针处盖一个有机形状的笔触。
+     最后把照片按这张蒙版"抠"出来（destination-in）⇒ 擦过的地方才露出照片。
+     ★★ 为什么必须离屏：擦痕是**累积**的，主 canvas 每帧清屏重画，存不住路径。 */
+  const mk = document.createElement('canvas');
+  const mkx = mk.getContext('2d');
 
   let raf = 0, running = false, onScreen = true, last = 0;
   let mx = 0, my = 0;                          // 指针（板内坐标）
   let cx = 0, cy = 0, cvx = 0, cvy = 0;        // 洞心（跟随弹簧的位置与速度）
   let pw = 0, pwT = 0;                         // 影响强度（实际值、目标值）
+  let trail = 0;                               // 擦痕残留（最新一笔的强度；1 = 刚擦过）
   let cur: HTMLImageElement | null = null, curUrl = '';
   let nxt: HTMLImageElement | null = null, nxtUrl = '';
   let mix = 1;                                 // 0 → 1：从 cur 淡入 nxt
@@ -185,6 +236,11 @@
     cvs.width = Math.round(W * dpr);
     cvs.height = Math.round(H * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // 蒙版同尺寸（也按 dpr）⇒ 擦痕不会被缩放糊掉
+    mk.width = cvs.width;
+    mk.height = cvs.height;
+    mkx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    mkx.clearRect(0, 0, W, H);
     COS = new Float32Array(N);
     SIN = new Float32Array(N);
     for (let i = 0; i < N; i++) {
@@ -193,11 +249,15 @@
       SIN[i] = Math.sin(th);
     }
     PX = new Float32Array(N * 2);
+    /* ★ 笔触分两档：整屏走参考站那档，小板（手机）走另一档 —— 见 R_HOLE_SMALL。 */
+    RB = Math.min(W, H) < SMALL_PLATE ? R_HOLE_SMALL : R_HOLE;
     RINF = Math.min(W, H) * R_INF_K;
     PUSH = Math.min(W, H) * PUSH_K;
-    // 尺寸变了 ⇒ 指针/洞心坐标失效，强度归零（免得形状上突然鼓一个错位的包）
+    // 尺寸变了 ⇒ 指针/洞心坐标失效，强度归零（免得形状上突然鼓一个错位的包）；
+    // 蒙版尺寸也变了 ⇒ 擦痕作废（旧坐标的擦痕会出现在错误的位置）
     pw = 0;
     pwT = 0;
+    trail = 0;
     return true;
   };
 
@@ -213,29 +273,15 @@
     ctx.globalAlpha = 1;
   };
 
-  const render = (t: number) => {
-    if (!W) return;
-
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
-
-    const im = cur;
-    if (!im || !im.complete || !im.naturalWidth) return;
-
-    /* reduced-motion：静止整张（不裁形、不流动、不响应指针）—— 见文件头 */
-    if (reduce.matches) {
-      drawCover(im, 1);
-      return;
-    }
-
-    /* ★★ 站主的口径：**没有指针就只是一块纯色**。
-       ⇒ 清屏之后直接返回，一个像素都不画（canvas 整版 alpha = 0，露出 CSS 板底）。 */
-    if (pw <= PW_EPS) return;
-
+  /* ★ 在指针（洞心）处盖一个有机形状的笔触 —— 擦痕就是这些笔触的并集。
+     ★ 软边（径向渐变）：实心到 0.70R、外围渐隐 ⇒ 边界像"雾被擦开"，不是硬边圆。
+     ★ 形状**每帧都在变**（噪声相位跟着 t 走）⇒ 划一道出去，带子的两边是起伏的，
+       不会是"一条等宽的规整笔道"—— 站主这条要求是"不能太规整"。 */
+  const stamp = (t: number) => {
     const ph = t * PH_SPD;
     const phL = ph * 0.45;   // 低频分量的相位推进更慢 ⇒ 两个分量不同步 ⇒ 形状持续变形
     const s = pw * pw * (3 - 2 * pw);          // 进出都平滑（不是线性淡入）
-    const R = Math.min(W, H) * R_HOLE * s;
+    const R = Math.min(W, H) * RB * s;
     const active = RINF > 1;
 
     for (let i = 0; i < N; i++) {
@@ -265,26 +311,86 @@
       PX[i * 2 + 1] = y;
     }
 
-    ctx.save();
-    ctx.beginPath();
+    mkx.save();
+    mkx.beginPath();
     /* ★ 二次曲线经过相邻顶点的**中点**把轮廓平滑掉。
        直接 lineTo 会出锯齿：形状被压扁的区段里相邻顶点的 dy 只有 2~3 px，
        而噪声让 dx 能差 3 px ⇒ 折线在横向来回跳（肉眼就是边上一圈小毛刺）。 */
-    ctx.moveTo((PX[0] + PX[2]) / 2, (PX[1] + PX[3]) / 2);
+    mkx.moveTo((PX[0] + PX[2]) / 2, (PX[1] + PX[3]) / 2);
     for (let i = 1; i <= N; i++) {
       const j = i % N;
       const qx = PX[j * 2], qy = PX[j * 2 + 1];
       const m = (j + 1) % N;
-      ctx.quadraticCurveTo(qx, qy, (qx + PX[m * 2]) / 2, (qy + PX[m * 2 + 1]) / 2);
+      mkx.quadraticCurveTo(qx, qy, (qx + PX[m * 2]) / 2, (qy + PX[m * 2 + 1]) / 2);
     }
-    ctx.closePath();
-    ctx.clip();
+    mkx.closePath();
+    mkx.clip();
+    // 软边：中心实心、外围渐隐（不是 0，免得笔触边缘永远擦不干净）
+    const g = mkx.createRadialGradient(cx, cy, R * 0.3, cx, cy, Math.max(1, R * 1.04));
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.7, 'rgba(255,255,255,1)');
+    g.addColorStop(1, 'rgba(255,255,255,0.55)');   // ★ 蒙版要平方 ⇒ 终点抬到 0.55（0.55² ≈ 0.30）
+    mkx.fillStyle = g;
+    mkx.fillRect(cx - R * 1.2, cy - R * 1.2, R * 2.4, R * 2.4);
+    mkx.restore();
+    mkx.globalCompositeOperation = 'source-over';
+  };
+
+  const render = (t: number, dt = 0) => {
+    if (!W) return;
+
+    /* ① 擦痕衰减：整版乘性衰减 ⇒ **早擦的那段先褪**（e^(−dt/τ)，帧率无关）。
+       ★ 每帧都做，不管有没有指针 —— 指针停着不动时，早先划过的路径照样在褪。 */
+    if (dt > 0) {
+      mkx.globalCompositeOperation = 'destination-out';
+      mkx.fillStyle = `rgba(0,0,0,${1 - Math.exp(-dt / TRAIL_TAU)})`;
+      mkx.fillRect(0, 0, W, H);
+      mkx.globalCompositeOperation = 'source-over';
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const im = cur;
+    if (!im || !im.complete || !im.naturalWidth) return;
+
+    /* reduced-motion：静止整张（不裁形、不流动、不响应指针）—— 见文件头 */
+    if (reduce.matches) {
+      drawCover(im, 1);
+      return;
+    }
+
+    /* ② 有指针就在当前位置盖一笔 */
+    if (pw > PW_EPS) {
+      stamp(t);
+      trail = 1;
+    }
+
+    /* ★★ 站主的口径：**没有指针（且擦痕褪尽）就只是一块纯色**。
+       ⇒ 清屏之后直接返回，一个像素都不画（canvas 整版 alpha = 0，露出 CSS 板底）。
+       ★ 注意与上一版的差别：擦痕还在的时候**要继续画**（那就是"停留一段时间"）。 */
+    if (trail <= TRAIL_EPS) {
+      mkx.clearRect(0, 0, W, H);
+      return;
+    }
 
     // ★ 先铺不透明的 cur 打底，再叠 alpha = mix 的 nxt ⇒ 才是**线性**交叉淡入
     //   （两张都用 alpha 叠会是 (1−m)² 的曲线，中段发暗）
     drawCover(im, 1);
     if (nxt && mix > 0 && nxt.complete && nxt.naturalWidth) drawCover(nxt, mix);
-    ctx.restore();
+    /* ③ 照片按擦痕蒙版抠出来 ⇒ 只有擦过的地方露出照片。
+       ★★ 蒙版**乘两次**（destination-in = αd × αs ⇒ 两遍就是 α²）：
+       实测（_probe/cdp-bath.mjs --wipe）单乘一遍时擦痕的 α 会**卡在 42 不再降** ——
+       蒙版是 8 位 alpha，而衰减是**乘性**的：α 越小、每帧的减量 `α·αs` 越小，
+       减到不足 0.5 时四舍五入把它原样留下来 ⇒ 42/255 ≈ 17% 的一道鬼影僵在那里
+       整整两秒，然后才被"褪尽"那一步清掉 —— 观感是"擦痕淡不下去，突然消失"。
+       平方之后：僵住那档 0.165² ≈ 0.027（2.7%，看不见了），且整条衰减曲线在中段
+       也更陡 ⇒ 擦痕是"慢慢淡掉"而不是"淡到一半停住再突然没了"。
+       ★ 软边的渐变终点因此要从 0.28 抬到 0.55（0.55² ≈ 0.30 ≈ 原值）⇒ 手感不变。 */
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(mk, 0, 0, W, H);
+    ctx.drawImage(mk, 0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
   };
 
   /* ---------------------------------------------------------------- 帧循环 */
@@ -299,10 +405,15 @@
     if (nxt) { cur = nxt; curUrl = nxtUrl; nxt = null; nxtUrl = ''; }
     mix = 1;
     pw = 0;
+    pwT = 0;
+    trail = 0;
     // ★ 停帧必须补一帧"全清" ⇒ 板回到纯色。少了这一步会留下最后一帧的形状残影。
+    //   ★★ 蒙版也要一起清：擦痕是**累积**的，只清主画布的话下次进来会带着上次没褪完的痕。
     if (W) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
+      mkx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      mkx.clearRect(0, 0, W, H);
     }
   };
 
@@ -313,9 +424,13 @@
     raf = requestAnimationFrame(frame);
   };
 
-  /* 跑不跑 rAF，只看"有没有指针"：没指针就不该烧电（也不该有洞） */
+  /* 跑不跑 rAF，看"有没有指针"**或**"擦痕还在褪"：
+     ★ 只看指针的话，指针一离开就停帧 ⇒ 擦痕会**冻在最后一帧**上，永远不会褪回纯色
+       （那正是"停留一段时间"这条要求的反面）。 */
   const sync = () => {
-    const want = onScreen && !document.hidden && !reduce.matches && (pwT > 0 || pw > PW_EPS);
+    const want =
+      onScreen && !document.hidden && !reduce.matches
+      && (pwT > 0 || pw > PW_EPS || trail > TRAIL_EPS);
     if (want) start();
     else stop();
   };
@@ -340,32 +455,33 @@
         mix = Math.min(1, mix + dt / SWAP_MS);
         if (mix >= 1) { cur = nxt; curUrl = nxtUrl; nxt = null; nxtUrl = ''; }
       }
+      /* ★ 擦痕残留：与蒙版用**同一个**时间常数衰减（帧率无关）⇒ trail 就是"最新一笔
+         还剩多少"。它只用来决定"还要不要继续画 / 要不要停帧"。 */
+      trail *= Math.exp(-dt / TRAIL_TAU);
     }
 
-    // 收干净了就停 ⇒ 板回到纯色（这一版**没有**"自己在动"这回事）
-    if (pw <= PW_EPS && pwT === 0) { stop(); return; }
+    // 指针走了**且**擦痕褪尽 ⇒ 停 ⇒ 板回到纯色（这一版**没有**"自己在动"这回事）
+    if (pw <= PW_EPS && pwT === 0 && trail <= TRAIL_EPS) { stop(); return; }
 
-    render(now);
+    render(now, dt);
     raf = requestAnimationFrame(frame);
   };
 
   /* ---------------------------------------------------------------- 内容 */
 
   /* 每次都重新收集 ⇒ 相册筛选（只改 figure 的 hidden）自动生效，不用跨脚本接线。
-     ★ 只收**横幅**（w > h）：板要按照片原比例裁形，竖幅会把页头这块小板撑成竖条。
+     ★ 只收**横幅**（w > h）：整屏是横的，竖幅铺进来只能裁成中间一条，认不出是什么。
      ★★ 图源用**网格档（800）**那张（`img` 的 src），**不是**灯箱档（1280，`a.frame` 的 href）：
-        板只有 277×184 css px（dpr 2 也只要 554 px），800 档绰绰有余；
-        而 1280 档单张能到 **486 KB**，线上实测某张图 842 ms 才到、更重的要好几秒
-        ⇒ 那几秒里指针**搅不出任何东西**（`drawCover` 看 `complete`，没图就不画）。
-        换成 800 档后：图源与"判横竖/定板形"用的那对 width/height **同源**，也没有这段空窗。 */
+        1280 档单张能到 **486 KB**，线上实测某张图 842 ms 才到、更重的要好几秒
+        ⇒ 那几秒里指针**擦不出任何东西**（`drawCover` 看 `complete`，没图就不画）。
+        ★ 整屏了要不要换 1280：**不换** —— 擦出来的只是一条一两百 px 宽的带子，
+          800 档在 dpr 2 下也够，而换回大图就要重新背上那段空窗。 */
   const collect = (): Frame[] =>
     Array.from(document.querySelectorAll<HTMLElement>('.wf figure:not([hidden])'))
       .map((fig) => {
         const im = fig.querySelector<HTMLImageElement>('img');
         return {
           url: im?.getAttribute('src') ?? '',
-          cap: fig.dataset.cap ?? '',
-          album: fig.querySelector('figcaption span')?.textContent ?? '',
           w: Number(im?.getAttribute('width') ?? 0),
           h: Number(im?.getAttribute('height') ?? 0),
         };
@@ -377,20 +493,16 @@
      （否则同 t 逐点比对 —— 形状类验收唯一的可靠手段 —— 直接失效）。 */
   const pickRandom = (l: Frame[]) => l[Math.floor(Math.random() * l.length)] ?? null;
 
-  const read = (f: Frame, n: number, total: number, tag: string) => {
-    if (capEl) capEl.textContent = f.cap;
-    if (metaEl) metaEl.textContent = `${f.album}${tag} · ${n} / ${total}`;
-  };
-
-  const show = (f: Frame, tag: string) => {
+  const show = (f: Frame) => {
     if (!f || f.url === curUrl) return;
     nxtUrl = f.url;
     nxt = load(f.url);
     mix = 0;
-    read(f, idx + 1, list.length, tag);
   };
 
-  /* 定下这一张（改图源 + 改板的形状 + 改读数）。★ 板的形状跟着照片走 ⇒ 换照片必调 */
+  /* 定下这一张（换图源 + 设板的比例）
+     ★ --bath-ar 只在**手机档**用得上（手机是"页头旁边的小板"，高按照片原比例）；
+       桌面整屏不用它，但设了没有副作用，且省得两条支路分开维护。 */
   const choose = (f: Frame) => {
     nxt = null;
     nxtUrl = '';
@@ -399,7 +511,6 @@
     curUrl = f.url;
     cur = load(curUrl);
     host.style.setProperty('--bath-ar', `${f.w} / ${f.h}`);
-    read(f, idx + 1, list.length, '');
   };
 
   /* 抽一张（打开时用；bfcache 回来时也用） */
@@ -445,23 +556,13 @@
       const url = im?.getAttribute('src');            // 同 collect()：走 800 档
       if (!url || url === curUrl) return;
       /* ★ 竖幅不接（站主：「只要横着的照片，不放竖着的」）：
-         板的形状是照着开场那张照片定死的，换一张竖幅进来就只能裁 —— 那会破坏
-         「整张铺进板里、不裁不拉伸」这条口径。所以划过竖幅时板不动。 */
+         整屏是横的，竖幅铺进来只能裁成中间一条。所以划过竖幅时板不动。 */
       const fw = Number(im?.getAttribute('width') ?? 0);
       const fh = Number(im?.getAttribute('height') ?? 0);
       if (!(fw > 0 && fh > 0 && fw > fh)) return;
       list = collect();
       idx = Math.max(0, list.findIndex((f) => f.url === url));
-      show(
-        {
-          url,
-          cap: fig.dataset.cap ?? '',
-          album: fig.querySelector('figcaption span')?.textContent ?? '',
-          w: fw,
-          h: fh,
-        },
-        ' · 悬停',
-      );
+      show({ url, w: fw, h: fh });
       if (!running) start();   // 交叉淡入需要帧；板可能正停在"纯色"上
     });
   }
@@ -489,6 +590,13 @@
   }, { rootMargin: '160px' });
   io.observe(host);
 
+  /* 一次性的"图到了再做点什么"（**只在 reduced-motion 那条路上用**，见下面的注释） */
+  const onceImg = (im: HTMLImageElement, cb: () => void) => {
+    if (im.complete && im.naturalWidth) { cb(); return; }
+    im.addEventListener('load', cb, { once: true });
+    im.addEventListener('error', cb, { once: true });
+  };
+
   /* ★ bfcache 回来的页面**不会重新执行脚本** ⇒ 不补这一下，站主要的
      「每次打开相册页随机一张」在"从文章返回相册"那条路径上就不成立。
      ★ 判据是 `persisted`：普通加载会自己走上面的初始化，别在这里重抽（会闪）。 */
@@ -509,6 +617,11 @@
     else {
       render(performance.now());
       sync();
+      /* ★★ 唯一要"等图"的地方：reduced-motion 是静态整张、且**不跑 rAF**
+         ⇒ 图要是晚到（线上实测过），这一帧就白画、之后再也没有重画的机会，
+         静止用户看到的是一块**空的深色板**（正好把这条降级的正解丢掉了）。
+         补一次 one-shot：图到了再画那一帧。 */
+      if (reduce.matches && cur) onceImg(cur, () => render(performance.now()));
     }
   }
 })();
