@@ -2534,5 +2534,84 @@ JS 预算：首页 5099/7168 · 相册页 4729/6144
    页面能滚（装置锚在首页很深处）时按视口算出来的 clip 会截到文首的白纸。
    先 `Runtime.evaluate` 拿 `scrollY`，clip.y 加上它。
 
+---
+
+### 6.25 归档页「索引卷尺」（INDEX TAPE）—— 内页第二台装置（2026-10-01，提交 `4a42f3f`）
+
+**形态**：右侧贴边一条**竖向**刻度尺（不是站主草案里写的横向卷尺 —— 横向要占正文宽度，
+而归档列表是通栏的；竖向贴在右侧留白里不推挤内容，是同一意象的另一形态，站主 2026-10-01 认可）。
+结构：`aside.tape`（`position: fixed` / `right: var(--gutter)` / 宽 44px / 高 `min(60vh, 460px)`）
+里放读数区 + 刻度轨道 + 游标。
+
+#### ★ 机制必须与显影板**对立**（口径 #5：每页一个机制上不同的互动）
+
+| | 相册 显影板（§6.18） | 归档 索引卷尺（本节） |
+|---|---|---|
+| 物理形态 | 连续介质（密度场） | 离散刻度（刚性齿） |
+| 边界 | 矢量等值线（marching squares） | 直线段（1px 高的横线） |
+| 位置语义 | 密度值 →阈值 | 滚动进度 → 等距年份 |
+| 跟随手感 | **一阶**指数平滑（无过冲，笔触"干净贴上"） | **二阶**欠阻尼弹簧（有过冲，机械"咔哒"） |
+| 驱动源 | 指针轨迹（累积擦痕） | 页面滚动位置（无状态） |
+
+⇒ 因为手感方向相反，**弹簧没有抽进共享层**，两页各自实现（见下）。
+
+#### 刻度：构建期算好，输出纯 HTML
+
+- **年份 = 大齿**（`.tape-tick.is-year`），等距分布 `i/(n-1)`，单年时居中 50%；
+  位置以**百分比**打进 `data-pos`（等距刻度的计算值，不是写死的文案/色值，不触红线）。
+- **月份 = 小齿**（`.is-month`，8px 短横），散布在「本年刻度 → 下一年刻度」之间；
+  最早一年下方没有空间 ⇒ 省略它的月份刻度。
+- ★ **从内容推导，不写死年份**：`groups` 来自 `getArchive()`，明年发文自动多一根 2027 刻度。
+  测试 `tests/index-tape.test.ts` 的判据是**解析 `content/posts/` 真数已发布文章**，
+  比对刻度 `data-count` 与年份分组 —— 不硬编码任何年份。
+- 颜色全 token：未卷过 `--hair`、卷过 `--accent-ink`（脚本加 `.past`）、游标 `--accent-ink`、
+  读数 `--ink`/`--muted`。读数用等宽字体 + `tabular-nums`（延续仪器语汇）。
+
+#### 交互与降级四态
+
+- 滚动 ⇒ 游标目标 = 滚动进度 × 轨道高，弹簧自己追（松手后从当前速度继续 ⇒ 过冲）。
+- 跨过年份刻度 ⇒ 读数区换「年份 · N 篇」，卷过的刻度加 `.past` 留墨。
+- **点击年份刻度 / 拖动轨道** ⇒ `scrollIntoView({behavior: animate ? 'smooth' : 'auto'})`
+  跳到对应年份分组。拖动期间游标直接贴手（不弹），松手才跳。
+- ① **reduced-motion** ⇒ 不跑 rAF，直接贴目标（落到最终态）；
+  ② **无 JS** ⇒ 装置不存在（`[hidden]` + `aria-hidden`，脚本到位才摘 `hidden`），
+  归档列表服务端已渲染完整；③ **≤767px** ⇒ CSS `display:none`（口径 #9，本轮拍板"完全不渲染"）；
+  ④ **视口外/ 切标签** ⇒ `rl-core` 的 `activityGate` 停帧。
+
+#### 共享工具层 `src/scripts/rl-core.ts`（约 1.4 KB，第一版）
+
+刻意**只抽真正通用且实现一致的三样**，硬抽是假共享：
+
+- `startLoop(cb)` —— 喂**真实 dt**（`Math.min(now-last, 100)`）的帧循环外壳；
+- `createActivityGate(el)` —— IntersectionObserver（`rootMargin` 预载 160px）+ `visibilitychange` 合并；
+- `prefersReducedMotion()` / `shouldAnimate(mql)` —— 降级开关（`matches` 是活的，别缓存成布尔）；
+- `createSpring(target, {stiffness, damping})` —— 二阶欠阻尼弹簧。
+
+★ **弹簧必须定步长子步积分**（`SPRING_H = 1/120`），这是实测踩到的坑：
+一帧一大步的半隐式欧拉稳定域是 `dt < 2/c`（k=110 / c=23 时≈ 87ms），
+而 `startLoop` 把 dt 钳在 100ms ⇒ **低于 11.5fps 就发散**，慢机器上弹簧炸成
+`Infinity→NaN`，挂在上面的滚动进度跟着变 NaN ⇒ 装置直接跳到 0/1 极端态。
+定步长后 `ω·h ≈ 0.087`、`c·h ≈ 0.19` 恒在稳定域内，且**真正**帧率无关。
+护栏：`tests/index-tape.test.ts`「大 dt 不发散」+「帧率无关」两条。
+
+#### 页面侧的三个坑（写在这里，别重犯）
+
+1. **归档页路径是 `src/pages/archive.astro`（单文件），不是 `archive/index.astro`** ——
+   全站只有 `gallery/`、`tags/`、`posts/` 是目录形式。
+2. **页头不能写 `max-width: var(--measure)`**（与其他内页不同）：归档**没有正文列**，
+   内容列是 `PostIndex` 的**通栏列表**（只有 `.title` 限 22em、`.summary` 限 40em）。
+   页头若收成 34em，下缘实线会短于列表的上缘线 ⇒ 两条线错位。
+   **版心要对齐的是内容，不是习惯。**
+3. **必须先摘 `[hidden]` 再量尺寸**：`display:none` 时 `clientHeight` 是 0，
+   刻度位置会全算成 0（同 `develop.ts` 的"必须先露面再量尺寸"）。
+
+#### 静态契约与护栏
+
+`tests/index-tape.test.ts` 14 条（9 条装置 + 5 条弹簧）。装置侧判据：
+`<aside class="tape">` 带 `hidden` + `aria-hidden="true"`、刻度年份 == 分组年份、
+`data-count` == 内容层真值、`data-pos ∈ [0,100]` 且年份等距、≤767px 有 `display:none`、
+零 `Math.random`、`spring.step(dt)`、reduced-motion 分支 `setCursor(targetFor())`、
+脚本只 `querySelector` 不 `innerHTML`。
+
 
 

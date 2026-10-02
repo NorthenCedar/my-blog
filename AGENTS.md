@@ -27,7 +27,7 @@
 | ① | `docs/writing-guide.md` | **站主自己用的手册**：约定、token、常见坑、怎么发布 | 全读（51 KB，值得） |
 | ② | `docs/architecture.md` + `docs/content-model.md` | 目录结构、内容管线、渲染链路 | 全读 |
 | ③ | `docs/site-decisions.md` | **历次设计决定与理由**（为什么是这样而不是那样） | 按需查 |
-| ④ | `tests/*.test.ts`（12 个） | **这才是真正的规格书**：站的硬约束都写成了断言 | 全读，尤其 `build-output` / `content-invariants` / `tokens` |
+| ④ | `tests/*.test.ts`（15 个） | **这才是真正的规格书**：站的硬约束都写成了断言 | 全读，尤其 `build-output` / `content-invariants` / `tokens` |
 | ⑤ | `src/styles/tokens.css` | 全部设计 token（颜色/间距/字号）。**组件里不许出现字面色值** | 全读 |
 | ⑥ | `src/layouts/Base.astro` · `src/lib/posts.ts` · `src/content.config.ts` · `src/tag-registry.ts` | 外壳（head/脚本/过渡标记）、文章管线、内容契约、标签注册表 | 全读 |
 | ⑦ | `docs/boot-intro-work-order.md` | **（已作废）**开场动画的旧施工工单：20.16 s 逐帧复刻版。v1.15 把开场整份重走后它不再是现行契约 | 只在考古时搜关键词（155 KB，别通读） |
