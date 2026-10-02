@@ -111,12 +111,27 @@
 | ★★ monkey-patch canvas 方法来测耗时 | 2026-10-01：patch `fill / drawImage / clearRect` 累计只有 **0.09 ms/帧**，而帧间隔 26 ms ⇒ 差点误判成“路径填充很便宜”。canvas 2D 会把命令排队，真正的光栅化在 flush/合成阶段 ⇒ patch 只能测到 JS 调用开销。⇒ 要**在代码内**用 `performance.now()` 分段计时，或做对照实验（如把路径换成一个矩形） |
 | ★ 拿本地无头 Chrome 的 fps 单次读数下结论 |
 | ★★ 拿**不同时间**测的 fps 做新旧对比 | 2026-10-01：新版线上 30 fps，上一版线上曾测 59.9 ⇒ 看似"新版掉了一倍"。把上一版 `git show HEAD~1:...` checkout 回来、**同一分钟内**用同一个探针重测⇒ 上一版 **20 fps**、新版 **30 fps**，结论完全反转。★ 无 GPU 的 headless 是**软件渲染的最坏情况**（真机 canvas 走 GPU）；而且反复跑探针会留一堆 chrome 进程拖慢机器。⇒ 帧率判据要么**同刻对照**，要么用**代码内分段计时**（本轮 step 3.5 ms + contour 2.5 ms）。探针 `_probe/cdp-bath-fpsbase.mjs` 先量“指针不在板上”的空闲基线（本轮 59.9）再量搅动 | 2026-10-01：同一份代码连测得到 30 / 37 / 40 / 55 / 60 fps。⇒ ① 连测 3 次；② 主判据用**代码内分段计时**（不受环境噪声影响，本轮：step 3.5 ms + contour 2.5 ms）；③ 帧率最终以**线上实测**为准 |：`_probe/_mutate-develop.mjs` 的插入类变异靠**锚点字符串**定位，源码改版后 `const ph = t * PH_SPD;` / `mkx.save();` / `const TAU2 = …` 全没了 ⇒ `replace` 静默不生效 ⇒ 判据看起来"守得住"，其实**根本没被破坏过**。⇒ **每次改版后必须重跑一遍**，看到"原版通过=是 · 破坏后=仍通过"就去查锚点 |
+| ★★★ **本机 CDP 回环端口连不上**（不是探针写错） | 2026-10-03 实测排查：Chrome **确实起来了**（`--user-data-dir` 目录建成、`DevToolsActivePort` **写上了真实端口号**，实测 50398 ⇒ 侧在正常监听），但 `fetch('http://127.0.0.1:<该端口>/json/version')` **一律 fetch failed**。对照组：node 连**自己起的本地HTTP 服务完全正常**（200）⇒ 不是"node 不能连本地端口"，是**回环调试端口被拦**。试过且**全都无效**：`--remote-debugging-address=127.0.0.1`、`--remote-allow-origins=*`、换端口号、`cmd /c start /b` 起、放宽沙箱。⇒ **`_probe/cdp-*.mjs` 那 62 个脚本在这台机器上跑不通**（它们是判据，**不要删**）；视觉验收改走 `_probe/launcher.mjs` 的 `withServer()` + `shot()`，断言类照旧 `npm run verify`，产物类照旧 `dist/` 静态断言。改动 launcher 后先跑 `node _probe/launcher-selftest.mjs` 自检 |
+| ★★★ 异步 `spawn` 起 Chrome 会 **EBUSY**，必须 `execFileSync` | 2026-10-03：`spawn(CHROME, …)` / `spawnSync` 一律返回 **EBUSY**，Chrome **根本没启动**（用户数据目录都没建、stderr 全空）；而**同一时刻**bash 直调同一个 exe 完全正常、`execFileSync` 也完全正常（截图产出、目录建成）。这与 `tests/tokens.test.ts` 那条已知环境故障是**同一个 EBUSY**。⇒ 探针里起 Chrome 一律用 `execFileSync`（`_probe/launcher.mjs` 就是这么写的） |
+| ★★★ 同步等 Chrome 与「本进程提供服务」**不能共存** | 2026-10-03 踩到：`execFileSync` 会**阻塞本进程事件循环**，而 `withServer()` 若在**本进程** `listen`，Chrome 来要页面时事件循环正卡在 `execFileSync` 里 ⇒ 无法响应 ⇒ Chrome 一直等到 ETIMEDOUT 且**没有截图**（一度误判成"Chrome 起不来"）。实测：同进程 listen ⇒ 超时无图；服务起在**独立进程** ⇒ 一次成功（304 KB）。⇒ `withServer()` 必须 `spawn(process.execPath, ['_probe/serve.mjs', port])` 起子进程，并轮询到 200 再返回 |
+| ★★ Chrome 截图的三个坑 | 2026-10-03：① **必须给绝对路径** —— 相对路径报「拒绝访问(0x5)」，文件根本不落地；② **必须加 `--no-proxy-server`** —— 否则 `127.0.0.1` 被系统代理接管 ⇒ `ERR_CONNECTION_REFUSED`（`curl` 却通，容易误判成服务没起）；③ `--screenshot` **只能拍首屏**且常在预算内不自行退出 ⇒ `execFileSync` 抛 ETIMEDOUT 是常态，**先查文件是否落地**再判成败（`launcher.mjs` 的 `shot()` 有重试 + 落地检查） |
+| ★ `(node … &)` 起服务会被下一条命令收尾带走 | 2026-10-03：用 `(cmd &)` 起的 `serve.mjs`，下一条 Bash 命令执行完它就被收走了，随后 `curl` 返回 **502**（不是 404/超时，很容易看成"服务坏了"）。⇒ 起本地服务一律用 `run_in_background`；或用 `_probe/launcher.mjs` 的 `withServer()`（自带就绪轮询与 `close()`） |
 
 ---
 
 ## 6. 怎么验证（这个站不接受"我觉得对"）
 
 - 页面类改动：**真开无头 Chrome 截图 + 人工看图**（`read_image`），不要只跑断言。
+- ★★ **本机（2026-10-03 实测）：CDP 回环端口连不上**，`_probe/cdp-*.mjs` 那 62 个脚本跑不通
+  （Chrome 起来了、端口也写了，就是连不上；详见 §5 事故表前四条）。三条替代通道：
+  | 验收类型 | 走哪条 |
+  |---|---|
+  | 视觉（排版 / 装置 / 配色） | `_probe/launcher.mjs` 的 `withServer()` + `shot()` → 出 PNG 后 `read_image` |
+  | 行为契约 | `npm run verify`（`tests/` 15 个文件 230 条） |
+  | 产物形态 | 直接对 `dist/` 做静态断言（多数 `build-output.test.ts` 已覆盖） |
+  改动 launcher 后跑 `node _probe/launcher-selftest.mjs` 自检（自检不依赖 CDP）。
+  ★ 仍需真CDP 能力的判据（模拟量指针、滚动跟手、`:focus-visible`、`scrollX` 多档溢出）
+  **在这台机器上无法自动验收** ⇒ 那几条只能靠人工目检 + 线上目检，别假装验过了。
   仓库里有一批现成的探针可参考：`_tmp-*.mjs`（CDP + sharp，含 hover 模拟、像素判据、帧率测量）。
 - **颜色/位置这类判断走计算样式或像素**，不要靠"读 CSS 文本猜"。
 - 部署类改动：**门闩要绑本次改动本身**（例如改色就查那个色值），否则部署还没推进就"验过了"是假通过
