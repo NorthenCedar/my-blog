@@ -53,6 +53,16 @@ const firstBig = at(firstFrame, LIGHT_W);
 ---
 
 <Base title="相册" chrome="page" current="gallery">
+  {/* ★★ 交接层（站主第九轮 ③：「到绿屏进相册时相册页内容缓缓浮上来，要丝滑点」）。
+      它只在**从剧场绿幕切过来**这一次露面：主页装置在跳转前把 `tsl-nav` 写进
+      sessionStorage，<head> 里那段同步脚本读掉它并给 <html> 挂 `.tsl-in`
+      （见 layouts/Base.astro）——所以这一屏同款深绿是**首帧就在**的。
+      为什么必须有它：本页的板（`.bath`）要等脚本解除 `hidden` 才露面，光靠板
+      自己会先闪一下纸白；铺一层与剧场绿幕同色的垫底，交接才是「同色溶解」。
+      默认 `display: none`（没有标记时它**不存在**，版面逐字节不变）。
+      aria-hidden：纯装饰，读屏不需要它。 */}
+  <div class="tsl-veil" data-tsl-veil aria-hidden="true"></div>
+
   {/* ===== 整屏显影板（站主 2026-10-01 第四轮：「不如直接把这个放在相册页整屏，
          鼠标往下滚的时候才看到相册页的内容」）=====
       ★ 没有指针 = 一块纯色；指针**涂抹**过的地方擦出照片，擦痕停留约 3 s 后褪回纯色。
@@ -571,6 +581,61 @@ const firstBig = at(firstFrame, LIGHT_W);
     font-size: var(--fs-body);
     padding: 0.5rem 0.9rem;
     flex-shrink: 0;
+  }
+
+  /* ===== 交接层 + 内容上浮（站主第九轮 ③，2026-10-02）=====
+     原话：「到绿屏进相册时相册页内容缓缓浮上来，要丝滑点」。
+     两件事叠在一起：
+       ① **交接层**：一屏与剧场绿幕**同款**的深绿（同一组 token、同一条 178deg
+          梯度 —— 主页 `.tsl-green` 就是照它写的），从满屏淡到透明。它保证
+          「从绿幕切过来」这一下的**首帧就是绿**。
+       ② **内容上浮**：板里的花体字 + 板下的标题/读数/筛选，从下方 1.1rem
+          升起并淡入（板本身不动 —— 它一移动，顶上就会露出纸白）。
+     ★ 只在「从剧场绿幕切过来」这一次播：交接标记由主页装置写在跳转前，
+       <head> 的同步脚本读掉并挂 `.tsl-in`。点站内链接过来的那条路有墨色浸染
+       （`html.pt-play`，与 `.tsl-in` 互斥：标记用完即删），直接打开/刷新本页
+       更是一个动画都不播 ⇒ 默认版面逐字节不变。
+     ★ 位移只用 transform、显隐只用 opacity（站规：不碰布局属性）；
+       `prefers-reduced-motion` 的读者全套不播（那时首帧就是普通纸白版面）。 */
+  .tsl-veil {
+    display: none;
+  }
+  @keyframes tsl-veil-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  @keyframes tsl-rise-in {
+    from { opacity: 0; transform: translateY(1.1rem); }
+    to { opacity: 1; transform: none; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    /* ★★ `:global(.tsl-in)` 不能省（本轮真踩坑，见下）：
+       Astro 的作用域会给**选择器里每一段元素级选择器**都补上 `data-astro-cid-*`，
+       不只是最后那段。写 `.tsl-in .tsl-veil` 编译出来是
+       `.tsl-in[data-astro-cid-wiaw4zal] .tsl-veil[data-astro-cid-wiaw4zal]`，
+       而 `.tsl-in` 挂在 `<html>` 上、`<html>` 是 Base 组件渲染的（另一个 cid）
+       ⇒ **这条规则永远匹配不上**，交接层与上浮动效双双静默失效。
+       实测（首轮探针）：落点 `<html class="tsl-in …">` 没问题，但
+       `getComputedStyle(.tsl-veil).display === 'none'`、两个 animationName 都是 none。
+       ⇒ 前导那段必须 `:global()`，只让最后那段吃作用域。 */
+    :global(.tsl-in) .tsl-veil {
+      display: block;
+      position: fixed;
+      inset: 0;
+      /* 层叠阶梯：正文 ≤4 < 过渡蒙版 45 < 交接层 46 < 相册灯箱 50 < 开场 60 */
+      z-index: 46;
+      pointer-events: none;
+      background:
+        radial-gradient(110% 70% at 12% 0%, color-mix(in srgb, var(--accent) 18%, transparent) 0%, transparent 58%),
+        linear-gradient(178deg, var(--dusk-1) 0%, var(--dusk-2) 34%, var(--dusk-3) 62%, var(--dusk-4) 100%);
+      animation: tsl-veil-out 620ms var(--ease) both;
+    }
+    :global(.tsl-in) .bath-mark,
+    :global(.tsl-in) .bath-hint,
+    :global(.tsl-in) .pagehead-main,
+    :global(.tsl-in) .filters {
+      animation: tsl-rise-in 820ms var(--ease-glass) both;
+    }
   }
 </style>
 

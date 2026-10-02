@@ -51,6 +51,13 @@ describe('低对比 token 越界（--accent-bright 只许用在深色底上）',
     // ★ 写单冒号 `:after` —— 断言比的是**产物**里的选择器（esbuild 会把 ::after 压成 :after），
     //   写成 ::after 这条例外永远匹配不上，白名单就成了摆设。
     '.scroll-hint s:after',
+    // 2026-10-02 第九轮追加：剧场右下角那一格（CC-BY 署名）里的**许可外链**。
+    // 这一格是深底（`color-mix(--dusk-1 74%, transparent)` 落在近黑的剧场画布上），
+    // 而全站兜底规则 `a{color:var(--accent-ink)}` 给的是**纸上**链色（#266b3b）
+    // —— 深底上几乎没对比，首轮探针截图里 "CC BY 4.0" 糊成一片（而「可见的署名」
+    // 正是 CC-BY 许可的全部要求）。改用 --accent-bright 是它的**正当用途**：
+    // 对 --dusk-1(#0b100e) 实测 6.76:1，小字达标；再配下划线。
+    '.tsl-hud a',
     // (2026-09-30 一度为 .hero-logo .lg-glow 登记过，随即撤销：
     //  站主要求 logo 沿用原型最终定色，改用专用 token --logo-glow，不再是裸 --accent-bright。
     //  留着这条"已不存在用法"的例外，等于给白名单掺水 —— 以后真出问题会被它掩护过去。)

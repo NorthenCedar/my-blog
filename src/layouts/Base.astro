@@ -70,12 +70,21 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
     {/* 页面过渡的**首帧保险**（2026-09-27）：上一页在点击时把 pt 写进 sessionStorage 并盖上蒙版；
         这里必须在**首次绘制之前**把蒙版补上，否则会先闪一下目标页的内容再盖上（站主要求"严禁首帧闪烁"）。
         必须是 inline + 同步（classic）脚本：type=module 会被 defer 到绘制之后，那就晚了。
-        代价约 110 字节，进每一页的内联脚本预算。 */}
+        代价约 110 字节，进每一页的内联脚本预算。
+        ★ 2026-10-02 第九轮又加了**同一手法的第二个标记 tsl-nav**（时间切片剧场 →
+        相册的交接，约 120 字节）：主页绿幕满屏后跳转前写下它，目标页据此在首帧
+        直接铺一屏同款深绿（`.tsl-veil`，见 gallery/index.astro）—— 晚一步挂就等于
+        先闪一下纸白。两个标记各自读掉即删，互不影响；不写进 sessionStorage 的
+        场合（隐私模式）只是少一道入场动画，导航本身不受影响。 */}
     <script is:inline>
       try {
         if (sessionStorage.getItem('pt')) {
           sessionStorage.removeItem('pt');
           document.documentElement.classList.add('pt-on', 'pt-play');
+        }
+        if (sessionStorage.getItem('tsl-nav')) {
+          sessionStorage.removeItem('tsl-nav');
+          document.documentElement.classList.add('tsl-in');
         }
       } catch (e) {}
     </script>

@@ -15,7 +15,9 @@
  *
  * ── 刻意不搬的原型件 ──────────────────────────────────────────
  *   · 右下角 .panel（PROTO CONTROL 调试面板）—— 原型注释自己写明「原型专用」
- *   · 页脚「运行 — 天 / PV — UV —」占位文本 —— 站上早接了真实计数（SiteStats）
+ *   · 页脚「运行 — 天 / PV — UV —」这一栏 —— 站主 2026-09-26 曾接上真实计数
+ *     （SiteStats），2026-10-02 第七轮又要求「把主页下面这一栏删了」⇒ 主页
+ *     底部整块撤掉（内页仍保留，见 SiteFooter）
  *   · @font-face —— 本站 fonts.css 已自托管同名字体，原型那份指向原型目录
  *   · <script type="importmap"> + 内联 three —— 本站走 src/scripts/dna3d.ts
  *     （懒加载 + 具名导出收口，657 KB → 542 KB，见 tests/build-output.test.ts）
@@ -23,13 +25,11 @@
  * ── 保留的本站基础设施（与「换视觉」无关，删了是超范围的破坏）──
  *   · Base 外壳（head / meta / canonical / RSS / .pt 页面过渡 / 自托管字体）
  *   · BootIntro 开场动画（站主 2026-09-26 审定）
- *   · SiteStats 真实计数（替代原型页脚的占位文本）
  */
 import { getEntry } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import BootIntro from '../components/BootIntro.astro';
 import NavDrawer from '../components/NavDrawer.astro';
-import SiteStats from '../components/SiteStats.astro';
 import { NAV_LINKS } from '../lib/nav';
 import { getVisiblePosts } from '../lib/posts';
 import { getSite } from '../lib/site';
@@ -353,14 +353,59 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     )}
   </div>
 
-  {/* ===== 页脚（原型 .foot）=====
-       原型这里是「运行 — 天 / PV — UV —」两行占位；站主拍板不搬占位文本 ⇒
-       换成站上已有的真实计数（SiteStats）。版式照抄原型的 .foot / .foot-in。 */}
-  <footer class="foot">
-    <div class="foot-in">
-      <SiteStats since={site.since} tone="paper" />
+  {/* ===== S6 · TIME SLICE 时间切片（主页收尾装置，SECTOR 06）=====
+       参考：抖音 @afterimage 的「时间切片」（蝴蝶穿过嵌套方框隧道，每个时刻
+       留一片残影，尽头落成标本）+ wodniack.dev 的门户机制（滚到底 → 滚进窗口）。
+       全部手写 Canvas2D 复刻，滚动驱动、可逆、可停在某一切片细看；尽头自然
+       转入 /gallery/。零新依赖，弹簧/停帧/降级复用 rl-core。
+       无 JS / reduced-motion / ≤767px：装置就是下面的静态回退层
+       （菱形 + 一句话 + 相册链接），脚本判定可跑才挂 .tsl-on 换成滚动剧场。 */}
+  <section class="tsl" id="s6" data-tsl>
+    <div class="section tsl-band">
+      <div class="section-head"><h2>时间的标本</h2><span>SECTOR 06</span></div>
+      <p class="tsl-lede">滚过下面的菱窗 —— 一段飞行正等着被切成薄片，落进相册。</p>
     </div>
-  </footer>
+    <div class="tsl-stage" data-tsl-stage>
+      <div class="tsl-view" data-tsl-view hidden>
+        <canvas data-tsl-cv></canvas>
+        <svg class="tsl-ring" data-tsl-ring viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M50 36 L64 50 L50 64 L36 50 Z" vector-effect="non-scaling-stroke"></path>
+        </svg>
+        {/* ★ 站主第九轮 ①：这一格原来是 FRAME 读数（`FRAME NN / 76 · T+X.XXS`），
+            现在整条换成**蝴蝶模型的署名** —— CC-BY 4.0 要求可见署名，这正是
+            §6.19 / §6.21 一直挂着的「发布前必须处理」。文字写在 HTML 里（无 JS
+            也在、读屏也读得到），脚本只按窗口张开进度改它的不透明度：
+            **穿过菱窗之后就收掉**（站主：「进入窗口后不展示」）。
+            ★ 外链按站规带 target/rel；`pointerdown` 由控制器挡一下，免得被
+              「拖动环视」的指针捕获抢走点击（见 time-slice.ts）。 */}
+        <p class="tsl-hud" data-tsl-hud>
+          蝴蝶模型 Monarch Butterfly · Paul Spooner · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a> · via Poly Pizza
+        </p>
+        {/* ★ 站主第九轮 ③：「到尽头不要显示进入相册那个按钮……到绿屏时直接进相册」
+            ⇒ 「进入相册」那个胶囊（.tsl-cta / .tsl-go）整块删掉，连同它的
+            驻留进度线。它的两个旧职责都有人接手：
+              · 尽头出口 —— 绿幕满屏即自动切页（脚本里的 beginNav）；
+              · 无 JS / 手机 / reduced-motion 的相册入口 —— 静态回退层里那个
+                真链接一直就在（`.tsl-static a`），不依赖这一块。 */}
+        {/* 穿窗后全屏转绿 —— 取相册页开场的深绿（同款 token），跳转过去无缝 */}
+        <div class="tsl-green" data-tsl-green aria-hidden="true"></div>
+      </div>
+      <div class="tsl-static" data-tsl-static>
+        <svg viewBox="0 0 120 120" aria-hidden="true">
+          <path d="M60 10 L110 60 L60 110 L10 60 Z"></path>
+        </svg>
+        <p>一段飞行正等着被切成薄片 —— 穿过菱窗，看时间在玻璃后凝固。</p>
+        <a href="/gallery/">进入相册</a>
+      </div>
+    </div>
+  </section>
+
+  {/* ★ 站主 2026-10-02 第七轮：「把主页下面这一栏删了」（参考截图里那行
+       左「本站已经运行 …」右「总访问量（PV）… 总访客数（UV）…」）。
+       ⇒ 连同它的 .foot / .foot-in 版式一起删掉，主页底部不再有页脚。
+       ★ 内页（SiteFooter → SiteStats，深色底）不受影响，那是站主 2026-09-26
+         单独要求「在每页最底部」的，只撤主页这一处。
+       ★ since 仍然要留在 Base 的入参里给内页用，所以不从内容层删。 */}
 
   {/* ===== 动效（照抄原型，去掉原型调试面板那三件事）=====
        三件：① 指针视差（只写 --mx/--my 两个 CSS 变量，位移全交给 CSS）
@@ -461,6 +506,7 @@ const titleLines: { ch: string; i: number }[][] = (() => {
   <script>
     import '../scripts/dna3d';
     import '../scripts/rhgrid';
+    import '../scripts/time-slice';
   </script>
 </Base>
 
@@ -1584,19 +1630,7 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     .langbar-detail dd:first-of-type { display: none; }
   }
 
-  /* ====================== 页脚 ====================== */
-  .foot {
-    border-top: 1px solid var(--hair);
-    margin-top: 2rem;
-  }
-  .foot-in {
-    max-width: var(--wrap);
-    margin: 0 auto;
-    padding: 2.4rem var(--gutter);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: var(--fs-xs);
-    color: var(--muted);
-  }
+  /* ★ 原「页脚」版式（.foot / .foot-in）已随那一栏一起删掉（站主第七轮）。 */
 
   /* ====================== 滚动视差（原型 v6 新增③：纯 CSS scroll-driven）======================
      四层从慢到快制造纵深：网格 -9vh / 玻璃卡 -26,-18,-34vh / 标题 +6vh。
@@ -1662,11 +1696,120 @@ const titleLines: { ch: string; i: number }[][] = (() => {
   @media (hover: none) {
     .bg-ring, .band-glass, .band-grid { transform: none !important; }
   }
+  /* ===== S6 · TIME SLICE 时间切片（主页收尾装置）===== */
+  .tsl-band { padding-bottom: var(--sp-5); }
+  .tsl-lede {
+    color: var(--muted);
+    font-size: var(--fs-lede);
+    max-width: var(--measure);
+  }
+  .tsl-stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 64vh;
+    /* 与 .band / .dusk / .paper-wrap 同款 full-bleed 逃生口（有测试守着这个写法） */
+    margin-inline: calc(50% - 50vw);
+  }
+  /* 静态回退层：无 JS / reduced-motion / ≤767px 时它就是装置的全部 */
+  .tsl-static {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-7) var(--gutter);
+    text-align: center;
+  }
+  .tsl-static svg { width: clamp(96px, 15vmin, 150px); }
+  .tsl-static path {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 5;
+    filter: drop-shadow(0 0 14px var(--deco-orbit-strong));
+  }
+  .tsl-static p { color: var(--muted); font-size: var(--fs-sm); max-width: 32em; }
+  .tsl-static a { color: var(--accent-ink); font-weight: 600; }
+
+  /* 脚本判定可跑（桌面 + 动效允许 + 2d 上下文可用）⇒ 挂 .tsl-on 换成滚动剧场 */
+  .tsl-on .tsl-static { display: none; }
+  .tsl-on .tsl-stage { display: block; height: 520vh; min-height: 0; }
+  .tsl-view { position: sticky; top: 0; height: 100vh; overflow: hidden; user-select: none; }
+  .tsl-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .tsl-ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .tsl-ring path {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke; /* preserveAspectRatio=none 会拉伸线宽，锁成 px */
+    filter: drop-shadow(0 0 10px var(--deco-orbit-strong));
+    /* 不做 opacity 过渡：入口/出口两段环都由脚本按 p/exit 逐帧写，过渡会拖后腿 */
+  }
+  .tsl-hud {
+    position: absolute;
+    right: var(--gutter);
+    bottom: 1.1rem;
+    margin: 0;
+    padding: 0.3rem 0.62rem;
+    border: 1px solid var(--dglass-line);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--dusk-1) 74%, transparent);
+    backdrop-filter: blur(5px);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: var(--fs-mono);
+    letter-spacing: 0.08em;
+    color: var(--on-band-meta);
+    /* ★ 第九轮 ①：这一格从 FRAME 读数变成了**署名**（内容见标记处）。
+       它只在「穿过菱窗之前」露面 —— 不透明度由脚本按窗口张开进度逐帧写，
+       进窗口后归 0、同时挂 hidden（连外链也不再可点）。 */
+  }
+  /* ★ 许可链接必须**看得见**（署名存在的全部意义），所以要盖掉全站那条
+     `a { color: var(--accent-ink) }` 兜底 —— 那是「对纸」的链色（#266b3b），
+     落在这一格深底上几乎没有对比（首轮探针截图里 CC BY 4.0 糊成一片）。
+     深底上用的绿是站内既有 token `--accent-bright`（注释明写「只许用在深色底」，
+     对 --ink 6.26:1）；再加下划线，让它在同一行灰字里一眼看得出是链接。 */
+  .tsl-hud a {
+    color: var(--accent-bright);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.18em;
+  }
+  .tsl-hud a:hover,
+  .tsl-hud a:focus-visible {
+    color: var(--on-band);
+  }
+  /* ★ 第九轮 ③：「进入相册」按钮整块删除（站主要「到绿屏直接进相册」）——
+     .tsl-cta / .tsl-cta::after（驻留进度线）/ .tsl-go 一族的规则一并删净，
+     不留死样式。静态回退层里的相册真链接（.tsl-static a）不受影响。 */
+  /* 穿窗后全屏转绿：取相册页开场的深绿（相册 hero 的梯度 = 一个 --accent 的
+     斜向光晕 + --dusk-1..4 的四档渐变，逐档实测误差 ≤2/255）⇒ 跳转过去同色，
+     「全屏变绿 → 相册浮现」无缝。opacity 由脚本按 exit 逐帧写，不走 CSS 过渡
+     （保证与滚动进度严格同源） */
+  .tsl-green {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    opacity: 0;
+    background:
+      radial-gradient(110% 70% at 12% 0%, color-mix(in srgb, var(--accent) 18%, transparent) 0%, transparent 58%),
+      linear-gradient(178deg, var(--dusk-1) 0%, var(--dusk-2) 34%, var(--dusk-3) 62%, var(--dusk-4) 100%);
+  }
+
+  /* 降级兜底：脚本失灵也不许把读者困在空剧场里（双保险，脚本侧同样会拒绝启用） */
+  @media (prefers-reduced-motion: reduce) {
+    .tsl-view { display: none !important; }
+    .tsl-static { display: flex !important; }
+    .tsl-stage { min-height: 52vh; }
+  }
+
   @media (max-width: 767px) {
     .entry a { grid-template-columns: 1fr; gap: 0.4rem; }
     .entry .s { grid-column: 1; }
     .dna-stack { display: none; }        /* 手机上 3D 太重且挤 */
     .band-glass.g2, .band-glass.g3 { display: none; }
     .scroll-hint { display: none; }
+    .tsl-view { display: none; }         /* 时间切片：手机走静态回退层 */
+    .tsl-stage { min-height: 52vh; }
   }
 </style>

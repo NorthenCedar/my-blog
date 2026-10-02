@@ -580,10 +580,17 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     // 脚本加载
     expect(talks, '说说页没有加载点赞/评论脚本').toMatch(/<script[^>]*type="module"/);
 
-    // 页脚统计：每个非 404 页面都要有（首页是 console 外壳，所以它单独放了一份）
-    const pages = htmlFiles().filter((f) => !f.endsWith('404.html'));
+    // 页脚统计：除首页与 404 外的每个页面都要有。
+    // ★ 2026-10-02 第七轮，站主原话「把主页下面这一栏删了」（截图里那栏就是它）⇒
+    //   首页（dist/index.html）**刻意不再有** data-since，必须从这条判据里排除。
+    //   内页那一条（SiteFooter）是站主 2026-09-26「在每页最底部加上」要的，仍然守。
+    const HOME = `${DIST}/index.html`; // 只排除主页这一个（内页也各有 index.html，别误伤）
+    const pages = htmlFiles().filter((f) => !f.endsWith('404.html') && f.replace(/\\/g, '/') !== HOME);
     const missing = pages.filter((f) => !readFileSync(f, 'utf8').includes('data-since'));
     expect(missing, `这些页面没有页脚统计：${missing.slice(0, 6).join(', ')}`).toEqual([]);
+    const home = readFileSync(join(DIST, 'index.html'), 'utf8');
+    expect(home, '站主第七轮要求删掉主页底部那一栏 ⇒ 首页不该再有页脚统计').not.toContain('data-since');
+    expect(home, '站主第七轮要求删掉主页底部那一栏 ⇒ 首页不该再有 .foot 版式').not.toContain('class="foot');
     // 起点日期来自内容层，不是写死在组件里
     const siteMd = readFileSync('content/site.md', 'utf8');
     expect(siteMd, 'content/site.md 里没有 since（页脚运行时长没有起点）').toMatch(/^since:\s*\d{4}-\d{2}-\d{2}\s*$/m);
@@ -1136,6 +1143,35 @@ describe.skipIf(!hasDist)('首屏焦点环：程序化交焦点不画绿框（20
       '全局 :focus-visible 的 3px outline 不见了 ⇒ 为了消一个绿框把键盘焦点环全砍了（过度修复）',
     ).toBe(true);
     console.log('判据 首屏焦点环 对象 dist/**/*.css 实测: 有 [tabindex="-1"]:focus-visible{outline:none}，且全局 :focus-visible 的 3px --accent-ink 环仍在 ⇒ 只收程序化聚焦，键盘焦点环不受影响');
+  });
+});
+
+describe.skipIf(!hasDist)('全站滚动条：只是「不画」，滚动本身照旧（2026-10-02 第七轮）', () => {
+  // 站主原话第 8 条：「把整个博客的侧边滚动的这个条删了」（截图里那根竖条）。
+  // 站上从来没有自定义过滚动条（全仓 grep scrollbar 只命中探针脚本）⇒ 那根是
+  // **Chrome 默认皮肤**压在深绿/纸白底上，不是我们画的。修法是让 UA **不画**它。
+  //
+  // ★ 这条必须两条 CSS 都断：`scrollbar-width`（Firefox/新 Chromium）与
+  //   `::-webkit-scrollbar`（WebKit/旧 Chromium）各管一半浏览器，只写一条
+  //   在另一家上等于没做 —— 而站主的截图恰好可能来自另一家。
+  it('产物 CSS 同时有 scrollbar-width:none 与 ::-webkit-scrollbar{display:none}', () => {
+    const all = allDistCss();
+    expect(
+      /html\{[^}]*scrollbar-width:\s*none/.test(all),
+      '产物里没有 `html{scrollbar-width:none}` ⇒ 在 Firefox/新版 Chromium 上那根默认滚动条还在',
+    ).toBe(true);
+    expect(
+      /html::\-webkit\-scrollbar\{[^}]*display:\s*none/.test(all),
+      '产物里没有 `html::-webkit-scrollbar{display:none}` ⇒ 在 WebKit/旧 Chromium 上那根默认滚动条还在',
+    ).toBe(true);
+    // ★ 反向护栏：只许「不画」，不许顺手把滚动本身也关掉。
+    //   （`html` 上另有一条 `overflow-x:clip`，那是宽视口接缝要的，不是这次的事，别误伤。）
+    const htmlRule = all.match(/(?:^|[},])html\{([^}]*)\}/)?.[1] ?? '';
+    expect(
+      /overflow:\s*hidden/.test(htmlRule),
+      'html 上出现了 overflow:hidden ⇒ 这不是「藏滚动条」，是把整页滚动关掉了（过度修复）',
+    ).toBe(false);
+    console.log('判据 滚动条 对象 dist/**/*.css 实测: html 同时带 scrollbar-width:none 与 ::-webkit-scrollbar{display:none}，且未动 overflow ⇒ 只是不画，滚动照旧');
   });
 });
 

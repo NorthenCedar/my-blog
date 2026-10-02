@@ -11,6 +11,17 @@ html {
      这里用 overflow-x:clip 收掉那点溢出：与 hidden 的区别是 clip **不创建滚动容器**，
      不会连带让内部 sticky / 滚动监听失效（这些本站都有）。 */
   overflow-x: clip;
+  /* ★ 站主 2026-10-02 第七轮：「把整个博客的侧边滚动的这个条删了」。
+     参考截图里那条浅色滚动条（Chrome 默认皮肤）压在深绿/纸白底上很扎眼。
+     两条属性各管一半浏览器：scrollbar-width 管 Firefox，::-webkit-scrollbar
+     管 Chrome / Edge / Safari。
+     ★ 只是**不画**那根条：滚动本身照旧（滚轮 / 触控 / 键盘 / 锚点跳转都不变），
+       页面的滚动条宽度（15px）也照旧参与 50vw 的换算 ⇒ 与上面那行 overflow-x
+       的假设一致，不会引入新的横向溢出。 */
+  scrollbar-width: none;
+}
+html::-webkit-scrollbar {
+  display: none;
 }
 
 body {

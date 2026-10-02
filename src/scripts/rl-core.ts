@@ -111,8 +111,17 @@ export function createActivityGate(
  * 二阶欠阻尼弹簧（机械惯性过冲用）。
  * ★ 与 develop 的一阶指数平滑（1−e^(−t·18)，无过冲）**刻意不同**：
  *   卷尺游标要的是「停下时轻微回弹」的机械感，欠阻尼（ζ<1）才会过冲。
- * 半隐式欧拉积分，吃真实 dt（帧率无关）。单位与 target/当前值同域（都是 px 或比例）。
+ * ★ 积分用**定步长子步**（1/120s 一片），不是「一帧一大步」——
+ *   坑（2026-10-03 实测踩到，很隐蔽）：半隐式欧拉一次的稳定域是 dt < 2/c，
+ *   k=110/c=23 时 ≈ 87ms，也就是**低于 11.5fps 就发散**；而 startLoop 把 dt
+ *   钳在 100ms，所以慢机器（或软件渲染 / 长卡顿）上弹簧会炸成 Infinity→NaN，
+ *   挂在上面的滚动进度跟着变 NaN ⇒ 装置直接跳到 0 或 1 的极端态。
+ *   定步长后：ω·h ≈ 0.087、c·h ≈ 0.19，恒在稳定域内，且**真正**帧率无关
+ *   （大 hitch 也只是多跑几步，落在 250ms 上限内）。
+ * 单位与 target/当前值同域（都是 px 或比例）。
  */
+const SPRING_H = 1 / 120; // 定步长（秒）
+const SPRING_MAX = 250; // 单帧最多补的时长（ms）：更长的 hitch 直接放弃补，防瞬间追击
 export interface SpringOpts {
   stiffness?: number; // k：越大越「硬」，回正越快（默认 170）
   damping?: number;   // c：越大越「粘」，过冲越小（默认 18，配 k=170 ⇒ ζ≈0.69 轻过冲）
@@ -123,12 +132,16 @@ export function createSpring(target: number, opts: SpringOpts = {}) {
   let x = target; // 位置
   let v = 0;      // 速度
   return {
-    /** 推进 dt 毫秒，返回当前值 */
+    /** 推进 dt 毫秒，返回当前值（定步长积分，见上） */
     step(dt: number): number {
-      const s = dt / 1000;
-      const a = -k * (x - target) - c * v;
-      v += a * s;
-      x += v * s;
+      let rem = Math.min(Math.max(0, dt), SPRING_MAX) / 1000; // 秒
+      while (rem > 0) {
+        const s = rem < SPRING_H ? rem : SPRING_H;
+        const a = -k * (x - target) - c * v;
+        v += a * s;
+        x += v * s;
+        rem -= s;
+      }
       return x;
     },
     /** 直接跳到 target（拖动松手 / 定位用，速度归零 = 不产生回弹） */

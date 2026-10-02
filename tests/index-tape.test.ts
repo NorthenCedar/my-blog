@@ -102,12 +102,14 @@ describe('归档页索引卷尺：刻度、降级与弹簧', () => {
     expect(CODE).not.toContain('Math.random');
   });
 
-  it('帧率无关：弹簧吃真实 dt（半隐式欧拉），无「每帧固定系数」', () => {
+  it('帧率无关：弹簧吃真实 dt，且用定步长子步积分（无「每帧固定系数」）', () => {
     // 弹簧积分在共享层 rl-core（index-tape 只调用 spring.step(dt)）
     expect(CODE).toContain('spring.step(dt');
     const core = readFileSync('src/scripts/rl-core.ts', 'utf8');
-    expect(core).toMatch(/dt\s*\/\s*1000/);
-    // 共享层的弹簧就是半隐式欧拉积分（半隐式 ⇒ 对步长不敏感，帧率无关）
+    // 半隐式欧拉 + **定步长**子步：一帧一大步会在 dt ≥ 2/c 时发散（实测踩过，
+    // 慢机器上弹簧炸成 NaN），所以按 SPRING_H 切碎再积分。
+    expect(core).toMatch(/\/\s*1000/);
+    expect(core).toMatch(/SPRING_H/);
     expect(core).toMatch(/v\s*\+=\s*a\s*\*\s*s/);
     expect(core).toMatch(/x\s*\+=\s*v\s*\*\s*s/);
   });
@@ -173,5 +175,18 @@ describe('共享工具层 rl-core：二阶欠阻尼弹簧', () => {
     const a = run(8, 1000);
     const b = run(16, 500);
     expect(Math.abs(a - b)).toBeLessThan(0.5);
+  });
+
+  it('大 dt 不发散：慢机器 / 长卡顿（dt=100ms）下仍收敛，不出 NaN / Infinity', () => {
+    // 实测踩到的坑：一帧一大步的半隐式欧拉在 dt ≥ 2/c（k=110, c=23 ⇒ ≈87ms）
+    // 就发散，而 startLoop 把 dt 钳在 100ms ⇒ 慢机器（软件渲染 / 长卡顿）上
+    // 弹簧炸成 Infinity→NaN，滚动进度跟着 NaN，装置直接跳到 0/1 的极端态。
+    // 定步长子步（1/120s）修掉了它：ω·h ≈ 0.087、c·h ≈ 0.19，恒在稳定域内。
+    const s = createSpring(0, { stiffness: 110, damping: 23 });
+    s.snap(0);
+    s.retarget(1);
+    for (let i = 0; i < 60; i++) s.step(100); // 6 秒，全是 100ms 的大步
+    expect(Number.isFinite(s.value), '弹簧发散了（出 NaN/Infinity）').toBe(true);
+    expect(Math.abs(s.value - 1)).toBeLessThan(1e-3);
   });
 });
