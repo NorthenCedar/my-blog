@@ -67,9 +67,53 @@ const rows = items.map((t) => ({ t, slug: slugOf(t) }));
 // 说说配图：构建期收进来，才能走 Astro 的优化管线（WebP + srcset）
 const talkAssets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/talks/*.{jpg,jpeg,png,webp,avif}', { eager: true });
 const assetOf = (name: string) => talkAssets[`/src/assets/talks/${name}`]?.default;
+
+/* 底纹母题（站主 2026-10-04 指定）：墨点螺旋图，**替代本页的百褶 ∞**。
+   ⚠️ 目录必须放在 `talks/` 的子目录里 —— 上面那条 `*.{jpg,…}` 是**非递归** glob，
+      真把文件放进 `talks/` 根下会被它当成"说说的配图"一起收进去（多一份产物）。
+   素材处理（不裁、不染，只转 WebP）见 `_probe/_talk-plate.mjs`。 */
+const PLATES = import.meta.glob<{ default: ImageMetadata }>('/src/assets/talks/plates/*.webp', { eager: true });
+const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
 ---
 
-<Base title="说说" current="talks" chrome="page">
+<Base title="说说" current="talks" chrome="page" bodyClass="talks-plate">
+  {/* ===================================================================
+   * 视口装饰层（plate 槽）—— 两层：**静态底纹** + **动态装置**
+   *
+   * ① `.float-plate`：站主 2026-10-04 指定「把这个放在原来百褶无限符号的地方」。
+   *    挂法照抄百褶 ∞（`body.chrome-page .page-inf`）—— fixed 挂视口居中、`contain`、
+   *    `opacity .2`、`z-index:-1`、不拦指针；全站纸白区只有**一套纹理语言**，
+   *    本页换的是母题（∞ → 墨点螺旋），不是角色。
+   *    ★ 两项刻意不照抄，都是素材差异（关于页那条教训：「唯一不能照抄的是素材本身」）：
+   *      比例（1317/563）与透明度（∞ 的 .2 配本图重约 4 倍 ⇒ 取站上装饰底纹 8% 档）。
+   *      推导、实测与四档样机见下面样式段的 `.float-plate` 注释 + `_probe/_float-verify.mjs`。
+   *    ★ 素材**不裁不染**（`_probe/_talk-plate.mjs`）：四边的月牙本来就触到画布边缘，
+   *      按任何阈值裁都会切掉最外圈的月牙尖 —— 而那正是整张图的读法。
+   *
+   * ② `.float-bg`：本页的装置（FLOAT）画布，逻辑在 `src/scripts/float.ts`。
+   *    与底纹同层（都在 z-index:-1）、DOM 在后 ⇒ 雨画在墨点**之上**、正文之下。
+   *
+   * ★★ 两层都必须走 `plate` 具名槽，不能塞进普通 slot：
+   *    `.shell` 在页面过渡里会被 `transform`，而被 transform 的祖先会成为
+   *    `position:fixed` 的包含块 ⇒ 装饰层会从下往上跳（关于页实测 91px）。
+   *    百褶 ∞ 那层一直没事，正因为它在 `.shell` 外面。
+   * =================================================================== */}
+  <Fragment slot="plate">
+    {plate && (
+      <div class="float-plate" aria-hidden="true">
+        <Image
+          class="float-img"
+          src={plate}
+          alt=""
+          widths={[790, 1317]}
+          sizes="128vw"
+          loading="eager"
+          decoding="sync"
+        />
+      </div>
+    )}
+    <canvas class="float-bg" data-float-bg aria-hidden="true"></canvas>
+  </Fragment>
   <header class="pagehead">
     <PageTitle>说说</PageTitle>
     {d.intro && <p class="lede">{d.intro}</p>}
@@ -142,30 +186,74 @@ const assetOf = (name: string) => talkAssets[`/src/assets/talks/${name}`]?.defau
     max-width: var(--measure);
     color: var(--muted);
   }
+  /* ===================================================================
+   * 说说列表 —— 卡片面板 + 原位漂浮（站主 2026-10-04 拍板）
+   *
+   * 站主原话：「漂浮的短句卡片要，但只能在他原来的位置漂浮，不打乱顺序，不要乱飘，
+   *   只是做一个在本来位置小幅漂浮的效果」+ 拍板「振幅 4px」「卡片面板留」。
+   *
+   * ★ 「原位浮」的四条约束都落在**机制**上，不靠"小心地写"：
+   *   ① 只动 `transform` ⇒ **不参与布局**：不重排、不改顺序、不动文档流。
+   *      `offsetTop` 一行不变 —— 这是"只能在原来的位置浮"的**机制保证**
+   *      （实验台探针实测：两个不同 t 下 off 数组逐条相同，只有 computed transform 在变）。
+   *   ② 周期用站上**既有 token** `--dur-orbit`(8s)（它的注释就是"循环层基准时长 4/8/16s
+   *      按元素体量选"，此前无人消费）⇒ 满足"低频常动 ≥8s"，且不新增魔法数字。
+   *   ③ 相邻**三条**错相位（差 5s = 0.625 周期）⇒ 读得出"各自在浮"，而不是整页一起弹；
+   *      三条一组循环 ⇒ 条目变多时是一道**有秩序的波**，不是各自乱飘（＝站主要的"不要乱飘"）。
+   *      相位只用 `:nth-child` 排、**不写一行 JS** ⇒ 无 JS 时照样浮、脚本失败也不会僵在
+   *      半个位移上；而且**没有"每帧算位置"这回事**，漂浮完全是合成器的活（零主线程成本）。
+   *   ④ 幅度两层变量：`--amp`（4px 定稿值）× `--amp-k`（媒体查询里调小）。
+   *      乘法必须留在样式表里做 —— 内联会压过媒体查询（实验台踩过）。
+   *   降级：reduced-motion 直接关掉；≤767 振幅 ×0.6；切标签由 `html.float-idle` 暂停。
+   * =================================================================== */
   .talks {
     margin: var(--sp-8) 0 0;
     padding: 0;
     list-style: none;
     max-width: var(--measure);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
   }
+  /* 面板：**只改 `.talk` 自己的盒子，一行 DOM 都不动** ⇒ 结构、顺序与既有断言
+     （`<time datetime>` 倒序 / `data-like` / `data-comments-for`）全不受影响。
+     面板的左边缘就是原来那条时间轴竖线（border-left），5px 方点仍钉在它上面。 */
   .talk {
     position: relative;
-    padding: 0 0 var(--sp-6) var(--sp-5);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--panel);
     border-left: 1px solid var(--hair);
+    --amp: calc(4px * var(--amp-k, 1));
+    animation: talk-float var(--dur-orbit, 8s) ease-in-out infinite;
+    animation-delay: calc(var(--i, 0) * -5s);
   }
-  /* 时间轴上的点：与相册/扫描带同一套"仪器感" */
+  .talk:nth-child(3n + 2) {
+    --i: 1;
+  }
+  .talk:nth-child(3n) {
+    --i: 2;
+  }
+  @keyframes talk-float {
+    0%,
+    100% {
+      transform: translateY(calc(var(--amp) * -1));
+    }
+    50% {
+      transform: translateY(var(--amp));
+    }
+  }
+  /* 时间轴上的点：与相册/扫描带同一套"仪器感"。
+     ★ `top` 从 `.45em` 改成 `calc(填充 + .45em)`：原来是相对**内容盒**顶（那时卡片
+       padding-top 是 0），现在卡片有 `--sp-3` 上内边距 ⇒ 不补这一下，方点会浮到日期
+       上方去。补的是"同一个相对位置"，不是重新调参。 */
   .talk::before {
     content: '';
     position: absolute;
     left: -3px;
-    top: 0.45em;
+    top: calc(var(--sp-3) + 0.45em);
     width: 5px;
     height: 5px;
     background: var(--accent);
-  }
-  .talk:last-child {
-    padding-bottom: 0;
-    border-left-color: transparent;
   }
   time {
     display: block;
@@ -190,7 +278,8 @@ const assetOf = (name: string) => talkAssets[`/src/assets/talks/${name}`]?.defau
     height: auto;
     display: block;
     border: 1px solid var(--hair);
-    background: var(--panel);
+    /* 卡片底是 --panel ⇒ 图底得换回纸白，否则图与"装它的面板"糊成一片（实验台里量出来的） */
+    background: var(--paper);
   }
   .missing {
     margin: 0;
@@ -328,9 +417,86 @@ const assetOf = (name: string) => talkAssets[`/src/assets/talks/${name}`]?.defau
     overflow: hidden;
   }
   @media (max-width: 767px) {
+    /* 窄屏振幅 ×0.6（与装置"极简版"同档）。原先是「padding-left 收一档」——
+       卡片面板把左右内边距统一成 --sp-4 之后那条已无差别，删掉不留假规则。 */
     .talk {
-      padding-left: var(--sp-4);
+      --amp-k: 0.6;
     }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* 原位漂浮是纯装饰 ⇒ RM 下直接关掉，不做"慢速版"（慢速仍然是在动） */
+    .talk {
+      animation: none;
+    }
+  }
+  /* 切标签页暂停（由 src/scripts/float.ts 在 visibilitychange 上挂 / 摘这一行 class）。
+     与装置画布的停帧同一处触发 ⇒ 两半（CSS 浮 + Canvas 雨）行为一致，少一类只在某半才有的差异。 */
+  :global(html.float-idle) .talk {
+    animation-play-state: paused;
+  }
+
+  /* ===================================================================
+   * 底纹层（PAGE PLATE）—— 墨点螺旋**替代**百褶 ∞（站主 2026-10-04）
+   *
+   * 挂法照抄 Topbar 的 `body.chrome-page .page-inf`（百褶 ∞ 那一层）：
+   *   fixed 挂视口居中 / `min(128vw,1600px)` / `contain` / `z-index:-1` / 不拦指针
+   *   —— 全站纸白区只有一套纹理语言，本页换**母题**不换**角色**。
+   * ★ 两项**刻意不照抄**，都是素材差异逼出来的（关于页同一课：「唯一不能照抄的是素材本身」）：
+   *   ① 比例：∞ 是 1572/878，本图 1317/563
+   *   ② 透明度：∞ 的 .2 配本图重约 4 倍 ⇒ 取站上自己的装饰底纹 8% 档（见下）
+   * ★ `--plate-w` / `--plate-op` 两个变量留给"再调分量"用（可以只在 HTML 上内联覆盖，
+   *   不必改样式表）；默认值就是校准后的定稿。四档对照样机见 `_probe/_float-verify.mjs`。
+   * =================================================================== */
+  .float-plate {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    /* 取宽照抄百褶 ∞（`min(128vw,1600px)`）—— 这一条是**目检校准过**的：
+       先试过"让墨迹与 ∞ 同宽"（= ×0.458 ⇒ 733px），实测配 .2 仍然比 ∞ 重得多，
+       而且缩小之后图案读不出"大尺度氛围"。⇒ 回到照抄取宽，改用**透明度**调分量。 */
+    width: var(--plate-w, min(128vw, 1600px));
+    aspect-ratio: 1317 / 563;
+    transform: translate(-50%, -50%);
+    /* ★★ 透明度**不是**照抄 ∞ 的 .2 —— 这是本页唯一一处必须偏离 ∞ 定稿值的地方，
+       理由是**等视觉分量**：.2 这个数字只对 ∞ 那张素材有意义（近白的米色呢喃，
+       实测整块底纹"纸白上一道极淡的暖痕"），换成本图（不透明区 rgb(30,30,29)、
+       覆盖 12.2%）后同样 .2 的分量重了约 4 倍，会把"纸白阅读底一字不改"压过去。
+       ⇒ 取 **.08**：站上**自己**的装饰底纹定稿档就是 8%
+         （`--deco-plate-coarse` = `#2d7d4614` = 20/255 ≈ 7.8%，文章页方格那轮站主亲选）。
+         同一把尺子量两张图，比"照抄一个只对旧素材成立的数字"更忠实于原意。 */
+    opacity: var(--plate-op, 0.08);
+    pointer-events: none;
+    z-index: -1;
+  }
+  /* ★ `max-width: none` 是必需的：base.css 给 `img` 定了 `max-width:100%`，
+     而这一层刻意比版心宽（`min(128vw,1600px)`）—— 不解除限制它就永远铺不到 128vw。 */
+  .float-plate img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    object-fit: contain;
+  }
+
+  /* 装置画布：与底纹同层（同 z-index:-1），DOM 在后 ⇒ 雨画在墨点**之上**、正文之下。
+     `inset:0` 满屏 ⇒ 一次对尺寸，滚动时不需要任何重算（fixed 不随文档走）。 */
+  .float-bg {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* ★★ 必须关掉本页的百褶 ∞（`.page-inf`，Topbar 渲染、全站内页共用）。
+     不关的话两套母题会叠在一起 —— Topbar 注释里已记过这个教训
+     （「切片档案」四层换 ∞ 底纹时就是因为叠着才整体删掉）。
+     ⚠ 用 `:global(...)`：`.page-inf` 是 Topbar 的元素、带的是**别的**作用域属性；
+       且那边写的是 `body.chrome-page .page-inf`（0,2,1）⇒ 权重必须对齐才压得住。
+     关法用 `display:none` 而不是 `opacity:0`：后者仍占一层满屏合成层，很贵。 */
+  :global(body.talks-plate .page-inf) {
+    display: none;
   }
 </style>
 
@@ -338,4 +504,7 @@ const assetOf = (name: string) => talkAssets[`/src/assets/talks/${name}`]?.defau
   // 说说的点赞与评论（2026-09-26 站主要求）。逻辑在 src/scripts/talks.ts，
   // 与文章/留言页的评论脚本分开：那边是"一个页面一个评论区"，这里是"一条说说一个"。
   import '../scripts/talks';
+  // 本页的装置「浮游 FLOAT」（2026-10-04）：斜飘雨线 + 下半屏椭圆涟漪。
+  // 在同一个 <script> 里 import ⇒ Astro 会把两个模块并进同一个产物脚本，不新增标签。
+  import '../scripts/float';
 </script>
