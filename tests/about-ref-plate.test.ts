@@ -1,12 +1,18 @@
-/* 关于页背景大图的契约（站主 2026-10-03 16:37 指定：**直接拿那张月相图当背景**，
- * 把纯黑底改成偏黑的深绿）
+/* 关于页底纹层的契约（2026-10-03 第三轮口径：**月相 + 蓝条替代百褶 ∞**）
  *
- * ⚠ 这份断言在同一天被推翻重写过一次，原因记在下面：
- *   ① 16:20 站主驳回上一版：「我要的强调色呢…你不要变他们的颜色什么的」
- *      —— 那一版把参考图统一染成墨绿 + 压成极淡 alpha，两件事都被否。
- *   ② 16:37 站主直接指定一张图当背景 ⇒ 断言从「四块取景框」改成「一张大图」。
- *   ⇒ **教训**：断言要守「站主明确的意图」而不是「我上一版的实现形态」。
- *     上一轮我守的是「四块 + 负偏移 + 压淡」，全是他不要的东西。
+ * ⚠ 这份断言在同一天被推翻重写过两次，教训都留着：
+ *   ① 16:20 站主驳回「统一染墨绿 + 压成极淡 alpha」——他要的是原色与强调色。
+ *   ② 16:37 站主指定一张图当**铺满视口的深绿大图**⇒ 断言从「四块取景框」改成「一张大图」。
+ *   ③ 18:50 站主口径再变：「只保留排版，其他什么背景签名全部恢复原样，
+ *      背景恢复后把月相和蓝条**替代背景上本来的百褶无限符号**」
+ *      ⇒ 图还是那张图，但**挂法**回到百褶 ∞ 那一层，纸托底整段作废。
+ *   ⇒ **教训**：断言要守「站主明确的意图」，不是「我上一版的实现形态」。
+ *     每一版实现都可能被下一版口径整体推翻，别把实现当契约。
+ *
+ * ★ 这一版最关键的一条契约是 **「照抄百褶 ∞ 的挂法」**：
+ *   百褶 ∞（`body.chrome-page .page-inf`，Topbar 渲染）是全站纸白区的统一语言。
+ *   本页换的是**母题**（∞ → 月相），不是**角色**（仍是 fixed 居中的淡墨纹）。
+ *   ⇒ 下面把两条挂法的关键参数逐条对照断言，防止只改一半。
  */
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,10 +28,16 @@ const SRC = readFileSync(join(ROOT, 'src/pages/about.astro'), 'utf8');
    ⇒ 正向断言一律用未剥注释的原文。 */
 const CODE = SRC.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/<!--[\s\S]*?-->/g, ' ');
 
+/* ★ 百褶 ∞ 的定义（Topbar.astro，is:global）—— 本页必须与它逐条一致。
+   把它当常量抄进来而不是 import，是为了让断言在 Topbar 改动时**报错**，
+   逼人回头看这条契约；而不是静默跟着变。 */
+const TOPBAR = readFileSync(join(ROOT, 'src/components/Topbar.astro'), 'utf8');
+const INF = TOPBAR.match(/body\.chrome-page \.page-inf\s*\{([^}]*)\}/)?.[1] ?? '';
+
 const PLATE_DIR = join(ROOT, 'src/assets/about/plates');
 const plates = existsSync(PLATE_DIR) ? readdirSync(PLATE_DIR).filter((f) => f.endsWith('.webp')) : [];
 
-describe('关于页 · 背景大图（站主 16:37 指定）', () => {
+describe('关于页 · 底纹层：月相 + 蓝条替代百褶 ∞', () => {
   it('素材是一张图，且已进仓、体积可控', () => {
     expect(plates.length, 'plates 目录下的 webp 数量不对（应为一张背景图）').toBe(1);
     expect(plates[0]).toBe('moon-main.webp');
@@ -40,56 +52,116 @@ describe('关于页 · 背景大图（站主 16:37 指定）', () => {
     const img = SRC.match(/<Image\b(?=[^>]*class="ref-img")[^>]*\/>/);
     expect(img, '没找到渲染背景图的 <Image class="ref-img">').toBeTruthy();
     expect(img![0], '少了 widths ⇒ 不会出多档 srcset').toMatch(/widths=\{/);
-    expect(img![0], '少了 sizes ⇒ 浏览器会下最大档').toMatch(/sizes="/);
+    // ★ sizes 必须跟百褶 ∞ 的取宽一致（128vw），不是 100vw —— 改错会让浏览器下错档
+    expect(img![0], 'sizes 应与百褶 ∞ 的取宽一致（128vw）').toMatch(/sizes="128vw"/);
   });
 
-  it('★ 不做灰度 / 不染色 / 不压淡 —— 站主要的是原色与强调色', () => {
+  /* ---- 挂法：逐条对齐百褶 ∞（这一组是本版契约的核心）---- */
+  it('★ 底纹层照抄百褶 ∞ 的几何与淡墨纹，z-index 刻意改为 0 并加 multiply', () => {
+    expect(INF, 'Topbar 里找不到 .page-inf 的规则 —— 百褶 ∞ 改名了，要回头改这条契约').toBeTruthy();
+
+    const ref = CODE.match(/\.ref-plate\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(ref, '没读到 .ref-plate 的样式块').toBeTruthy();
+
+    // ① fixed 挂视口 + 居中（滚动时纹理始终居中，与百褶 ∞ 观感一致）
+    expect(ref, '必须 position:fixed（挂视口，不是文档）').toMatch(/position:\s*fixed/);
+    expect(ref, '必须 left/top 50% + translate(-50%,-50%) 居中').toMatch(/left:\s*50%/);
+    expect(ref, '必须 top:50%').toMatch(/top:\s*50%/);
+    expect(ref, '必须 translate(-50%,-50%)').toMatch(/translate\(-50%,\s*-50%\)/);
+    // ★ 与百褶 ∞ 对照（防止手改时只改一半）
+    expect(ref, '与百褶 ∞ 的 fixed 挂法不一致').toMatch(
+      INF.includes('position: fixed') ? /position:\s*fixed/ : /x/);
+    expect(ref, '与百褶 ∞ 的居中写法不一致').toMatch(
+      INF.includes('translate(-50%, -50%)') ? /translate\(-50%,\s*-50%\)/ : /x/);
+
+    // ② 取宽与比例：min(128vw,1600px) + aspect-ratio + object-fit:contain
+    expect(ref, '取宽必须与百褶 ∞ 一致：min(128vw, 1600px)').toMatch(
+      /width:\s*min\(128vw,\s*1600px\)/);
+    expect(ref, '与百褶 ∞ 的取宽不一致').toMatch(
+      INF.match(/width:\s*([^;]+);/)?.[1]?.trim().replace(/\s+/g, ' ') === 'min(128vw, 1600px)'
+        ? /width:\s*min\(128vw,\s*1600px\)/ : /x/);
+    // 图是 1920×1045 ⇒ 比例必须锁在这个值，否则 contain 会拉变形
+    expect(ref, 'aspect-ratio 必须是素材的真实比例 1920/1045').toMatch(
+      /aspect-ratio:\s*1920\s*\/\s*1045/);
+    expect(CODE, '图必须 contain（百褶 ∞ 同一套，避免拉伸变形）').toMatch(
+      /\.ref-main\s*>\s*(?:picture|img)[^{}]*\{[^}]*object-fit:\s*contain/);
+
+    // ③ 淡墨纹：opacity 照抄百褶 ∞ 的 .2
+    expect(ref, 'opacity 必须与百褶 ∞ 一致（.2）').toMatch(/opacity:\s*0?\.2/);
+    expect(ref, '与百褶 ∞ 的 opacity 不一致').toMatch(
+      INF.match(/opacity:\s*([^;]+);/)?.[1]?.trim() === '0.2' ? /opacity:\s*0?\.2/ : /x/);
+
+    // ④ 与百褶 ∞ 完全同参数：z-index -1（素材已自带 alpha，不需要额外补丁）
+    expect(ref, '必须 z-index:-1（与百褶 ∞ 同层，素材已修好）')
+      .toMatch(/z-index:\s*-1/);
+    expect(INF, '百褶 ∞ 现在不是 -1 了 ⇒ 这条契约要重新对').toMatch(/z-index:\s*-1/);
+
+    // ★★ 素材必须自带 alpha —— 这是「看不见矩形边」的唯一保证。
+    //   踩了两轮：① 不透明矩形底 + opacity:.2 ⇒ 灰绿矩形，截图上一眼可见边界
+    //   （实测差 47/255）② 改用 mix-blend-mode:multiply **压不住**
+    //   （multiply 只改色、不裁形状）⇒ 正解是素材侧把纯黑底转 alpha。
+    //   ⇒ 门闩守「不许重新引入 blend 补丁」+「产物图确实带 alpha」。
+    expect(CODE, '不该再有 mix-blend-mode 补丁（素材已自带 alpha，blend 压不住矩形边）')
+      .not.toMatch(/mix-blend-mode/);
+
+    // ⑤ 不吃点击
+    expect(ref, '必须 pointer-events:none（它是装饰层）').toMatch(/pointer-events:\s*none/);
+  });
+
+  it('★ 本页必须关掉百褶 ∞（两套母题叠在一起会脏）', () => {
+    /* Topbar 注释里已记过这个教训：「切片档案」四层换 ∞ 底纹时就是因为叠着才整体删掉。 */
+    const off = CODE.match(/:global\(body\.about-plate \.page-inf\)\s*\{([^}]*)\}/);
+    expect(off, '没找到关掉 .page-inf 的规则 ⇒ 百褶 ∞ 会与月相纹叠加').toBeTruthy();
+    expect(off![1], '用 display:none 关（它这层fixed 满屏，opacity:0 仍占合成层、很贵）')
+      .toMatch(/display:\s*none/);
+  });
+
+  it('★ body 保持不透明纸白底（与上一版相反），所有纸托底已删', () => {
+    /* 上一版为了让深绿大图透出来，把 body 改成 transparent 并给每块垫纸。
+       现在底纹是 z-index:-1 的淡墨纹 ⇒ 它画在 body 背景**之下**才正常
+       （-1 的定义就是画在父元素背景之下）⇒ body 必须恢复 var(--paper)。 */
+    expect(CODE, 'body 不得再被改成 transparent（底纹已回到 -1，body 要保住纸白底）')
+      .not.toMatch(/body\.about-plate\s*\{[^}]*background:\s*transparent/);
+    // 纸托底三件套整段作废
+    expect(CODE, '`.prose::before` 纸托底应已删（底纹是淡墨纹，不需要压）')
+      .not.toMatch(/\.prose::before/);
+    expect(CODE, '`.fig-block::before` 纸托底应已删').not.toMatch(/\.fig-block::before/);
+    expect(CODE, '`.page-paper` 页头纸应已删').not.toMatch(/\.page-paper/);
+    expect(CODE, '`.ref-paper` 分段纸应已删').not.toMatch(/\.ref-paper/);
+  });
+
+  it('★ 不做灰度 / 不染色 —— 站主要的是原色与强调色', () => {
     /* 站主 16:20 原话：「你不要变他们的颜色什么的」「我要的强调色呢」。
        前两版分别做了「统一染墨绿」与「压成极淡 alpha」⇒ 都被否。
-       ⇒ 判据：底纹层不许有 filter、不许有 opacity 压淡。 */
+       ★ 注意：opacity 本身**允许**（这一版照抄百褶 ∞ 就是 .2），
+         被否的是「filter 改色」与「把 .ref-main 单独压淡」。 */
     const rules = [...CODE.matchAll(/(\.ref[\w-]*[^{}]*)\{([^}]*)\}/g)].map((m) => m[2]);
     expect(rules.length, '没找到底纹层的样式块 —— 改名了要同步这条断言').toBeGreaterThan(0);
     for (const r of rules) {
       expect(r, '底纹里还有 filter（会改掉原图的原色与强调色）').not.toMatch(/filter:/);
     }
     const main = CODE.match(/\.ref-main\s*\{([^}]*)\}/);
-    if (main) expect(main[1], '`.ref-main` 不该被整体压淡').not.toMatch(/opacity:\s*0?\.\d/);
+    if (main) expect(main[1], '`.ref-main` 不该被单独压淡（整体 opacity 只在 .ref-plate 上）')
+      .not.toMatch(/opacity:\s*0?\.\d/);
   });
 
-  it('背景层是 fixed 铺满视口的装饰层，且不吃点击', () => {
-    expect(CODE).toMatch(/\.ref-plate\s*\{[^}]*position:\s*fixed/);
-    expect(CODE).toMatch(/\.ref-plate\s*\{[^}]*inset:\s*0/);
-    expect(CODE).toMatch(/\.ref-plate\s*\{[^}]*pointer-events:\s*none/);
-    // ★ overflow:hidden 是「图不撑出横向滚动」的保证
-    expect(CODE, '缺 overflow:hidden ⇒ 背景图会撑出横向滚动').toMatch(/\.ref-plate\s*\{[^}]*overflow:\s*hidden/);
+  it('底纹层是 fixed 装饰层，且模板里带 aria-hidden', () => {
     expect(SRC).toMatch(/class="ref-plate" aria-hidden="true"/);
   });
 
-  it('★ 内容层必须提层（否则正文会被深色大图压住）', () => {
-    /* 站主 16:14 附的截图就是这个问题：`.prose` 实测 `position: static`，
-       内容层一条提层规则都没有 ⇒ 底纹直接压在文字后面（看着像「正文透明了」）。
-       ★ 这条规则我写错过两次位置（一次只在样稿里、一次被后续替换删掉），
-         而**源码有 ≠ 产物有** ⇒ 下面额外查产物 CSS。 */
-    const zRule = CODE.match(/:global\(body\.chrome-page \.topbar\)[^{]*\{[^}]*z-index:\s*1/);
-    expect(zRule, '缺顶栏/页脚提层规则（AGENTS §6.26 记过这条）').toBeTruthy();
-    const content = CODE.match(/\.pagehead,\s*\.sign-card,\s*\.prose,\s*\.fig-block\s*\{[^}]*z-index:\s*1/);
-    expect(content, '内容层缺 z-index:1 ⇒ 会被固定层的底纹压住').toBeTruthy();
-  });
-
-  it('★ 文字区要有不透明的纸（深色大图上正文必须可读）', () => {
-    /* 踩了四轮才对：① 两条竖条 ⇒ 月亮被劈成两半；② 一整块纸 ⇒ 月亮被吃掉；
-       ③ 分段但写死 % ⇒ 纸与内容错位；④ 逐块由内容撑开 ✓。
-       ⇒ 现在的形态是「给 .sign-card / .prose / .fig-block 的 ::before 加纸」。
-     ★ 纸必须**不透明**（半透明白纱等于把图洗淡，那是站主驳回过的做法）。 */
-    const before = CODE.match(/\.prose::before[^{]*\{[^}]*\}/);
-    expect(before, '正文没有自己的纸（深色大图上会看不清）').toBeTruthy();
-    expect(before![0], '纸必须用不透明的 --paper').toMatch(/background:\s*var\(--paper\)/);
-    expect(CODE, '不该再有半透明白纱（ref-veil 那套是站主驳回的）').not.toMatch(/ref-veil/);
+  it('★ 不需要顶部空档（那是为了让铺满视口的大图露出而设的）', () => {
+    /* .about-main 曾有 padding-top: min(30vh, 380px)。
+       它服务的是「深绿大图从页面上方整段露出」，且会让左右两栏首行基线错开
+       （实测左栏 y=490、右栏 y=110）⇒ 现在必须删。 */
+    expect(CODE, '顶部空档应已删（底纹照抄百褶 ∞，不需要给图腾位置）')
+      .not.toMatch(/\.about-main\s*\{[^}]*padding-top:\s*min\(30vh/);
   });
 });
 
 describe.skipIf(!hasDist)('产物里的背景图', () => {
   const ABOUT = readFileSync(join(DIST, 'about', 'index.html'), 'utf8');
+  const cssFile = readdirSync(join(DIST, '_astro')).find((f) => /^about\..*\.css$/.test(f));
+  const CSS = cssFile ? readFileSync(join(DIST, '_astro', cssFile), 'utf8') : '';
 
   it('渲染出背景图且带 srcset', () => {
     const imgs = [...ABOUT.matchAll(/<img[^>]*class="ref-img"[^>]*>/g)].map((m) => m[0]);
@@ -97,13 +169,70 @@ describe.skipIf(!hasDist)('产物里的背景图', () => {
     expect(imgs[0]).toMatch(/srcset="/);
   });
 
-  it('★ body 带上了 about-plate 类（否则 body 的纸白底会盖住整张图）', () => {
-    /* `body { background: var(--paper) }`（base.css）铺满全页，
-       元素再高的 z-index 也压不过 body 自身的背景 ⇒ 实测整张图被盖住。 */
+  it('★ body 带上了 about-plate 类（关百褶 ∞ 的作用域）', () => {
+    /* ⚠ 与上一版的目的相反：上一版是为了让 body **透明**好让图透出来；
+       现在是为了用 `body.about-plate .page-inf` 精确关掉百褶 ∞。
+       class 是**合并**的（`chrome-page about-plate`），不是恰好等于 ⇒ 用词边界判。 */
     const bodyTag = ABOUT.match(/<body[^>]*>/);
     expect(bodyTag, '找不到 body 标签').toBeTruthy();
-    expect(bodyTag![0], 'body 缺 about-plate 类 ⇒ 纸白底会盖住背景图').toMatch(
-      /class="[^"]*about-plate/);
+    expect(bodyTag![0], 'body 缺 about-plate 类 ⇒ 关不掉百褶 ∞，两套纹理会叠')
+      .toMatch(/class="[^"]*\babout-plate\b/);
+  });
+
+  it('★ 产物里 .page-inf 确实被 display:none 关掉了', () => {
+    /* 只查源码不够 —— `:global()` 与 scoped 的编译结果不同。
+       以前就踩过「源码有 ≠ 产物有」（层叠规则插在注释前被替换掉）⇒ 必须查产物。 */
+    expect(cssFile, '没找到关于页的产物 CSS').toBeTruthy();
+    const off = CSS.match(/body\.about-plate\s+\.page-inf\s*\{([^}]*)\}/);
+    expect(off, '产物 CSS 里没有关 .page-inf 的规则 ⇒ 百褶 ∞ 仍会渲染').toBeTruthy();
+    expect(off![1], '产物里必须是 display:none').toMatch(/display:\s*none/);
+  });
+
+  it('★ 产物里标题真的落在纸白底上（不再被任何纸/图压住）', () => {
+    /* 这一版不需要纸托底，「标题可读」改由 body 纸白底保证。
+       门闩守两件事：① 产物里没有 .page-paper ② body 背景不是 transparent。 */
+    expect(CSS, '产物里还有 .page-paper（纸应已删）').not.toMatch(/\.page-paper/);
+    expect(CSS, '产物里 body.about-plate 被改成了透明（应恢复纸白底）')
+      .not.toMatch(/body\.about-plate\s*\{[^}]*background:\s*transparent/);
+  });
+
+  it('★ 产物里标题的 grid 落位规则不带 cid（跨组件选择器的老坑）', () => {
+    /* `.pagehead > h1` 会被 scoped 编译成带本页 cid 的属性选择器，
+       而 h1 是 PageTitle 组件渲染的（带组件自己的 cid）⇒ 不匹配 ⇒ 规则静默失效。
+       ⇒ 必须有 `:global()` 产出的一条**不带 cid** 的规则。 */
+    const rules = CSS.match(/\.pagehead\s*>\s*h1[^{}]*\{[^{}]*\}/g) ?? [];
+    expect(rules.length, '产物里找不到 .pagehead > h1 规则').toBeGreaterThan(0);
+    for (const r of rules) {
+      const h1Part = r.split(',').find((seg) => /\.pagehead\s*>\s*h1/.test(seg)) ?? '';
+      expect(h1Part, '没在规则里找到 .pagehead>h1 那一段').toBeTruthy();
+      expect(h1Part, '产物里 .pagehead>h1 带了 cid ⇒ 运行时匹配不到组件的 h1')
+        .not.toMatch(/data-astro-cid/);
+    }
+  });
+
+  it('★ 素材自带 alpha（纯黑底已转透明）—— 这是「看不见矩形边」的唯一保证', () => {
+    /* 这条是**产物级**门闩，守的是 2026-10-03 踩的两轮：
+       ① 不透明矩形底 + opacity:.2 ⇒ 灰绿矩形，截图上一眼看见下边界
+          （实测 x=60：y≤300 rgb(250,250,247) vs y=700~1100 rgb(203,204,201)）
+       ② mix-blend-mode:multiply **压不住**（只改色、不裁形状）
+       ⇒ 正解是素材侧把纯黑底转 alpha（`_probe/_deep-plate.mjs`，阈值 6..48）。
+       ★ 判据用 sharp 读 channels + 最大 alpha：
+         只查 hasAlpha 不够 —— `alphaQuality` 那个不被识别的选项会让
+         hasAlpha=true 但**全图 alpha=0**（脚本自检当场抓到过）。
+       ⚠ 这是**同步**检查（构建前跑 sharp），不是 build 后查产物 ——
+         查 dist 里的 webp 拿不到「原素材是否带 alpha」这条信息。 */
+    const out = join(PLATE_DIR, plates[0]);
+    // 用动态 import 避免顶层 sharp 依赖（sharp 是 astro 自带的，不是本仓依赖）
+    const sharpMod = await import('sharp');
+    const img = sharpMod.default(out);
+    const meta = await img.metadata();
+    expect(meta.hasAlpha, '素材没有 alpha 通道 ⇒ 纯黑底会变成灰绿矩形').toBe(true);
+    const { data, info } = await img.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    let maxA = 0;
+    for (let n = 3; n < data.length; n += info.channels) {
+      if (data[n] > maxA) maxA = data[n];
+    }
+    expect(maxA, '素材最大 alpha 为 0 ⇒ 元素（月亮/星芒/蓝带）被整体清掉了').toBeGreaterThanOrEqual(200);
   });
 
   it('背景图体积可控（不是 10 MB）', () => {

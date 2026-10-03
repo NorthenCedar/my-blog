@@ -23,13 +23,13 @@ describe('关于页 · 两栏版式', () => {
     const iMain = ACSS_SRC.indexOf('class="about-main"');
     const iSide = ACSS_SRC.indexOf('class="about-side"');
     const iProse = ACSS_SRC.indexOf('class="prose"');
-    const iSign = ACSS_SRC.indexOf('class="sign-card"');
+    const iHead = ACSS_SRC.indexOf('class="pagehead"');
     expect(iMain, '缺 .about-main').toBeGreaterThan(-1);
     expect(iSide, '缺 .about-side').toBeGreaterThan(-1);
-    /* main 里必须含「页头 → 签名 → 正文」这个既有顺序；
-       签名在正文之前是改版前就有的，不能因为分栏而颠倒。 */
-    expect(iSign, '签名不在 main 内').toBeGreaterThan(iMain);
-    expect(iSign, '签名跑到了正文后面').toBeLessThan(iProse);
+    /* ★ 2026-10-03 签名整块删除后，main 内的顺序断言改成「页头 → 正文」。
+       （原来守的是「页头 → 签名 → 正文」，签名在正文之前是改版前就有的既有顺序。）*/
+    expect(iHead, '页头不在 main 内').toBeGreaterThan(iMain);
+    expect(iHead, '页头跑到了正文后面').toBeLessThan(iProse);
   });
 
   it('★ 移动端靠 display:contents 保住阅读顺序（不是 grid 显式定位）', () => {
@@ -93,13 +93,14 @@ describe.skipIf(!hasDist)('产物里的关于页', () => {
     }
   });
 
-  it('签名与正文仍在同一容器内（移动端顺序的前提）', () => {
+  it('页头与正文仍在同一容器内（移动端顺序的前提）', () => {
+    // ★ 2026-10-03：签名删除后，main 内的顺序是「页头 → 正文」。
     const iMain = ABOUT.indexOf('about-main');
-    const iSign = ABOUT.indexOf('sign-card');
+    const iHead = ABOUT.indexOf('class="pagehead"');
     const iProse = ABOUT.indexOf('class="prose"');
     const iSide = ABOUT.indexOf('about-side');
-    expect(iSign).toBeGreaterThan(iMain);
-    expect(iProse).toBeGreaterThan(iSign);
+    expect(iHead).toBeGreaterThan(iMain);
+    expect(iProse).toBeGreaterThan(iHead);
     expect(iSide).toBeGreaterThan(iProse);
   });
 });

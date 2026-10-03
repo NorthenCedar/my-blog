@@ -27,11 +27,10 @@ interface AboutData {
   avatarName?: string;
   social?: Social[];
   stack?: StackGroup[];
-  /** 手写签名（站主 2026-10-03 提供原件）。走内容层，与 avatar 同一条理由：
-   *  图片放 src/assets/about/ 才能参与构建期优化（转 WebP + 出 srcset）。 */
-  signature?: string;
-  /** 签名切片底部那行小字（等宽字、读数感）。也在内容层——它是站主自己的话。 */
-  signatureNote?: string;
+  /* ★ 2026-10-03 站主口径：「只保留排版，其他什么背景签名全部恢复原样」
+     ⇒ signature / signatureNote 两个字段**已删**（连同 sign.png 素材、
+       src/scripts/hand-sign.ts、FIG.01 那块纸、以及它专属的测试与门闩）。
+     要恢复签名时按 git log 回看 9a4414b / 0572158 两版，别凭印象重写。 */
 }
 
 /* ===== 语言占比条（站主 2026-09-30 要求「更新技术栈并加一个这个」）=====
@@ -85,7 +84,7 @@ const LANG_TOTAL = '447,832 B';
 const d = (entry?.data ?? {}) as unknown as AboutData;
 const assets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/about/*.{jpg,jpeg,png,webp,avif}', { eager: true });
 const avatar = d.avatar ? assets[`/src/assets/about/${d.avatar}`]?.default : undefined;
-const signature = d.signature ? assets[`/src/assets/about/${d.signature}`]?.default : undefined;
+/* ★ 2026-10-03 删：const signature = …（签名整体移除，见 AboutData 注记）*/
 
 /* 参考图底纹（第2 步，2026-10-03）—— **构建期已裁成小图**，不是 CSS 取景。
    ★ 为什么必须裁文件：CSS 的 overflow:hidden + 偏移能在浏览器里「取景」，
@@ -121,32 +120,38 @@ const isExternal = (h: string) => /^https?:/i.test(h);
            包含块又换回视口 ⇒ **位置突变，视觉上就是"加载后跳一下"**（实测从 y=246 跳到 y=198，48px）。
       改成布局定位后这两个问题一起消失：位置由排版决定（不会变），元素在正文流里（自然跟着滚）。 */}
   {/* ===================================================================
-   * 标本馆底纹层（REFERENCE PLATE）—— 站主 2026-10-03 第二轮口径
+   * 底纹层（PAGE PLATE）—— 2026-10-03 站主第三轮口径
    *
-   * 站主四条要求，逐条对应：
-   *   ① 头像上面不要有线   ⇒ 见下面 .profile 的样式（刻度环与排线已删）
-   *   ② **直接用参考图里的素材**（月相 / 雕像 / 飞鸟 / 星芒），不自己画
-   *   ③ **直接放背景里**，不做成独立卡片 ⇒ 就是这一层，铺满视口
-   *   ④ **背景用白色** ⇒ 底色 --paper，参考图按亮度差透明化后染成墨绿
+   * 站主原话：「只保留排版，其他什么背景签名全部恢复原样，
+   *   背景恢复后把月相和蓝条替代背景上本来的百褶无限符号」
    *
-   * ★★ 第 2 步（2026-10-03）：参考图底纹素材走**构建期图片管线**。
-   *   本机 Chrome canvas 那条路今天卡了三次（症状都是「不报错、只是收不到结果」，
-   *   真因是 execFileSync 阻塞事件循环 ⇒ 同进程的服务无法响应），
-   *   而 astro:assets 已在站内跑着（头像与签名都走它）⇒ 复用它最省、最可复算。
+   * 拆成两句话来执行，缺一不可：
+   *   ① 「其他什么背景签名全部恢复原样」
+   *      ⇒ **只保留排版**（页头 / 两栏 / 细线列表 / 刻度尺这些版式语言），
+   *        签名（FIG.01 HAND）整块删除、揭幕动画与素材一起删；
+   *        背景**不是**回到站主指定的那张「铺满视口大图」——
+   *        而是回到**百褶 ∞ 那一层的位置与角色**（下一条）。
+   *   ② 「把月相和蓝条替代百褶无限符号」
+   *      ⇒ 仍然用站主指定的那张图（`moon-main.webp`，月相 + 纯蓝横带 +
+   *        蓝色轨道线都是原图自带的），但**挂法对齐百褶 ∞**：
+   *        fixed 挂视口居中、`min(128vw, 1600px)`、`contain`、`opacity .2`、
+   *        `z-index` 退到正文之下。
+   *      ⇒ 效果：关于页的纸白区纹理从「深绿大图」换回「淡墨纹」，
+   *        母题从 ∞ 换成月相，**纸白阅读底一字不改**（口径 #1）。
    *
-   * ★ 取哪几段（互不重复、不冲突）：
-   *   月相盘 + 直尺 · 雕像群像 · 飞鸟 + 星芒 · 树 + 新月
-   *   灰度 + 墨绿全部用 CSS filter 现场做（grayscale + sepia + hue-rotate）——
-   *   **不做像素处理**：逐像素改色会把原图的浓淡与拼贴层次一起抹平。
+   * ★ 为什么必须**覆盖**而不是「叠在百褶 ∞ 上面」：
+   *   百褶 ∞ 那层是 `body.chrome-page .page-inf`（`z-index:-1`），
+   *   由 Topbar 渲染、全站内页共用。若只加一层不覆盖它，两层纹理会叠在一起 ——
+   *   两套母题叠一次脏（Topbar 注释里已记过这个教训：「切片档案」四层
+   *   换 ∞ 底纹时就是因为叠着才整体删掉）。
+   *   ⇒ 本页把 `.page-inf` 显式关掉（见样式段 `body.about-plate .page-inf`），
+   *     自己也用 `z-index:-1` 站在同一个层级上。
+   *
+   * ★ 图**不重新处理**：构建期已把纯黑底染成深绿（`_probe/_deep-plate.mjs`，
+   *   灰阶按「越暗染得越多」混向 --dusk-2 的 #131b17，白月亮与星芒保持白，
+   *   彩色像素一格不动）⇒ 站点内不存在第二份「纯黑版」。
    * =================================================================== */}
   <div class="ref-plate" aria-hidden="true">
-    {/* ★ 站主 2026-10-03 16:37 指定：**直接拿这一张当背景**，
-       纯黑底改成偏黑的深绿（`#131b17`，站内 `--dusk-2`）。
-       「纯黑 → 深绿」是**构建期**做的（`_probe/_deep-plate.mjs`，用 sharp）：
-       灰阶像素按「越暗染得越多」混向深绿，白月亮与星芒保持白；
-       **彩色像素（那条纯蓝横带、轨道线）一格不动** —— 它就是强调色。
-       实测：白月亮 on #131b17 = 17.55:1；纯蓝带 = 2.04:1（纯装饰图形，
-       且是站主指定作品的一部分 ⇒ 记录实测值，不做数值上的假通过，详见脚本头）。*/}
     {plate('moon-main') && (
       <div class="ref-main">
         <Image
@@ -154,15 +159,12 @@ const isExternal = (h: string) => /^https?:/i.test(h);
           src={plate('moon-main')!}
           alt=""
           widths={[960, 1920]}
-          sizes="100vw"
+          sizes="128vw"
           loading="eager"
           decoding="sync"
         />
       </div>
     )}
-    {/* 纸托底：文字区铺一层**不透明**的纸，让正文压得住这张深色大图。
-        （半透明白纱不行—— 那等于把图洗淡，站主要的原色与繁复线条会再被抽掉一次。）*/}
-    <div class="ref-paper" aria-hidden="true"></div>
   </div>
 
   {/* ===================================================================
@@ -187,13 +189,11 @@ const isExternal = (h: string) => /^https?:/i.test(h);
         与头像上的排线**全部去掉**，头像回归纯圆形照片。
         刻度与量规的语汇改由页头那根 `--hair` 细线与各区块的 `FIG.0x` 编号承担。
 
-        ★★ 页头纸托底（2026-10-03 目检后补，实测依据）：
-          页头整段落在背景大图上（实测 pagehead y=490..918，图高 772）⇒ 标题与
-          「关于」两字直接压深色底，完全读不出来（`.page-paper` 查无此元素 ⇒ 纸丢了）。
-          ⇒ 纸必须是**真元素**而不是 `::before`：`.pagehead` 是 grid 容器，
-            伪元素会按 grid item 参与轨道计算，`inset` 被算坏（见下方 CSS 注记）。
-            纸铺 `grid-area: 1/1/-1/-1` 跨全部网格区，负 margin 向外撑出纸边。*/}
-    <div class="page-paper" aria-hidden="true"></div>
+        ★★ 页头纸托底 `.page-paper` 已删（2026-10-03 第三轮口径）。
+          它存在过的唯一理由是「深绿大图压住标题」（实测 pagehead 整段落在图上）；
+          现在底纹回到百褶 ∞ 那一层（`z-index:-1` + `opacity:.2`，画在 body
+          纸白底**之下**）⇒ 标题直接落在纸白底上，不需要任何纸。
+          顺带 `.pagehead` 的 `overflow:hidden` 也去掉了（它只是给纸兜底）。*/}
     <p class="fig-no" aria-hidden="true">FIG.00 — PROFILE</p>
     <PageTitle>关于</PageTitle>
     {avatar && (
@@ -204,31 +204,11 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     )}
   </header>
 
-  {/* ===== HAND 亲笔 · 签名（站主 2026-10-03）=====
-      ★ 站主 2026-10-03 第二轮口径：「**这个是直接放到背景里，不要单独做一个卡片**」
-        ⇒ 深底板取消、编号小字与图同宽排在图上方，签名直接落在纸白底上。
-        （上一版那套--dusk-2 深底切片是从「深底才有冲击力」的思路来的，
-          但既然底纹走白底，深底板就成了页面里唯一的孤岛 —— 去掉更干净。）
-      ★ 签名是站主手迹原件：已抠掉白底（转成带 alpha 的图）、转成站内墨绿。
-        加工脚本见 _probe/hand-sign-prep.mjs（该目录已 gitignore；
-        成品 src/assets/about/sign.png 进仓，参与构建期优化：56 KB → WebP 18 KB）。
-      ★ 落笔 = 横向揭幕（clip-path inset 从 100% 走到 0），不是逐笔 —— 位图没有路径。 */}
-  {signature && (
-    <figure class="sign-card" data-sign-card>
-      <figcaption class="sign-head">
-        <b>FIG.01 — HAND</b>
-        <span>{d.signatureNote}</span>
-      </figcaption>
-      <Image
-        class="sign-img"
-        data-sign-img
-        src={signature}
-        alt={`${d.avatarName ?? '站主'}的手写签名`}
-        widths={[340, 680]}
-        sizes="340px"
-      />
-    </figure>
-  )}
+  {/* ★ 2026-10-03 站主口径：「签名全部恢复原样」⇒ FIG.01 HAND 整块**已删**
+      （含 <figure class="sign-card"> 纸托底、编号小字、<img data-sign-img>，
+        以及配套的 src/scripts/hand-sign.ts 揭幕动画与 sign.png 素材）。
+      左栏现在是：页头 → 正文。原「FIG.01」这个编号位空缺，
+      社交/技术栈/语言占比仍从 FIG.02 起（编号是连续的排版语汇，不重排）。*/}
 
   <div class="prose">{Content && <Content />}</div>
   </div><!-- /.about-main -->
@@ -313,11 +293,9 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   </div><!-- /.about-grid -->
 </Base>
 
-<script>
-  // 签名落笔（横向揭幕）。与页面其余部分刻意无耦合：只读 [data-sign-img]，不碰别的节点。
-  // 写法照 archive.astro 那台卷尺：独立入口的 <script>，不与内联逻辑混在一起。
-  import '../scripts/hand-sign';
-</script>
+<!-- ★ 2026-10-03 删：签名落笔的 <script>import '../scripts/hand-sign'</script>
+     （连同 src/scripts/hand-sign.ts 与 src/assets/about/sign.png 一起删除）。
+     关于页现在**零 JS**—— 版式与底纹都是纯 CSS，与「只保留排版」的口径一致。 -->
 
 <style>
   /* 拍板 D：页头版心收成 --measure，与正文列左对齐（与文章页同一条）。 */
@@ -369,15 +347,17 @@ const isExternal = (h: string) => /^https?:/i.test(h);
       align-items: start;      /* ★ 右栏不拉高，块按自身高度排（否则 social 会被prose 拉出大片空白）*/
     }
     .about-main {
-    grid-column: 1;
-    min-width: 0;
-    /* ★ 顶部留一整段空档：页面上方约380px 不排内容 ⇒ 背景图从那里**整段**露出来。
-       为什么要这么大：版心左右两侧加起来只有约 96px，图从那里露出来只是一条窄边，
-       认不出是月亮还是星芒（试过，像「贴了张白纸」）。
-       而这张图铺到 1280视口后高约 697px、**月亮直径约 250px** ⇒ 空档要装得下它。
-       ★ 数字是按「图的实际宽高比 + 月亮实际直径」算的，不是拍脑袋。 */
-    padding-top: min(30vh, 380px);
-  }
+      grid-column: 1;
+      min-width: 0;
+      /* ★ 2026-10-03 删：`padding-top: min(30vh, 380px)` 那段顶部空档。
+         它存在过的唯一理由是「让铺满视口的深绿大图从页面上方整段露出来」
+         （当时的算式：图高 697px、月亮直径约 250px ⇒ 空档要装得下月亮）。
+         现在底纹回到百褶 ∞ 那一层（照抄它的挂法：fixed 居中、铺满视口、
+         `opacity:.2`、画在 body 纸白底之下）⇒ **不需要任何空档**，
+         而且右栏（.about-side）本来就没有这段 padding，
+         留着会让左右两栏的**首行基线错开**（实测左栏 y=490、右栏 y=110）。
+         ⇒ 删掉之后两栏齐平，这本该是版式的默认状态。 */
+    }
     .about-side {
       /* ★ 不用 flex + gap，用「上边框 + padding-top」分隔。
          目检踩到：gap 与 border-top 同时存在时，两个半段间距（上一块下方 gap
@@ -411,277 +391,175 @@ const isExternal = (h: string) => /^https?:/i.test(h);
       padding-top: 0;
       border-top: 0;
     }
-    /* 签名留在左栏（它在 main 里）：它宽380px，与页头上下成组更紧。
-       ★ 但让它占满左列宽度上限，别让 380px 的图孤零零挂在 578px 栏里右侧。 */
-    .about-main .sign-card {
-      width: min(380px, 100%);
-    }
+    /* ★ 2026-10-03 删：.about-main .sign-card { width: min(380px,100%) }
+       —— 签名整块已删，这条是它专属的宽屏宽度约束。 */
   }
 
-  /* ---- 参考图底纹层（站主 2026-10-03 第二轮；第2 步换成真图）----
-     ★ 站主四条：① 头像上不要线 ② 直接用参考图素材 ③ 直接放背景不做卡片 ④ 白底。
-     ★★ 第2 步把「CSS 取景 + 原图」换成**构建期裁好的小图**：
-        CSS 的 overflow:hidden + 偏移能在浏览器里取景，但**浏览器仍会下载整张原图**
-        （3–4 MB × 3 ⇒ 关于页 10 MB+）。现在图是 900px 宽的 WebP、四块共 482 KB。
-     ★★ **不改成单色、不压淡**（2026-10-03 站主驳回过一次）：
-        上一版把元素统一染成墨绿 + 整体压成极淡 alpha，站主要的是
-        「**强调色、雕像月相的原色、繁复的线条**」。
-        ⇒ 图是**原色**的（`_probe/_ref-plate.mjs` 只做裁切+缩放，一格颜色不动），
-        运行时也**没有 filter**、没有低 opacity ——
-        文字压不住的部分由下面的纸托底（`.ref-paper`）解决。
-     ★ 四块的取景内容：月相序列环 / 维纳斯雕像 / 飞鸟+同心圆 /撞色蓝块+罗马侧脸。 */
+  /* ===================================================================
+   * 底纹层（PAGE PLATE）—— 月相 + 蓝条**替代**百褶 ∞（2026-10-03 第三轮口径）
+   *
+   * 站主原话：「只保留排版，其他什么背景签名全部恢复原样，
+   *   背景恢复后把月相和蓝条替代背景上本来的百褶无限符号」
+   *
+   * ⇒ 这一段的参数**逐条照抄** Topbar 里 `body.chrome-page .page-inf`
+   *   （百褶 ∞ 那一层），只有两处不同：素材换成月相图、本页关掉 .page-inf。
+   *   照抄是有意的：全站纸白区只有**一套**纹理语言（Topbar 注释原话
+   *   「保持全站只有一套纸白区语言」），本页换母题但不换**挂法**。
+   *
+   * ★ 三个关键参数各自的作用（都是从上一版踩出来的）：
+   *   · `position: fixed` + `translate(-50%,-50%)`
+   *     ⇒ 挂**视口**而不是文档 ⇒ 滚动时纹理始终居中，与百褶 ∞ 观感一致。
+   *   · `width: min(128vw, 1600px)` + `aspect-ratio`
+   *     ⇒ 纹理比版心宽、大尺度；`aspect-ratio` 锁住比例，
+   *       `contain` 才不会把图拉变形（这张是 1920×1045 ⇒ 1.837:1）。
+   *   · `opacity: .2` + `z-index: -1`
+   *     ⇒ 退到正文**之下**、压成极淡的墨纹 —— 这正是「纸白阅读底一字不改」
+   *       （口径 #1）的前提：纹理只做氛围，不承载任何信息。
+   *
+   * ⚠ `opacity: .2` 是**照抄百褶 ∞**，与上一版「不加 opacity」相反 ——
+   *   那条是针对「铺满视口的深绿大图」说的（那时要的是冲击力）；
+   *   现在回到「纸白区纹理」这个角色，淡墨纹才是对的。
+   *   代价：月相与纯蓝强调色都会被压到 20% 不透明度
+   *   ⇒ 这是站主要求的必然结果（他说的是「替代百褶∞ 那个位置」），
+   *     不是实现偷工。若嫌太淡，唯一该动的是这个数值（0.2 → 0.3 之类），
+   *     改这里一处即可，别去动图本身。
+   * =================================================================== */
+  /* ===================================================================
+   * 底纹层挂法 —— 与百褶 ∞ 同位（2026-10-03 第三轮口径）
+   *
+   * 站主原话：「只保留排版，其他什么背景签名全部恢复原样，
+   *   背景恢复后把月相和蓝条替代背景上本来的百褶无限符号」
+   *
+   * ★ **同位**：挂法逐条照抄 Topbar 的 `body.chrome-page .page-inf`
+   *   （fixed 挂视口居中、`min(128vw,1600px)`、`aspect-ratio`、
+   *     `object-fit:contain`、`opacity:.2`、`z-index:-1`、不拦指针）
+   *   —— 全站纸白区只有一套纹理语言，本页换的是**母题**（∞ → 月相），不是角色。
+   *
+   * ★★ 唯一不能照抄的是素材本身，这一条是**目检逼出来的**（踩了两轮）：
+   *   百褶 ∞ 那张 `inf-orig.webp` 是**白底**图 ⇒ 矩形底与纸白底同色 ⇒ 看不出边界。
+   *   月相这张是**纯黑底**图 ⇒ 即使 `opacity:.2`，矩形内也是
+   *   0.2×黑 + 0.8×纸白 = 一片灰，与矩形外的纸白**有色差**
+   *   ⇒ 截图上一眼能看见一条矩形下边界（实测 x=60：y≤300 是 rgb(250,250,247)、
+   *     y=700~1100 是 rgb(203,204,201)，差 47/255）。
+   *   第一轮试 `mix-blend-mode: multiply` —— **压不住**：
+   *   multiply 只改色、不裁形状，而图本身是个**不透明矩形**；
+   *   把 z-index 提到 0 让它与 body 纸白底同层之后，矩形边依然在（实测截图复验）。
+   *   ⇒ 正解在**素材侧**（`_probe/_deep-plate.mjs`）：把纯黑底转成 **alpha**，
+   *     图只剩月亮 / 星芒 / 蓝带 / 山脊的形状 ⇒ 矩形在数学上不存在。
+   *     素材处理完，这一层就与百褶 ∞ **完全同参数**，不需要任何额外花招。
+   * ★ 所以这里刻意**不写** mix-blend-mode、也**不写** opacity 之外的 blend 相关属性：
+   *   那些是为「不透明矩形底」打的补丁，素材修好后就该撤掉。
+   * =================================================================== */
   .ref-plate {
     position: fixed;
-    inset: 0;
-    z-index: 0;
+    left: 50%;
+    top: 50%;
+    width: min(128vw, 1600px);
+    aspect-ratio: 1920 / 1045;
+    transform: translate(-50%, -50%);
     pointer-events: none;
-    overflow: hidden;
-    /* ★ 2026-10-03 补：这一层自己要**有底色**。
-       实测（1440×1500）：图按视口宽铺、高 772px，而视口高 1500px
-       ⇒ 图只占 y=0..772，**下面 728px 全是 body 的透明**（实测 bg=rgba(0,0,0,0)）
-       ⇒ 页面下半截是白底，与站主要求的「深绿」相悖。
-       垫 --dusk-2（与构建期处理后的图底同色 `#131b17`）⇒ 上下都深绿，看不出接缝。 */
-    background: var(--dusk-2);
+    z-index: -1;
+    opacity: 0.2;
   }
-  /* ===================================================================
-   * 内容层提层（★ 2026-10-03 补；之前**漏了**，症状是正文「透明」）
-   *
-   * 症状：正文发灰、对比度掉下来 —— 文字后面直接是底纹与白纱。
-   * 根因：`.ref-plate` 是 `position:fixed; z-index:0`（它自己那个 0 必须在：
-   *   用 -1 会被 body 的 `background: var(--paper)` 挡住 ⇒ 底纹全白，
-   *   见规范 §6.26 记的两条层叠坑），而**内容侧一条提层规则都没有**
-   *   （`.prose` 实测 `position: static`）⇒ 两者同处一个层叠上下文，
-   *   DOM 靠后的底纹压过了正文。
-   *
-   * ★ 这条规则我**写错过两次位置**：① 最初只在样稿 `_refbg.html` 里写了，
-   *   落到 `.astro` 时漏掉；② 第二次插在 `.ref-veil` 注释之前，
-   *   而那段注释后来被替换掉 ⇒ 规则跟着一起没了（编译产物里查不到）。
-   *   ⇒ 教训：**层叠规则要放在不会被后续替换波及的位置**，
-   *     且改完必须到**产物 CSS** 里查有没有这条规则（源码有 ≠ 产物有）。
-   *
-   * ★ 顶栏/页脚用 `:global(body.chrome-page …)`：它们由 Base/Topbar 渲染，
-   *   带的是**别的**作用域属性；且 `body.chrome-page .topbar` (0,1,1)
-   *   的权重高于裸 `.topbar` (0,1,0) ⇒ 不对齐权重压不住它。
-   * =================================================================== */
-  :global(body.chrome-page .topbar),
-  :global(body.chrome-page .foot) {
-    position: relative;
-    z-index: 1;
-  }
-  .pagehead,
-  .sign-card,
-  .prose,
-  .fig-block {
-    position: relative;
-    z-index: 1;
-  }
-  /* 背景大图：铺满视口，**原色、原比例**（站主 16:37 指定）。
-     ★ object-fit: cover + 居中：这张是 1.84:1 的宽幅，铺到竖向视口会上下留白，
-       靠 cover 裁掉；居中是为了让月亮（视觉中心）落在视口中央。
-     ★ 不加任何 filter、不加 opacity —— 上一版被驳回的就是这两样。 */
   .ref-main {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-  }
-  /* ★ 图只从**页面顶部与底部**露出来，两侧不露。
-     ★★ 踩了四轮才明白这件事（2026-10-03 目检）：
-       纸要压住文字 ⇒ 必须不透明、必须完整；而版心左右两侧加起来只有约 96px，
-       图从那里露出来只是**一条窄边**，看不出是月亮还是星芒（试过：像"贴了张白纸"）。
-       ⇒ 让纸的上下**留出空档**：纸按内容块分段（已做），段间就是图的可见区。
-     ★ object-position 的第二个值：月亮在这张图的中偏上 ⇒ 42% 让它落在上半屏的
-       空档里（0–8% 那段）。 */
-  /* ★★★ 定位必须用「按宽铺 + 顶部对齐」，**不能用 cover**（2026-10-03 实测算出来的）：
-     图 1920×1045（1.84:1），cover 到 1280×1500 ⇒按**高**铺，
-     纵向溢出 0、横向溢出 1476px ⇒ `object-position` 的**纵向值完全无效**
-     （实测 0%–100% 算出来月亮都在视口 y=690px，而顶部空档只有 0–380px）。
-     ⇒ 改用显式的 `width:100%; height:auto`：图按视口宽铺、高约 697px，
-        顶部对齐 ⇒ 月亮（图内 y≈46%）落在视口 y≈320px，**正好在空档里**。
-     ★ 图比容器窄时会露底 ⇒ 底下垫 --dusk-2（与图底同色，看不出接缝）。 */
-  /* ★★ body 的不透明纸白底必须让位 —— 它是遮挡整张背景图的真正原因。
-     `src/styles/base.css` 里 `body { background: var(--paper) }`铺满全页，
-     而 `.ref-plate` 是 `z-index:0` 的 fixed 层 ⇒ **在 body 背景之上**
-     （元素永远在body 背景之上），实测射线里顶部空档只有 body 的纸白底、没有图。
-     ⇒ 关于页把 body 背景改成透明，纸白由**各内容块自己的纸**承担
-      （.page-paper 与各块的 ::before 已经是--paper）。
-     ⚠ 用 `:global()` + `body.about` 类名限定，**只影响关于页**，
-        别的页面仍靠 body 的纸白底（红线：别顺手改全站）。 */
-  :global(body.about-plate) {
-    background: transparent;
-  }
-
-  /* `.ref-main` 装图：用 **relative**（不是 absolute）——
-     绝对定位会让子元素脱离文档流、容器高度塌成 0 ⇒ 图整块消失（实测踩到）。
-     图在正常流里，容器高度由图撑开。 */
-  .ref-main {
-    position: relative;
     width: 100%;
+    height: 100%;
     line-height: 0;
   }
   .ref-main > picture,
   .ref-main > img {
     display: block;
     width: 100%;
-    height: auto;
+    height: 100%;
+    object-fit: contain;
     max-width: none;
   }
 
+  /* ★★ 必须**关掉**本页的百褶 ∞（`.page-inf`，由 Topbar 渲染，全站内页共用）。
+     不关的话两套母题会叠在一起 —— Topbar 注释里已记过这个教训
+     （「切片档案」四层换 ∞ 底纹时就是因为叠着才整体删掉）。
+     ⚠ 用 `:global(body.about-plate .page-inf)`：
+       `.page-inf` 是 Topbar 的元素、带的是**别的**作用域属性；
+       且 `body.chrome-page .page-inf` (0,2,1) 权重高于裸 `.page-inf` (0,1,0)
+       ⇒ 不对齐权重压不住它。
+     关法用 `display: none` 而不是 `opacity: 0`：
+       后者仍占层、仍可能被合成层吃掉 GPU（这层是 fixed 满屏，很贵）。 */
+  :global(body.about-plate .page-inf) {
+    display: none;
+  }
+
+  /* ★★ body 的不透明纸白底**必须留着**（与上一版相反）。
+     上一版为了让「深绿大图」透出来，把 `body.about-plate` 改成 `background: transparent`
+     并给每个内容块加纸托底（`.prose::before` / `.fig-block::before` / `.page-paper`）。
+     现在底纹回到「z-index:-1 的淡墨纹」⇒ 它在 body 背景**之下**才正常
+     （-1 的元素画在 body 背景之下，这是 z-index:-1 的定义），
+     ⇒ body 保持 `var(--paper)` 不透明即可，**所有纸托底一并删除**。
+
+     为什么必须是这样，而不是「body 透明 + 逐块垫纸」：
+       · 逐块垫纸是 2026-10-03 踩了**四轮**才做对的东西（两次被月亮劈开、
+         一次纸把月亮吃掉、一次纸与内容错位），根因是「深色大图必须被不透明纸压住」。
+       · 而现在纹理是淡墨纹，**不需要**任何东西压它
+         （实测百褶 ∞ 就是裸挂在 body 纸白底上的）。
+       · 少一层纸 = 正文的对比度由 body 一次性保证，不必逐块维护。
+     红线「正文排版不动」也因此更稳：删掉 `::before` 之后
+     `.prose` 的内容盒回到最干净的状态（此前 `::before` 一直挂在它身上）。 */
+
   /* ===================================================================
-   * 纸托底 —— **由内容自己撑开**，不写死任何百分比
+   * 纸托底 —— **整段已删**（2026-10-03 站主第三轮口径）
    *
-   * ★★ 踩了三轮才对（2026-10-03 目检），每轮的错都记在这里：
-   *   ① 两条竖条 + 中间留缝 ⇒ **月亮被劈成两半**（它是这张图唯一的视觉中心）；
-   *   ② 一整块纸盖满版心 ⇒ 正文可读了，但**月亮被整块吃掉**，只剩边角；
-   *   ③ 分段但用**写死的 %** ⇒ 纸与内容错位，文字直接压在图上（最难看的一版）。
-   * ⇒ 正解：**每一块有字的元素自己带纸**，纸由**伪元素**画在内容盒之外。
+   * 下面是踩了三轮才做对的东西，删掉之前先把为什么删写清楚（别手滑加回来）：
+   *   ① 两条竖条 + 中间留缝 ⇒ 月亮被劈成两半；
+   *   ② 一整块纸盖满版心 ⇒ 正文可读了，但月亮被整块吃掉；
+   *   ③ 分段但用写死的 % ⇒ 纸与内容错位，文字直接压在图上。
+   * 这三轮的共同前提是：**背景是一张铺满视口的深绿大图**，
+   * 文字压不住 ⇒ 必须有不透明纸垫在下面。
    *
-   * ★★ 关键约束：纸**不能靠给内容加 padding 实现** ——
-   *   那会改变 `.prose` 的内容盒（红线#3「正文排版不动」）。
-   *   正确做法：伪元素 `::before` 用 `inset: -Npx` 向外撑，
-   *   **盒子本身一格不动**，纸在它周围张出来。
-   *
-   * ★ 为什么不给 `.about-main` / `.about-side` 整栏加纸：
-   *   整栏加纸 = 情况②（月亮被吃掉）。**逐块加**才有缝。
+   * ★ 现在底纹回到 `z-index: -1` + `opacity: .2` 的淡墨纹
+   *   （＝百褶 ∞ 那一层的角色），它画在 body 纸白底**之下**
+   *   ⇒ 不需要任何东西压它，跟百褶 ∞ 当年一样是裸挂的。
+   * ⇒ 一并删除的东西：`.sign-card::before` / `.prose::before` / `.fig-block::before`
+   *   / `.page-paper` 真元素 / `.ref-paper` 那两条写死 % 的分段纸 / body 的 transparent。
+   * ⇒ 顺带收益：`.prose` 的内容盒回到最干净的状态（此前 `::before` 一直挂在它身上），
+   *   红线「正文排版不动」少了一层需要维护的东西。
    *=================================================================== */
-  .pagehead,
-  .sign-card,
-  .prose,
-  .fig-block {
-    position: relative;
-  }
-  .sign-card::before,
-  .prose::before,
-  .fig-block::before {
-    content: '';
-    position: absolute;
-    /* 向外撑出纸边（负 inset）—— 内容盒本身不动，正文排版零影响。 */
-    inset: calc(var(--sp-4) * -1);
-    background: var(--paper);
-    box-shadow: 0 0 0 1px var(--hair);
-    z-index: -1;             /* 纸在内容之下、文字之上 */
-  }
-  /* 签名那块窄（380px），纸也窄 ⇒ 视觉上像「贴上去的标本片」 */
-  .sign-card::before {
-    inset: calc(var(--sp-3) * -1);
-  }
-  /* ★★ 页头的纸**不能用伪元素** ——
-     `.pagehead` 是两栏 grid（标题左 / 头像右，且 `FIG.00` 通栏），
-     伪元素会按 grid 容器参与轨道计算，实测 inset 被算成
-     `72px -16px -32px -3px`（上面莫名撑开 72px、左侧只剩 -3px）
-     ⇒ 纸既盖不住标题那一格、又往版心外溢。
-     ⇒ 改用**真元素**：在模板里给页头加一个 `.page-paper` 子节点，
-       由下面的 `position:absolute + inset` 铺满页头（见「页头纸托底」段）。 */
+
   /* 页头：宽屏两栏（标题左 / 头像右），窄屏单列纵向流。
      ★ `display: grid` **只在媒体查询里写一次**（见下方 `@media (min-width:1024px)`），
        这里**不重复声明** —— 同元素两处各写一次 display 时后写的赢（这个坑踩过：
        外层 grid 被媒体查询的 flex 覆盖）。 */
   .pagehead {
     position: relative;
-    /* 纸用负 inset 向外撑，理论上会超出页头盒 —— 这里裁掉，
-       保证任何视口下页头都不产生横向溢出（红线：页面不可横向滚动）。
-       代价：页头右侧/底部若有元素想「探出」页头会被裁（当前没有这类元素）。 */
-    overflow: hidden;
   }
   /* ★★ 页头网格必须**逐项显式指定落位**（2026-10-03 实测出来的坑）。
      之前只写 `grid-template-columns: 1fr auto` 让浏览器自动放置，结果是：
        实测 h1 x=562（落在**右**列）、.profile x=101（落在**左**列）
      ⇒ 标题和头像左右**调换**了（与设计意图相反）。
-     根因：网格项按源码顺序自动-flow，`.fig-no` 先占 (1,1)，于是
-     `h1` 被挤到 (1,2)、`.profile` 到 (2,1)。
-     ⇒ 显式落位，顺序无关：
-       编号通栏（1/-1）· 标题左列 · 头像右列。 */
+     根因：网格项按源码顺序自动-flow，`.fig-no` 先占 (1,1)，
+     于是 `h1` 被挤到 (1,2)、`.profile` 到 (2,1)。
+     ⇒ 显式落位，顺序无关：编号通栏（1/-1）· 标题左列 · 头像右列。
+
+     ★ 标题为什么用 `:global()` 而不是 `.pagehead > h1`（实测踩过）：
+       Astro 的 scoped CSS 会给选择器尾部加本页 cid 属性，
+       `.pagehead > h1` 编译成 `.pagehead[本页cid] > h1[本页cid]`；
+       而这个 h1 是 **PageTitle 组件**渲染的，元素上带的是**组件自己的** cid
+       ⇒ 属性选择器**不匹配** ⇒ 规则整条静默失效（不报错、不警告）。
+       当时纸（`.page-paper`，本页元素 ⇒ 匹配成功）拿到 position:absolute + z-index:0，
+       标题既static 又无 z-index ⇒ **纸把标题整个盖住**，页头一片空白。
+       ★ 现在纸已删、底纹是 z-index:-1，这个失效**不再有可见症状**，
+         但规则本身仍要写对（落位得真生效，否则左右又会调换）。
+       代价与边界：`:global()` 让这条规则离开本页作用域，
+       但它以 `.pagehead >` 为前缀（该类是本页独有）⇒ 影响面仅关于页。 */
   .pagehead > .fig-no { grid-column: 1 / -1; grid-row: 1; }
-  /* ★ 标题必须用 `:global()` 包住类名，**不能**写 `.pagehead > h1` 或 `.pagehead > .h`
-     （2026-10-03 实测踩到，症状是「纸把标题整个盖住、页头一片空白」）。
-
-     —— 为什么。这两个写法都被 Astro 的 scoped CSS 编译成**带本页 cid 的属性选择器**：
-        `.pagehead[本页cid] > h1[本页cid]` / `> .h[本页cid]`。
-        而这个 h1 是 **PageTitle 组件**渲染的，元素上带的是**组件自己的 cid**（ta2fbyqs≠本页）
-        ⇒ 属性选择器**不匹配** ⇒ 规则整条静默失效（实测 h1pos=static h1z=auto）。
-        ⇒ 纸（`.page-paper`，本页元素 ⇒ 匹配成功）拿到 position:absolute + z-index:0，
-          标题既 static 又无z-index ⇒ **纸盖住标题**，纸上只剩空白。
-
-     ★ 代价与边界：`:global()` 意味着这条规则**离开本页作用域**。
-       它以 `.pagehead >` 为前缀（`.pagehead` 是本页唯一的类）⇒ 实际影响面仅关于页。
-       规则：凡是**跨组件边界**要选择元素，一律 `:global(类名)`，不用标签/局部类选择器。 */
   :global(.pagehead > h1) { grid-column: 1; grid-row: 2; }
   .pagehead > .profile { grid-column: 2; grid-row: 2; }
 
-  /* ---- 页头纸托底（真元素，不是伪元素）----
-     ★ 为什么不用 `::before`：`.pagehead` 是 grid 容器，伪元素会作为 grid item
-       参与轨道计算，`inset: -16px` 被算成 `72px -16px -32px -3px`
-       （实测上面莫名撑 72px、左侧只剩 -3px）⇒ 纸既盖不住标题、又往版心外溢。
-     ★ 为什么**不能**用 `grid-area: 1/1/-1/-1`（实测踩到，2026-10-03）：
-       `grid-template-rows: auto auto` 只有 2 行，`-1` 解析成第 3 行（不存在）
-       ⇒ 纸被放进一条**隐式行**并按内容高度撑开，而那条行没有内容
-       ⇒ **实测高度 = 0**（探针：page-paper=[85,546,610,0]）⇒ 纸等于不存在。
-       ⇒ 改成显式 `grid-row: 1 / 3`（第 1 行到第 2 行末）才跨满，
-         但那样纸会**参与行分配**、可能把标题/头像挤变形（纸成了有内容的项）。
-     ⇒ 最终方案：`position: absolute` + 显式四边 inset，**包含块锚在页头自己**
-       （`.pagehead` 已有 position:relative，上面那条规则给了）。
-       绝对定位的 grid 子元素**不参与轨道计算**（这正是我们要的：纸不影响排版），
-       而包含块是页头的 padding盒 ⇒ inset 相对页头算，精确可控。
-       ⚠ 之前「absolute ⇒ 高度塌 0」那次是因为 `.pagehead` 当时**没有**
-         position:relative，包含块跑到 main 去了；现在有了，两个条件都满足。
-     ⚠⚠ **另一个更隐蔽的坑（2026-10-03 实测）**：下面那条
-        `.pagehead > * { position: relative; z-index: 1 }` 排在**本规则之后**，
-        同特异性（都是 0,1,0）**后写的赢** ⇒ 把纸的 `position:absolute`
-        覆盖回 `relative` ⇒ 纸重新变成 grid item ⇒ 实测高度又塌成 0。
-        ⇒ 靠**提高特异性**（`.pagehead > .page-paper`，0,2,0）压过通配那条，
-          而不是靠调整源码顺序 —— 顺序太脆，下一次插注释就会再被翻回去。
-     ⚠⚠⚠ 窄屏下纸**不得**超出视口（2026-10-03 实测）：
-       390 视口时 grid 的 `1fr auto` 算出 503px 的纸宽（文档 scrollWidth=512）
-       ⇒ 横向溢出 122px、头像被切出屏幕。
-       根因不在纸上，而在 **grid 只该在宽屏生效**（见下方媒体查询）。
-       这里再加一道保险：`overflow: hidden` 让纸的溢出被裁在页头盒内。 */
-  .pagehead > .page-paper {
-    position: absolute;
-    /* 负 inset = 纸边向外撑；页头内容盒本身一格不动（红线：正文排版不动）。 */
-    inset: calc(var(--sp-4) * -1);
-    background: var(--paper);
-    box-shadow: 0 0 0 1px var(--hair);
-    /* 纸在内容之下：`.pagehead > *` 那条会给所有子元素 z-index:1，
-       这里显式压回 0（同一特异性下靠后声明胜出）。 */
-    z-index: 0;
-  }
-
-  /* 页头内容压在纸之上 */
-  .pagehead > *,
-  /* ★ 这条是**必需**的，不是冗余：`.pagehead > *` 编译成
-     `.pagehead[本页cid] > *[本页cid]`，而标题 h1 带的是 **PageTitle 组件**的 cid
-     ⇒ 通配那条匹配不到它 ⇒ 标题没有 z-index，被纸（z-index:0 定位元素）整个盖住
-     （实测：h1pos=static h1z=auto，elementFromPoint 命中 DIV.page-paper）。
-     ⇒ 同样必须 `:global()`。 */
-  :global(.pagehead > h1),
-  .sign-card,
-  .prose,
-  .fig-block {
-    position: relative;
-    z-index: 1;
-  }
-  /* 块与块之间的缝：纸与纸之间要露出背景图 */
-  .sign-card,
+  /* 块与块之间的间距。
+     ★ 这里曾用 `margin-bottom` 在「纸与纸之间露出背景图」——
+       纸已删（底纹回到淡墨纹，本来就铺满视口、不需要留缝），
+       间距改由各块自己的 margin 承担。 */
   .prose,
   .fig-block {
     margin-bottom: var(--sp-7);
-  }
-  /* 左栏段：与 .about-main 的行盒对齐（页头 + 签名 + 正文） */
-  .ref-paper::before {
-    top: 8%;
-    height: 46%;
-  }
-  /* 右栏段：与 .about-side 的行盒对齐（三块清单） */
-  .ref-paper::after {
-    top: 4%;
-    height: 62%;
-  }
-  .ref-paper::before {
-    left: max(var(--gutter), calc((100% - var(--wrap)) / 2 + var(--gutter)));
-    width: min(var(--measure), calc(100% - var(--gutter) * 2));
-  }
-  .ref-paper::after {
-    right: max(var(--gutter), calc((100% - var(--wrap)) / 2 + var(--gutter)));
-    width: max(0px, calc((100% - var(--gutter) * 2) - var(--measure) - var(--sp-8)));
   }
 
   /* ---- 标本编号：等宽字 + 大字距 = 「标本标签」的印刷感，也是仪器语汇的延续 ---- */
@@ -707,34 +585,8 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     position: relative;
   }
 
-  /* ---- 签名（站主 2026-10-03 第二轮：取消深底板，签名直接落在纸白底上）----
-     ★ 为什么去掉 --dusk-2 深底：底纹改走白底之后，那块深底就成了页面里唯一的孤岛；
-       站主要求「直接放到背景里，不要单独做一个卡片」⇒ 只留编号小字 + 签名本身。
-     ★ 宽度用 min() 收窄：380px 写死在 390 视口下会横向溢出（2026-10-03 目检实测签名被切）。 */
-  .sign-card {
-    margin: var(--sp-6) 0 var(--sp-6);
-    width: min(380px, 100%);
-  }
-  .sign-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: var(--sp-3);
-    padding-bottom: 0.4em;
-    font-family: var(--font-mono);
-    font-size: var(--fs-xs);
-    letter-spacing: 0.16em;
-    color: var(--muted);
-  }
-  .sign-head b {
-    color: var(--accent-ink);
-    font-weight: 400;
-  }
-  .sign-img {
-    display: block;
-    width: 100%;
-    height: auto;
-  }
+  /* ★ 签名的样式（.sign-card/.sign-head/.sign-img）**已删**（2026-10-03 第三轮口径）。
+     宽度那套`min(380px, 100%)` 的收窄结论仍然有效，将来要恢复签名时直接用。 */
 
   /* ---- 社交卡 / 技术栈：站主 2026-10-03 第二轮「不做卡片」⇒
      改成**细线分隔的列表**（上边框分隔、无卡片框、无底色）----
@@ -1062,32 +914,11 @@ const isExternal = (h: string) => /^https?:/i.test(h);
       min-width: 0;
     }
     /* ---- 手机档（口径 #9：展示型留**极简版**）----
-       极简 = 保留签名（这一页唯一的手笔，不能砍）与底纹层，
-       但去掉编号小字、缩小边距 —— 窄屏上这些挤得慌且读不出。
-       ★ 落笔动画在手机上也保留（它是本页唯一的互动）。
-       ★ 宽度已在 .sign-card 上用 min(380px, 100%) 收窄，这里不再重复设。 */
-    .sign-head span {
-      display: none;
-    }
+       极简 = 去掉编号小字、缩小边距 —— 窄屏上这些挤得慌且读不出。
+       ★ 签名的极简规则（.sign-head span { display:none }）随签名一起删了。
+       ★ 底纹层不用为窄屏改任何参数：它照抄百褶 ∞（`width:min(128vw,1600px)`
+         + `contain`），128vw 在窄屏上自然收窄，比例由 aspect-ratio 锁住。 */
     .fig-no {
       margin-bottom: 0;
     }
-    /* 窄屏：这张图是 1.84:1 宽幅，铺到 390×800 的竖屏会裁掉左右一大半，
-       月亮（视觉中心）还能保住，但两侧的星芒与山脉会丢。
-       ⇒ 改成按**高度**对齐（object-position 的第二个值），
-         让月亮仍在上半屏的可见区里。 */
-    /* 窄屏是单栏 ⇒ 左右两段都退到版心宽度，图从两侧透上来更多 */
-    .ref-paper {
-      left: var(--sp-5);
-      right: var(--sp-5);
-    }
-    .ref-paper::before {
-      top: 4%;
-      height: 30%;
-    }
-    .ref-paper::after {
-      top: 40%;
-      height: 40%;
-    }
-  }
 </style>

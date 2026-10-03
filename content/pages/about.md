@@ -7,13 +7,8 @@ title: 关于
 #   stack       技术栈（2026-09-28 要求）：group 是分组小标题，items 是该组条目。
 #                每一项都在本仓库里有出处（依赖见 package.json、部署见 wrangler.toml、
 #                接口见 functions/api/、字体见 public/fonts/）—— 改之前先确认它还在用。
-#   signature   手写签名图（站主 2026-10-03 提供原件，已抠白底转墨绿）—— 同 avatar 的目录。
-#                显示为深底切片「FIG.01 HAND」，落笔动画是横向揭幕。
-# signatureNote 签名切片底部那行小字（等宽字，读数感）。
 avatar: avatar.jpg
 avatarName: 北杉
-signature: sign.png
-signatureNote: HANDWRITING · 北杉
 social:
   - icon: github
     name: GitHub

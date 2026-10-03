@@ -58,15 +58,13 @@ describe('低对比 token 越界（--accent-bright 只许用在深色底上）',
     // 正是 CC-BY 许可的全部要求）。改用 --accent-bright 是它的**正当用途**：
     // 对 --dusk-1(#0b100e) 实测 6.76:1，小字达标；再配下划线。
     '.tsl-hud a',
-    // 2026-10-03 追加：关于页「亲笔签名」深底切片（--dusk-2 底）上的两处亮绿。
-    // 与上面同属「深色底上的亮绿」，实测对 --dusk-1 是 6.90:1（比它对 --ink 的 6.26 还高）。
-    // ★ 站主 2026-10-03 拍板「配色以绿色为主 + 和本站风格有关系」⇒ 签名切片的编号与元信息
-    //   用 --accent-bright，而不是新造色值。
-    '.sign-head .sign-fig',
-    '.sign-foot .sign-meta',
-    // (2026-09-30 一度为 .hero-logo .lg-glow 登记过，随即撤销：
+    // (2026-10-03 一度为 .hero-logo .lg-glow 登记过，随即撤销：
     //  站主要求 logo 沿用原型最终定色，改用专用 token --logo-glow，不再是裸 --accent-bright。
     //  留着这条"已不存在用法"的例外，等于给白名单掺水 —— 以后真出问题会被它掩护过去。)
+    // ★ 2026-10-03 删：'.sign-head .sign-fig' / '.sign-foot .sign-meta'
+    //   —— 关于页签名切片整块已删，这两条已成「已不存在用法」⇒ 同上面的理由移除。
+    //   ★ 移除后 --accent-bright 在产物里只应剩 .tsl-hud a 一处；
+    //     若将来别处要用它，请连同「为什么那个底色下只有它达标」一起写进来。
   ];
 
   it('构建产物的 CSS 里，裸 var(--accent-bright) 只出现在白名单选择器里', () => {
@@ -127,51 +125,10 @@ describe('深底（dusk 系）上的文字颜色', () => {
     expect(script, 'dusk-5 应登记为图形色（下限 3）').toMatch(/dusk-5.*dusk-1.*4\.26.*3/);
   });
 
-  it('about.astro 深底切片里不用 accent-ink / muted 承载文字', () => {
-    const astro = readFileSync('src/pages/about.astro', 'utf8');
-    // 剥注释与字符串，避免注释里抄到字面量造成恒真
-    const code = astro
-      .replace(/\/\*[\s\S]*?\*\//g, ' ')
-      .replace(/(^|\s)\/\/[^\n]*/g, ' ')
-      .replace(/<!--[\s\S]*?-->/g, ' ');
-    /* ★★ 判据只抓**深底切片自己的规则**，且要求选择器里**只有 .sign-*、没有逗号**。
-       踩过的坑（2026-10-03 本轮自己踩的）：第一版写 `/\.sign[\w-]*[^{}]*\{/`，结果把**共享的编号规则组**
-       （`.fig-no, .sign-fig, .sign-kind, .fig-idx { color: var(--accent-ink) }`）一起抓了——
-       那是**纸底**上的编号，accent-ink 在纸上 6.18:1 完全正当。
-       判据写得越宽，越会给出假的红。 */
-    const deepBlocks = [...code.matchAll(/(^|[},])\s*(\.sign-[a-z-]+)\s*\{([^{}]*)\}/g)];
-    expect(deepBlocks.length, '没找到签名切片的样式块 —— 改名了要同步这条断言').toBeGreaterThan(0);
-    for (const m of deepBlocks) {
-      const body = m[3];
-      expect(body, `${m[2]} 用了 --accent-ink（对 dusk 只有 2.97）`).not.toMatch(/color:\s*var\(--accent-ink\)/);
-      expect(body, `${m[2]} 用了 --muted（对 dusk 只有 2.77）`).not.toMatch(/color:\s*var\(--muted\)/);
-    }
-  });
-
-  it('深底小字只用 dusk-6 / accent-bright，dusk-5 只许做 10px 标签', () => {
-    const astro = readFileSync('src/pages/about.astro', 'utf8');
-    const code = astro.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, ' ');
-    const deepBlocks = [...code.matchAll(/(^|[},])\s*(\.sign-[a-z-]+)\s*\{([^{}]*)\}/g)];
-    /* 白名单三档：
-       --dusk-6（11.76:1，正文级）、--accent-bright（6.90:1，深底的绿）、--dusk-5（4.26:1）。
-       ★ --dusk-5 差 0.24 不到 4.5，所以**只许做 10px 标签/刻度，不承载正文**——
-         这是站主 2026-10-03 拍板「加一串读数小字」后的既成设计，
-         且已在 assert-tokens.mjs 里以图形下限 3:1 登记。把它写进白名单并在下面
-         单独守「不许拿它写正文」。
-       ★★ 判据里比的是**捕获组拿到的 token 名**（`(--[a-z0-9-]+)`，**不含右括号**），
-          所以白名单也必须是不带括号的裸名 —— 写成 `var(--dusk-5)` 会永远不匹配（假红）。
-          这个坑我自己踩了一次。 */
-    const OK = /^--(?:dusk-6|accent-bright|dusk-5)$/;
-    for (const m of deepBlocks) {
-      for (const c of m[3].matchAll(/color:\s*var\((--[a-z0-9-]+)\)/g)) {
-        expect(OK.test(c[1]), `${m[2]} 用了 ${c[1]} —— 深底只许 dusk-6 / accent-bright / dusk-5(标签)`).toBe(true);
-      }
-    }
-    // ★ 但 dusk-5 只许出现在 10px 级：拿它写正文级文字（--fs-sm 及以上）不行
-    const rule = code.match(/\.sign-foot[^{]*\{([^{}]*)\}/)?.[1] ?? '';
-    if (/color:\s*var\(--dusk-5\)/.test(rule)) {
-      const size = rule.match(/font-size:\s*var\((--fs-[\w-]+)\)/)?.[1] ?? '';
-      expect(size, 'dusk-5 只能用在 --fs-xs（10px 级）').toBe('--fs-xs');
-    }
-  });
+  /* ★ 2026-10-03 删：两条绑死 `.sign-*` 的断言（关于页签名切片）。
+       签名整块已删（站主第三轮口径「只保留排版，签名恢复原样」），
+       判据 `deepBlocks.length > 0` 变成恒假 ⇒ 删掉而不是留着假绿。
+       ★ 上面那条 `assert-tokens.mjs 里有dusk 系断言` **仍然保留** ——
+         它守的是 token 层面的通用规则（dusk-6/dusk-5 在任何深底上都要成立），
+         与签名无关。删签名不该把token 层的门闩一起带走。 */
 });
