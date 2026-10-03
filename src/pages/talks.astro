@@ -82,11 +82,14 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
    *
    * ① `.float-plate`：站主 2026-10-04 指定「把这个放在原来百褶无限符号的地方」。
    *    挂法照抄百褶 ∞（`body.chrome-page .page-inf`）—— fixed 挂视口居中、`contain`、
-   *    `opacity .2`、`z-index:-1`、不拦指针；全站纸白区只有**一套纹理语言**，
+   *    `z-index:-1`、不拦指针；全站纸白区只有**一套纹理语言**，
    *    本页换的是母题（∞ → 墨点螺旋），不是角色。
-   *    ★ 两项刻意不照抄，都是素材差异（关于页那条教训：「唯一不能照抄的是素材本身」）：
-   *      比例（1317/563）与透明度（∞ 的 .2 配本图重约 4 倍 ⇒ 取站上装饰底纹 8% 档）。
-   *      推导、实测与四档样机见下面样式段的 `.float-plate` 注释 + `_probe/_float-verify.mjs`。
+   *    ★ 三项刻意不照抄，都是素材差异（关于页那条教训：「唯一不能照抄的是素材本身」）：
+   *      ① 比例：本图 1317/563，∞ 是 1572/878。
+   *      ② 透明度：∞ 的 `.2` 配本图重约 4 倍 ⇒ 取站上**自己**的装饰底纹定稿档 8%。
+   *      ③ 取宽：∞ 是**故意出血**的 `min(128vw,1600px)`，本图墨迹铺满画布
+   *         ⇒ 出血会切掉最外圈月牙，站主目检定「小一点，不要出去了」⇒ 收回画内。
+   *      三条的推导与实测都写在下面样式段的 `.float-plate` 注释里。
    *    ★ 素材**不裁不染**（`_probe/_talk-plate.mjs`）：四边的月牙本来就触到画布边缘，
    *      按任何阈值裁都会切掉最外圈的月牙尖 —— 而那正是整张图的读法。
    *
@@ -105,8 +108,8 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
           class="float-img"
           src={plate}
           alt=""
-          widths={[790, 1317]}
-          sizes="128vw"
+          widths={[590, 1180]}
+          sizes="86vw"
           loading="eager"
           decoding="sync"
         />
@@ -451,10 +454,15 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     position: fixed;
     left: 50%;
     top: 50%;
-    /* 取宽照抄百褶 ∞（`min(128vw,1600px)`）—— 这一条是**目检校准过**的：
-       先试过"让墨迹与 ∞ 同宽"（= ×0.458 ⇒ 733px），实测配 .2 仍然比 ∞ 重得多，
-       而且缩小之后图案读不出"大尺度氛围"。⇒ 回到照抄取宽，改用**透明度**调分量。 */
-    width: var(--plate-w, min(128vw, 1600px));
+    /* ★★ 取宽**不照抄**百褶 ∞ —— 站主 2026-10-04 目检后定了「小一点，不要出去了」。
+       ∞ 用的是 `min(128vw,1600px)`，那是**故意出血**（∞ 的两头被视口切掉是它的读法，
+       它的墨迹只占取景框 45.8%，切掉的本来就是空白）。本图墨迹**铺满整个画布**，
+       出血 = 最外圈那排月牙被切掉半截，读起来像"图被裁坏了" ⇒ 必须收到画内。
+       ⇒ `min(86vw, 1180px, 200vh)`：三个上限各管一件事
+          · 86vw —— 任何视口宽下都留 ≥7% 余量（1440 实测取 1180，左右各 130px）
+          · 1180px —— 超宽屏不让它无限长（同时仍是版心 544px 的两倍多，"大尺度氛围"没丢）
+          · 200vh —— 兜住"又宽又扁"的窗（横屏平板）：图高 ≤ 85.5vh，上下永远留得下。 */
+    width: var(--plate-w, min(86vw, 1180px, 200vh));
     aspect-ratio: 1317 / 563;
     transform: translate(-50%, -50%);
     /* ★★ 透明度**不是**照抄 ∞ 的 .2 —— 这是本页唯一一处必须偏离 ∞ 定稿值的地方，
@@ -468,8 +476,9 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     pointer-events: none;
     z-index: -1;
   }
-  /* ★ `max-width: none` 是必需的：base.css 给 `img` 定了 `max-width:100%`，
-     而这一层刻意比版心宽（`min(128vw,1600px)`）—— 不解除限制它就永远铺不到 128vw。 */
+  /* ★ `max-width: none` 仍是必需的：base.css 给 `img` 定了 `max-width:100%`，
+     而这一层刻意比版心宽（`min(86vw,1180px,200vh)` 仍 ≥ 1180px，版心只有 544px）
+     —— 不解除限制它就缩到父盒宽度，底纹会跟着版心走。 */
   .float-plate img {
     display: block;
     width: 100%;

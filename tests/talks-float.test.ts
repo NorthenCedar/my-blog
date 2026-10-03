@@ -325,17 +325,30 @@ describe('说说页 · 墨点螺旋底纹（替代百褶 ∞）', () => {
     }
     expect(plate, '与百褶 ∞ 的居中写法不一致').toMatch(/translate\(-50%,\s*-50%\)/);
     expect(inf, '百褶 ∞ 现在不是 z-index:-1 了 ⇒ 这条契约要重新对').toMatch(/z-index:\s*-1/);
-    // 取宽照抄 ∞（目检校准后的选择：缩小反而读不出大尺度氛围）
-    expect(plate, '取宽必须与百褶 ∞ 一致：min(128vw, 1600px)').toMatch(
-      /--plate-w,\s*min\(128vw,\s*1600px\)\)/,
+    /* 取宽**刻意不照抄** ∞：∞ 的 `min(128vw,1600px)` 是**故意出血**
+       （它墨迹只占取景框 45.8%，切掉的是空白）；本图墨迹铺满画布，
+       出血会切掉最外圈月牙。站主 2026-10-04 目检：「小一点，不要出去了」。 */
+    expect(plate, '取宽必须收回画内：min(86vw, 1180px, 200vh)').toMatch(
+      /--plate-w,\s*min\(86vw,\s*1180px,\s*200vh\)\)/,
     );
+    // 反例守卫：∞ 那个"故意出血"的档不许回到本页（ACSS 已剥注释，这里查的就是真声明）
+    expect(plate, '128vw 是 ∞ 的出血档 —— 本页禁止再用（会切掉最外圈月牙）').not.toMatch(/128vw/);
+    /* ★ 站上通用的守卫，比单看某个数字耐老化：把 plate 块里所有 vw 值都拿出来，
+       任何一个 ≥100vw 都意味着「图案会出画」。 */
+    const vwValues = [...plate.matchAll(/([\d.]+)vw/g)].map((m) => Number(m[1]));
+    expect(vwValues.length, '取宽里一个 vw 都没有？').toBeGreaterThan(0);
+    for (const v of vwValues) {
+      expect(v, '取宽不许 ≥100vw —— 站主 2026-10-04：不要出去了').toBeLessThan(100);
+    }
+    // 宽与高都要有上界 —— 只锁宽的话，"又宽又扁"的窗里会从上下出去
+    expect(plate, '挡"又宽又扁"的窗，必须有 vh 上界').toMatch(/200vh/);
     // 透明度**刻意不照抄** .2：站上自己的装饰底纹定稿档是 8%
     expect(plate, '透明度默认值应为 8%（站上装饰底纹定稿档）').toMatch(/--plate-op,\s*0\.08\)/);
     expect(inf, '百褶 ∞ 的 opacity 不是 .2 了？契约要重新对').toMatch(/opacity:\s*0?\.2/);
     /* ⚠ 这条查**未剥注释的原文**（要的就是注释里的理由） */
     expect(ASTRO, '这一段要写清为什么不是 .2（换素材 ⇒ 换等价分量）').toMatch(/等视觉分量/);
     expect(SRC + ACSS, '两档旋钮要留着，便于只改一行就调分量').toMatch(/--plate-op/);
-    // 图片：contain + 解除 base.css 的 max-width（否则铺不到 128vw）
+    // 图片：contain + 解除 base.css 的 max-width（否则缩到父盒宽度、底纹跟着版心走）
     expect(ACSS).toMatch(/\.float-plate img\s*\{[\s\S]*?object-fit:\s*contain/);
     expect(ACSS).toMatch(/\.float-plate img\s*\{[\s\S]*?max-width:\s*none/);
     // 走构建期管线（<Image widths sizes>）
