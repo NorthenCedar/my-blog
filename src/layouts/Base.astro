@@ -24,6 +24,15 @@ interface Props {
   /** 404 这类错误页不该有 canonical —— 它不是真实内容页 */
   noCanonical?: boolean;
   /**
+   * 追加到 `<body>` 的额外类名（空格分隔）。
+   * ★ 2026-10-03 新增：关于页要一张**从 body 背景就开始**的深色大图，
+   *   而 `body { background: var(--paper) }`（base.css）铺满全页会把图盖住
+   *   —— 元素再高的 z-index 也压不过 body 自身的背景。
+   *   ⇒ 该页用这个 prop挂一个类，由页面自己的样式把 body 背景改成 transparent。
+   *   只给需要的页面用，**不顺手改全站**。
+   */
+  bodyClass?: string;
+  /**
    * 外壳形态（三选一）：
    *   不传 / `'band'`  = 深色带 + 品牌行 + 页脚（旧外壳，其余 10 页在用）
    *   `'console'`      = 首页专用：刻度尺 / HUD / 扫描带 / OS 状态条
@@ -39,7 +48,7 @@ interface Props {
    */
   chrome?: 'band' | 'console' | 'page';
 }
-const { title, description, current, noCanonical, chrome } = Astro.props;
+const { title, description, current, noCanonical, chrome, bodyClass } = Astro.props;
 // 站名/简介/联系方式来自 content/site.md —— 主题不持有任何文案
 const site = await getSite();
 // 关于「Topbar 静态 import 的成本」：Astro 的样式图按 import 收集（不是按 render），
@@ -89,7 +98,14 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
       } catch (e) {}
     </script>
   </head>
-  <body class={chrome === 'console' ? 'chrome-console' : chrome === 'page' ? 'chrome-page' : undefined}>
+  <body
+    class={[
+      chrome === 'console' ? 'chrome-console' : chrome === 'page' ? 'chrome-page' : undefined,
+      bodyClass,
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined}
+  >
     <a class="skip" href="#main">跳到正文</a>
     {/* chrome='console'（首页）自带刻度尺 / HUD / 扫描带 / OS 状态条；
         chrome='page'（内页）自带浅色顶栏 + 切片档案背景 —— 两者都不渲染旧的深色 Band。

@@ -815,13 +815,22 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(rules.length, '产物里一条 .profile 规则都没有').toBeGreaterThan(0);
     expect(rules.join(' '), `.profile 里出现 position:fixed（会不跟滚动 + 加载后跳一下）`).not.toMatch(/position:fixed/);
     // 页头必须是两栏 grid（头像才能排到右边而不是压在标题下面）。
-    // 两处都要容忍产物形态：媒体查询被压缩成 range 写法（`@media (width>=1024px)`），
-    // 且选择器带 Astro 作用域属性（`.pagehead[data-astro-cid-…]`）—— 后者已经绊过我三次，成套路写。
+    // ★ 2026-10-03 修订：原来要求「`display:grid` 必须写在
+    //   `@media (min-width:1024px)` 里」，那是**绑死形态**—— 本轮把
+    //   `display:grid` 提到了外层（`.pagehead` 基线），
+    //   窄屏再由媒体查询收窄，头像在宽屏照样靠右、行为完全没变。
+    //   ⇒ 改为守**意图**：`.pagehead` 的规则里必须有 `display:grid`
+    //     +两列轨道（`grid-template-columns` 带 `auto`），
+    //     不再要求它必须被包在某个媒体查询里。
+    //   另：判据要区分「桌面要两栏」与「窄屏别挤」—— 只看有没有两列轨道。
     const scope = '(?:\\[data-astro-cid-[a-z0-9]+\\])?';
-    expect(css, '桌面端页头不是两栏 grid（头像会掉到标题下面）').toMatch(
-      new RegExp(`@media\\((?:min-width:1024px|width>=1024px)\\)\\{\\.pagehead${scope}\\{[^}]*display:grid`),
+    const headRules = [...css.matchAll(new RegExp(`\\.pagehead${scope}\\{[^}]*\\}`, 'g'))].map((m) => m[0]);
+    expect(headRules.length, '产物里一条 .pagehead 规则都没有').toBeGreaterThan(0);
+    const hasTwoCol = headRules.some(
+      (r) => /display:grid/.test(r) && /grid-template-columns:[^;}]*auto/.test(r),
     );
-    console.log(`判据 关于页头像 对象 布局定位 实测: 头像与名字都在页头内 · ${rules.length} 条 .profile 规则无 position:fixed · 桌面页头是两栏 grid`);
+    expect(hasTwoCol, `页头没有两栏 grid（头像会掉到标题下面）。现有规则：${headRules.join(' | ').slice(0, 300)}`).toBe(true);
+    console.log(`判据 关于页头像 对象 布局定位 实测: 头像与名字都在页头内 · ${rules.length} 条 .profile 规则无 position:fixed · 页头两栏 grid（${headRules.length} 条规则中命中）`);
   });
 
   it('评论顺序：新的在最上面（接口排序 + 两个前端脚本的插入位置）', () => {

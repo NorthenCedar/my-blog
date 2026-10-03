@@ -111,7 +111,7 @@ const isExternal = (h: string) => /^https?:/i.test(h);
       搬进浅底后自动继承外壳的 --ink，所以**无需主题化**（已读源码确认，见 docs/about-migration-notes.md）。
       版式依据不是原型：prototype/terminal/ 里没有关于页，依据是既有内页外壳的实测实现（/gallery 与文章页）。 */
 }
-<Base title="关于" current="about" chrome="page">
+<Base title="关于" current="about" chrome="page" bodyClass="about-plate">
   {/* 头像（站主 2026-09-26 要、2026-09-27 改）：
       **必须和标题放在同一个页头里**，桌面靠 grid 排到右边、手机在标题下方居中。
       为什么不用 `position: fixed`（第一版就是这么写的，被站主抓了）：
@@ -140,27 +140,29 @@ const isExternal = (h: string) => /^https?:/i.test(h);
    *   **不做像素处理**：逐像素改色会把原图的浓淡与拼贴层次一起抹平。
    * =================================================================== */}
   <div class="ref-plate" aria-hidden="true">
-    {plate('moon') && (
-      <div class="ref ref-moon">
-        <Image class="ref-img" src={plate('moon')!} alt="" widths={[560, 1120]} sizes="(min-width:1024px) 34vw, 90vw" />
+    {/* ★ 站主 2026-10-03 16:37 指定：**直接拿这一张当背景**，
+       纯黑底改成偏黑的深绿（`#131b17`，站内 `--dusk-2`）。
+       「纯黑 → 深绿」是**构建期**做的（`_probe/_deep-plate.mjs`，用 sharp）：
+       灰阶像素按「越暗染得越多」混向深绿，白月亮与星芒保持白；
+       **彩色像素（那条纯蓝横带、轨道线）一格不动** —— 它就是强调色。
+       实测：白月亮 on #131b17 = 17.55:1；纯蓝带 = 2.04:1（纯装饰图形，
+       且是站主指定作品的一部分 ⇒ 记录实测值，不做数值上的假通过，详见脚本头）。*/}
+    {plate('moon-main') && (
+      <div class="ref-main">
+        <Image
+          class="ref-img"
+          src={plate('moon-main')!}
+          alt=""
+          widths={[960, 1920]}
+          sizes="100vw"
+          loading="eager"
+          decoding="sync"
+        />
       </div>
     )}
-    {plate('statue') && (
-      <div class="ref ref-statue">
-        <Image class="ref-img" src={plate('statue')!} alt="" widths={[420, 840]} sizes="(min-width:1024px) 22vw, 70vw" />
-      </div>
-    )}
-    {plate('birds') && (
-      <div class="ref ref-birds">
-        <Image class="ref-img" src={plate('birds')!} alt="" widths={[560, 1120]} sizes="(min-width:1024px) 30vw, 90vw" />
-      </div>
-    )}
-    {plate('dial') && (
-      <div class="ref ref-dial">
-        <Image class="ref-img" src={plate('dial')!} alt="" widths={[520, 1040]} sizes="(min-width:1024px) 26vw, 80vw" />
-      </div>
-    )}
-    <span class="ref-veil"></span>
+    {/* 纸托底：文字区铺一层**不透明**的纸，让正文压得住这张深色大图。
+        （半透明白纱不行—— 那等于把图洗淡，站主要的原色与繁复线条会再被抽掉一次。）*/}
+    <div class="ref-paper" aria-hidden="true"></div>
   </div>
 
   {/* ===================================================================
@@ -359,9 +361,15 @@ const isExternal = (h: string) => /^https?:/i.test(h);
       align-items: start;      /* ★ 右栏不拉高，块按自身高度排（否则 social 会被prose 拉出大片空白）*/
     }
     .about-main {
-      grid-column: 1;
-      min-width: 0;
-    }
+    grid-column: 1;
+    min-width: 0;
+    /* ★ 顶部留一整段空档：页面上方约380px 不排内容 ⇒ 背景图从那里**整段**露出来。
+       为什么要这么大：版心左右两侧加起来只有约 96px，图从那里露出来只是一条窄边，
+       认不出是月亮还是星芒（试过，像「贴了张白纸」）。
+       而这张图铺到 1280视口后高约 697px、**月亮直径约 250px** ⇒ 空档要装得下它。
+       ★ 数字是按「图的实际宽高比 + 月亮实际直径」算的，不是拍脑袋。 */
+    padding-top: min(30vh, 380px);
+  }
     .about-side {
       /* ★ 不用 flex + gap，用「上边框 + padding-top」分隔。
          目检踩到：gap 与 border-top 同时存在时，两个半段间距（上一块下方 gap
@@ -407,11 +415,13 @@ const isExternal = (h: string) => /^https?:/i.test(h);
      ★★ 第2 步把「CSS 取景 + 原图」换成**构建期裁好的小图**：
         CSS 的 overflow:hidden + 偏移能在浏览器里取景，但**浏览器仍会下载整张原图**
         （3–4 MB × 3 ⇒ 关于页 10 MB+）。现在图是 900px 宽的 WebP、四块共 482 KB。
-     ★★ 灰度与墨绿**在构建期就做好了**（`_probe/_ref-plate.mjs` 用 sharp 按
-        「与白的亮度差」算 alpha、颜色恒为深墨绿）⇒ 运行时**不需要任何 filter**。
-        之前那套 grayscale + sepia + hue-rotate 现场染色已经删掉 ——
-        它的存在是因为当时是原图，现在是已染好的小图。
-     ★ 四块的取景内容（互不重复）：月相序列环 / 维纳斯雕像 / 飞鸟+同心圆 / 圆盘+星芒。 */
+     ★★ **不改成单色、不压淡**（2026-10-03 站主驳回过一次）：
+        上一版把元素统一染成墨绿 + 整体压成极淡 alpha，站主要的是
+        「**强调色、雕像月相的原色、繁复的线条**」。
+        ⇒ 图是**原色**的（`_probe/_ref-plate.mjs` 只做裁切+缩放，一格颜色不动），
+        运行时也**没有 filter**、没有低 opacity ——
+        文字压不住的部分由下面的纸托底（`.ref-paper`）解决。
+     ★ 四块的取景内容：月相序列环 / 维纳斯雕像 / 飞鸟+同心圆 /撞色蓝块+罗马侧脸。 */
   .ref-plate {
     position: fixed;
     inset: 0;
@@ -419,68 +429,192 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     pointer-events: none;
     overflow: hidden;
   }
-  .ref-plate .ref {
+  /* ===================================================================
+   * 内容层提层（★ 2026-10-03 补；之前**漏了**，症状是正文「透明」）
+   *
+   * 症状：正文发灰、对比度掉下来 —— 文字后面直接是底纹与白纱。
+   * 根因：`.ref-plate` 是 `position:fixed; z-index:0`（它自己那个 0 必须在：
+   *   用 -1 会被 body 的 `background: var(--paper)` 挡住 ⇒ 底纹全白，
+   *   见规范 §6.26 记的两条层叠坑），而**内容侧一条提层规则都没有**
+   *   （`.prose` 实测 `position: static`）⇒ 两者同处一个层叠上下文，
+   *   DOM 靠后的底纹压过了正文。
+   *
+   * ★ 这条规则我**写错过两次位置**：① 最初只在样稿 `_refbg.html` 里写了，
+   *   落到 `.astro` 时漏掉；② 第二次插在 `.ref-veil` 注释之前，
+   *   而那段注释后来被替换掉 ⇒ 规则跟着一起没了（编译产物里查不到）。
+   *   ⇒ 教训：**层叠规则要放在不会被后续替换波及的位置**，
+   *     且改完必须到**产物 CSS** 里查有没有这条规则（源码有 ≠ 产物有）。
+   *
+   * ★ 顶栏/页脚用 `:global(body.chrome-page …)`：它们由 Base/Topbar 渲染，
+   *   带的是**别的**作用域属性；且 `body.chrome-page .topbar` (0,1,1)
+   *   的权重高于裸 `.topbar` (0,1,0) ⇒ 不对齐权重压不住它。
+   * =================================================================== */
+  :global(body.chrome-page .topbar),
+  :global(body.chrome-page .foot) {
+    position: relative;
+    z-index: 1;
+  }
+  .pagehead,
+  .sign-card,
+  .prose,
+  .fig-block {
+    position: relative;
+    z-index: 1;
+  }
+  /* 背景大图：铺满视口，**原色、原比例**（站主 16:37 指定）。
+     ★ object-fit: cover + 居中：这张是 1.84:1 的宽幅，铺到竖向视口会上下留白，
+       靠 cover 裁掉；居中是为了让月亮（视觉中心）落在视口中央。
+     ★ 不加任何 filter、不加 opacity —— 上一版被驳回的就是这两样。 */
+  .ref-main {
     position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+  /* ★ 图只从**页面顶部与底部**露出来，两侧不露。
+     ★★ 踩了四轮才明白这件事（2026-10-03 目检）：
+       纸要压住文字 ⇒ 必须不透明、必须完整；而版心左右两侧加起来只有约 96px，
+       图从那里露出来只是**一条窄边**，看不出是月亮还是星芒（试过：像"贴了张白纸"）。
+       ⇒ 让纸的上下**留出空档**：纸按内容块分段（已做），段间就是图的可见区。
+     ★ object-position 的第二个值：月亮在这张图的中偏上 ⇒ 42% 让它落在上半屏的
+       空档里（0–8% 那段）。 */
+  /* ★★★ 定位必须用「按宽铺 + 顶部对齐」，**不能用 cover**（2026-10-03 实测算出来的）：
+     图 1920×1045（1.84:1），cover 到 1280×1500 ⇒按**高**铺，
+     纵向溢出 0、横向溢出 1476px ⇒ `object-position` 的**纵向值完全无效**
+     （实测 0%–100% 算出来月亮都在视口 y=690px，而顶部空档只有 0–380px）。
+     ⇒ 改用显式的 `width:100%; height:auto`：图按视口宽铺、高约 697px，
+        顶部对齐 ⇒ 月亮（图内 y≈46%）落在视口 y≈320px，**正好在空档里**。
+     ★ 图比容器窄时会露底 ⇒ 底下垫 --dusk-2（与图底同色，看不出接缝）。 */
+  /* ★★ body 的不透明纸白底必须让位 —— 它是遮挡整张背景图的真正原因。
+     `src/styles/base.css` 里 `body { background: var(--paper) }`铺满全页，
+     而 `.ref-plate` 是 `z-index:0` 的 fixed 层 ⇒ **在 body 背景之上**
+     （元素永远在body 背景之上），实测射线里顶部空档只有 body 的纸白底、没有图。
+     ⇒ 关于页把 body 背景改成透明，纸白由**各内容块自己的纸**承担
+      （.page-paper 与各块的 ::before 已经是--paper）。
+     ⚠ 用 `:global()` + `body.about` 类名限定，**只影响关于页**，
+        别的页面仍靠 body 的纸白底（红线：别顺手改全站）。 */
+  :global(body.about-plate) {
+    background: transparent;
+  }
+
+  /* `.ref-main` 装图：用 **relative**（不是 absolute）——
+     绝对定位会让子元素脱离文档流、容器高度塌成 0 ⇒ 图整块消失（实测踩到）。
+     图在正常流里，容器高度由图撑开。 */
+  .ref-main {
+    position: relative;
+    width: 100%;
     line-height: 0;
   }
-  .ref-plate .ref > picture,
-  .ref-plate .ref > img {
+  .ref-main > picture,
+  .ref-main > img {
     display: block;
     width: 100%;
     height: auto;
     max-width: none;
   }
-  /* ★ 摆位原则（目检定下来的）：**四块全部待在版心之外**，
-     任何一块压到文字就是失败 —— 底纹是气氛，不是背景图片。
-     目检踩过：月相按「右上角」放，结果盖住右栏的社交清单；飞鸟放左侧中段，
-     结果压住头像与正文第一行。⇒ 改成按**视口百分比贴边**摆。
 
-  /* ① 月相序列环（站主点名）—— 右上角，**大部分滑出视口**，只留左下一角。
-        元素最重（满月环形山 + 放射线），所以给最大的图但只露一角。 */
-  .ref-moon {
-    right: -14%;
-    top: -6%;
-    width: min(44vw, 600px);
+  /* ===================================================================
+   * 纸托底 —— **由内容自己撑开**，不写死任何百分比
+   *
+   * ★★ 踩了三轮才对（2026-10-03 目检），每轮的错都记在这里：
+   *   ① 两条竖条 + 中间留缝 ⇒ **月亮被劈成两半**（它是这张图唯一的视觉中心）；
+   *   ② 一整块纸盖满版心 ⇒ 正文可读了，但**月亮被整块吃掉**，只剩边角；
+   *   ③ 分段但用**写死的 %** ⇒ 纸与内容错位，文字直接压在图上（最难看的一版）。
+   * ⇒ 正解：**每一块有字的元素自己带纸**，纸由**伪元素**画在内容盒之外。
+   *
+   * ★★ 关键约束：纸**不能靠给内容加 padding 实现** ——
+   *   那会改变 `.prose` 的内容盒（红线#3「正文排版不动」）。
+   *   正确做法：伪元素 `::before` 用 `inset: -Npx` 向外撑，
+   *   **盒子本身一格不动**，纸在它周围张出来。
+   *
+   * ★ 为什么不给 `.about-main` / `.about-side` 整栏加纸：
+   *   整栏加纸 = 情况②（月亮被吃掉）。**逐块加**才有缝。
+   *=================================================================== */
+  .pagehead,
+  .sign-card,
+  .prose,
+  .fig-block {
+    position: relative;
   }
-  /* ② 维纳斯雕像（站主点名）—— 左下，贴左缘。同样只露一部分。 */
-  .ref-statue {
-    left: -12%;
-    top: 52%;
-    width: min(24vw, 320px);
-  }
-  /* ③ 飞鸟 + 同心圆线 —— 右上偏下，**与右栏同侧但更靠边**。
-        原来放左侧中段会压住头像（实测）。 */
-  .ref-birds {
-    right: -10%;
-    top: 26%;
-    width: min(34vw, 460px);
-  }
-  /* ④ 圆盘 + 星芒 + 直尺 —— 右下角，滑出大半。
-        ★ 它挨着 footer 所在的深色带，但**只滑到深色带之上**（top: 78%），
-          不压footer（footer 有自己的背景，不透明）。 */
-  .ref-dial {
-    right: -12%;
-    top: 76%;
-    width: min(28vw, 380px);
-  }
-  /* 白纱：把版心那一带压干净（★ 站主要求「头像上不要有线」），
-     两端留出底纹的可见区。渐变端点用 8 位hex（红线：颜色一律走 token 或 8 位）。 */
-  .ref-veil {
+  .sign-card::before,
+  .prose::before,
+  .fig-block::before {
+    content: '';
     position: absolute;
-    inset: 0;
-    /* 白纱：把版心两栏（左右各约 600px）压干净，其余留给底纹。
-       ★ 强度是目检定的：e8（.91）太弱，正文底下的纹路会显出来；
-         而 40%/60% 两端的 a8/b0（.66/.69）让版心仍透出一点纹，
-         免得整页死白。 */
-    background: linear-gradient(
-      90deg,
-      #fafaf7f2 0%,
-      #fafaf7cc 30%,
-      #fafaf7b8 46%,
-      #fafaf7b8 54%,
-      #fafaf7cc 70%,
-      #fafaf7f2 100%
-    );
+    /* 向外撑出纸边（负 inset）—— 内容盒本身不动，正文排版零影响。 */
+    inset: calc(var(--sp-4) * -1);
+    background: var(--paper);
+    box-shadow: 0 0 0 1px var(--hair);
+    z-index: -1;             /* 纸在内容之下、文字之上 */
+  }
+  /* 签名那块窄（380px），纸也窄 ⇒ 视觉上像「贴上去的标本片」 */
+  .sign-card::before {
+    inset: calc(var(--sp-3) * -1);
+  }
+  /* ★★ 页头的纸**不能用伪元素** ——
+     `.pagehead` 是两栏 grid（标题左 / 头像右，且 `FIG.00` 通栏），
+     伪元素会按 grid 容器参与轨道计算，实测 inset 被算成
+     `72px -16px -32px -3px`（上面莫名撑开 72px、左侧只剩 -3px）
+     ⇒ 纸既盖不住标题那一格、又往版心外溢。
+     ⇒ 改用**真元素**：在模板里给页头加一个 `.page-paper` 兄弟节点，
+       用 `grid-area: 1 / 1 / -1 / -1` 铺满整个 grid，不受行列影响。 */
+  /* 纸与 .pagehead 同父级、同position 上下文 ⇒ 用它自己的盒 + 负 inset 精确外撑。
+     ★ 这里能生效是因为**它不在 grid 容器里**（见上面那条注记）。 */
+  /* ★ 纸必须是页头的**兄弟**而不是子元素 —— 但 `position:absolute` 的包含块
+     会往上找到最近的定位祖先（.about-main 是 static，最终是 main），
+     实测 `inset: 0` 直接撑满整个 main（y=62..1540），
+     而页头只有 y=410..762 ⇒ 纸比需要的大得多，把月亮也盖了。
+     ⇒ 正解：给 `.pagehead` 自己一个 `position: relative` 作为包含块上下文，
+       再把纸**放回页头内部**（作为第一个子元素），
+       这样 `inset` 就是相对**页头自己的盒**算的。
+     ★ 之前试过「放页头内部 + grid-area」失败，是因为 grid 轨道参与了计算；
+       现在用 `position: relative` + `inset` 不再走 grid 轨道。 */
+  /* 页头：宽屏两栏（标题左 / 头像右）。**不在这里写 display** ——
+     媒体查询里那条会再写一次 display，同元素两处各写一次时**后写的赢**
+     （这个坑踩过：外层 grid 被媒体查询的 flex 覆盖）。 */
+  .pagehead {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    align-items: start;
+    column-gap: var(--sp-6);
+  }
+  /* ★ 纸只留 grid-area，**不加 position: absolute**（2026-10-03 实测）。
+     两者同时存在时 `absolute` 胜出 ⇒ `inset: -16px` 生效，但
+     **grid 容器不为 absolute 子元素提供高度参照** ⇒ 纸高度塌成 0
+     （实测 y=466..466）⇒ 纸等于不存在。
+     只用 grid-area：纸作为**真正的 grid item**跨所有网格区
+     （`grid-area: 1/1/-1/-1`），高度由行分配撑开，且用负 margin 外撑出纸边。 */
+  /* 页头内容压在纸之上 */
+  .pagehead > *,
+  .sign-card,
+  .prose,
+  .fig-block {
+    position: relative;
+    z-index: 1;
+  }
+  /* 块与块之间的缝：纸与纸之间要露出背景图 */
+  .sign-card,
+  .prose,
+  .fig-block {
+    margin-bottom: var(--sp-7);
+  }
+  /* 左栏段：与 .about-main 的行盒对齐（页头 + 签名 + 正文） */
+  .ref-paper::before {
+    top: 8%;
+    height: 46%;
+  }
+  /* 右栏段：与 .about-side 的行盒对齐（三块清单） */
+  .ref-paper::after {
+    top: 4%;
+    height: 62%;
+  }
+  .ref-paper::before {
+    left: max(var(--gutter), calc((100% - var(--wrap)) / 2 + var(--gutter)));
+    width: min(var(--measure), calc(100% - var(--gutter) * 2));
+  }
+  .ref-paper::after {
+    right: max(var(--gutter), calc((100% - var(--wrap)) / 2 + var(--gutter)));
+    width: max(0px, calc((100% - var(--gutter) * 2) - var(--measure) - var(--sp-8)));
   }
 
   /* ---- 标本编号：等宽字 + 大字距 = 「标本标签」的印刷感，也是仪器语汇的延续 ---- */
@@ -635,15 +769,18 @@ const isExternal = (h: string) => /^https?:/i.test(h);
       /* ★ 2026-10-03 分栏后：页头不再通栏（原来是 max-width:none 铺满整个 wrap，
          而右半是空的）。现在它只占**左列**，标题与头像在列内左右分置。 */
       max-width: none;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      align-items: start;
-      column-gap: var(--sp-6);
+      /* display 由外层那条 .pagehead 规则给 **grid** —— 这里**不要**再写 display。
+         ★ 踩到（2026-10-03）：这条媒体查询里曾写 `display: flex`，
+           它在层叠上**晚于**外层的 grid ⇒ 把 grid 覆盖成 flex
+           ⇒ `.page-paper`（absolute 子元素）在 flex 容器里高度塌成 0
+              （实测 y=466..466）⇒ 纸等于不存在 ⇒「关于」压在深色图上。
+         ⇒ 同一元素**不要在两处各写一次 display**，否则后写的赢。 */
       padding-bottom: var(--sp-5);
       border-bottom: 1px solid var(--hair);
     }
     .pagehead .fig-no {
-      grid-column: 1 / -1;
+      /* flex 下用 100% 宽独占一行（原来是 grid-column: 1/-1） */
+      flex: 0 0 100%;
       margin-bottom: var(--sp-2);
     }
     .profile {
@@ -855,25 +992,22 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     .fig-no {
       margin-bottom: 0;
     }
-    /* 底纹在窄屏上只留两处（月相 + 雕像，站主点名的那两个），并再压淡一档：
-       390px 宽的屏上铺四块会糊成一片灰，什么也认不出。
-       ★ 图已经是构建期染好的墨绿小图，运行时**没有 filter**，
-         所以这里的 opacity 直接作用在成品图上。 */
-    .ref {
-      opacity: 0.5;
+    /* 窄屏：这张图是 1.84:1 宽幅，铺到 390×800 的竖屏会裁掉左右一大半，
+       月亮（视觉中心）还能保住，但两侧的星芒与山脉会丢。
+       ⇒ 改成按**高度**对齐（object-position 的第二个值），
+         让月亮仍在上半屏的可见区里。 */
+    /* 窄屏是单栏 ⇒ 左右两段都退到版心宽度，图从两侧透上来更多 */
+    .ref-paper {
+      left: var(--sp-5);
+      right: var(--sp-5);
     }
-    .ref-birds,
-    .ref-dial {
-      display: none;
+    .ref-paper::before {
+      top: 4%;
+      height: 30%;
     }
-    /* 留下的两块在窄屏上占得更满一些（屏幕上没有右栏，清单是通栏的） */
-    .ref-moon {
-      right: -4%;
-      width: min(72vw, 420px);
-    }
-    .ref-statue {
-      left: -4%;
-      width: min(38vw, 220px);
+    .ref-paper::after {
+      top: 40%;
+      height: 40%;
     }
   }
 </style>
