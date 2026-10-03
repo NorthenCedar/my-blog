@@ -123,40 +123,29 @@ describe('关于页 · 亲笔签名切片：降级与配色', () => {
   });
 
   it('手机 ≤767px 留极简版（口径 #9），不是不渲染', () => {
-    const m = ACSS.match(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.sign-plate\s*\{[\s\S]*?\}/);
-    expect(m, '缺 ≤767px 的签名切片规则').toBeTruthy();
-    // 极简= 缩小边距，不是 display:none
-    expect(ACSS.match(/@media\s*\(max-width:\s*767px\)[\s\S]*?\.sign-card\s*\{[^}]*display:\s*none/))
+    /* ★ 2026-10-03 站主改口径：「直接放到背景里，不要单独做一个卡片」⇒ 深底板与
+       .sign-plate 那个「切片台」都删了。判据随之改守 .sign-head 里的说明文字——
+       极简 = 窄屏隐藏那行小字，**签名本身留着**，且**不是** display:none。 */
+    const m = ACSS.match(/@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.sign-head\s+span\s*\{[\s\S]*?\}/);
+    expect(m, '缺 ≤767px 的签名极简规则（应隐藏 .sign-head span）').toBeTruthy();
+    expect(m?.[0], '窄屏极简应是 display:none（只藏说明文字）').toMatch(/display:\s*none/);
+    // 签名本身不隐藏
+    expect(ACSS.match(/@media\s*\(max-width:\s*767px\)[\s\S]*?\.sign-(?:card|img)\s*\{[^}]*display:\s*none/))
       .toBeFalsy();
   });
 
-  it('深底配色只用实测达标的档（accent-ink 在深底只有 2.97）', () => {
-    /* ★ 判据只抓**深底切片自己的规则**（选择器以 .sign- 开头且**只有它自己**）。
-       踩过的坑：一开始用 `/\.sign[\w-]*[^{}]*\{/` 匹配，结果把**共享的编号规则组**
-       （`.fig-no, .sign-fig, .sign-kind, .fig-idx { color: var(--accent-ink) }`）
-       一起抓了—— 那是**纸底**上的编号，accent-ink 在纸上 6.18:1 完全正当。
-       ⇒ 必须要求选择器里**只有 .sign-***，且不能带逗号（带逗号就是共享组）。
-       （同一条坑在 tests/tokens.test.ts 里也踩了一次，两处都改了判据。）
-
-       ★ 另一个反向的坑：这条断言**一度写成只许 dusk-6 / accent-bright**，
-       结果把 `.sign-foot` 的 --dusk-5 判成违规 —— 但那是有意的设计：
-       4.26:1 差 0.24 不到 4.5，**只做 10px 标签**，已在 assert-tokens 以图形下限登记。
-       判据过严与过宽一样有害：前者挡住既定设计，后者放过真问题。 */
-    const deepBlocks = [...ACSS.matchAll(/(^|[},])\s*(\.sign-[a-z-]+)\s*\{([^{}]*)\}/g)]
-      .map((m) => ({ sel: m[2], body: m[3] }));
-    expect(deepBlocks.length, '没找到签名切片的样式块').toBeGreaterThan(0);
-    for (const { sel, body } of deepBlocks) {
-      expect(body, `${sel} 用了 --accent-ink（深底上仅 2.97）`).not.toMatch(/color:\s*var\(--accent-ink\)/);
-      expect(body, `${sel} 用了 --muted（深底上仅 2.77）`).not.toMatch(/color:\s*var\(--muted\)/);
-    }
-    // 底色用 dusk-2；深底上的强调色用 accent-bright（绿，站主 2026-10-03 拍板）
-    expect(ACSS).toMatch(/background:\s*var\(--dusk-2\)/);
-    expect(ACSS).toMatch(/color:\s*var\(--accent-bright\)/);
-    // dusk-5 若出现，只许配 10px 级字号（它是 4.26:1，承载不了正文）
-    const foot = ACSS.match(/\.sign-foot\s*\{([^{}]*)\}/)?.[1] ?? '';
-    if (/color:\s*var\(--dusk-5\)/.test(foot)) {
-      expect(foot.match(/font-size:\s*var\((--fs-[\w-]+)\)/)?.[1]).toBe('--fs-xs');
-    }
+  /* ★ 2026-10-03 站主改口径：底纹走**白底**、签名**不做卡片** ⇒ 本页已无深底区块，
+     「深底上不许用 accent-ink」那条随口径一起作废（它守的是已删掉的深底板）。
+     换成守新口径：① 纸白底没被改 ② 签名是走构建期优化的墨绿位图 ③ 深底仍不许回来。 */
+  it('白底口径：底色是 --paper，签名是墨绿位图（无深底卡片）', () => {
+    // ① 底纹层用纸白，页面没有深底板了
+    expect(ACSS, '本页不该再出现深底板（站主已改口径为白底）').not.toMatch(/background:\s*var\(--dusk-2\)/);
+    // ② 签名是图片且走构建期优化（srcset 多档）—— 不是用色值画出来的
+    //    ★ 正则要注意属性顺序：产物里 `srcset` 排在 `data-sign-img` **之前**
+    //    （Astro 的 Image 组件先输出 src/srcset，属性再往后排）⇒ 用两个前瞻而不是固定顺序。
+    expect(ABOUT).toMatch(/<img(?=[^>]*data-sign-img)(?=[^>]*srcset="[^"]+")[^>]*>/);
+    // ③ 编号与说明用纸上的绿（这是它们的正当场合）
+    expect(ACSS).toMatch(/color:\s*var\(--accent-ink\)/);
   });
 
   it('切片宽度用 min() 收窄（380px 写死会在 390 视口下溢出）', () => {

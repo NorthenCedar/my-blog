@@ -108,50 +108,70 @@ const isExternal = (h: string) => /^https?:/i.test(h);
            `position: fixed` 的**包含块** ⇒ 头像按"相对 .shell"定位；动画结束、类被摘掉后 transform 变 none，
            包含块又换回视口 ⇒ **位置突变，视觉上就是"加载后跳一下"**（实测从 y=246 跳到 y=198，48px）。
       改成布局定位后这两个问题一起消失：位置由排版决定（不会变），元素在正文流里（自然跟着滚）。 */}
+  {/* ===================================================================
+   * 标本馆底纹层（REFERENCE PLATE）—— 站主 2026-10-03 第二轮口径
+   *
+   * 站主四条要求，逐条对应：
+   *   ① 头像上面不要有线   ⇒ 见下面 .profile 的样式（刻度环与排线已删）
+   *   ② **直接用参考图里的素材**（月相 / 雕像 / 飞鸟 / 星芒），不自己画
+   *   ③ **直接放背景里**，不做成独立卡片 ⇒ 就是这一层，铺满视口
+   *   ④ **背景用白色** ⇒ 底色 --paper，参考图按亮度差透明化后染成墨绿
+   *
+   * ★★ 第 2 步（2026-10-03）：参考图底纹素材走**构建期图片管线**。
+   *   本机 Chrome canvas 那条路今天卡了三次（症状都是「不报错、只是收不到结果」，
+   *   真因是 execFileSync 阻塞事件循环 ⇒ 同进程的服务无法响应），
+   *   而 astro:assets 已在站内跑着（头像与签名都走它）⇒ 复用它最省、最可复算。
+   *
+   * ★ 取哪几段（互不重复、不冲突）：
+   *   月相盘 + 直尺 · 雕像群像 · 飞鸟 + 星芒 · 树 + 新月
+   *   灰度 + 墨绿全部用 CSS filter 现场做（grayscale + sepia + hue-rotate）——
+   *   **不做像素处理**：逐像素改色会把原图的浓淡与拼贴层次一起抹平。
+   * =================================================================== */}
+  <div class="ref-plate" aria-hidden="true">
+    <div class="ref ref-moon"></div>
+    <div class="ref ref-statue"></div>
+    <div class="ref ref-birds"></div>
+    <div class="ref ref-tree"></div>
+    <span class="ref-veil"></span>
+  </div>
+
   <header class="pagehead">
+    {/* ★ 站主 2026-10-03：「我的头像上面不要有线」⇒原来的圆形刻度环（量规语汇）
+        与头像上的排线**全部去掉**，头像回归纯圆形照片。
+        刻度与量规的语汇改由页头那根 `--hair` 细线与各区块的 `FIG.0x` 编号承担。 */}
+    <p class="fig-no" aria-hidden="true">FIG.00 — PROFILE</p>
     <PageTitle>关于</PageTitle>
     {avatar && (
       <div class="profile">
         <Image class="avatar" src={avatar} alt={`${d.avatarName ?? '站主'}的头像`} widths={[96, 192]} sizes="128px" />
-        <p class="profile-name">{d.avatarName}</p>
+        <p class="profile-name">{d.avatarName} · SPECIMEN 00</p>
       </div>
     )}
   </header>
 
-  {/* ===== HAND 亲笔 · 签名切片（站主 2026-10-03）=====
-      **全页唯一一处深底**（--dusk-2），其余切片都是纸白 —— 页面因此有一处视觉锚点，
-      但「纸白阅读底」这条契约没被推翻（正文仍是纸白上的 .prose）。
-      ★ 签名是站主手迹原件：已抠掉白底（转成带 alpha 的图）、转成站内墨绿
-        （--accent-bright）。原件是蓝紫色的，加工脚本见 _probe/hand-sign-prep.mjs
-        （该目录已 gitignore；成品 src/assets/about/sign.png 进仓参与构建期优化）。
-      ★ 深底上的颜色只有两个选择（实测，见 scripts/assert-tokens.mjs）：
-        编号 accent-bright 6.9:1 · 字是图 · 小字 dusk-5 4.26:1（**不到 4.5，所以只做
-        10px 标签/刻度，不承载正文**）。**--accent-ink 在深底上只有 2.97，不许用。**
+  {/* ===== HAND 亲笔 · 签名（站主 2026-10-03）=====
+      ★ 站主 2026-10-03 第二轮口径：「**这个是直接放到背景里，不要单独做一个卡片**」
+        ⇒ 深底板取消、编号小字与图同宽排在图上方，签名直接落在纸白底上。
+        （上一版那套--dusk-2 深底切片是从「深底才有冲击力」的思路来的，
+          但既然底纹走白底，深底板就成了页面里唯一的孤岛 —— 去掉更干净。）
+      ★ 签名是站主手迹原件：已抠掉白底（转成带 alpha 的图）、转成站内墨绿。
+        加工脚本见 _probe/hand-sign-prep.mjs（该目录已 gitignore；
+        成品 src/assets/about/sign.png 进仓，参与构建期优化：56 KB → WebP 18 KB）。
       ★ 落笔 = 横向揭幕（clip-path inset 从 100% 走到 0），不是逐笔 —— 位图没有路径。 */}
   {signature && (
     <figure class="sign-card" data-sign-card>
       <figcaption class="sign-head">
-        <span class="sign-fig">FIG.01 — HAND</span>
-        <span class="sign-kind">specimen / signature</span>
-      </figcaption>
-      <div class="sign-plate">
-        <Image
-          class="sign-img"
-          data-sign-img
-          src={signature}
-          alt={`${d.avatarName ?? '站主'}的手写签名`}
-          widths={[340, 680]}
-          sizes="340px"
-        />
-      </div>
-      <p class="sign-foot">
+        <b>FIG.01 — HAND</b>
         <span>{d.signatureNote}</span>
-        {/* ★ 这行小字是**站主自己的标注**，不是构建期读数 ——
-            故意不写"509×264"这类尺寸：那是一次性处理时的中间值，与页面上的
-            产物（构建期转WebP 18 KB、多档 srcset）无关。写它就是假读数，
-            与首页那条「语言占比必须是实测值」同一个原则：读数要么真，要么别写。 */}
-        <span class="sign-meta">HANDWRITTEN / ALPHA</span>
-      </p>
+      </figcaption>
+      <Image
+        class="sign-img"
+        data-sign-img
+        src={signature}
+        alt={`${d.avatarName ?? '站主'}的手写签名`}
+        widths={[340, 680]}
+        sizes="340px"
+      />
     </figure>
   )}
 
@@ -160,7 +180,7 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   {social.length > 0 && (
     <section class="social-block fig-block" aria-labelledby="social-title">
       <p class="fig-no" aria-hidden="true">FIG.02</p>
-      <h2 id="social-title">我的一些社交账号</h2>
+      <h2 class="fig-h" id="social-title">我的一些社交账号</h2>
       <ul class="social">
         {social.map((s, i) => (
           <li>
@@ -182,7 +202,7 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   {stack.length > 0 && (
     <section class="stack-block fig-block" aria-labelledby="stack-title">
       <p class="fig-no" aria-hidden="true">FIG.03</p>
-      <h2 id="stack-title">技术栈</h2>
+      <h2 class="fig-h" id="stack-title">技术栈</h2>
       <div class="stack-groups">
         {stack.map((g) => (
           <div class="stack-group">
@@ -206,7 +226,7 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   {LANGS.length > 0 && (
     <section class="lang-block fig-block" aria-labelledby="lang-title">
       <p class="fig-no" aria-hidden="true">FIG.04</p>
-      <h2 id="lang-title">源码语言占比</h2>
+      <h2 class="fig-h" id="lang-title">源码语言占比</h2>
       <p class="lang-total">
         本站源码实测 · 合计 <b>{LANG_TOTAL}</b>（<code>src/</code> 与 <code>functions/</code>，不含依赖与构建产物）
       </p>
@@ -246,19 +266,152 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   /* ===================================================================
    * 标本馆（SPECIMEN CABINET）—— 站主 2026-10-03 定的版式语言
    *
-   * 参照物是一组「拼贴 + 版画蚀刻 + 仪器图纸」的参考图，共同语法是：
-   *   ① 大量留白（纸白底不改 —— 口径 #1「纸白阅读底一行不改」）；
-   *   ② 标本切片：直��� + 细边框 + 左上角编号（FIG.01 / FIG.02…）；
-   *   ③ 印刷体标签用等宽小字 + 字距，与「手写」形成层次对比。
-   * 落在这三样上的改动只有版式（页头/ 列表项 / 卡片），**正文 .prose 一行没动**
+   * 参照物是一组「拼贴 + 版画蚀刻 + 仪器图纸」的参考图，落到版式上是这四样：
+   *   ① 纸白底（口径 #1「纸白阅读底一行不改」）；
+   *   ② 标本编号（FIG.00 / 01 / 02…）用等宽小字 + 大字距，排在区块左上；
+   *   ③ 细线分隔的列表（**不做卡片** —— 站主 2026-10-03「直接放背景里，不要单独做卡片」）；
+   *   ④ 参考图底纹层（.ref-plate，见结构处注释），元素是原图里的月相 / 雕像 / 飞鸟 / 星芒。
+   * 落在这四样上的改动只有版式（页头 / 列表项 / 刻度），**正文 .prose 一行没动**
    * —— 口径 #3 明确「正文排版不动」。
    * =================================================================== */
 
-  /* ---- 切片编号（FIG.01 那类）----
-     等宽字 + 大字距 + 小尺寸 = 「标本标签」的印刷感，也是仪器语汇的延续。 */
+  /* ---- 参考图底纹层（站主 2026-10-03 第二轮）----
+     ★ 站主四条：① 头像上不要线 ② 直接用参考图素材 ③ 直接放背景不做卡片 ④ 白底。
+     ★ 结构是「取景框 + 绝对定位的图」⇒ 裁切用 CSS 完成（overflow:hidden +偏移），
+       **不做像素处理**：灰度与墨绿全靠 filter 现场做（grayscale + sepia + hue-rotate）——
+       逐像素改色会把原图的浓淡与拼贴层次一起抹平，而那正是参考图的值钱处。
+     ★ 素材走 astro:assets 出来的小图（构建期已转WebP），所以下载量是几十 KB 级，
+       不是原图那 3–4 MB（CSS 裁切不能裁文件，浏览器仍会下载整张 —— 这点务必记住）。
+     ★ 四块互不重叠：左上飞鸟 / 右上月相 / 左下群像 / 右下树。 */
+  .ref-plate {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .ref-plate .ref {
+    position: absolute;
+    overflow: hidden;
+  }
+  .ref-plate .ref > picture,
+  .ref-plate .ref > img {
+    position: absolute;
+    max-width: none;
+    height: auto;
+  }
+  /* 月相盘 + 直尺（站主点名要的那两块之一）*/
+  .ref-moon {
+    right: -6%;
+    top: 4%;
+    width: 62%;
+    height: 30%;
+  }
+  .ref-moon > picture,
+  .ref-moon > img {
+    right: 0;
+    top: -84%;
+    width: 128%;
+  }
+  /* 雕像群像（站主点名的另一块）*/
+  .ref-statue {
+    left: -8%;
+    top: 40%;
+    width: 58%;
+    height: 34%;
+  }
+  .ref-statue > picture,
+  .ref-statue > img {
+    left: 0;
+    top: -36%;
+    width: 132%;
+  }
+  /* 飞鸟 + 星芒 */
+  .ref-birds {
+    left: -10%;
+    top: 12%;
+    width: 56%;
+    height: 26%;
+  }
+  .ref-birds > picture,
+  .ref-birds > img {
+    left: 0;
+    top: -3%;
+    width: 138%;
+  }
+  /* 树 + 新月 */
+  .ref-tree {
+    right: -4%;
+    top: 72%;
+    width: 52%;
+    height: 28%;
+  }
+  .ref-tree > picture,
+  .ref-tree > img {
+    right: 0;
+    top: -2%;
+    width: 152%;
+  }
+  /* 统一转色：灰度 → 墨绿。三个 token 值对应站内既有色，不自创。 */
+  .ref-plate .ref {
+    filter: grayscale(1) sepia(0.9) hue-rotate(88deg) saturate(0.7) contrast(1.1);
+    opacity: 0.24;
+  }
+  .ref-moon {
+    opacity: 0.3;
+  }
+  .ref-statue {
+    opacity: 0.26;
+  }
+  .ref-birds {
+    opacity: 0.2;
+  }
+  .ref-tree {
+    opacity: 0.18;
+  }
+  /* 白纱：把版心那一带压干净（★ 头像区不要有线），两端留出底纹的可见区。 */
+  /* ★ 内容层必须**显式提到 1** —— 2026-10-03 目检连踩两条：
+       ① 底纹用 z-index:-1 ⇒ 被 body 的 `background: var(--paper)` 挡住，底纹全白；
+       ② 底纹用 z-index:0 而不给内容提层 ⇒ .shell 没有 positioned 祖先，两者同处一个
+          层叠上下文，DOM 靠后的底纹**盖在内容上** ⇒ 整页发白、标题正文全看不见。
+       ⇒ 正确做法：底纹 0 / 内容 1。
+     ★ 顶栏与页脚在 .shell **之外**（Base.astro 渲染的），同样要提层，
+       否则导航与站名会发白（第二次目检才抓到）。 */
+  /* ★ 顶栏/页脚必须用 :global() + **body.chrome-page 前缀**：
+       ① 它们由 Base/Topbar 渲染，带的是**别的**作用域属性（AGENTS 事故表记过同类坑：
+          时间切片的交接层就因此静默失效过一次）；
+       ② 更关键：**权重**—— `body.chrome-page .topbar`（0,1,1）已经设了
+          `background: linear-gradient(--glass-bg…)` + `backdrop-filter`，
+          而 `.topbar`（0,1,0）盖不住它 ⇒ 顶栏被底纹压住、发白看不见。
+          ⇒ 锚到同一个 `body.chrome-page` 上，权重齐平而后定义，才压得住。 */
+  :global(body.chrome-page .topbar),
+  :global(body.chrome-page .foot) {
+    position: relative;
+    z-index: 1;
+  }
+  .pagehead,
+  .sign-card,
+  .prose,
+  .fig-block {
+    position: relative;
+    z-index: 1;
+  }
+
+  .ref-veil {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      #fafaf7e8 0%,
+      #fafaf7a8 40%,
+      #fafaf7b0 60%,
+      #fafaf7e8 82%,
+      #fafaf7e8 100%
+    );
+  }
+
+  /* ---- 标本编号：等宽字 + 大字距 = 「标本标签」的印刷感，也是仪器语汇的延续 ---- */
   .fig-no,
-  .sign-fig,
-  .sign-kind,
   .fig-idx {
     font-family: var(--font-mono);
     font-size: var(--fs-xs);
@@ -266,80 +419,73 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     color: var(--accent-ink);
     font-variant-numeric: tabular-nums;
   }
-  /* 切片编号挂在区块左上角外侧（视觉上像贴在切片上的标签，不占正文宽度） */
-  .fig-block {
-    position: relative;
-  }
-  /* ★ 编号与 h2 之间要留气：2026-10-03 目检发现两者挤在一起像一行。
-     用 --sp-2（0.5rem）—— 编号是"标签"不是标题，不能抢 h2 的节奏。 */
+  /* 编号与 h2 各占一行、之间留气：编号是「标签」不是标题，不能抢 h2 的节奏。 */
   .fig-no {
     margin: 0 0 var(--sp-2);
     color: var(--muted);
   }
+  .fig-h {
+    margin: 0 0 var(--sp-3);
+    font-size: var(--fs-lg);
+    font-weight: 800;
+  }
+  .fig-block {
+    position: relative;
+  }
 
-  /* ---- 签名切片：全页唯一一处深底（--dusk-2）----
-     ★ 深底上的颜色只有两个选择（实测值见 scripts/assert-tokens.mjs）：
-       --accent-bright on --dusk-1 = 6.90（编号用这个）
-       --dusk-5      on --dusk-1 = 4.26（**不到 4.5 ⇒ 只做 10px 标签/刻度**）
-       --accent-ink  on --dusk-1 = 2.97（**深底上不许用** —— 它是纸上的绿）
-     ⇒ tests/tokens.test.ts 有断言守着这条线，改配色前先看那里。 */
+  /* ---- 签名（站主 2026-10-03 第二轮：取消深底板，签名直接落在纸白底上）----
+     ★ 为什么去掉 --dusk-2 深底：底纹改走白底之后，那块深底就成了页面里唯一的孤岛；
+       站主要求「直接放到背景里，不要单独做一个卡片」⇒ 只留编号小字 + 签名本身。
+     ★ 宽度用 min() 收窄：380px 写死在 390 视口下会横向溢出（2026-10-03 目检实测签名被切）。 */
   .sign-card {
-    /* 下边距要给足：.prose 在 base.css 里没有上边距，不留白会紧贴第一行正文
-       （2026-10-03 目检发现）。
-     ★ 宽度不能写死：380px 在 390 视口下会连边框一起溢出（目检实测签名右边被切）⇒
-       用 min() 收窄。站主 2026-10-03 拍板的是「340px 图 / 380px 切片」这个**桌面**比例。 */
     margin: var(--sp-6) 0 var(--sp-6);
     width: min(380px, 100%);
-    background: var(--dusk-2);
-    border: 1px solid var(--dusk-4);
   }
   .sign-head {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     gap: var(--sp-3);
-    padding: var(--sp-2) var(--sp-3);
-    border-bottom: 1px solid var(--dusk-4);
+    padding-bottom: 0.4em;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.16em;
+    color: var(--muted);
   }
-  .sign-head .sign-fig {
-    color: var(--accent-bright);
-  }
-  .sign-head .sign-kind {
-    color: var(--dusk-5);
-    letter-spacing: 0.08em;
-  }
-  /* 签名图所在的「切片台」：留 20px 边距（站主 2026-10-03 拍板 340px 图 / 380px 切片） */
-  .sign-plate {
-    padding: 20px;
+  .sign-head b {
+    color: var(--accent-ink);
+    font-weight: 400;
   }
   .sign-img {
     display: block;
     width: 100%;
     height: auto;
   }
-  .sign-foot {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: var(--sp-3);
-    margin: 0;
-    padding: var(--sp-2) var(--sp-3);
-    border-top: 1px solid var(--dusk-4);
-    font-family: var(--font-mono);
-    font-size: var(--fs-xs);
-    letter-spacing: 0.08em;
-    color: var(--dusk-5);
-    font-variant-numeric: tabular-nums;
-  }
-  .sign-foot .sign-meta {
-    color: var(--accent-bright);
-  }
 
-  /* ---- 社交卡 / 技术栈：从「圆角柔边」改成「标本标签」（直角 + 细框 + 序号）---- */
-  .social a,
+  /* ---- 社交卡 / 技术栈：站主 2026-10-03 第二轮「不做卡片」⇒
+     改成**细线分隔的列表**（上边框分隔、无卡片框、无底色）----
+     ★ 为什么彻底去框：参考图里那些元素是「浮在纸上」的不是「装在盒子里」；
+       保留 --panel 底色会让每一行都变成一个独立的方块，与底纹层打架。 */
+  .social {
+    border-top: 1px solid var(--hair);
+  }
+  .social a {
+    border: 0;
+    border-bottom: 1px solid var(--hair);
+    background: transparent;
+    padding: var(--sp-3) 0;
+  }
+  .social a:hover,
+  .social a:focus-visible {
+    background: var(--accent-wash);
+    /* 悬停时给一点左内边距，让它看起来「被抽出」而不是「被点亮」 */
+    padding-left: var(--sp-2);
+  }
   .stack-group {
-    border: 1px solid var(--hair);
-    background: var(--panel);
+    border: 0;
+    border-top: 1px solid var(--hair);
+    background: transparent;
+    padding: var(--sp-4) 0;
   }
   /* 卡片是标本 ⇒ 不再圆角。原有的 hover 反馈保留（accent-wash 那一档）。 */
   .social a {
@@ -441,9 +587,8 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     font-weight: 800;
   }
   .social {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
-    gap: var(--sp-3);
+    /* 站主 2026-10-03「不做卡片」⇒ 由多列网格改成**单列细线列表** */
+    display: block;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -452,17 +597,19 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     display: flex;
     align-items: center;
     gap: 0.6em;
-    padding: var(--sp-3) var(--sp-4);
-    border: 1px solid var(--hair);
-    background: var(--panel);
+    padding: var(--sp-3) 0;
+    border: 0;
+    border-bottom: 1px solid var(--hair);
+    background: transparent;
     color: var(--ink);
     text-decoration: none;
     font-size: var(--fs-sm);
   }
   .social a:hover,
   .social a:focus-visible {
-    border-color: var(--accent);
     background: var(--accent-wash);
+    /* 悬停时给一点左内边距：看起来「被抽出」而不是「被点亮」*/
+    padding-left: var(--sp-2);
   }
   @media (max-width: 767px) {
     .social {
@@ -483,16 +630,15 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     font-weight: 800;
   }
   .stack-groups {
-    /* 单列：正文列只有 34em（≈544px），两列放不下三张卡会留一张孤卡（1440 实测）；
-       全宽单列让每组的 chips 有整行可用，长条目（Cloudflare D1…）也不用挤。 */
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--sp-3);
+    /* 单列 + 无间隙：站主 2026-10-03「不做卡片」⇒ 三组之间靠 hair 细线分隔，
+       有间隙会变成三块独立的方块。 */
+    display: block;
   }
   .stack-group {
-    border: 1px solid var(--hair);
-    background: var(--panel);
-    padding: var(--sp-4);
+    border: 0;
+    border-top: 1px solid var(--hair);
+    background: transparent;
+    padding: var(--sp-4) 0;
   }
   .stack-group-name {
     margin: 0 0 var(--sp-3);
@@ -617,20 +763,25 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     .lang-pct {
       min-width: 0;
     }
-    /* ---- 手机档的签名切片（口径 #9：展示型留**极简版**）----
-       极简 = 保留深底切片与签名（它是这一页唯一的手笔，不能砍），
-       但去掉刻度小字与元信息、缩小边距 —— 窄屏上这些挤得慌且读不出。
+    /* ---- 手机档（口径 #9：展示型留**极简版**）----
+       极简 = 保留签名（这一页唯一的手笔，不能砍）与底纹层，
+       但去掉编号小字、缩小边距 —— 窄屏上这些挤得慌且读不出。
        ★ 落笔动画在手机上也保留（它是本页唯一的互动）。
        ★ 宽度已在 .sign-card 上用 min(380px, 100%) 收窄，这里不再重复设。 */
-    .sign-plate {
-      padding: 12px;
-    }
-    .sign-kind,
-    .sign-meta {
+    .sign-head span {
       display: none;
     }
     .fig-no {
       margin-bottom: 0;
+    }
+    /* 底纹在窄屏上只留两处（月相 + 雕像），并再压淡一档：
+       390px 宽的屏上铺四块会糊成一片灰，什么也认不出。 */
+    .ref {
+      opacity:.5;
+    }
+    .ref-birds,
+    .ref-tree {
+      display: none;
     }
   }
 </style>
