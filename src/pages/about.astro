@@ -185,7 +185,15 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   <header class="pagehead">
     {/* ★ 站主 2026-10-03：「我的头像上面不要有线」⇒原来的圆形刻度环（量规语汇）
         与头像上的排线**全部去掉**，头像回归纯圆形照片。
-        刻度与量规的语汇改由页头那根 `--hair` 细线与各区块的 `FIG.0x` 编号承担。 */}
+        刻度与量规的语汇改由页头那根 `--hair` 细线与各区块的 `FIG.0x` 编号承担。
+
+        ★★ 页头纸托底（2026-10-03 目检后补，实测依据）：
+          页头整段落在背景大图上（实测 pagehead y=490..918，图高 772）⇒ 标题与
+          「关于」两字直接压深色底，完全读不出来（`.page-paper` 查无此元素 ⇒ 纸丢了）。
+          ⇒ 纸必须是**真元素**而不是 `::before`：`.pagehead` 是 grid 容器，
+            伪元素会按 grid item 参与轨道计算，`inset` 被算坏（见下方 CSS 注记）。
+            纸铺 `grid-area: 1/1/-1/-1` 跨全部网格区，负 margin 向外撑出纸边。*/}
+    <div class="page-paper" aria-hidden="true"></div>
     <p class="fig-no" aria-hidden="true">FIG.00 — PROFILE</p>
     <PageTitle>关于</PageTitle>
     {avatar && (
@@ -428,6 +436,12 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     z-index: 0;
     pointer-events: none;
     overflow: hidden;
+    /* ★ 2026-10-03 补：这一层自己要**有底色**。
+       实测（1440×1500）：图按视口宽铺、高 772px，而视口高 1500px
+       ⇒ 图只占 y=0..772，**下面 728px 全是 body 的透明**（实测 bg=rgba(0,0,0,0)）
+       ⇒ 页面下半截是白底，与站主要求的「深绿」相悖。
+       垫 --dusk-2（与构建期处理后的图底同色 `#131b17`）⇒ 上下都深绿，看不出接缝。 */
+    background: var(--dusk-2);
   }
   /* ===================================================================
    * 内容层提层（★ 2026-10-03 补；之前**漏了**，症状是正文「透明」）
@@ -555,37 +569,90 @@ const isExternal = (h: string) => /^https?:/i.test(h);
      伪元素会按 grid 容器参与轨道计算，实测 inset 被算成
      `72px -16px -32px -3px`（上面莫名撑开 72px、左侧只剩 -3px）
      ⇒ 纸既盖不住标题那一格、又往版心外溢。
-     ⇒ 改用**真元素**：在模板里给页头加一个 `.page-paper` 兄弟节点，
-       用 `grid-area: 1 / 1 / -1 / -1` 铺满整个 grid，不受行列影响。 */
-  /* 纸与 .pagehead 同父级、同position 上下文 ⇒ 用它自己的盒 + 负 inset 精确外撑。
-     ★ 这里能生效是因为**它不在 grid 容器里**（见上面那条注记）。 */
-  /* ★ 纸必须是页头的**兄弟**而不是子元素 —— 但 `position:absolute` 的包含块
-     会往上找到最近的定位祖先（.about-main 是 static，最终是 main），
-     实测 `inset: 0` 直接撑满整个 main（y=62..1540），
-     而页头只有 y=410..762 ⇒ 纸比需要的大得多，把月亮也盖了。
-     ⇒ 正解：给 `.pagehead` 自己一个 `position: relative` 作为包含块上下文，
-       再把纸**放回页头内部**（作为第一个子元素），
-       这样 `inset` 就是相对**页头自己的盒**算的。
-     ★ 之前试过「放页头内部 + grid-area」失败，是因为 grid 轨道参与了计算；
-       现在用 `position: relative` + `inset` 不再走 grid 轨道。 */
-  /* 页头：宽屏两栏（标题左 / 头像右）。**不在这里写 display** ——
-     媒体查询里那条会再写一次 display，同元素两处各写一次时**后写的赢**
-     （这个坑踩过：外层 grid 被媒体查询的 flex 覆盖）。 */
+     ⇒ 改用**真元素**：在模板里给页头加一个 `.page-paper` 子节点，
+       由下面的 `position:absolute + inset` 铺满页头（见「页头纸托底」段）。 */
+  /* 页头：宽屏两栏（标题左 / 头像右），窄屏单列纵向流。
+     ★ `display: grid` **只在媒体查询里写一次**（见下方 `@media (min-width:1024px)`），
+       这里**不重复声明** —— 同元素两处各写一次 display 时后写的赢（这个坑踩过：
+       外层 grid 被媒体查询的 flex 覆盖）。 */
   .pagehead {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-rows: auto auto;
-    align-items: start;
-    column-gap: var(--sp-6);
+    position: relative;
+    /* 纸用负 inset 向外撑，理论上会超出页头盒 —— 这里裁掉，
+       保证任何视口下页头都不产生横向溢出（红线：页面不可横向滚动）。
+       代价：页头右侧/底部若有元素想「探出」页头会被裁（当前没有这类元素）。 */
+    overflow: hidden;
   }
-  /* ★ 纸只留 grid-area，**不加 position: absolute**（2026-10-03 实测）。
-     两者同时存在时 `absolute` 胜出 ⇒ `inset: -16px` 生效，但
-     **grid 容器不为 absolute 子元素提供高度参照** ⇒ 纸高度塌成 0
-     （实测 y=466..466）⇒ 纸等于不存在。
-     只用 grid-area：纸作为**真正的 grid item**跨所有网格区
-     （`grid-area: 1/1/-1/-1`），高度由行分配撑开，且用负 margin 外撑出纸边。 */
+  /* ★★ 页头网格必须**逐项显式指定落位**（2026-10-03 实测出来的坑）。
+     之前只写 `grid-template-columns: 1fr auto` 让浏览器自动放置，结果是：
+       实测 h1 x=562（落在**右**列）、.profile x=101（落在**左**列）
+     ⇒ 标题和头像左右**调换**了（与设计意图相反）。
+     根因：网格项按源码顺序自动-flow，`.fig-no` 先占 (1,1)，于是
+     `h1` 被挤到 (1,2)、`.profile` 到 (2,1)。
+     ⇒ 显式落位，顺序无关：
+       编号通栏（1/-1）· 标题左列 · 头像右列。 */
+  .pagehead > .fig-no { grid-column: 1 / -1; grid-row: 1; }
+  /* ★ 标题必须用 `:global()` 包住类名，**不能**写 `.pagehead > h1` 或 `.pagehead > .h`
+     （2026-10-03 实测踩到，症状是「纸把标题整个盖住、页头一片空白」）。
+
+     —— 为什么。这两个写法都被 Astro 的 scoped CSS 编译成**带本页 cid 的属性选择器**：
+        `.pagehead[本页cid] > h1[本页cid]` / `> .h[本页cid]`。
+        而这个 h1 是 **PageTitle 组件**渲染的，元素上带的是**组件自己的 cid**（ta2fbyqs≠本页）
+        ⇒ 属性选择器**不匹配** ⇒ 规则整条静默失效（实测 h1pos=static h1z=auto）。
+        ⇒ 纸（`.page-paper`，本页元素 ⇒ 匹配成功）拿到 position:absolute + z-index:0，
+          标题既 static 又无z-index ⇒ **纸盖住标题**，纸上只剩空白。
+
+     ★ 代价与边界：`:global()` 意味着这条规则**离开本页作用域**。
+       它以 `.pagehead >` 为前缀（`.pagehead` 是本页唯一的类）⇒ 实际影响面仅关于页。
+       规则：凡是**跨组件边界**要选择元素，一律 `:global(类名)`，不用标签/局部类选择器。 */
+  :global(.pagehead > h1) { grid-column: 1; grid-row: 2; }
+  .pagehead > .profile { grid-column: 2; grid-row: 2; }
+
+  /* ---- 页头纸托底（真元素，不是伪元素）----
+     ★ 为什么不用 `::before`：`.pagehead` 是 grid 容器，伪元素会作为 grid item
+       参与轨道计算，`inset: -16px` 被算成 `72px -16px -32px -3px`
+       （实测上面莫名撑 72px、左侧只剩 -3px）⇒ 纸既盖不住标题、又往版心外溢。
+     ★ 为什么**不能**用 `grid-area: 1/1/-1/-1`（实测踩到，2026-10-03）：
+       `grid-template-rows: auto auto` 只有 2 行，`-1` 解析成第 3 行（不存在）
+       ⇒ 纸被放进一条**隐式行**并按内容高度撑开，而那条行没有内容
+       ⇒ **实测高度 = 0**（探针：page-paper=[85,546,610,0]）⇒ 纸等于不存在。
+       ⇒ 改成显式 `grid-row: 1 / 3`（第 1 行到第 2 行末）才跨满，
+         但那样纸会**参与行分配**、可能把标题/头像挤变形（纸成了有内容的项）。
+     ⇒ 最终方案：`position: absolute` + 显式四边 inset，**包含块锚在页头自己**
+       （`.pagehead` 已有 position:relative，上面那条规则给了）。
+       绝对定位的 grid 子元素**不参与轨道计算**（这正是我们要的：纸不影响排版），
+       而包含块是页头的 padding盒 ⇒ inset 相对页头算，精确可控。
+       ⚠ 之前「absolute ⇒ 高度塌 0」那次是因为 `.pagehead` 当时**没有**
+         position:relative，包含块跑到 main 去了；现在有了，两个条件都满足。
+     ⚠⚠ **另一个更隐蔽的坑（2026-10-03 实测）**：下面那条
+        `.pagehead > * { position: relative; z-index: 1 }` 排在**本规则之后**，
+        同特异性（都是 0,1,0）**后写的赢** ⇒ 把纸的 `position:absolute`
+        覆盖回 `relative` ⇒ 纸重新变成 grid item ⇒ 实测高度又塌成 0。
+        ⇒ 靠**提高特异性**（`.pagehead > .page-paper`，0,2,0）压过通配那条，
+          而不是靠调整源码顺序 —— 顺序太脆，下一次插注释就会再被翻回去。
+     ⚠⚠⚠ 窄屏下纸**不得**超出视口（2026-10-03 实测）：
+       390 视口时 grid 的 `1fr auto` 算出 503px 的纸宽（文档 scrollWidth=512）
+       ⇒ 横向溢出 122px、头像被切出屏幕。
+       根因不在纸上，而在 **grid 只该在宽屏生效**（见下方媒体查询）。
+       这里再加一道保险：`overflow: hidden` 让纸的溢出被裁在页头盒内。 */
+  .pagehead > .page-paper {
+    position: absolute;
+    /* 负 inset = 纸边向外撑；页头内容盒本身一格不动（红线：正文排版不动）。 */
+    inset: calc(var(--sp-4) * -1);
+    background: var(--paper);
+    box-shadow: 0 0 0 1px var(--hair);
+    /* 纸在内容之下：`.pagehead > *` 那条会给所有子元素 z-index:1，
+       这里显式压回 0（同一特异性下靠后声明胜出）。 */
+    z-index: 0;
+  }
+
   /* 页头内容压在纸之上 */
   .pagehead > *,
+  /* ★ 这条是**必需**的，不是冗余：`.pagehead > *` 编译成
+     `.pagehead[本页cid] > *[本页cid]`，而标题 h1 带的是 **PageTitle 组件**的 cid
+     ⇒ 通配那条匹配不到它 ⇒ 标题没有 z-index，被纸（z-index:0 定位元素）整个盖住
+     （实测：h1pos=static h1z=auto，elementFromPoint 命中 DIV.page-paper）。
+     ⇒ 同样必须 `:global()`。 */
+  :global(.pagehead > h1),
   .sign-card,
   .prose,
   .fig-block {
@@ -763,24 +830,37 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   }
   /* 宽屏：页头变成**两栏** —— 标题在左、头像在右（都留在正文流里 ⇒ 位置固定不变、且跟着页面滚）。
      为什么不用 position:fixed：① 不跟滚动；② 过渡动画给 .shell 加的 transform 会把 fixed 的包含块
-     从视口换成 .shell，动画一结束就位置突变（"加载后跳一下"）。布局定位两个问题都没有。 */
+     从视口换成 .shell，动画一结束就位置突变（"加载后跳一下"）。布局定位两个问题都没有。
+
+     ★★ 但 `display: grid` 本身**必须限在宽屏**（2026-10-03 实测踩到）：
+       `grid-template-columns: 1fr auto` + auto 放置在窄屏算出的列宽超过视口
+       （实测 390 视口：纸宽 503px、文档 scrollWidth=512 ⇒ 横向溢出 122px，
+         头像与「北杉 · SPECIMEN 00」被切到屏幕外）。
+       窄屏本来就该是**单列纵向流**（标题在上、头像居中在下），所以把 grid
+       整体关掉，两个显式落位属性在非 grid 容器上自动失效。 */
+  @media (min-width: 1024px) {
+    .pagehead {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-rows: auto auto;
+    }
+  }
   @media (min-width: 1024px) {
     .pagehead {
       /* ★ 2026-10-03 分栏后：页头不再通栏（原来是 max-width:none 铺满整个 wrap，
          而右半是空的）。现在它只占**左列**，标题与头像在列内左右分置。 */
       max-width: none;
-      /* display 由外层那条 .pagehead 规则给 **grid** —— 这里**不要**再写 display。
+      /* display 由上面那条媒体查询给 **grid** —— 这里**不要**再写 display。
          ★ 踩到（2026-10-03）：这条媒体查询里曾写 `display: flex`，
            它在层叠上**晚于**外层的 grid ⇒ 把 grid 覆盖成 flex
            ⇒ `.page-paper`（absolute 子元素）在 flex 容器里高度塌成 0
               （实测 y=466..466）⇒ 纸等于不存在 ⇒「关于」压在深色图上。
-         ⇒ 同一元素**不要在两处各写一次 display**，否则后写的赢。 */
+         ⇒ 同一元素**不要在两处各写一次 display**，否则后写的赢；
+           grid 声明已提到独立的窄屏关闭段（见上）。 */
       padding-bottom: var(--sp-5);
       border-bottom: 1px solid var(--hair);
     }
     .pagehead .fig-no {
-      /* flex 下用 100% 宽独占一行（原来是 grid-column: 1/-1） */
-      flex: 0 0 100%;
       margin-bottom: var(--sp-2);
     }
     .profile {
