@@ -86,6 +86,18 @@ const d = (entry?.data ?? {}) as unknown as AboutData;
 const assets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/about/*.{jpg,jpeg,png,webp,avif}', { eager: true });
 const avatar = d.avatar ? assets[`/src/assets/about/${d.avatar}`]?.default : undefined;
 const signature = d.signature ? assets[`/src/assets/about/${d.signature}`]?.default : undefined;
+
+/* 参考图底纹（第2 步，2026-10-03）—— **构建期已裁成小图**，不是 CSS 取景。
+   ★ 为什么必须裁文件：CSS 的 overflow:hidden + 偏移能在浏览器里「取景」，
+     但**浏览器仍会下载整张原图**。原图 1080×1791~2355、3–4 MB 三张 ⇒ 关于页 10 MB+。
+   ★ 裁切用的是 sharp —— **astro 自带的依赖**（astro 的 package.json 有 "sharp": "^0.35.4"），
+     不是新增运行时依赖，不违反「只允许 astro / @astrojs/rss / @astrojs/sitemap」。
+   ★ 元素全部取自站主给的参考图，**不自己画**（手绘 SVG 雕像实测砸过三次：蘑菇→emoji→火柴人）。
+     月相序列 + 维纳斯雕像取自同一段（风格一致，且都是白底）；
+     d 图虽有罗马雕像但**底是蓝色**，蓝底转绿会与「白底 + 墨绿」的整体调子打架 ⇒ 没用它。
+   裁切参数（段内百分比、白点分位数等）见 `_probe/_ref-plate.mjs`，可复算、可改。 */
+const PLATE_SRCS = import.meta.glob<{ default: ImageMetadata }>('/src/assets/about/plates/*.webp', { eager: true });
+const plate = (name: string) => PLATE_SRCS[`/src/assets/about/plates/${name}.webp`]?.default;
 const social = d.social ?? [];
 // 空组不渲染（内容层写错分组时不至于留一个空卡片）
 const stack = (d.stack ?? []).filter((g) => (g?.items ?? []).length > 0);
@@ -128,10 +140,26 @@ const isExternal = (h: string) => /^https?:/i.test(h);
    *   **不做像素处理**：逐像素改色会把原图的浓淡与拼贴层次一起抹平。
    * =================================================================== */}
   <div class="ref-plate" aria-hidden="true">
-    <div class="ref ref-moon"></div>
-    <div class="ref ref-statue"></div>
-    <div class="ref ref-birds"></div>
-    <div class="ref ref-tree"></div>
+    {plate('moon') && (
+      <div class="ref ref-moon">
+        <Image class="ref-img" src={plate('moon')!} alt="" widths={[560, 1120]} sizes="(min-width:1024px) 34vw, 90vw" />
+      </div>
+    )}
+    {plate('statue') && (
+      <div class="ref ref-statue">
+        <Image class="ref-img" src={plate('statue')!} alt="" widths={[420, 840]} sizes="(min-width:1024px) 22vw, 70vw" />
+      </div>
+    )}
+    {plate('birds') && (
+      <div class="ref ref-birds">
+        <Image class="ref-img" src={plate('birds')!} alt="" widths={[560, 1120]} sizes="(min-width:1024px) 30vw, 90vw" />
+      </div>
+    )}
+    {plate('dial') && (
+      <div class="ref ref-dial">
+        <Image class="ref-img" src={plate('dial')!} alt="" widths={[520, 1040]} sizes="(min-width:1024px) 26vw, 80vw" />
+      </div>
+    )}
     <span class="ref-veil"></span>
   </div>
 
@@ -374,14 +402,16 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     }
   }
 
-  /* ---- 参考图底纹层（站主 2026-10-03 第二轮）----
+  /* ---- 参考图底纹层（站主 2026-10-03 第二轮；第2 步换成真图）----
      ★ 站主四条：① 头像上不要线 ② 直接用参考图素材 ③ 直接放背景不做卡片 ④ 白底。
-     ★ 结构是「取景框 + 绝对定位的图」⇒ 裁切用 CSS 完成（overflow:hidden +偏移），
-       **不做像素处理**：灰度与墨绿全靠 filter 现场做（grayscale + sepia + hue-rotate）——
-       逐像素改色会把原图的浓淡与拼贴层次一起抹平，而那正是参考图的值钱处。
-     ★ 素材走 astro:assets 出来的小图（构建期已转WebP），所以下载量是几十 KB 级，
-       不是原图那 3–4 MB（CSS 裁切不能裁文件，浏览器仍会下载整张 —— 这点务必记住）。
-     ★ 四块互不重叠：左上飞鸟 / 右上月相 / 左下群像 / 右下树。 */
+     ★★ 第2 步把「CSS 取景 + 原图」换成**构建期裁好的小图**：
+        CSS 的 overflow:hidden + 偏移能在浏览器里取景，但**浏览器仍会下载整张原图**
+        （3–4 MB × 3 ⇒ 关于页 10 MB+）。现在图是 900px 宽的 WebP、四块共 482 KB。
+     ★★ 灰度与墨绿**在构建期就做好了**（`_probe/_ref-plate.mjs` 用 sharp 按
+        「与白的亮度差」算 alpha、颜色恒为深墨绿）⇒ 运行时**不需要任何 filter**。
+        之前那套 grayscale + sepia + hue-rotate 现场染色已经删掉 ——
+        它的存在是因为当时是原图，现在是已染好的小图。
+     ★ 四块的取景内容（互不重复）：月相序列环 / 维纳斯雕像 / 飞鸟+同心圆 / 圆盘+星芒。 */
   .ref-plate {
     position: fixed;
     inset: 0;
@@ -391,121 +421,65 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   }
   .ref-plate .ref {
     position: absolute;
-    overflow: hidden;
+    line-height: 0;
   }
   .ref-plate .ref > picture,
   .ref-plate .ref > img {
-    position: absolute;
-    max-width: none;
+    display: block;
+    width: 100%;
     height: auto;
+    max-width: none;
   }
-  /* 月相盘 + 直尺（站主点名要的那两块之一）*/
-  .ref-moon {
-    right: -6%;
-    top: 4%;
-    width: 62%;
-    height: 30%;
-  }
-  .ref-moon > picture,
-  .ref-moon > img {
-    right: 0;
-    top: -84%;
-    width: 128%;
-  }
-  /* 雕像群像（站主点名的另一块）*/
-  .ref-statue {
-    left: -8%;
-    top: 40%;
-    width: 58%;
-    height: 34%;
-  }
-  .ref-statue > picture,
-  .ref-statue > img {
-    left: 0;
-    top: -36%;
-    width: 132%;
-  }
-  /* 飞鸟 + 星芒 */
-  .ref-birds {
-    left: -10%;
-    top: 12%;
-    width: 56%;
-    height: 26%;
-  }
-  .ref-birds > picture,
-  .ref-birds > img {
-    left: 0;
-    top: -3%;
-    width: 138%;
-  }
-  /* 树 + 新月 */
-  .ref-tree {
-    right: -4%;
-    top: 72%;
-    width: 52%;
-    height: 28%;
-  }
-  .ref-tree > picture,
-  .ref-tree > img {
-    right: 0;
-    top: -2%;
-    width: 152%;
-  }
-  /* 统一转色：灰度 → 墨绿。三个 token 值对应站内既有色，不自创。 */
-  .ref-plate .ref {
-    filter: grayscale(1) sepia(0.9) hue-rotate(88deg) saturate(0.7) contrast(1.1);
-    opacity: 0.24;
-  }
-  .ref-moon {
-    opacity: 0.3;
-  }
-  .ref-statue {
-    opacity: 0.26;
-  }
-  .ref-birds {
-    opacity: 0.2;
-  }
-  .ref-tree {
-    opacity: 0.18;
-  }
-  /* 白纱：把版心那一带压干净（★ 头像区不要有线），两端留出底纹的可见区。 */
-  /* ★ 内容层必须**显式提到 1** —— 2026-10-03 目检连踩两条：
-       ① 底纹用 z-index:-1 ⇒ 被 body 的 `background: var(--paper)` 挡住，底纹全白；
-       ② 底纹用 z-index:0 而不给内容提层 ⇒ .shell 没有 positioned 祖先，两者同处一个
-          层叠上下文，DOM 靠后的底纹**盖在内容上** ⇒ 整页发白、标题正文全看不见。
-       ⇒ 正确做法：底纹 0 / 内容 1。
-     ★ 顶栏与页脚在 .shell **之外**（Base.astro 渲染的），同样要提层，
-       否则导航与站名会发白（第二次目检才抓到）。 */
-  /* ★ 顶栏/页脚必须用 :global() + **body.chrome-page 前缀**：
-       ① 它们由 Base/Topbar 渲染，带的是**别的**作用域属性（AGENTS 事故表记过同类坑：
-          时间切片的交接层就因此静默失效过一次）；
-       ② 更关键：**权重**—— `body.chrome-page .topbar`（0,1,1）已经设了
-          `background: linear-gradient(--glass-bg…)` + `backdrop-filter`，
-          而 `.topbar`（0,1,0）盖不住它 ⇒ 顶栏被底纹压住、发白看不见。
-          ⇒ 锚到同一个 `body.chrome-page` 上，权重齐平而后定义，才压得住。 */
-  :global(body.chrome-page .topbar),
-  :global(body.chrome-page .foot) {
-    position: relative;
-    z-index: 1;
-  }
-  .pagehead,
-  .sign-card,
-  .prose,
-  .fig-block {
-    position: relative;
-    z-index: 1;
-  }
+  /* ★ 摆位原则（目检定下来的）：**四块全部待在版心之外**，
+     任何一块压到文字就是失败 —— 底纹是气氛，不是背景图片。
+     目检踩过：月相按「右上角」放，结果盖住右栏的社交清单；飞鸟放左侧中段，
+     结果压住头像与正文第一行。⇒ 改成按**视口百分比贴边**摆。
 
+  /* ① 月相序列环（站主点名）—— 右上角，**大部分滑出视口**，只留左下一角。
+        元素最重（满月环形山 + 放射线），所以给最大的图但只露一角。 */
+  .ref-moon {
+    right: -14%;
+    top: -6%;
+    width: min(44vw, 600px);
+  }
+  /* ② 维纳斯雕像（站主点名）—— 左下，贴左缘。同样只露一部分。 */
+  .ref-statue {
+    left: -12%;
+    top: 52%;
+    width: min(24vw, 320px);
+  }
+  /* ③ 飞鸟 + 同心圆线 —— 右上偏下，**与右栏同侧但更靠边**。
+        原来放左侧中段会压住头像（实测）。 */
+  .ref-birds {
+    right: -10%;
+    top: 26%;
+    width: min(34vw, 460px);
+  }
+  /* ④ 圆盘 + 星芒 + 直尺 —— 右下角，滑出大半。
+        ★ 它挨着 footer 所在的深色带，但**只滑到深色带之上**（top: 78%），
+          不压footer（footer 有自己的背景，不透明）。 */
+  .ref-dial {
+    right: -12%;
+    top: 76%;
+    width: min(28vw, 380px);
+  }
+  /* 白纱：把版心那一带压干净（★ 站主要求「头像上不要有线」），
+     两端留出底纹的可见区。渐变端点用 8 位hex（红线：颜色一律走 token 或 8 位）。 */
   .ref-veil {
     position: absolute;
     inset: 0;
+    /* 白纱：把版心两栏（左右各约 600px）压干净，其余留给底纹。
+       ★ 强度是目检定的：e8（.91）太弱，正文底下的纹路会显出来；
+         而 40%/60% 两端的 a8/b0（.66/.69）让版心仍透出一点纹，
+         免得整页死白。 */
     background: linear-gradient(
       90deg,
-      #fafaf7e8 0%,
-      #fafaf7a8 40%,
-      #fafaf7b0 60%,
-      #fafaf7e8 82%,
-      #fafaf7e8 100%
+      #fafaf7f2 0%,
+      #fafaf7cc 30%,
+      #fafaf7b8 46%,
+      #fafaf7b8 54%,
+      #fafaf7cc 70%,
+      #fafaf7f2 100%
     );
   }
 
@@ -881,14 +855,25 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     .fig-no {
       margin-bottom: 0;
     }
-    /* 底纹在窄屏上只留两处（月相 + 雕像），并再压淡一档：
-       390px 宽的屏上铺四块会糊成一片灰，什么也认不出。 */
+    /* 底纹在窄屏上只留两处（月相 + 雕像，站主点名的那两个），并再压淡一档：
+       390px 宽的屏上铺四块会糊成一片灰，什么也认不出。
+       ★ 图已经是构建期染好的墨绿小图，运行时**没有 filter**，
+         所以这里的 opacity 直接作用在成品图上。 */
     .ref {
-      opacity:.5;
+      opacity: 0.5;
     }
     .ref-birds,
-    .ref-tree {
+    .ref-dial {
       display: none;
+    }
+    /* 留下的两块在窄屏上占得更满一些（屏幕上没有右栏，清单是通栏的） */
+    .ref-moon {
+      right: -4%;
+      width: min(72vw, 420px);
+    }
+    .ref-statue {
+      left: -4%;
+      width: min(38vw, 220px);
     }
   }
 </style>

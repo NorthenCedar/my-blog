@@ -27,7 +27,7 @@
 | ① | `docs/writing-guide.md` | **站主自己用的手册**：约定、token、常见坑、怎么发布 | 全读（51 KB，值得） |
 | ② | `docs/architecture.md` + `docs/content-model.md` | 目录结构、内容管线、渲染链路 | 全读 |
 | ③ | `docs/site-decisions.md` | **历次设计决定与理由**（为什么是这样而不是那样） | 按需查 |
-| ④ | `tests/*.test.ts`（18 个） | **这才是真正的规格书**：站的硬约束都写成了断言 | 全读，尤其 `build-output` / `content-invariants` / `tokens` |
+| ④ | `tests/*.test.ts`（19 个） | **这才是真正的规格书**：站的硬约束都写成了断言 | 全读，尤其 `build-output` / `content-invariants` / `tokens` |
 | ⑤ | `src/styles/tokens.css` | 全部设计 token（颜色/间距/字号）。**组件里不许出现字面色值** | 全读 |
 | ⑥ | `src/layouts/Base.astro` · `src/lib/posts.ts` · `src/content.config.ts` · `src/tag-registry.ts` | 外壳（head/脚本/过渡标记）、文章管线、内容契约、标签注册表 | 全读 |
 | ⑦ | `docs/boot-intro-work-order.md` | **（已作废）**开场动画的旧施工工单：20.16 s 逐帧复刻版。v1.15 把开场整份重走后它不再是现行契约 | 只在考古时搜关键词（155 KB，别通读） |
@@ -110,6 +110,9 @@
 | ★★ 把“提高分辨率”当成解决“糊”的手段 | 2026-10-01：场从 CSS 宽 1/4 提到 1/3（320→426，面积 ×1.78）就掉到 **29 fps**。“分辨率低”的病灶往往不是采样密度，而是**高频被降采样**⇒ 先问“哪一层是高频的”，把那一层搬到显示分辨率（或矢量顶点），而不是把整个场提上去 |
 | ★★ monkey-patch canvas 方法来测耗时 | 2026-10-01：patch `fill / drawImage / clearRect` 累计只有 **0.09 ms/帧**，而帧间隔 26 ms ⇒ 差点误判成“路径填充很便宜”。canvas 2D 会把命令排队，真正的光栅化在 flush/合成阶段 ⇒ patch 只能测到 JS 调用开销。⇒ 要**在代码内**用 `performance.now()` 分段计时，或做对照实验（如把路径换成一个矩形） |
 | ★ 拿本地无头 Chrome 的 fps 单次读数下结论 |
+| 用「剥注释后再断言」这条通则去做**正向**断言 | 2026-10-03踩到：`about.astro` 的说明注释里出现了块注释定界符的**字面文本**（讲 CSS 裁切那两句），朴素的块注释正则从那里一路吃到下一个定界符，**把中间真正的代码吞掉** ⇒ 正向断言（如「plates 走了 import.meta.glob」）恒红，而源码明明是对的。★ 更隐蔽的一层：改判据时若在注释里写出反斜杠，vitest 直接报 `Invalid Unicode escape sequence`。⇒ **正向断言用未剥注释的原文；负向断言才用剥过的版本**（负向需要它是为了防注释里的字面量让判据恒红）。另：`aria-hidden` 容器的配对区间**不能**用 `indexOf('</div>')` ——会撞上嵌套子元素的第一个闭合（实测区间被截在 3460，后面的图全落在区间外），必须做嵌套计数 |
+| 给装饰性图写空 alt，被「所有 alt 非空」那条断言判红 | 无障碍惯例是「装饰性图 alt 必须为空串+ 容器 `aria-hidden`」，写上内容反而让屏幕阅读器念出纯装饰。站里的断言本意是「**有信息的**图不许漏 alt」⇒ 2026-10-03 给它加了**严格豁免**：空 alt 只有落在 `aria-hidden="true"` 容器内才放过，且用嵌套计数求区间。★ 顺带查出 **Astro 对空 alt 输出的是裸属性**（`<img ... alt sizes="...">`，不是 `alt=""`）⇒ 判据不能只认 `alt="..."`，否则把正确写法当成「完全没有 alt」。★ 豁免只许收窄不许放宽 —— 写成「空 alt 都行」等于把这条断言作废 |
+| 参考图当底纹，用 CSS `overflow:hidden` + 偏移「取景」 | ★★ **CSS 裁切不能裁文件** —— 浏览器仍会下载**整张**原图。参考图 1080×1791~2355、3–4 MB 三张 ⇒ 关于页 10 MB+。正解是**构建期裁文件**：`sharp`（★ **astro 自带的依赖**，`astro/package.json` 里有 `"sharp": "^0.35.4"`，不是新增运行时依赖）按坐标裁 + 算 alpha，产物走 `astro:assets` 出 WebP + srcset。★ 另两条踩到的：① **取景框不能跨段**（百分比相对整张图算⇒ 框跨了相邻两段、混进深色区 ⇒ 整块发灰）—— 改成在「段文件」上裁；② **alpha 阈值不能用固定值**（原图那些段本就有大量中灰纸纹，实测 alpha 均值 127/255 ⇒ 整块半透明呈浅绿雾）—— 改用**白点分位数**，本项目取 0.45 / gamma 1.0（`_probe/_scan-params.mjs` 扫六组对比出来的）|
 | 部署门闩查线上时，没绕开 CDN 缓存 | 2026-10-03：提交 `f07fbbe` 的部署已是 Active，wrangler 显示 Source 正是它，但`curl https://northcedar.top/about/ | grep -c navshell` 返回 **0** —— 差点误判成"没部署上去"。⇒ **门闩查询一律带一个随机查询串**（`?cb=$(date +%s)`）；拿不准时再直查部署域名（`https://<hash>.personal-br4.pages.dev`），它不经过 CDN。★ 这与「门闩要绑本次改动本身」是同一条原则的两端：**绑对了内容，被缓存骗了照样是假通过**。〔本项目此前已踩过四次同类坑，见下条〕 |
 | 用 `visibility:hidden` 或 `html{overflow-x:clip}` 当"挡住溢出"的手段 | ★★ **fixed 元素超出视口的量，Chrome 会计入文档滚动宽度**（与规范有出入）。`visibility:hidden` 不挡，**`html{overflow-x:clip}` 也不挡** —— 2026-10-03 实测 clip 的**计算值就是 clip**，而 `scrollX` 仍是 304。那条 clip 是为 full-bleed hero 的 15px 误差加的，与此无关。正解：给它一个 `position:fixed; inset:0; overflow:hidden` 的祖先壳。★ **但壳必须把面板从 `fixed` 改成 `absolute`** —— fixed 只被「建立了固定定位包含块」的祖先（带 transform/filter/will-change/contain）裁剪，光有 overflow 裁不住。⇒ 手机端**整站**每一页都能横向拖出空白（实测 390→304 = 78vw、768→320 = 封顶，四页完全一致）。护栏：`tests/nav-drawer-overflow.test.ts`（8 条，守壳的三件套 + 不许改回 fixed + 打开态不许退回 `~`） |
 | 给已有的同级兄弟选择器加了一层包裹，却没改选择器 | 加壳后 `.navmask` / `.navpanel` 变成壳的**子**元素，原来的 `.navtog:checked ~ .navmask`（同级兄弟）不再匹配 ⇒ **抽屉打不开**，而且构建照常成功。⇒ 凡是给某节点加包裹层，**连带检查所有以它为末端的组合选择器**。护栏同上 |
@@ -132,7 +135,7 @@
   | 验收类型 | 走哪条 |
   |---|---|
   | 视觉（排版 / 装置 / 配色） | `_probe/launcher.mjs` 的 `withServer()` + `shot()` → 出 PNG 后 `read_image` |
-  | 行为契约 | `npm run verify`（`tests/` 18 个文件 266 条） |
+  | 行为契约 | `npm run verify`（`tests/` 19 个文件 275 条） |
   | 产物形态 | 直接对 `dist/` 做静态断言（多数 `build-output.test.ts` 已覆盖） |
   | **运行时布局 / 盒宽 / `scrollX` 多档溢出** | ★ **`_probe/_measure-all.mjs`**（见下） |
   改动 launcher 后跑 `node _probe/launcher-selftest.mjs` 自检（自检不依赖 CDP）。

@@ -151,13 +151,61 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     }
   });
 
-  it('所有图片的 alt 都非空', () => {
+  it('所有图片的 alt 都非空（装饰性图例外，但必须严格豁免）', () => {
+    /*★ 2026-10-03 补一条豁免：关于页底纹层是**装饰性**图（`aria-hidden="true"` 容器内），
+       按无障碍惯例它们的alt 必须是空串 —— 写上内容反而会让屏幕阅读器把
+       「月相序列环」这类纯装饰念出来。但「所有 alt 非空」这条判据的本意是
+       「**有信息的**图不许漏alt」⇒ 严格限定：只有**位于 aria-hidden 容器内**的空 alt 才豁免。
+       判据不许放宽成「空 alt 都行」—— 那等于把这条断言作废。
+       （起因：2026-10-03 接入参考图底纹时本条恒红，见 tests/about-ref-plate.test.ts。） */
     for (const f of htmlFiles()) {
       const html = readFileSync(f, 'utf8');
+      /* 找出所有 aria-hidden="true" 容器的**配对区间**。
+         ⚠ 不能用 `indexOf('</div>', start)` —— 那会撞上**嵌套**子元素的第一个闭合
+         （实测：ref-plate 里有 .ref > picture，区间被截在 3460，后面的图就落在区间外）。
+         ⇒ 必须做**嵌套计数**：从开标签起，每遇一个同名开标签 +1、每遇闭合 -1，回到 0 即配对。 */
+      const hiddenSpans: [number, number][] = [];
+      for (const m of html.matchAll(/<([a-z]+)\b[^>]*aria-hidden="true"[^>]*>/g)) {
+        const tag = m[1];
+        const start = m.index!;
+        const openRe = new RegExp(`<${tag}\\b`, 'g');
+        const closeRe = new RegExp(`</${tag}>`, 'g');
+        let pos = start;
+        let depth = 0;
+        let end = html.length;
+        while (pos < html.length) {
+          openRe.lastIndex = pos;
+          closeRe.lastIndex = pos;
+          const o = openRe.exec(html);
+          const c = closeRe.exec(html);
+          if (!c) break;
+          if (o && o.index < c.index) { depth++; pos = o.index + 1; }
+          else {
+            depth--;
+            pos = c.index + c[0].length;
+            if (depth === 0) { end = pos; break; }
+          }
+        }
+        hiddenSpans.push([start, end]);
+      }
+      const inHidden = (pos: number) => hiddenSpans.some(([a, b]) => pos >= a && pos <= b);
+
       for (const m of html.matchAll(/<img\b[^>]*>/g)) {
-        const alt = m[0].match(/alt="([^"]*)"/);
-        expect(alt, `${f} 里有 img 完全没有 alt`).toBeTruthy();
-        expect(alt![1].trim().length, `${f} 里有 img 的 alt 是空的`).toBeGreaterThan(0);
+        const tag = m[0];
+        /* alt 有两种形态：alt="文字"（有内容）与 **裸 alt**（空字符串）。
+           ★ Astro 对空 alt 的输出是**裸属性**（实测产物：`<img ... alt sizes="...">`），
+           而 HTML 规范里裸属性等价于 alt="" —— 即「装饰性图，正确写法」。
+           所以判据不能只认 alt="..."，否则会把正确的写法当成「完全没有 alt」而恒红。
+           两种都接受，但**空 alt 仍要过下面那道 aria-hidden 关卡**。 */
+        const quoted = tag.match(/alt="([^"]*)"/);
+        const bare = /(?:\s|^)alt(?=[\s=]|$)/.test(tag);
+        expect(quoted || bare, `${f} 里有 img 完全没有 alt 属性：${tag.slice(0, 120)}`).toBeTruthy();
+        if (quoted && quoted[1].trim().length > 0) continue;
+        expect(
+          inHidden(m.index!),
+          `${f} 里有 img 的 alt 是空的，且它不在任何 aria-hidden="true" 容器内 —— ` +
+            `要么给它写 alt，要么把它移进装饰层（aria-hidden + 空 alt）`,
+        ).toBe(true);
       }
     }
   });

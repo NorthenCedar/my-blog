@@ -63,7 +63,7 @@ cd <博客仓库>
 ```powershell
 npm run dev       # 启动本地预览，改完立刻能看到（按 Ctrl+C 停止）
 npm run build     # 只构建，不跑测试
-npm run verify    # 构建 + 跑全部测试（共 266 条：264 通过 / 1 设计内跳过 / 1 已知环境故障）—— 推送前必跑
+npm run verify    # 构建 + 跑全部测试（共 275 条：273 通过 / 1 设计内跳过 / 1 已知环境故障）—— 推送前必跑
 npm test          # 只跑测试
 git add -A        # 把改动标记为"要提交"
 git commit -m "说明"   # 存成一个版本
@@ -186,7 +186,7 @@ npm run dev
 npm run verify
 ```
 
-看到 `Tests 264 passed` 就对了（数字会随新增护栏上升；旁边两行都不是代码问题）：`1 skipped` 是设计内的跳过
+看到 `Tests 273 passed` 就对了（数字会随新增护栏上升；旁边两行都不是代码问题）：`1 skipped` 是设计内的跳过
 （「上游镜像已清」「未构建」这类前提缺失的占位，见 `tests/` 里的 `skipIf` 条件）；
 `1 failed` 是本机已知环境故障 `spawnSync node EBUSY`（`tests/tokens.test.ts` 用相对路径 `node`
 起子进程在本机必失败），用绝对路径直跑 `node scripts/assert-tokens.mjs` 复核那 11 项即可。
@@ -568,7 +568,7 @@ logo 配色 `#e9efe9` / `#8fe0b0`、大标题 `clamp(2.4rem, 9.2vw, 6.4rem)`。
 ### 8.6 改完必须做的事
 
 ```powershell
-npm run verify        # 构建 + 全量测试（当前 264 passed / 1 skipped / 1 已知环境故障）
+npm run verify        # 构建 + 全量测试（当前 273 passed / 1 skipped / 1 已知环境故障）
 cd <博客仓库>
 node scripts/assert-tokens.mjs   # 单独复算对比度
 ```
@@ -1307,6 +1307,49 @@ stack:                    # 技术栈：group 是分组小标题，items 是该�
    （改版前签名在正文之前）。`display:contents` 让 aside 不生成盒子、子元素直接参与父级流动。
 3. **右栏块间距不要用 `gap`。** gap 与 `border-top` 同时存在时，两个半段间距会夹着一条线，
    看起来像「双线夹一段空白」。分隔只用「上边框 + `padding-top`」。
+
+---
+
+## 24.3 关于页的参考图底纹（`/about` 的背景层）
+
+> 2026-10-03 站主要求：「直接用参考图里的素材，雕像月相各种图案都在那了，不要自己画」
+> +「直接放到背景里，不要单独做一个卡片」+「背景最好用白色」。
+
+### 是什么
+
+`.ref-plate` 是 `position:fixed; inset:0` 的装饰层（`aria-hidden` + 空 alt + `pointer-events:none`），
+里面四块**从站主参考图里取景**的元素，全部是**构建期裁好的小图**：
+
+| 块 | 内容 | 摆位 |
+|---|---|---|
+| `ref-moon` | **月相序列环**（站主点名）| 右上角，大半滑出视口 |
+| `ref-statue` | **维纳斯雕像**（站主点名）| 左下，贴左缘 |
+| `ref-birds` | 飞鸟 + 同心圆线 | 右上偏下 |
+| `ref-dial` | 圆盘 + 星芒 + 直尺 | 右下角 |
+
+窄屏（≤767px）只留月相与雕像（站主点名的那两个）并再压淡一档。
+
+### ★ 三条别动的约定
+
+1. **必须裁文件，不能只用 CSS 取景。**
+   CSS 的 `overflow:hidden` + 偏移能在浏览器里"取景"，但**浏览器仍会下载整张原图** ——
+   原图 3–4 MB，三张就是 10 MB+。现在四张共 **482 KB**（进仓的源图），
+   产物按视口出多档 srcset，`about/index.html` 引用的 webp 合计 < 2.5 MB。
+2. **底纹的灰度与墨绿是构建期做好的**（`_probe/_ref-plate.mjs`，用 sharp），
+   运行时**不需要任何 `filter`** —— 那是第一版「原图 + 现场染色」的历史遗留。
+3. **四块都必须用负偏移贴边**（滑出视口），不许压在版心上。
+   目检踩过两轮：月相按"右上角"放 ⇒ 盖住右栏社交清单；飞鸟放左侧中段 ⇒ 压住头像与正文。
+
+### 想改什么改哪个
+
+| 想改 | 改哪儿 |
+|---|---|
+| 取哪几段、改裁切位置 | `_probe/_ref-plate.mjs` 的 `PLATES`（**段内**百分比）|
+| 底纹浓淡 / 曲线 | 同上的 `white`（白点分位数）与 `gamma` |
+| 摆位与大小 | `about.astro` 的 `.ref-moon` / `.ref-statue` / `.ref-birds` / `.ref-dial` |
+| 窄屏留哪几块 | `about.astro` 最后的 `@media (max-width: 767px)` |
+
+**改完裁切参数要重跑**：`node _probe/_ref-plate.mjs`（需先把参考图切成四段，见脚本头注释）。
 
 ---
 
