@@ -1,0 +1,183 @@
+/**
+ * 全站 hover 统一基线（2026-10-03 站主：「把本站所有鼠标悬停的效果都改成主页那样」）
+ *
+ * ── 为什么要单独一个文件 ─────────────────────────────────────────────
+ * 摸底结论：**差异不在颜色，在「有没有 transition」。**
+ *   · 首页（`pages/index.astro`）的 hover 是三件套：
+ *       ① 时长/曲线 = `--dur-hover` 260ms + `--ease-interact`
+ *       ② 形态 = 轻位移（nav 上浮 2px / entry 横向 6px）+ 边线变色
+ *       ③ **每一条都有 transition**
+ *   · 内页（页脚、目录、正文链接、评论按钮、回复按钮、复制按钮、标签片…）
+ *       的 hover **一条 transition 都没有** ⇒ 颜色「啪」一下跳过去。
+ *     所以「跟主页不一样」的实际来源是第③条，不是配色。
+ * ⇒ 修法：在**基线层**统一给出时长与曲线，各页只保留自己的**形态**差异
+ *   （下划线怎么变、背景什么色），不必每处重写参数。
+ *
+ * ── 站主选的范围：「只统一动效参数」───────────────────────────────
+ *   参数 = 时长 + 曲线 + 位移幅度（全站用 token）；
+ *   形态 = 各页原有的颜色/下划线/背景**一律不动**。
+ *   ⇒ 所以本文件**只给参数与位移**，不给颜色。
+ *   （`.prose a:hover` 的 accent-ink、`.foot .links a:hover` 的对比度注释等
+ *     都留在原文件里，本文件不重复定义颜色。）
+ *
+ * ── 为什么不用 `:where(a)` 一条兜底 ─────────────────────────────────
+ *   ① 会给纯文本链接挂上 transform 过渡，而正文链接的 hover 改的是
+ *      `text-decoration-thickness`（`prose.css`）—— 横抖对正文行很难看。
+ *   ② 会**覆盖**各页刻意写的 `transition`（Topbar 的扫光用 `--ease-glass`，
+ *      与交互层曲线**故意不同**）⇒ 那条会被改坏。
+ * ⇒ 用**具名清单**：只列已确认是瞬变的选择器。清单有限、可穷举。
+ *
+ * ── 纪律 ──────────────────────────────────────────────────────────────
+ *   · 每条都要配 `:focus-visible`（键盘用户看到的必须是同一份反馈）。
+ *   · 位移幅度用 token（`--hover-lift` / `--hover-nudge`），**不自造数值**。
+ *     这两个值是首页量过的（nav 上浮 2px、entry 横移 6px），照搬。
+ *   · 触屏不参与（`(hover: none)` 下不触发），无需额外降级。
+ *   · reduced-motion：见文件末尾 —— **撤位移、留颜色**，不要整体
+ *     `transition: none`（那会让 hover 完全没反馈，而它是可用性的一部分）。
+ */
+
+/* ══════════════ 1. 正文链接 ══════════════
+   现状（`prose.css`）：`.prose a:hover { color: …; text-decoration-thickness: 2px }`
+   —— 无 transition ⇒ 下划线加粗是瞬变。
+   ★ 只过渡 color 与 text-decoration-thickness，**不加 transform**。 */
+.prose a {
+  transition:
+    color var(--dur-hover) var(--ease-interact),
+    text-decoration-thickness var(--dur-hover) var(--ease-interact);
+}
+
+/* ══════════════ 2. 纸面按钮（评论提交 / 回复 / 复制代码）══════════════
+   形态对齐首页的「浮起」：上浮 2px + 玻璃阴影。 */
+.comment-form button,
+.reply-btn,
+.reply-send,
+.copy-btn {
+  transition:
+    color var(--dur-hover) var(--ease-interact),
+    background-color var(--dur-hover) var(--ease-interact),
+    border-color var(--dur-hover) var(--ease-interact),
+    box-shadow var(--dur-hover) var(--ease-interact),
+    transform var(--dur-hover) var(--ease-interact);
+}
+/* ⚠ 这一组**必须**配 :focus-visible（2026-10-03 补）：
+   原来只写了 `:hover:not(:disabled)`，键盘用户 Tab 到按钮时**拿不到浮起反馈**
+   （`prose.css` 等处的 focus 样式只改颜色，没有位移）。
+   门闩（tests/interaction-baseline.test.ts）会逐族核对：
+   「有 :hover 位移 ⇒ 必须有对应的 :focus-visible 位移」。 */
+.comment-form button:hover:not(:disabled),
+.comment-form button:focus-visible:not(:disabled),
+.reply-btn:hover:not(:disabled),
+.reply-btn:focus-visible:not(:disabled),
+.reply-send:hover:not(:disabled),
+.reply-send:focus-visible:not(:disabled),
+.copy-btn:hover:not(:disabled),
+.copy-btn:focus-visible:not(:disabled) {
+  transform: translateY(var(--hover-lift));
+  box-shadow: var(--glass-shadow);
+}
+/* 按下时反向（沉 1px）：「可点」的即时反馈，是 hover 的延续。 */
+.comment-form button:active:not(:disabled),
+.reply-btn:active:not(:disabled),
+.reply-send:active:not(:disabled),
+.copy-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* ══════════════ 3. 文字型链接（目录 / 页脚 / 归档条目 / 标签片）══════════════
+   ★ 刻意**不给 transform**：文字行横向抖动在窄栏里很难看。
+     首页的位移是给**卡片**的（`.entry a` 横移 6px），不是给文字的。
+     ⇒ 这里对齐首页的**参数**，不对齐它的**形态**。
+   覆盖：`Toc.astro` 的 `.toc a`、`SiteFooter.astro` 的 `.foot .links a`、
+        `PostIndex.astro` 的 `.index a`、`tags/index.astro` 的 `.chips a`、
+        `about.astro` 的 `.social a` / `.lang-list a` / `.stack-list a`。 */
+.toc a,
+.foot .links a,
+.index a,
+.chips a,
+.social a,
+.lang-list a,
+.stack-group a,
+.act {
+  transition:
+    color var(--dur-hover) var(--ease-interact),
+    border-color var(--dur-hover) var(--ease-interact),
+    background-color var(--dur-hover) var(--ease-interact),
+    box-shadow var(--dur-hover) var(--ease-interact);
+}
+
+/* ══════════════ 4. 卡片/条目：横向轻推 + 玻璃浮起 ══════════════
+   形态照搬首页 `.entry a:hover { transform: translateX(6px); box-shadow: … }`
+   —— 幅度用 `--hover-nudge`（= 6px，与首页同一个 token），不另造。
+   ★ 选 `.index a` 而不是 `.index .title`：`PostIndex.astro` 里
+     `.title` 是 `a` 内部的 `span`，hover 的位移要给**被点的整块**，
+     给 span 会让位移与命中区域不一致。
+     `.act`（说说页的按钮）用上浮而非横移—— 它是横排小按钮。 */
+.index a,
+.social a {
+  display: inline-block;
+}
+.index a:hover,
+.index a:focus-visible,
+.social a:hover,
+.social a:focus-visible {
+  transform: translateX(var(--hover-nudge));
+  box-shadow: var(--glass-shadow);
+}
+.act {
+  display: inline-block;
+}
+.act:hover,
+.act:focus-visible {
+  transform: translateY(var(--hover-lift));
+  box-shadow: var(--glass-shadow);
+}
+
+/* ══════════════ 5. 表单控件 ══════════════
+   输入框/文本域：只过渡颜色与边框，**不给 transform** ——
+   输入时框在动会让人以为窗口在晃。 */
+.comment-form input,
+.comment-form textarea,
+.reply-form input,
+.reply-form textarea {
+  transition:
+    color var(--dur-hover) var(--ease-interact),
+    background-color var(--dur-hover) var(--ease-interact),
+    border-color var(--dur-hover) var(--ease-interact),
+    box-shadow var(--dur-hover) var(--ease-interact);
+}
+
+/* ══════════════ 6. 减少动态效果 ══════════════
+   ★ **不整体 `transition: none`**：那会让 hover 完全没反馈，
+     而 hover 反馈是可用性的一部分（它告诉用户这里可点）。
+     正确做法：撤掉**位移**（动效），保留**颜色瞬变**（反馈）。
+   与站内其它 reduced-motion 处理同思路（见 `transition.css` 末尾）。 */
+@media (prefers-reduced-motion: reduce) {
+  .prose a,
+  .comment-form button,
+  .reply-btn,
+  .reply-send,
+  .copy-btn,
+  .foot .links a,
+  .index a,
+  .chips a,
+  .social a,
+  .lang-list a,
+  .stack-group a,
+  .act,
+  .comment-form input,
+  .comment-form textarea,
+  .reply-form input,
+  .reply-form textarea {
+    transition: color 1ms linear, background-color 1ms linear, border-color 1ms linear;
+  }
+  /* 位移全撤：只留颜色瞬变。 */
+  .comment-form button:hover:not(:disabled),
+  .reply-btn:hover:not(:disabled),
+  .reply-send:hover:not(:disabled),
+  .copy-btn:hover:not(:disabled),
+  .social a:hover,
+  .act:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}

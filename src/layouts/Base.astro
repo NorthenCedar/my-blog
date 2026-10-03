@@ -7,6 +7,11 @@ import '../styles/base.css';
 import '../styles/prose.css';
 import '../styles/links.css';
 import '../styles/transition.css';
+// 全站 hover 统一基线（2026-10-03 站主：「把本站所有鼠标悬停的效果都改成主页那样」）。
+// ★ 必须排在 base/prose/links **之后**：它只给参数（时长+曲线），
+//   各页原有的颜色与形态仍以先引入的规则为准 —— 同特异性下后者胜，
+//   这个顺序保证「基线补参数、不改形态」真的成立。
+import '../styles/hover.css';
 import Brandline from '../components/Brandline.astro';
 import CursorRing from '../components/CursorRing.astro';
 import Band from '../components/Band.astro';
