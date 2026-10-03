@@ -76,10 +76,20 @@
   ★ 这条与 `docs/site-decisions.md` 里「推送失败的真实原因只可能是凭据」**不矛盾，但已不完整**：
   凭据齐全照样会被 TLS 挡住 —— 见到 `CRYPT_E_NO_REVOCATION_CHECK` 就是这一条。
 - ★ 线上目检（push 之后）**不能用 `_probe/launcher.mjs` 的 `shot()`/`dumpDom()`** —— 它们硬编码
-  `--no-proxy-server`（那是给本地 `127.0.0.1` 用的），线上出不去。改用 `_probe/_live-verify.mjs`：
-  `--proxy-server=http://127.0.0.1:53702 --ignore-certificate-errors`（代理做 TLS 拦截，不忽略证书直接
-  `ERR_CERT_AUTHORITY_INVALID`）。★ 两档的分工：**默认档页首「尺不出现」是对的**（滚动才抽出，
-  且虚拟时间里 900ms 秒到、几乎截不到抽出态）⇒ 要看尺就用 `--force-prefers-reduced-motion`（尺常驻）。
+  `--no-proxy-server`（那是给本地 `127.0.0.1` 用的），线上出不去。改用 `_probe/_live-verify.mjs`
+  （文章页）或 `_probe/_live-talks.mjs`（说说页）。
+  ★★ **出口通道不许硬编码端口**（2026-10-04 实测）：本文档原先记的 `--proxy-server=...:53702` 是
+  **上一次会话**的代理端口，本机**每会话都换**（本轮实测是 `62647`）。硬编码的后果是**静默失败** ——
+  截图"没产出文件"、`dumpDom` 返回空串，看着像"线上挂了"，其实只是通道不对（白等了 3 分钟轮询）。
+  ⇒ 两个 live 脚本现在都**运行时探测**：先 `--no-proxy-server` 直连试，不通再取 `HTTPS_PROXY`；
+  判据必须是"**拿到了本题内容**"（如 `float-plate`），不能只查"有没有返回 HTML"（连不上时
+  Chrome 也吐错误页，是**假通过**）。本机实测**直连是通的** ⇒「直连出不去」不是恒久事实，别当前提。
+  走代理时仍必须 `--ignore-certificate-errors`（代理做 TLS 拦截）。
+  ★ **判据别在 curl 回来的 HTML 里找 CSS**：样式是**外部文件**（`/_astro/*.css`），HTML 里本来
+  就没有那句话 —— 本轮拿 `min(...vw...)` 在 HTML 里轮询 14 次全"没命中"，其实第一版早就上线了，
+  只是**判据找错了地方**。要查样式就直接取那个 `/_astro/talks.*.css` 与本地产物 `diff`。
+  ★ 两档的分工：**默认档页首「尺不出现」是对的**（滚动才抽出，且虚拟时间里 900ms 秒到、几乎截不到
+  抽出态）⇒ 要看尺就用 `--force-prefers-reduced-motion`（尺常驻）。
 
 ---
 
