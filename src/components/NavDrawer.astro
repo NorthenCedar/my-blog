@@ -22,24 +22,54 @@ const id = 'nav-toggle';
 
 <input type="checkbox" id={id} class="navtog" aria-label="导航菜单" />
 <label for={id} class="navbtn" aria-hidden="true"><span class="bars"></span></label>
-<label for={id} class="navmask" aria-hidden="true"></label>
-<nav class="navpanel" aria-label="主导航（展开）">
-  <p class="navpanel-title">导航菜单</p>
-  {NAV_LINKS.map((l) => (
-    <a href={l.href} aria-current={current === l.key ? 'page' : undefined}>{l.label}</a>
-  ))}
-  <a href="/rss.xml">RSS</a>
-</nav>
+{/* ★ 2026-10-03 新增这层壳（站主「修 navpanel 溢出」）。
+    根因：关闭态的 .navpanel 是 `position:fixed; right:0; transform:translateX(100%)`，
+    整块被推到视口右缘之外 304–320px。而**Chrome 会把 fixed 元素超出视口的量
+    计入文档的滚动宽度**（与规范有出入），`visibility:hidden` 不挡这个，
+    连 `html{overflow-x:clip}` 也挡不住 —— 实测 clip 已生效（计算值就是 clip）
+    而 scrollX 仍是 304。
+    正解：给它一个 `position:fixed; inset:0; overflow:hidden` 的祖先壳，
+    滑出部分被壳裁掉 ⇒ 不再产生滚动宽度。
+    实测（`_probe/_measure-all.mjs`，判据 scrollTo(99999,0) 后看 scrollX）：
+      修前390→304· 768→320 · 1280→0
+      修后 390→0 · 768→0 · 1280→0
+    ⚠ 壳本身不能吃点击：mask/panel 各自恢复 pointer-events。 */}
+<div class="navshell">
+  <label for={id} class="navmask" aria-hidden="true"></label>
+  <nav class="navpanel" aria-label="主导航（展开）">
+    <p class="navpanel-title">导航菜单</p>
+    {NAV_LINKS.map((l) => (
+      <a href={l.href} aria-current={current === l.key ? 'page' : undefined}>{l.label}</a>
+    ))}
+    <a href="/rss.xml">RSS</a>
+  </nav>
+</div>
 
 <style>
   /* 桌面：整块不参与布局（PC 走 Brandline / Topbar 里那排横排链接） */
   .navtog,
   .navbtn,
+  .navshell,
   .navmask,
   .navpanel {
     display: none;
   }
   @media (max-width: 1023px) {
+    /* ★ 2026-10-03：抽屉壳（站主「修 navpanel 溢出」）。
+       这层的唯一职责是**裁掉关闭态滑出视口的面板**。
+       为什么必须真的裁：Chrome 把 fixed 元素超出视口的量计入文档滚动宽度，
+       `visibility:hidden` 不挡、`html{overflow-x:clip}` 也不挡（实测 clip 计算值生效
+       而 scrollX 仍 304）。所以只能靠一个 overflow:hidden 的祖先。
+       `pointer-events:none` + 子元素各自 auto ⇒ 壳本身不吃点击，
+       关闭时 mask/panel 都是 visibility:hidden 也不吃。 */
+    .navshell {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      overflow: hidden;
+      pointer-events: none;
+    }
     .navtog {
       /* 视觉上藏起来，但**保持可聚焦**（键盘 Space 开合） */
       position: absolute;
@@ -90,7 +120,7 @@ const id = 'nav-toggle';
     }
     .navmask {
       display: block;
-      position: fixed;
+      position: absolute;
       inset: 0;
       z-index: 40;
       opacity: 0;
@@ -100,7 +130,13 @@ const id = 'nav-toggle';
     }
     .navpanel {
       display: block;
-      position: fixed;
+      /* ★ 由 fixed 改absolute —— 这是让壳的 overflow:hidden 真正生效的那一步。
+         原理：**fixed 元素只被「建立固定定位包含块」的祖先裁剪**（祖先有 transform /
+         filter / will-change / contain 之类），光有 overflow:hidden 裁不住它。
+         改成 absolute 后，包含块就是那个 fixed 的壳（壳自身 inset:0 铺满视口），
+         于是壳的 overflow:hidden 生效 ⇒ 关闭态 translateX(100%) 滑出的部分被裁掉。
+         几何不变：壳铺满视口 ⇒ absolute 的 inset:0 / top-right-bottom 仍贴视口边。 */
+      position: absolute;
       top: 0;
       right: 0;
       bottom: 0;
@@ -134,14 +170,21 @@ const id = 'nav-toggle';
     .navpanel a[aria-current='page'] {
       color: var(--accent-ink);
     }
-    /* 打开态：checkbox 一被勾上，遮罩淡入、面板滑入 */
-    .navtog:checked ~ .navmask {
+    /* 打开态：checkbox 一被勾上，遮罩淡入、面板滑入
+       ★ 2026-10-03：原选择器是 `.navtog:checked ~ .navmask`（同级兄弟），
+         加了 .navshell 这层壳之后 mask/panel 变成壳的**子**元素，`~` 不再匹配
+         ⇒ 抽屉会打不开。改成后代选择器。
+         `:has()` 在此不必需：checkbox 仍是壳的兄弟，`~ .navshell` 足够定位到壳，
+         再用空格 descendant 进去。 */
+    .navtog:checked ~ .navshell .navmask {
       opacity: 1;
       visibility: visible;
+      pointer-events: auto;
     }
-    .navtog:checked ~ .navpanel {
+    .navtog:checked ~ .navshell .navpanel {
       transform: translateX(0);
       visibility: visible;
+      pointer-events: auto;
     }
     /* 面板打开时锁滚动（body 由 Base 提供，靠 html 层的 :has 兜住） */
     html:has(.navtog:checked) {

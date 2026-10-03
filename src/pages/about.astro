@@ -135,6 +135,23 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     <span class="ref-veil"></span>
   </div>
 
+  {/* ===================================================================
+   * 两栏容器（站主 2026-10-03：「右半部分太空，重新排版」）
+   *
+   * 为什么这么分：内容天然分两类 ——
+   *   · **叙述类**（页头 / 签名 / 正文）要窄、要安静⇒ 左边一栏，宽度就是 --measure
+   *   · **读数类**（社交 / 技术栈 / 语言占比）天生是清单与仪表 ⇒ 右边一栏，占满余宽
+   * 分栏后 1280 视口的右半不再是空的，而清单类内容**比正文更适合窄栏堆叠**
+   * （行短、易扫读），布局与内容是匹配的，不是硬塞。
+   *
+   * ★ 关键：**不改变 DOM 里的阅读顺序**。签名仍在正文之前（移动端尤其重要）。
+   *   办法是移动端把 aside 设成 `display:contents` —— 它不生成盒子，
+   *   子元素直接参与父级流动，于是视觉顺序 = main 的三个 + aside 的三个，
+   *   与改造前**逐项一致**。（若用 grid 显式指定行列，两栏的 DOM 顺序就会决定
+   *   移动端顺序，签名会掉到正文后面。）
+   * =================================================================== */}
+  <div class="about-grid">
+  <div class="about-main">
   <header class="pagehead">
     {/* ★ 站主 2026-10-03：「我的头像上面不要有线」⇒原来的圆形刻度环（量规语汇）
         与头像上的排线**全部去掉**，头像回归纯圆形照片。
@@ -176,7 +193,9 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   )}
 
   <div class="prose">{Content && <Content />}</div>
+  </div><!-- /.about-main -->
 
+  <aside class="about-side" aria-label="站点信息">
   {social.length > 0 && (
     <section class="social-block fig-block" aria-labelledby="social-title">
       <p class="fig-no" aria-hidden="true">FIG.02</p>
@@ -252,6 +271,8 @@ const isExternal = (h: string) => /^https?:/i.test(h);
       </div>
     </section>
   )}
+  </aside><!-- /.about-side -->
+  </div><!-- /.about-grid -->
 </Base>
 
 <script>
@@ -274,6 +295,84 @@ const isExternal = (h: string) => /^https?:/i.test(h);
    * 落在这四样上的改动只有版式（页头 / 列表项 / 刻度），**正文 .prose 一行没动**
    * —— 口径 #3 明确「正文排版不动」。
    * =================================================================== */
+
+  /* ===================================================================
+   * 两栏版式（站主 2026-10-03：「右半部分太空，重新排版」）
+   *
+   * 改版前：页头 / 签名 / 正文 / 社交 / 技术栈 / 语言占比 **全部**限在
+   * --measure（34em ≈ 578px）里单列排下来⇒ 1280 视口下右半 600px 全空。
+   *
+   * 分栏依据（不是「为了填满」而是内容本来就分两类）：
+   *   左栏 = **叙述类**（页头 / 签名 / 正文）—— 窄栏、安静、适合连续阅读
+   *   右栏 = **读数类**（社交 / 技术栈 / 语言占比）—— 清单与仪表，
+   *           行短可扫读，在窄栏里比在通栏里更好读（通栏时一行只剩三五个字，两端全是空白）
+   * ★ 正文 .prose 的宽度**一个字没改**（仍是 prose.css 里的 max-width:var(--measure)），
+   *   它在 grid 里被第一列约束，视觉效果与改版前一致 —— 口径 #3「正文排版不动」。
+   *
+   * ★ 移动端为什么用 `display: contents` 而不是 grid 显式定位：
+   *   若在 grid 上写 `grid-row/grid-column`，**DOM 顺序就决定了窄屏顺序**，
+   *   而 aside 在 main 之后 ⇒ 签名会掉到正文后面（改版前签名在正文之前）。
+   *   `display:contents` 让 aside 不生成盒子、子元素直接参与父级流动，
+   *   窄屏顺序 = main 的三个 + aside 的三个 = 与改版前**逐项一致**，零顺序变化。
+   * =================================================================== */
+  .about-grid {
+    display: block;            /* 窄屏默认就是原来的单列流 */
+  }
+  .about-side {
+    display: contents;
+  }
+  @media (min-width: 1024px) {
+    .about-grid {
+      display: grid;
+      /* 左列固定 --measure（正文该多宽就多宽），右列吃掉余宽。
+         1024px 起才分栏：低于它右列不足 300px，清单会被挤成两三个字一行。 */
+      grid-template-columns: minmax(0, var(--measure)) minmax(0, 1fr);
+      column-gap: var(--sp-8);
+      align-items: start;      /* ★ 右栏不拉高，块按自身高度排（否则 social 会被prose 拉出大片空白）*/
+    }
+    .about-main {
+      grid-column: 1;
+      min-width: 0;
+    }
+    .about-side {
+      /* ★ 不用 flex + gap，用「上边框 + padding-top」分隔。
+         目检踩到：gap 与 border-top 同时存在时，两个半段间距（上一块下方 gap
+         + 下一块上方 padding）夹着一条线，看起来像「双线夹一段空白」。
+         现在间距**只由 padding-top 提供**，线上只有一条 —— 干净。 */
+      display: block;
+      grid-column: 2;
+      min-width: 0;
+    }
+    /* 右栏标题比左栏小一档：它们是清单的标题，不是页的章节标题。
+       （--fs-lg → --fs-body 上浮，视觉上落在一级与二级之间。） */
+    .about-side .fig-h {
+      font-size: var(--fs-body);
+      font-weight: 700;
+      margin-bottom: var(--sp-2);
+    }
+    /* 编号与标题同行：右栏窄，横排更紧凑（左栏是竖排的两行） */
+    .about-side .fig-no {
+      margin-bottom: 0;
+    }
+    .about-side .fig-block {
+      /* 归零原有的 margin-top（.stack-block / .lang-block / .social-block 各带
+         `margin: var(--sp-8) 0 0`）—— 在右栏里由 padding-top 统一控制间距，
+         两处都留会叠成双倍空白。 */
+      margin-top: 0;
+      max-width: none;         /* 右栏宽度由 grid 列给，不该再限 --measure */
+      padding-top: var(--sp-5);
+      border-top: 1px solid var(--hair);
+    }
+    .about-side .fig-block:first-child {
+      padding-top: 0;
+      border-top: 0;
+    }
+    /* 签名留在左栏（它在 main 里）：它宽380px，与页头上下成组更紧。
+       ★ 但让它占满左列宽度上限，别让 380px 的图孤零零挂在 578px 栏里右侧。 */
+    .about-main .sign-card {
+      width: min(380px, 100%);
+    }
+  }
 
   /* ---- 参考图底纹层（站主 2026-10-03 第二轮）----
      ★ 站主四条：① 头像上不要线 ② 直接用参考图素材 ③ 直接放背景不做卡片 ④ 白底。
@@ -559,15 +658,23 @@ const isExternal = (h: string) => /^https?:/i.test(h);
      从视口换成 .shell，动画一结束就位置突变（"加载后跳一下"）。布局定位两个问题都没有。 */
   @media (min-width: 1024px) {
     .pagehead {
+      /* ★ 2026-10-03 分栏后：页头不再通栏（原来是 max-width:none 铺满整个 wrap，
+         而右半是空的）。现在它只占**左列**，标题与头像在列内左右分置。 */
       max-width: none;
       display: grid;
       grid-template-columns: 1fr auto;
       align-items: start;
       column-gap: var(--sp-6);
+      padding-bottom: var(--sp-5);
+      border-bottom: 1px solid var(--hair);
+    }
+    .pagehead .fig-no {
+      grid-column: 1 / -1;
+      margin-bottom: var(--sp-2);
     }
     .profile {
       /* 往下压一点，让头像对着标题的下半部分（站主给的参考图就是这个观感；
-         代价是页头行高变大、正文整体下移 40px —— 这是刻意的，不是副作用）。 */
+         代价是页头行高变大、正文整体下移 —— 这是刻意的，不是副作用）。 */
       margin: 2.5rem 0 0;
     }
     .avatar {
