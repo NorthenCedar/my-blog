@@ -27,6 +27,11 @@ interface AboutData {
   avatarName?: string;
   social?: Social[];
   stack?: StackGroup[];
+  /** 手写签名（站主 2026-10-03 提供原件）。走内容层，与 avatar 同一条理由：
+   *  图片放 src/assets/about/ 才能参与构建期优化（转 WebP + 出 srcset）。 */
+  signature?: string;
+  /** 签名切片底部那行小字（等宽字、读数感）。也在内容层——它是站主自己的话。 */
+  signatureNote?: string;
 }
 
 /* ===== 语言占比条（站主 2026-09-30 要求「更新技术栈并加一个这个」）=====
@@ -80,6 +85,7 @@ const LANG_TOTAL = '447,832 B';
 const d = (entry?.data ?? {}) as unknown as AboutData;
 const assets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/about/*.{jpg,jpeg,png,webp,avif}', { eager: true });
 const avatar = d.avatar ? assets[`/src/assets/about/${d.avatar}`]?.default : undefined;
+const signature = d.signature ? assets[`/src/assets/about/${d.signature}`]?.default : undefined;
 const social = d.social ?? [];
 // 空组不渲染（内容层写错分组时不至于留一个空卡片）
 const stack = (d.stack ?? []).filter((g) => (g?.items ?? []).length > 0);
@@ -112,19 +118,58 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     )}
   </header>
 
+  {/* ===== HAND 亲笔 · 签名切片（站主 2026-10-03）=====
+      **全页唯一一处深底**（--dusk-2），其余切片都是纸白 —— 页面因此有一处视觉锚点，
+      但「纸白阅读底」这条契约没被推翻（正文仍是纸白上的 .prose）。
+      ★ 签名是站主手迹原件：已抠掉白底（转成带 alpha 的图）、转成站内墨绿
+        （--accent-bright）。原件是蓝紫色的，加工脚本见 _probe/hand-sign-prep.mjs
+        （该目录已 gitignore；成品 src/assets/about/sign.png 进仓参与构建期优化）。
+      ★ 深底上的颜色只有两个选择（实测，见 scripts/assert-tokens.mjs）：
+        编号 accent-bright 6.9:1 · 字是图 · 小字 dusk-5 4.26:1（**不到 4.5，所以只做
+        10px 标签/刻度，不承载正文**）。**--accent-ink 在深底上只有 2.97，不许用。**
+      ★ 落笔 = 横向揭幕（clip-path inset 从 100% 走到 0），不是逐笔 —— 位图没有路径。 */}
+  {signature && (
+    <figure class="sign-card" data-sign-card>
+      <figcaption class="sign-head">
+        <span class="sign-fig">FIG.01 — HAND</span>
+        <span class="sign-kind">specimen / signature</span>
+      </figcaption>
+      <div class="sign-plate">
+        <Image
+          class="sign-img"
+          data-sign-img
+          src={signature}
+          alt={`${d.avatarName ?? '站主'}的手写签名`}
+          widths={[340, 680]}
+          sizes="340px"
+        />
+      </div>
+      <p class="sign-foot">
+        <span>{d.signatureNote}</span>
+        {/* ★ 这行小字是**站主自己的标注**，不是构建期读数 ——
+            故意不写"509×264"这类尺寸：那是一次性处理时的中间值，与页面上的
+            产物（构建期转WebP 18 KB、多档 srcset）无关。写它就是假读数，
+            与首页那条「语言占比必须是实测值」同一个原则：读数要么真，要么别写。 */}
+        <span class="sign-meta">HANDWRITTEN / ALPHA</span>
+      </p>
+    </figure>
+  )}
+
   <div class="prose">{Content && <Content />}</div>
 
   {social.length > 0 && (
-    <section class="social-block" aria-labelledby="social-title">
+    <section class="social-block fig-block" aria-labelledby="social-title">
+      <p class="fig-no" aria-hidden="true">FIG.02</p>
       <h2 id="social-title">我的一些社交账号</h2>
       <ul class="social">
-        {social.map((s) => (
+        {social.map((s, i) => (
           <li>
             <a
               href={s.href}
               {...(isExternal(s.href) ? { rel: 'noopener' } : {})}
               {...(isExternal(s.href) ? { target: '_blank' } : {})}
             >
+              <span class="fig-idx" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
               <SocialIcon name={s.icon} />
               <span>{s.name}</span>
             </a>
@@ -135,7 +180,8 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   )}
 
   {stack.length > 0 && (
-    <section class="stack-block" aria-labelledby="stack-title">
+    <section class="stack-block fig-block" aria-labelledby="stack-title">
+      <p class="fig-no" aria-hidden="true">FIG.03</p>
       <h2 id="stack-title">技术栈</h2>
       <div class="stack-groups">
         {stack.map((g) => (
@@ -153,12 +199,13 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   )}
 
   {/* 技术栈占比条（站主 2026-09-30：「更新技术栈并加一个这个」）——紧跟在技术栈之后，同一个位置。
-      数据口径：**本站源码实测**（站主拍板的那一档），不是抄原型那组 ——
+      数据口径：**本站源码实测**（站主拍板的那一档），不是抄原型那组——
       原型是 HTML 单文件，它的 JS 占 93.1%（含 three.js 整包），与本站毫无可比性。
       条宽直接用百分比当 CSS 宽度；每段配一个纯色圆点做图例
       （渐变在小圆点上会渲染成全透明，所以 dot 与 fill 是两个字段）。 */}
   {LANGS.length > 0 && (
-    <section class="lang-block" aria-labelledby="lang-title">
+    <section class="lang-block fig-block" aria-labelledby="lang-title">
+      <p class="fig-no" aria-hidden="true">FIG.04</p>
       <h2 id="lang-title">源码语言占比</h2>
       <p class="lang-total">
         本站源码实测 · 合计 <b>{LANG_TOTAL}</b>（<code>src/</code> 与 <code>functions/</code>，不含依赖与构建产物）
@@ -179,12 +226,160 @@ const isExternal = (h: string) => /^https?:/i.test(h);
           </li>
         ))}
       </ul>
+      {/* 刻度尺：每 10% 一道，纯装饰（aria-hidden）。它是「读数」的延伸，不是新数据。 */}
+      <div class="lang-rule" aria-hidden="true">
+        {Array.from({ length: 10 }, (_, i) => <i style={`left:${i * 10}%`}></i>)}
+      </div>
     </section>
   )}
 </Base>
 
+<script>
+  // 签名落笔（横向揭幕）。与页面其余部分刻意无耦合：只读 [data-sign-img]，不碰别的节点。
+  // 写法照 archive.astro 那台卷尺：独立入口的 <script>，不与内联逻辑混在一起。
+  import '../scripts/hand-sign';
+</script>
+
 <style>
   /* 拍板 D：页头版心收成 --measure，与正文列左对齐（与文章页同一条）。 */
+
+  /* ===================================================================
+   * 标本馆（SPECIMEN CABINET）—— 站主 2026-10-03 定的版式语言
+   *
+   * 参照物是一组「拼贴 + 版画蚀刻 + 仪器图纸」的参考图，共同语法是：
+   *   ① 大量留白（纸白底不改 —— 口径 #1「纸白阅读底一行不改」）；
+   *   ② 标本切片：直��� + 细边框 + 左上角编号（FIG.01 / FIG.02…）；
+   *   ③ 印刷体标签用等宽小字 + 字距，与「手写」形成层次对比。
+   * 落在这三样上的改动只有版式（页头/ 列表项 / 卡片），**正文 .prose 一行没动**
+   * —— 口径 #3 明确「正文排版不动」。
+   * =================================================================== */
+
+  /* ---- 切片编号（FIG.01 那类）----
+     等宽字 + 大字距 + 小尺寸 = 「标本标签」的印刷感，也是仪器语汇的延续。 */
+  .fig-no,
+  .sign-fig,
+  .sign-kind,
+  .fig-idx {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.16em;
+    color: var(--accent-ink);
+    font-variant-numeric: tabular-nums;
+  }
+  /* 切片编号挂在区块左上角外侧（视觉上像贴在切片上的标签，不占正文宽度） */
+  .fig-block {
+    position: relative;
+  }
+  /* ★ 编号与 h2 之间要留气：2026-10-03 目检发现两者挤在一起像一行。
+     用 --sp-2（0.5rem）—— 编号是"标签"不是标题，不能抢 h2 的节奏。 */
+  .fig-no {
+    margin: 0 0 var(--sp-2);
+    color: var(--muted);
+  }
+
+  /* ---- 签名切片：全页唯一一处深底（--dusk-2）----
+     ★ 深底上的颜色只有两个选择（实测值见 scripts/assert-tokens.mjs）：
+       --accent-bright on --dusk-1 = 6.90（编号用这个）
+       --dusk-5      on --dusk-1 = 4.26（**不到 4.5 ⇒ 只做 10px 标签/刻度**）
+       --accent-ink  on --dusk-1 = 2.97（**深底上不许用** —— 它是纸上的绿）
+     ⇒ tests/tokens.test.ts 有断言守着这条线，改配色前先看那里。 */
+  .sign-card {
+    /* 下边距要给足：.prose 在 base.css 里没有上边距，不留白会紧贴第一行正文
+       （2026-10-03 目检发现）。
+     ★ 宽度不能写死：380px 在 390 视口下会连边框一起溢出（目检实测签名右边被切）⇒
+       用 min() 收窄。站主 2026-10-03 拍板的是「340px 图 / 380px 切片」这个**桌面**比例。 */
+    margin: var(--sp-6) 0 var(--sp-6);
+    width: min(380px, 100%);
+    background: var(--dusk-2);
+    border: 1px solid var(--dusk-4);
+  }
+  .sign-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--dusk-4);
+  }
+  .sign-head .sign-fig {
+    color: var(--accent-bright);
+  }
+  .sign-head .sign-kind {
+    color: var(--dusk-5);
+    letter-spacing: 0.08em;
+  }
+  /* 签名图所在的「切片台」：留 20px 边距（站主 2026-10-03 拍板 340px 图 / 380px 切片） */
+  .sign-plate {
+    padding: 20px;
+  }
+  .sign-img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .sign-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--sp-3);
+    margin: 0;
+    padding: var(--sp-2) var(--sp-3);
+    border-top: 1px solid var(--dusk-4);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.08em;
+    color: var(--dusk-5);
+    font-variant-numeric: tabular-nums;
+  }
+  .sign-foot .sign-meta {
+    color: var(--accent-bright);
+  }
+
+  /* ---- 社交卡 / 技术栈：从「圆角柔边」改成「标本标签」（直角 + 细框 + 序号）---- */
+  .social a,
+  .stack-group {
+    border: 1px solid var(--hair);
+    background: var(--panel);
+  }
+  /* 卡片是标本 ⇒ 不再圆角。原有的 hover 反馈保留（accent-wash 那一档）。 */
+  .social a {
+    position: relative;
+  }
+  .social a .fig-idx {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 0 0.3em;
+    background: var(--paper);
+    color: var(--muted);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.08em;
+  }
+  .stack-items li {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.04em;
+  }
+
+  /* ---- 语言占比条：条形保留（它是构建期实测的真读数），下面加一道刻度尺 ---- */
+  .lang-rule {
+    position: relative;
+    height: 6px;
+    margin-top: var(--sp-2);
+    border-bottom: 1px solid var(--hair);
+  }
+  .lang-rule i {
+    position: absolute;
+    bottom: 0;
+    width: 1px;
+    height: 3px;
+    background: var(--hair);
+  }
+  /* 0% 那一道加高一档，给个「起点」 */
+  .lang-rule i:first-child {
+    height: 6px;
+    background: var(--accent-ink);
+  }
   .pagehead {
     max-width: var(--measure);
   }
@@ -421,6 +616,21 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     }
     .lang-pct {
       min-width: 0;
+    }
+    /* ---- 手机档的签名切片（口径 #9：展示型留**极简版**）----
+       极简 = 保留深底切片与签名（它是这一页唯一的手笔，不能砍），
+       但去掉刻度小字与元信息、缩小边距 —— 窄屏上这些挤得慌且读不出。
+       ★ 落笔动画在手机上也保留（它是本页唯一的互动）。
+       ★ 宽度已在 .sign-card 上用 min(380px, 100%) 收窄，这里不再重复设。 */
+    .sign-plate {
+      padding: 12px;
+    }
+    .sign-kind,
+    .sign-meta {
+      display: none;
+    }
+    .fig-no {
+      margin-bottom: 0;
     }
   }
 </style>
