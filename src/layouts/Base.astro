@@ -45,6 +45,10 @@ interface Props {
    *
    * 注意：`'page'` **不渲染 `<slot name="band" />`** —— 用它的页面不要把内容放 band 槽，
    * 否则那部分会静默消失（首页当初就是被这个坑过一次，见台账 f919fa1）。
+   *
+   * ★ 另有一个与 chrome 无关的具名槽 `plate`（2026-10-03 加），见结构处注记：
+   *   它是给「视口装饰层」用的，必须落在 `.shell` 之外，否则会被页面过渡的
+   *   transform 改变 fixed 的包含块 ⇒ 打开页面时装饰层从下往上跳（实测 91px）。
    */
   chrome?: 'band' | 'console' | 'page';
 }
@@ -111,6 +115,17 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
         chrome='page'（内页）自带浅色顶栏 + 切片档案背景 —— 两者都不渲染旧的深色 Band。
         不传 chrome 的 10 页走原路径，产物逐字节不变。 */}
     {chrome === 'page' && <Topbar wordmark={site.wordmark} current={current} />}
+    {/* ★ `plate` 槽：**视口装饰层**，必须挂在 `.shell` **之外**（2026-10-03 加）。
+        为什么不能用普通 slot（`slot` 会落进 `.shell` 内部）：
+          页面过渡 `html.pt-play .shell { animation: pt-shell … }` 会给 `.shell`
+          加 transform，而**被 transform 的祖先会成为 `position: fixed` 的包含块**
+          ⇒ 装饰层的 `top:50%` 从「视口 50%」变成「.shell 盒 50%」。
+          实测跳位幅度 **91px**（about 页：常态 plateY=266 → 过渡中 357 → 摘类后 266）。
+          用户看到的就是「打开页面时背景从下面跳回上面」。
+        ⇒ 这个槽与 Topbar 的 `.page-inf`（百褶 ∞）**同一位置层级** ——
+          那个装饰层一直没这个问题，正是因为它在 `.shell` 外面。
+        ⚠ 用它的人必须自己保证 z-index 退到内容之下（百褶 ∞ 是 z-index:-1）。 */}
+    <slot name="plate" />
     {chrome !== 'console' && chrome !== 'page' && (
       <Band>
         <Brandline current={current} name={site.name} wordmark={site.wordmark} />

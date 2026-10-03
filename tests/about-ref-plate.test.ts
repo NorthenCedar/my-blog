@@ -42,8 +42,19 @@ describe('关于页 · 底纹层：月相 + 蓝条替代百褶 ∞', () => {
     expect(plates.length, 'plates 目录下的 webp 数量不对（应为一张背景图）').toBe(1);
     expect(plates[0]).toBe('moon-main.webp');
     const kb = statSync(join(PLATE_DIR, plates[0])).size / 1024;
-    // 原图 1.25 MB / 1920×1045 ⇒ 裁切+转色后应显著变小
-    expect(kb, `背景图 ${kb.toFixed(0)} KB，没显著变小`).toBeLessThan(400);
+    /* ★ 上限从 400 调到 450 KB —— 因为 2026-10-03 素材加了 **alpha 通道**
+       （纯黑底转透明，让矩形在数学上不存在），实测 402 KB。
+       同一天实测的压缩档（alpha 四档都完好、最大 alpha 恒 255）：
+         quality 90 → 511 KB · 82 → 438 KB · 75 → **402 KB** · 68 → 388 KB
+       取 75 的理由：这层是 `opacity:.2` 的底纹、又在 z-index:-1 之下，
+       肉眼只看极淡一层墨纹 ⇒ 再压就是浪费画质换字节。
+       ⇒ 门闩卡 450 而不是回到 400：真实产物是 402，凑到 400 只能再降一档画质，
+         那是**为了过门闩而牺牲产物**。上限该反映实测，不是反过来。
+       ★ 另有一道更严的门闩在下面（素材必须 hasAlpha 且最大 alpha ≥ 200）——
+         体积可以商量，alpha 丢了是定性缺陷。 */
+    expect(kb, `背景图 ${kb.toFixed(0)} KB，超出上限（alpha 通道约占 +185 KB）`).toBeLessThan(450);
+    // 对照：原图 1.25 MB ⇒ 至少要压到 1/3 才算「体积可控」
+    expect(kb, `背景图 ${kb.toFixed(0)} KB，相对原图 1.25 MB 压得不够`).toBeLessThan(1280 / 3);
   });
 
   it('★ 走构建期管线（<Image widths sizes>），不是 <img src> 直连', () => {
@@ -163,6 +174,38 @@ describe.skipIf(!hasDist)('产物里的背景图', () => {
   const cssFile = readdirSync(join(DIST, '_astro')).find((f) => /^about\..*\.css$/.test(f));
   const CSS = cssFile ? readFileSync(join(DIST, '_astro', cssFile), 'utf8') : '';
 
+  /* ---- 产物 DOM 位置（2026-10-03 修「打开页面背景从下往上跳」加）----
+     根因：底纹层原本走普通 slot ⇒ 落进 `.shell` 内部，而页面过渡
+     `html.pt-play .shell { animation: pt-shell … }` 会给 `.shell` 加 transform
+     ⇒ **被 transform 的祖先成为 fixed 的包含块** ⇒ `top:50%` 从「视口 50%」
+     变成「.shell 盒 50%」。实测跳位 91px（266 → 357 → 266）。
+     ⇒ 改走 Base 的 `plate` 具名槽，落在 `.shell` 之外。
+     ★ 这只能靠**产物 DOM 顺序**守住：源码里两者都在 `<Base>` 内，
+       看不出谁在外；scoped CSS 与位置无关，也不参与这个判断。 */
+  it('★ 底纹层在 .shell 之外（否则页面过渡的 transform 会让 fixed 层跳位）', () => {
+    const iPlate = ABOUT.indexOf('class="ref-plate"');
+    const iShell = ABOUT.indexOf('class="shell"');
+    const iMain = ABOUT.indexOf('id="main"');
+    expect(iPlate, '产物里找不到 .ref-plate（底纹没渲染？）').toBeGreaterThan(-1);
+    expect(iShell, '产物里找不到 .shell').toBeGreaterThan(-1);
+    expect(iMain, '产物里找不到 <main id="main">').toBeGreaterThan(-1);
+    expect(iPlate, '底纹层落进了 .shell 内部 ⇒ 页面过渡时 fixed 包含块被改、背景会跳位')
+      .toBeLessThan(iMain);
+    expect(iPlate, '底纹层应在 <main> 之前（与 Topbar 的 .page-inf 同级）')
+      .toBeLessThan(iShell);
+  });
+
+  it('★ Base 提供 plate 具名槽，且它落在 .shell 之外', () => {
+    const base = readFileSync(join(ROOT, 'src/layouts/Base.astro'), 'utf8');
+    const slotIdx = base.indexOf('<slot name="plate"');
+    expect(slotIdx, 'Base 里没有 <slot name="plate"> —— 底纹层又落回 .shell 内部了')
+      .toBeGreaterThan(-1);
+    const shellIdx = base.indexOf('class="shell"');
+    expect(shellIdx, 'Base 里找不到 .shell').toBeGreaterThan(-1);
+    expect(slotIdx, 'plate 槽必须写在 .shell 之前')
+      .toBeLessThan(shellIdx);
+  });
+
   it('渲染出背景图且带 srcset', () => {
     const imgs = [...ABOUT.matchAll(/<img[^>]*class="ref-img"[^>]*>/g)].map((m) => m[0]);
     expect(imgs.length, '产物里背景图数量不对').toBe(1);
@@ -210,8 +253,8 @@ describe.skipIf(!hasDist)('产物里的背景图', () => {
     }
   });
 
-  it('★ 素材自带 alpha（纯黑底已转透明）—— 这是「看不见矩形边」的唯一保证', () => {
-    /* 这条是**产物级**门闩，守的是 2026-10-03 踩的两轮：
+  it('★ 素材自带 alpha（纯黑底已转透明）—— 这是「看不见矩形边」的唯一保证', async () => {
+    /* 这一条是**产物级**门闩，守的是 2026-10-03 踩的两轮：
        ① 不透明矩形底 + opacity:.2 ⇒ 灰绿矩形，截图上一眼看见下边界
           （实测 x=60：y≤300 rgb(250,250,247) vs y=700~1100 rgb(203,204,201)）
        ② mix-blend-mode:multiply **压不住**（只改色、不裁形状）
@@ -219,12 +262,19 @@ describe.skipIf(!hasDist)('产物里的背景图', () => {
        ★ 判据用 sharp 读 channels + 最大 alpha：
          只查 hasAlpha 不够 —— `alphaQuality` 那个不被识别的选项会让
          hasAlpha=true 但**全图 alpha=0**（脚本自检当场抓到过）。
-       ⚠ 这是**同步**检查（构建前跑 sharp），不是 build 后查产物 ——
-         查 dist 里的 webp 拿不到「原素材是否带 alpha」这条信息。 */
+       ⚠ 这是**同步**检查（构建前跑 sharp），不是 build 后查产物——
+         查 dist 里的 webp 拿不到「原素材是否带 alpha」这条信息。
+       ⚠⚠ 这个 it **必须标 async**（2026-10-03 修）：
+         里面用了 `await import('sharp')` 与 `await img.metadata()`，
+         而 vitest 不会因为里面有 await 就自动推断成异步 ——
+         漏了 async 会报 `[PARSE_ERROR] await is only allowed within async functions`，
+         整个测试文件**一个用例都跑不了**（表现为「Test Files 2 failed」但
+         Tests 只有 1 个失败，很像「别处坏了」）。 */
     const out = join(PLATE_DIR, plates[0]);
-    // 用动态 import 避免顶层 sharp 依赖（sharp 是 astro 自带的，不是本仓依赖）
+    // 动态 import：sharp 是 astro 自带的依赖，不是本仓 package.json 里的依赖
     const sharpMod = await import('sharp');
-    const img = sharpMod.default(out);
+    const sharp = sharpMod.default;
+    const img = sharp(out);
     const meta = await img.metadata();
     expect(meta.hasAlpha, '素材没有 alpha 通道 ⇒ 纯黑底会变成灰绿矩形').toBe(true);
     const { data, info } = await img.ensureAlpha().raw().toBuffer({ resolveWithObject: true });

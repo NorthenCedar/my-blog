@@ -147,11 +147,22 @@ const isExternal = (h: string) => /^https?:/i.test(h);
    *   ⇒ 本页把 `.page-inf` 显式关掉（见样式段 `body.about-plate .page-inf`），
    *     自己也用 `z-index:-1` 站在同一个层级上。
    *
-   * ★ 图**不重新处理**：构建期已把纯黑底染成深绿（`_probe/_deep-plate.mjs`，
-   *   灰阶按「越暗染得越多」混向 --dusk-2 的 #131b17，白月亮与星芒保持白，
-   *   彩色像素一格不动）⇒ 站点内不存在第二份「纯黑版」。
+   * ★ 图**不重新处理**：构建期已把纯黑底转成alpha（`_probe/_deep-plate.mjs`，
+   *   灰阶按「越暗染得越多」混向深绿并给暗部 alpha，白月亮与星芒保持白，
+   *   彩色像素一格不动）⇒ 矩形底在数学上不存在。
+   *
+   * ★★ 这一层走 Base 的 **`plate` 具名槽**，不是普通 slot —— 2026-10-03 修。
+   *   症状：打开关于页时背景**从下面跳回上面**（站主报的）。
+   *   根因：普通 slot 落进 `.shell` 内部，而页面过渡 `html.pt-play .shell`
+   *   会给 `.shell` 加 transform ⇒ **被 transform 的祖先成为 fixed 的包含块**
+   *   ⇒ `top:50%` 从「视口 50%」变成「.shell 盒 50%」。
+   *   实测跳位 **91px**（常态 plateY=266 → 过渡中 357 → 摘类后 266，
+   *   算式：62 + 1463×0.5 − 871/2 = 357）。
+   *   ⇒ 挂到 `plate` 槽（`.shell` 之外，与 Topbar 的 `.page-inf` 同级），
+   *     那个百褶 ∞ 层一直没事正是因为它也在 `.shell` 外面。
+   *   ★ 这与「头像用 fixed 会跳一下」是**同一个坑的两种表现**（记忆里已记过一次）。
    * =================================================================== */}
-  <div class="ref-plate" aria-hidden="true">
+  <div slot="plate" class="ref-plate" aria-hidden="true">
     {plate('moon-main') && (
       <div class="ref-main">
         <Image
