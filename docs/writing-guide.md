@@ -63,7 +63,7 @@ cd <博客仓库>
 ```powershell
 npm run dev       # 启动本地预览，改完立刻能看到（按 Ctrl+C 停止）
 npm run build     # 只构建，不跑测试
-npm run verify    # 构建 + 跑全部测试（共 230 条：228 通过 / 1 设计内跳过 / 1 已知环境故障）—— 推送前必跑
+npm run verify    # 构建 + 跑全部测试（共 266 条：264 通过 / 1 设计内跳过 / 1 已知环境故障）—— 推送前必跑
 npm test          # 只跑测试
 git add -A        # 把改动标记为"要提交"
 git commit -m "说明"   # 存成一个版本
@@ -186,7 +186,7 @@ npm run dev
 npm run verify
 ```
 
-看到 `Tests 228 passed` 就对了（数字会随新增护栏上升；旁边两行都不是代码问题）：`1 skipped` 是设计内的跳过
+看到 `Tests 264 passed` 就对了（数字会随新增护栏上升；旁边两行都不是代码问题）：`1 skipped` 是设计内的跳过
 （「上游镜像已清」「未构建」这类前提缺失的占位，见 `tests/` 里的 `skipIf` 条件）；
 `1 failed` 是本机已知环境故障 `spawnSync node EBUSY`（`tests/tokens.test.ts` 用相对路径 `node`
 起子进程在本机必失败），用绝对路径直跑 `node scripts/assert-tokens.mjs` 复核那 11 项即可。
@@ -568,7 +568,7 @@ logo 配色 `#e9efe9` / `#8fe0b0`、大标题 `clamp(2.4rem, 9.2vw, 6.4rem)`。
 ### 8.6 改完必须做的事
 
 ```powershell
-npm run verify        # 构建 + 全量测试（当前 228 passed / 1 skipped / 1 已知环境故障）
+npm run verify        # 构建 + 全量测试（当前 264 passed / 1 skipped / 1 已知环境故障）
 cd <博客仓库>
 node scripts/assert-tokens.mjs   # 单独复算对比度
 ```
@@ -1268,6 +1268,45 @@ stack:                    # 技术栈：group 是分组小标题，items 是该�
 和页面上的东西无关。**读数要么真，要么别写**（首页那条语言占比就是这么做的）。
 
 设计决策与全部实测值见 `docs/rhinelab-spec.md` **§6.26**。
+
+---
+
+## 24.2 关于页的两栏版式（`/about`）
+
+> 2026-10-03 站主：「右半部分太空，重新排版」。此前所有内容都限在正文宽度里单列排下来，
+> 1280 视口下右半约 600px 全空。
+
+### 现在长什么样
+
+**1024px 起分两栏；低于 1024px 是原来的单列**（顺序一字未变）。
+
+| 栏 | 装什么 | 为什么归在这边 |
+|---|---|---|
+| **左栏** | 页头（标题 + 头像）· 签名 · 正文 | 叙述类：窄栏、安静，适合连续阅读。宽度就是 `--measure` |
+| **右栏** | 社交账号 · 技术栈 · 源码语言占比 | 读数类：清单与仪表。行短可扫读，窄栏里比通栏里更好读（通栏时一行只剩三五个字、两端全空）|
+
+分栏依据不是「为了填满」，而是**内容本来就分两类**。
+
+### 想改什么改哪个
+
+| 想改 | 改哪儿 |
+|---|---|
+| 两栏的宽度比例 / 断点 | `about.astro` 的 `.about-grid`（`grid-template-columns`）|
+| 哪块归左栏、哪块归右栏 | 模板里挪 `.about-main` / `.about-side` 的位置 |
+| 右栏块与块之间的分隔 | `.about-side .fig-block` 的 `padding-top` + `border-top` |
+| 右栏标题的大小 | `.about-side .fig-h` |
+| 手机端的顺序 | **别动** —— 靠 `display:contents` 保住（见下） |
+
+### 三条别动的约定
+
+1. **正文 `.prose` 的宽度一个 token 都不许在本页改。** 它的宽度仍由 `src/styles/prose.css` 的
+   `max-width: var(--measure)` 给，本页只靠 grid 第一列约束它。`tests/about-two-col.test.ts`
+   守着这条（断言本页不得给 `.prose` 设 `width` / `max-width` / `font-size` / `line-height`）。
+2. **窄屏顺序靠 `display:contents`，不要改成 grid 显式定位。** 若写 `grid-row` / `grid-column`，
+   **DOM 顺序就会决定窄屏顺序** —— `aside` 在 `main` 之后，签名会掉到正文后面
+   （改版前签名在正文之前）。`display:contents` 让 aside 不生成盒子、子元素直接参与父级流动。
+3. **右栏块间距不要用 `gap`。** gap 与 `border-top` 同时存在时，两个半段间距会夹着一条线，
+   看起来像「双线夹一段空白」。分隔只用「上边框 + `padding-top`」。
 
 ---
 

@@ -27,7 +27,7 @@
 | ① | `docs/writing-guide.md` | **站主自己用的手册**：约定、token、常见坑、怎么发布 | 全读（51 KB，值得） |
 | ② | `docs/architecture.md` + `docs/content-model.md` | 目录结构、内容管线、渲染链路 | 全读 |
 | ③ | `docs/site-decisions.md` | **历次设计决定与理由**（为什么是这样而不是那样） | 按需查 |
-| ④ | `tests/*.test.ts`（15 个） | **这才是真正的规格书**：站的硬约束都写成了断言 | 全读，尤其 `build-output` / `content-invariants` / `tokens` |
+| ④ | `tests/*.test.ts`（18 个） | **这才是真正的规格书**：站的硬约束都写成了断言 | 全读，尤其 `build-output` / `content-invariants` / `tokens` |
 | ⑤ | `src/styles/tokens.css` | 全部设计 token（颜色/间距/字号）。**组件里不许出现字面色值** | 全读 |
 | ⑥ | `src/layouts/Base.astro` · `src/lib/posts.ts` · `src/content.config.ts` · `src/tag-registry.ts` | 外壳（head/脚本/过渡标记）、文章管线、内容契约、标签注册表 | 全读 |
 | ⑦ | `docs/boot-intro-work-order.md` | **（已作废）**开场动画的旧施工工单：20.16 s 逐帧复刻版。v1.15 把开场整份重走后它不再是现行契约 | 只在考古时搜关键词（155 KB，别通读） |
@@ -110,6 +110,10 @@
 | ★★ 把“提高分辨率”当成解决“糊”的手段 | 2026-10-01：场从 CSS 宽 1/4 提到 1/3（320→426，面积 ×1.78）就掉到 **29 fps**。“分辨率低”的病灶往往不是采样密度，而是**高频被降采样**⇒ 先问“哪一层是高频的”，把那一层搬到显示分辨率（或矢量顶点），而不是把整个场提上去 |
 | ★★ monkey-patch canvas 方法来测耗时 | 2026-10-01：patch `fill / drawImage / clearRect` 累计只有 **0.09 ms/帧**，而帧间隔 26 ms ⇒ 差点误判成“路径填充很便宜”。canvas 2D 会把命令排队，真正的光栅化在 flush/合成阶段 ⇒ patch 只能测到 JS 调用开销。⇒ 要**在代码内**用 `performance.now()` 分段计时，或做对照实验（如把路径换成一个矩形） |
 | ★ 拿本地无头 Chrome 的 fps 单次读数下结论 |
+| 用 `visibility:hidden` 或 `html{overflow-x:clip}` 当"挡住溢出"的手段 | ★★ **fixed 元素超出视口的量，Chrome 会计入文档滚动宽度**（与规范有出入）。`visibility:hidden` 不挡，**`html{overflow-x:clip}` 也不挡** —— 2026-10-03 实测 clip 的**计算值就是 clip**，而 `scrollX` 仍是 304。那条 clip 是为 full-bleed hero 的 15px 误差加的，与此无关。正解：给它一个 `position:fixed; inset:0; overflow:hidden` 的祖先壳。★ **但壳必须把面板从 `fixed` 改成 `absolute`** —— fixed 只被「建立了固定定位包含块」的祖先（带 transform/filter/will-change/contain）裁剪，光有 overflow 裁不住。⇒ 手机端**整站**每一页都能横向拖出空白（实测 390→304 = 78vw、768→320 = 封顶，四页完全一致）。护栏：`tests/nav-drawer-overflow.test.ts`（8 条，守壳的三件套 + 不许改回 fixed + 打开态不许退回 `~`） |
+| 给已有的同级兄弟选择器加了一层包裹，却没改选择器 | 加壳后 `.navmask` / `.navpanel` 变成壳的**子**元素，原来的 `.navtog:checked ~ .navmask`（同级兄弟）不再匹配 ⇒ **抽屉打不开**，而且构建照常成功。⇒ 凡是给某节点加包裹层，**连带检查所有以它为末端的组合选择器**。护栏同上 |
+| 用 `gap` 做列表块间距，同时又给块加 `border-top` | 两个半段间距（上一块下方 gap + 下一块上方 padding）夹着一条线，看起来像"双线夹一段空白"（2026-10-03 目检关于页右栏时踩到）。⇒ 块级分隔**只用上边框 + `padding-top`**，不要 gap 与边框同时上 |
+| 分栏时用 `grid-row` / `grid-column` 显式定位 | ★ 那样**DOM 顺序就决定了窄屏顺序**：`aside` 在 `main` 之后 ⇒ 签名会掉到正文后面（改版前签名在正文之前）。正解：移动端把 aside 设`display:contents`（不生成盒子、子元素直接参与父级流动），窄屏顺序 = main 三个 + aside 三个 = 与改版前一致。护栏：`tests/about-two-col.test.ts`（7 条，含"窄屏默认不得是 grid"与"`.prose` 不得被设 width/max-width/font-size/line-height"） |
 | ★★ 拿**不同时间**测的 fps 做新旧对比 | 2026-10-01：新版线上 30 fps，上一版线上曾测 59.9 ⇒ 看似"新版掉了一倍"。把上一版 `git show HEAD~1:...` checkout 回来、**同一分钟内**用同一个探针重测⇒ 上一版 **20 fps**、新版 **30 fps**，结论完全反转。★ 无 GPU 的 headless 是**软件渲染的最坏情况**（真机 canvas 走 GPU）；而且反复跑探针会留一堆 chrome 进程拖慢机器。⇒ 帧率判据要么**同刻对照**，要么用**代码内分段计时**（本轮 step 3.5 ms + contour 2.5 ms）。探针 `_probe/cdp-bath-fpsbase.mjs` 先量“指针不在板上”的空闲基线（本轮 59.9）再量搅动 | 2026-10-01：同一份代码连测得到 30 / 37 / 40 / 55 / 60 fps。⇒ ① 连测 3 次；② 主判据用**代码内分段计时**（不受环境噪声影响，本轮：step 3.5 ms + contour 2.5 ms）；③ 帧率最终以**线上实测**为准 |：`_probe/_mutate-develop.mjs` 的插入类变异靠**锚点字符串**定位，源码改版后 `const ph = t * PH_SPD;` / `mkx.save();` / `const TAU2 = …` 全没了 ⇒ `replace` 静默不生效 ⇒ 判据看起来"守得住"，其实**根本没被破坏过**。⇒ **每次改版后必须重跑一遍**，看到"原版通过=是 · 破坏后=仍通过"就去查锚点 |
 | ★★★ **本机 CDP 回环端口连不上**（不是探针写错） | 2026-10-03 实测排查：Chrome **确实起来了**（`--user-data-dir` 目录建成、`DevToolsActivePort` **写上了真实端口号**，实测 50398 ⇒ 侧在正常监听），但 `fetch('http://127.0.0.1:<该端口>/json/version')` **一律 fetch failed**。对照组：node 连**自己起的本地HTTP 服务完全正常**（200）⇒ 不是"node 不能连本地端口"，是**回环调试端口被拦**。试过且**全都无效**：`--remote-debugging-address=127.0.0.1`、`--remote-allow-origins=*`、换端口号、`cmd /c start /b` 起、放宽沙箱。⇒ **`_probe/cdp-*.mjs` 那 62 个脚本在这台机器上跑不通**（它们是判据，**不要删**）；视觉验收改走 `_probe/launcher.mjs` 的 `withServer()` + `shot()`，断言类照旧 `npm run verify`，产物类照旧 `dist/` 静态断言。改动 launcher 后先跑 `node _probe/launcher-selftest.mjs` 自检 |
 | ★★★ 异步 `spawn` 起 Chrome 会 **EBUSY**，必须 `execFileSync` | 2026-10-03：`spawn(CHROME, …)` / `spawnSync` 一律返回 **EBUSY**，Chrome **根本没启动**（用户数据目录都没建、stderr 全空）；而**同一时刻**bash 直调同一个 exe 完全正常、`execFileSync` 也完全正常（截图产出、目录建成）。这与 `tests/tokens.test.ts` 那条已知环境故障是**同一个 EBUSY**。⇒ 探针里起 Chrome 一律用 `execFileSync`（`_probe/launcher.mjs` 就是这么写的） |
@@ -127,13 +131,28 @@
   | 验收类型 | 走哪条 |
   |---|---|
   | 视觉（排版 / 装置 / 配色） | `_probe/launcher.mjs` 的 `withServer()` + `shot()` → 出 PNG 后 `read_image` |
-  | 行为契约 | `npm run verify`（`tests/` 15 个文件 230 条） |
+  | 行为契约 | `npm run verify`（`tests/` 18 个文件 266 条） |
   | 产物形态 | 直接对 `dist/` 做静态断言（多数 `build-output.test.ts` 已覆盖） |
+  | **运行时布局 / 盒宽 / `scrollX` 多档溢出** | ★ **`_probe/_measure-all.mjs`**（见下） |
   改动 launcher 后跑 `node _probe/launcher-selftest.mjs` 自检（自检不依赖 CDP）。
-  ★ 仍需真CDP 能力的判据（模拟量指针、滚动跟手、`:focus-visible`、`scrollX` 多档溢出）
-  **在这台机器上无法自动验收** ⇒ 那几条只能靠人工目检 + 线上目检，别假装验过了。
+  ★ **`_probe/_measure-all.mjs`（2026-10-03 新增）**：把测量页写进 `dist/`、用**同源 iframe**
+  加载被测页，再以 `--dump-dom` 取回结果 —— 于是**本机也能自动验运行时布局了**
+  （此前记为"验不了"）。用法：`PAGES="/about/,/archive/" VPS="390,768,1280" node _probe/_measure-all.mjs`。
+  它量 `scrollX`（AGENTS 那条唯一判据）、`docScrollWidth`、以及右缘超出的元素。
+- ★★ **仍需真 CDP 能力的判据**：模拟量指针（hover / 拖动）、滚动跟手、`:focus-visible`。
+  这几条**在这台机器上无法自动验收** ⇒ 只能靠人工目检 + 线上目检，别假装验过了。
   仓库里有一批现成的探针可参考：`_tmp-*.mjs`（CDP + sharp，含 hover 模拟、像素判据、帧率测量）。
+- ★ **两条会让目检得出错误结论的伪影（2026-10-03 实测，都会让人以为"有 bug"）**：
+  ① `Chrome --screenshot` 的画面宽度可能与页面视口不一致 ⇒ 截图里"文字被切"未必是溢出。
+     判据要靠 `scrollX` + `docScrollWidth` + 各盒 `getBoundingClientRect` 三者对上。
+  ② `--virtual-time-budget` **不推进 CSS transition** ⇒ 量过渡中的属性（`opacity`/`visibility`）
+     会停在起点，看着像"规则没生效"。判据：注入 `transition:none` 再读一次，
+     若变成目标值即证明规则是好的。旁证：同一条规则里**不参与过渡**的属性（如 `pointer-events`）
+     已经生效了。
 - **颜色/位置这类判断走计算样式或像素**，不要靠"读 CSS 文本猜"。
+- ★ **负向断言必须先剥注释**。文件头把"为什么"写得很细时，那些说明文字里会出现
+  各种选择器字面量，会让 `not.toMatch(...)` 恒红（2026-10-03 踩到：判据命中的是
+  注释里引用的旧选择器）。方向与「断言绑死产物形态」相反，但同源。
 - 部署类改动：**门闩要绑本次改动本身**（例如改色就查那个色值），否则部署还没推进就"验过了"是假通过
   —— 这个坑一天内踩过四次。
 - 排查"push 了但线上没变"：① `npx wrangler pages deployment list --project-name=personal` 看那次部署是不是
