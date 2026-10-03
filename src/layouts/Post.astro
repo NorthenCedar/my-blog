@@ -24,18 +24,61 @@ const toc = headingTree(headings);
      另按站主拍板 B：导语用内容层的 summary —— 首页 S2 只显示标题，文章页是它唯一露脸的地方。
      详见 docs/post-migration-notes.md。 */
 }
-{/* current="archive"（站主 2026-09-26："以后点进具体文章后右上角显示在归档"）：
-    文章属于归档这份清单 ⇒ 进详情页时高亮「归档」。以前这里没传 current，整个导航一个都不高亮。
-    手机抽屉用同一个 current 值，所以索引同步（无需另改）。 */}
-<Base title={meta.title} description={meta.summary} chrome="page" current="archive">
+{/* ===== 2026-10-03：文章页装「阅读尺」（READING RULE）+ 工程方格底纹 + 目录改右栏 =====
+    站主拍板六条（先出实验台 `dist/_plate-lab.html`，看过真渲染才定的）：
+      ① 底纹母题 = 9 个候选里的 **#7 方格 + 页边刻度轨**；② 强度 8%；③ **铺满整页**
+         （不在正文范围里压掉图案 ⇒ 不加 mask）；
+      ④ 映射 = **even**（读头必压齿）；⑤ 移动端阅读尺**完全不渲染**；
+      ⑥ 「本文目录」从正文上方挪成**右侧 sticky 栏**。
+    ★ 这一轮 src/ 只动三处：本文件、src/scripts/reading-rule.ts、styles/tokens.css。
+      相册的 develop.ts / 归档的 index-tape.ts 一行未动。 */}
+<Base
+  title={meta.title}
+  description={meta.summary}
+  chrome="page"
+  current="archive"
+  bodyClass="post-plate"
+>
+  {/* ★★ 装置与底纹都挂 `plate` 槽（= `.shell` **之外**）。
+     为什么不能用普通 slot：页面过渡 `html.pt-play .shell { animation: pt-shell … }`
+     会给 `.shell` 加 `transform: scale(.99)` + `filter: blur()`，而**被 transform
+     （或 filter）的祖先会成为 `position: fixed` 的包含块** ⇒ 固定定位的底纹与阅读尺
+     会从「视口」改挂到「.shell 盒」，过渡那 900ms 里整体跳位
+     （关于页底纹当时实测跳 91px，见 Base.astro 的 plate 槽注释）。
+     ⚠ 归档页的 `.tape` 现在就挂在 `.shell` 里，有同一个隐患（已记进 spec §6.28 的待办）。 */}
+  <Fragment slot="plate">
+    {/* 底纹层：工程方格（细格 1u + 粗格 6u）+ 左右视口刻度轨。纯装饰，不拦指针。 */}
+    <div class="plate-grid" aria-hidden="true"></div>
+
+    {/* ===== 阅读尺 READING RULE =====
+        ★ 默认 `hidden` + `aria-hidden` ⇒ **无 JS 时装置不存在**（不是藏起来）；
+          正文本身由 Astro 服务端渲染完整，尺只是叠加层。
+        ★ 结构：条（bar，左右各留一个 gutter）→ 纸带（tape，被 translateX 抽出）
+          + 读头（readhead，钉在条左端）+ 读数（readout，浮在尺上方）。 */}
+    <aside class="rule" data-rule hidden aria-hidden="true">
+      <div class="bar" data-rule-bar><div class="tape" data-rule-tape></div></div>
+      <span class="readhead" aria-hidden="true"></span>
+      <p class="readout">
+        <em data-rule-sec>序</em><i data-rule-total></i><i data-rule-pct>0%</i>
+      </p>
+      <span class="hint" aria-hidden="true">READING RULE · RM-01</span>
+    </aside>
+  </Fragment>
+
   <header class="pagehead">
     <Meta post={meta} />
     <h1 class="hero-title">{meta.title}</h1>
     <p class="standfirst">{meta.summary}</p>
   </header>
 
-  <article>
-    <Toc headings={toc} />
+  {/* ===== 版式：正文 + 右侧 sticky 目录（站主拍板 ⑥）=====
+     窄屏 DOM 顺序不变（目录仍在正文之前、通栏），只有 ≥960px 起才排成两栏 ——
+     所以「不装 JS 也完整可读」这条不受影响，窄屏行为与改版前逐像素一致。
+     **正文 `.prose` 的排版一行不改**（红线）：这里只给它分配栅格列。 */}
+  <article class="post-body">
+    <div class="post-rail">
+      <Toc headings={toc} />
+    </div>
     <div class="prose"><Content /></div>
   </article>
 
@@ -68,6 +111,283 @@ const toc = headingTree(headings);
     max-width: 32em;
     margin: 0;
   }
+
+  /* ===== 底纹：工程方格 + 页边刻度轨（母题 #7，铺满整页）=====
+     挂法逐条照抄百褶 ∞ / 关于页 ref-plate：fixed + inset:0 + z-index:-1 + 不拦指针。
+     颜色只用 token（--deco-plate-*，8 位 hex 承载 alpha）；密度只用 --deco-plate-u。
+     ★ 粗格 = 细格 ×6、刻度轨小齿 2u / 大齿 10u —— 这是配方，别单独改一处。 */
+  .plate-grid {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    background-image:
+      linear-gradient(to right, var(--deco-plate-fine) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--deco-plate-fine) 1px, transparent 1px),
+      linear-gradient(to right, var(--deco-plate-coarse) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--deco-plate-coarse) 1px, transparent 1px);
+    background-size:
+      var(--deco-plate-u) var(--deco-plate-u),
+      var(--deco-plate-u) var(--deco-plate-u),
+      calc(var(--deco-plate-u) * 6) calc(var(--deco-plate-u) * 6),
+      calc(var(--deco-plate-u) * 6) calc(var(--deco-plate-u) * 6);
+  }
+  /* 页边刻度轨：左右**视口**边缘，不随内容走。伪元素用 absolute 挂在满屏的
+     .plate-grid 里 ⇒ 效果与 fixed 相同（实验台里两种都试过，逐帧一致）。 */
+  .plate-grid::before,
+  .plate-grid::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 16px;
+    background-image:
+      repeating-linear-gradient(
+        to bottom,
+        var(--deco-plate-fine) 0 1px,
+        transparent 1px calc(var(--deco-plate-u) * 2)
+      ),
+      repeating-linear-gradient(
+        to bottom,
+        var(--deco-plate-coarse) 0 1px,
+        transparent 1px calc(var(--deco-plate-u) * 10)
+      );
+    background-size: 6px 100%, 16px 100%;
+    background-repeat: repeat-y;
+  }
+  .plate-grid::before {
+    left: 0;
+  }
+  .plate-grid::after {
+    right: 0;
+  }
+
+  /* ★★ 必须关掉本页的百褶 ∞（`.page-inf`，Topbar 渲染，全站内页共用）。
+     两套母题叠着必脏 —— 与关于页换月相时同一个理由（Topbar 注释里记过这个教训）。
+     ⚠ 用 `:global(...)`：`.page-inf` 是 Topbar 的元素、带的是**别的**作用域属性；
+       且那边写的是 `body.chrome-page .page-inf`（0,2,1）⇒ 权重必须对齐才压得住。
+     关法用 `display:none` 而不是 `opacity:0`：后者仍占一层满屏合成层，很贵。 */
+  :global(body.post-plate .page-inf) {
+    display: none;
+  }
+
+  /* ★ 文末让位（本轮探针实测补的）：阅读尺是**贴视口底部**的 52px 固定条
+     ⇒ 滚到文档最末尾时，页脚最后一块（SiteFooter 的 `.stats-wrap`，即「本站已运行…」）
+     正好落进这一条里。默认档「停手 900ms 收回」会自己让开，
+     但 reduced-motion 档尺**常驻** ⇒ 会被**永久**压住。
+     实测（iframe 1440×900，RM 档，滚到 5000/5000）：
+       `.foot` 786.3 ~ 899.8（高 113.5）· `.stats-wrap` 845.0 ~ 867.8 · 尺顶 848
+       ⇒ `.stats-wrap` 的 845~867.8 有 19.8px 在尺下，整条几乎读不到。
+     加满尺高 + 一点余量后：`.stats-wrap` 底边移到 815.8，让开尺顶 32px。
+     ★ **两档都留**、不写成只在 `@media (prefers-reduced-motion: reduce)` 里：
+       两档几何完全一致，就少一类「只在某个档才出现的布局」这种最难查的差异。 */
+  :global(body.post-plate .foot) {
+    padding-bottom: calc(var(--sp-6) + 52px);
+  }
+
+  /* ===== 阅读尺 READING RULE =====
+     形态（站主拍板 R1）：视口底部横向直尺，读头钉在条左端、纸带向左走；
+     滚动抽出、停手 900ms 收回；点尺面 scrub 跳转。颜色全 token，
+     尺面用首页那套玻璃参数（--glass-*）—— 与「浮起」的观测仪器语汇一致。 */
+  .rule {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 3; /* 正文（.shell z-index:1）之上，跟手光标环/蒙版之下 */
+    height: 52px;
+    border-top: 1px solid var(--glass-line);
+    background: linear-gradient(0deg, var(--glass-bg) 40%, transparent);
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    backdrop-filter: blur(var(--glass-blur));
+    transform: translateY(110%);
+    transition: transform var(--dur-enter) var(--ease);
+  }
+  .rule.is-out {
+    transform: translateY(0);
+  }
+  /* reduced-motion：尺常驻（脚本加 is-out）+ 去掉出入过渡（脚本加 is-instant） */
+  .rule.is-instant {
+    transition: none;
+  }
+  /* 无 JS 时整块不出现（脚本到位才摘 [hidden]）；显式写，免得上游给 .rule 加 display */
+  .rule[hidden] {
+    display: none;
+  }
+  .rule .bar {
+    position: absolute;
+    left: var(--gutter);
+    right: var(--gutter);
+    top: 0;
+    bottom: 0;
+    overflow: hidden;
+  }
+  /* 纸带：宽 3×条宽（t 从 −1 排到 +2），靠 translateX 走纸；will-change 只给 transform */
+  .rule .tape {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    will-change: transform;
+  }
+  /* ★★ 刻度全部是**脚本创建**的节点（纸带要按条宽铺 3 倍长，301 根不适合写进 HTML），
+     而 Astro 的 scoped 样式编译成 `.tk[data-astro-cid-…]` —— 脚本 createElement 出来的
+     元素**身上没有这个属性**，于是这些规则**一条都命不中**（探针实测：
+     `getComputedStyle(tick).backgroundColor` 是 `rgba(0,0,0,0)`，等于刻度根本没画出来；
+     静态的 `.readhead` 有属性、颜色正常 —— 两边一对比就定位到了）。
+     ⇒ 刻度这一族必须 `:global(...)`。但都挂在 `.rule` 之下，不会漏到别的页
+       （同 BootIntro 的 `:global(path)`、以及评论组件把 CSS 放进全局 comments.css 的同一原因）。 */
+  .rule :global(.tk) {
+    position: absolute;
+    bottom: 14px;
+    width: 1px;
+    background: var(--hair);
+  }
+  .rule :global(.tk-minor) {
+    height: 6px;
+  }
+  .rule :global(.tk-mid) {
+    height: 10px;
+  }
+  .rule :global(.tk-major) {
+    height: 16px;
+    background: var(--ink-2);
+  }
+  .rule :global(.tk b) {
+    position: absolute;
+    top: -12px;
+    left: 2px;
+    font-family: 'IBM Plex Mono', Consolas, 'Courier New', monospace;
+    font-size: 9px;
+    font-weight: 400;
+    color: var(--muted);
+  }
+  /* 节齿：h2 = 长绿齿（带 §n 标签），h3 = 短绿齿（不带标签） */
+  .rule :global(.tk-sec) {
+    height: 24px;
+    width: 2px;
+    background: var(--accent);
+  }
+  .rule :global(.tk-sec.is-h3) {
+    height: 16px;
+    width: 1px;
+    background: var(--accent);
+    opacity: 0.55;
+  }
+  .rule :global(.tk-sec i) {
+    position: absolute;
+    bottom: 28px;
+    left: 3px;
+    font-family: 'IBM Plex Mono', Consolas, 'Courier New', monospace;
+    font-size: 9px;
+    font-style: normal;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    color: var(--accent-ink);
+  }
+  /* 读头：钉在条左端的一根绿竖线 + 顶端小三角（指示「你读到这里」） */
+  .readhead {
+    position: absolute;
+    left: var(--gutter);
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 2px solid var(--accent-ink);
+    z-index: 2;
+  }
+  .readhead::after {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--accent-ink);
+  }
+  /* 读数与型号漂在尺**上方**（尺内让给刻度）—— 各带一小块纸色底，
+     压在正文上也读得清。 */
+  .readout {
+    position: absolute;
+    left: var(--gutter);
+    bottom: calc(100% + 5px);
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 1px 0.4em;
+    background: var(--paper);
+    border: 1px solid var(--glass-line);
+    font-family: 'IBM Plex Mono', Consolas, 'Courier New', monospace;
+    font-size: var(--fs-xs);
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .readout em {
+    font-style: normal;
+    font-weight: 700;
+    color: var(--accent-ink);
+  }
+  .readout i {
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+  }
+  .hint {
+    position: absolute;
+    right: var(--gutter);
+    bottom: calc(100% + 5px);
+    padding: 1px 0.4em;
+    background: var(--paper);
+    border: 1px solid var(--glass-line);
+    font-family: 'IBM Plex Mono', Consolas, 'Courier New', monospace;
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    color: var(--muted);
+  }
+
+  /* ===== 版式：正文 + 右侧 sticky 目录 =====
+     <960px：完全不动（目录在正文上方通栏，与改版前逐像素一致）。
+     ≥960px：正文占第一列（宽仍是 --measure），目录进第二列并 sticky。
+     ★ 为什么 960：需要的宽度 = --measure(34em=578px) + gap(2rem=32px) + 目录栏(≈256px)
+       + 两侧 gutter（4vw×2）⇒ 视口 ≈902px 起才放得下，取 960 留出富余。 */
+  @media (min-width: 960px) {
+    .post-body {
+      display: grid;
+      grid-template-columns: minmax(0, var(--measure)) minmax(0, 1fr);
+      gap: var(--sp-6);
+      align-items: start;
+    }
+    .post-body > .prose {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    /* 目录栏：sticky 生效的前提是「栅格项不拉伸 + 行高由正文撑开」——
+       `align-items:start` 让本项只有内容高，而它的包含块仍是整个栅格行 ⇒ 可在行内粘住。 */
+    .post-rail {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: start;
+      position: sticky;
+      top: var(--sp-6);
+    }
+    /* 目录进右栏：单列、显式露出「本文目录」标题，
+       并压掉 Toc.astro 里那套为「通栏横向索引条」写死的规则
+       （那边 ≥1440 会隐藏标题 + 排四列 —— 在 256px 的栏里会散架）。
+       ⚠ 必须 `:global(...)`：`.toc` 是 Toc.astro 的元素，带的是它的作用域属性；
+         写在 .post-rail 之下才能把权重压过 `@media (min-width:1440px)` 那条。 */
+    .post-rail :global(.toc) {
+      margin: 0;
+      padding: var(--sp-3) 0;
+      max-width: 16rem;
+    }
+    .post-rail :global(.toc .label) {
+      display: block;
+    }
+    .post-rail :global(.toc ol) {
+      columns: 1;
+    }
+  }
+
   .adj {
     display: flex;
     justify-content: space-between;
@@ -89,10 +409,19 @@ const toc = headingTree(headings);
   .adj .next {
     margin-left: auto;
   }
+
+  /* ===== 移动端（≤767px）：阅读尺**完全不渲染**（站主拍板 ⑤）=====
+     ★ 底纹层不在降级之列 —— 它是背景不是装置（与站内 ∞ 底纹「窄屏不隐藏」同一口径）。 */
+  @media (max-width: 767px) {
+    .rule {
+      display: none;
+    }
+  }
 </style>
 
 <script>
-  // 文章页的两个客户端脚本：代码块工具栏 + 评论区。见 src/scripts/
+  // 文章页的客户端脚本：代码块工具栏 + 评论区 + 阅读尺。见 src/scripts/
   import '../scripts/copy-code';
   import '../scripts/comments';
+  import '../scripts/reading-rule';
 </script>

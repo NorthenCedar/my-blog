@@ -27,7 +27,7 @@
 | ① | `docs/writing-guide.md` | **站主自己用的手册**：约定、token、常见坑、怎么发布 | 全读（51 KB，值得） |
 | ② | `docs/architecture.md` + `docs/content-model.md` | 目录结构、内容管线、渲染链路 | 全读 |
 | ③ | `docs/site-decisions.md` | **历次设计决定与理由**（为什么是这样而不是那样） | 按需查 |
-| ④ | `tests/*.test.ts`（19 个） | **这才是真正的规格书**：站的硬约束都写成了断言 | 全读，尤其 `build-output` / `content-invariants` / `tokens` |
+| ④ | `tests/*.test.ts`（20 个） | **这才是真正的规格书**：站的硬约束都写成了断言 | 全读，尤其 `build-output` / `content-invariants` / `tokens` |
 | ⑤ | `src/styles/tokens.css` | 全部设计 token（颜色/间距/字号）。**组件里不许出现字面色值** | 全读 |
 | ⑥ | `src/layouts/Base.astro` · `src/lib/posts.ts` · `src/content.config.ts` · `src/tag-registry.ts` | 外壳（head/脚本/过渡标记）、文章管线、内容契约、标签注册表 | 全读 |
 | ⑦ | `docs/boot-intro-work-order.md` | **（已作废）**开场动画的旧施工工单：20.16 s 逐帧复刻版。v1.15 把开场整份重走后它不再是现行契约 | 只在考古时搜关键词（155 KB，别通读） |
@@ -124,7 +124,10 @@
 | ★★★ 异步 `spawn` 起 Chrome 会 **EBUSY**，必须 `execFileSync` | 2026-10-03：`spawn(CHROME, …)` / `spawnSync` 一律返回 **EBUSY**，Chrome **根本没启动**（用户数据目录都没建、stderr 全空）；而**同一时刻**bash 直调同一个 exe 完全正常、`execFileSync` 也完全正常（截图产出、目录建成）。这与 `tests/tokens.test.ts` 那条已知环境故障是**同一个 EBUSY**。⇒ 探针里起 Chrome 一律用 `execFileSync`（`_probe/launcher.mjs` 就是这么写的） |
 | ★★★ 同步等 Chrome 与「本进程提供服务」**不能共存** | 2026-10-03 踩到：`execFileSync` 会**阻塞本进程事件循环**，而 `withServer()` 若在**本进程** `listen`，Chrome 来要页面时事件循环正卡在 `execFileSync` 里 ⇒ 无法响应 ⇒ Chrome 一直等到 ETIMEDOUT 且**没有截图**（一度误判成"Chrome 起不来"）。实测：同进程 listen ⇒ 超时无图；服务起在**独立进程** ⇒ 一次成功（304 KB）。⇒ `withServer()` 必须 `spawn(process.execPath, ['_probe/serve.mjs', port])` 起子进程，并轮询到 200 再返回 |
 | ★★ Chrome 截图的三个坑 | 2026-10-03：① **必须给绝对路径** —— 相对路径报「拒绝访问(0x5)」，文件根本不落地；② **必须加 `--no-proxy-server`** —— 否则 `127.0.0.1` 被系统代理接管 ⇒ `ERR_CONNECTION_REFUSED`（`curl` 却通，容易误判成服务没起）；③ `--screenshot` **只能拍首屏**且常在预算内不自行退出 ⇒ `execFileSync` 抛 ETIMEDOUT 是常态，**先查文件是否落地**再判成败（`launcher.mjs` 的 `shot()` 有重试 + 落地检查） |
-| ★ `(node … &)` 起服务会被下一条命令收尾带走 | 2026-10-03：用 `(cmd &)` 起的 `serve.mjs`，下一条 Bash 命令执行完它就被收走了，随后 `curl` 返回 **502**（不是 404/超时，很容易看成"服务坏了"）。⇒ 起本地服务一律用 `run_in_background`；或用 `_probe/launcher.mjs` 的 `withServer()`（自带就绪轮询与 `close()`） |
+| ★★ `(node … &)` 起服务会被下一条命令收尾带走 | 2026-10-03：用 `(cmd &)` 起的 `serve.mjs`，下一条 Bash 命令执行完它就被收走了，随后 `curl` 返回 **502**（不是 404/超时，很容易看成"服务坏了"）。⇒ 起本地服务一律用 `run_in_background`；或用 `_probe/launcher.mjs` 的 `withServer()`（自带就绪轮询与 `close()`） |
+| ★★★ 用 `getBoundingClientRect()` 量**带 transform 的元素** | 2026-10-03（阅读尺）：RM 档探针报 `Δ = 168/336/504/…`（正好是**整齿**的整数倍），而**同一行**打印的 `x=1512px + tf=-1511.94px + 条左 48` 推出来只能是 ≈0 —— 两者数学上不可能同时成立。把 `tape.getBoundingClientRect().left` 也打出来才发现它**卡死若干轮**（`-1463.945` 连报四次）而内联 `transform` 每轮都对；`Δ = tapeRect + style.left − 读头.left` **逐字吻合**。成因：`.tape` 带 `will-change:transform` 走**合成器**，而 `--virtual-time-budget` 下**渲染帧不推进** ⇒ rect 给的是"上次已提交"的 transform（默认档因为 `paint()` 走 rAF 恰好躲过）。⇒ 判据取**纯样式量**（`style.left` + `style.transform` + `offsetLeft`），并用 `elementsFromPoint(读头 x)` 做独立复核（命中栈含 `tk-sec` 即证明压住了）。改完两档 Δ 一致：最大 **0.130px**。★ 通用：本机量任何带 transform/filter/will-change 的元素，都不要只信 rect |
+| ★★ iframe 里的**真实 rAF 在 `--virtual-time-budget` 下不推进** | 2026-10-03（阅读尺截图）：`mode=page&scroll=0.34` 与不滚动拍出来的 PNG **字节完全相同**（md5 实锤）——一度误判成"滚动被弹回页首"。真因是页面那段卡在 `await raf(w2, 8)`（`w2` 是 iframe 的 window，rAF 是**真实**的）⇒ 后面的 `scrollTo` **一行都没执行**（`#out` 停在「A 载入 f2」）。⇒ ① iframe 里一律把 rAF 换成定时器调度；② **不能**用 `setTimeout = () => 0` 一把掐死（页面的重绘也走 rAF，会僵在首帧）——**只拦长定时器**（`≥300ms`：900ms 自动收回 / 180ms resize 去抖）；③ 滚动落位必须**读回校验**（`got=1783 / want=1783.3`），不校验就不知道拍的是哪一屏 |
+| ★ `--dump-dom` 会把 `<script>` 源码一起 dump | 2026-10-03：想在 dump 出来的 DOM 里读探针写的 `PAGE got=…`，正则在**整份 DOM** 上搜 ⇒ 命中的是**脚本里的那个字符串字面量**（`out.textContent = 'PAGE  got=' + …`），读出来的"值"其实是源码。⇒ 取数一律先 `match(/<pre id="out">([\s\S]*?)<\/pre>/)` 再在里面取。★ 同理：写回校验值必须写进**外层**探针页的 `#out`，写进 iframe 内部的文档是 dump 不到的（踩过：报"没读到标记"） |
 
 ---
 
@@ -136,7 +139,7 @@
   | 验收类型 | 走哪条 |
   |---|---|
   | 视觉（排版 / 装置 / 配色） | `_probe/launcher.mjs` 的 `withServer()` + `shot()` → 出 PNG 后 `read_image` |
-  | 行为契约 | `npm run verify`（`tests/` 19 个文件 275 条） |
+  | 行为契约 | `npm run verify`（`tests/` 20 个文件 297 条：296 通过 / 1 设计内跳过） |
   | 产物形态 | 直接对 `dist/` 做静态断言（多数 `build-output.test.ts` 已覆盖） |
   | **运行时布局 / 盒宽 / `scrollX` 多档溢出** | ★ **`_probe/_measure-all.mjs`**（见下） |
   改动 launcher 后跑 `node _probe/launcher-selftest.mjs` 自检（自检不依赖 CDP）。
