@@ -263,7 +263,7 @@ function reduceBlocks(): { at: number; blk: string }[] {
   });
 }
 
-describe.skipIf(!hasDist)('日志页 · 动效（站主 2026-10-04：「加一点动态背景」，拍板 ①呼吸+⑤生长 / ≤15px / 只管本页）', () => {
+describe.skipIf(!hasDist)('日志页 · 动效（站主 2026-10-04：「加一点动态背景」，拍板 ①呼吸+⑤生长 / 只管本页；同日两次改参数：呼吸调到看得见、齿排在过渡后）', () => {
   /* ★ 这一组守的是**三条容易回归的性质**，不是"上一版调好的参数值"：
      ① **仍然零 JS** —— 两次动效全部由 CSS 表达（上面那条断言一字未改）。
      ② **居中不能丢** —— @keyframes 里的 transform 会**整体覆盖**基础声明，
@@ -292,16 +292,66 @@ describe.skipIf(!hasDist)('日志页 · 动效（站主 2026-10-04：「加一�
     }
   });
 
-  it('★ 呼吸的位移守**配额**（站主拍板 ≤15px）：可解析的平移/缩放分量必须在预算内', () => {
+  it('★★ 呼吸的幅度必须**落在可见区间内**（上下界都写 —— 只写上界等于给"越漂越弱"发许可证）', () => {
+    /* ★ 这条断言改过一次。原来的版本是「位移守配额 ≤15px」，**只防太大**，
+       没有任何东西防"消失" ⇒ 底纹一路漂到 0.14 px/s（人眼分辨阈 ≈1 px/s 的十分之一）
+       而断言全绿。站主看页面说「呼吸我看不出来啊」，实测坐实：旧组 96 s /
+       平移极差 9.43 px / scale 极差 0.008 ⇒ 轮廓实际只涨 6 px。
+       教训：**装饰性动效的契约，可见性要有下界、克制要有上界，两边都得写。** */
     const kf = keyframesBlock('log-inf-breathe');
     const tr = [...kf.matchAll(/translate3d\((-?[\d.]+)px,\s*(-?[\d.]+)px/g)]
       .map((m) => [Number(m[1]), Number(m[2])]);
     expect(tr.length, '没解析到两档 translate3d').toBe(2);
     const dt = Math.hypot(tr[1][0] - tr[0][0], tr[1][1] - tr[0][1]);
-    expect(dt, `平移极差 ${dt.toFixed(2)}px 已吃掉 15px 预算的大头`).toBeLessThan(15);
     const sc = [...kf.matchAll(/scale\(([\d.]+)\)/g)].map((m) => Number(m[1]));
     expect(new Set(sc).size, '没解析到两档 scale').toBe(2);
-    expect(Math.abs(sc[1] - sc[0]), '缩放极差过大（边缘会被它带出更多位移）').toBeLessThan(0.05);
+    const ds = Math.abs(sc[1] - sc[0]);
+
+    /* 上界：胀大时最远的角会被 scale 带走 —— 层半对角线按最坏档 895px 宽算 ≈505px。 */
+    const R = Math.hypot(895 / 2, (895 * 642) / 1222 / 2);
+    const peak = dt + ds * R;
+    expect(dt, `平移极差 ${dt.toFixed(2)}px：下界防消失、上界防抢戏（预算 ${peak.toFixed(1)}px）`)
+      .toBeGreaterThan(10);
+    expect(peak, `合成峰值 ${peak.toFixed(1)}px 太大，底纹会从版心里跳出来`).toBeLessThan(70);
+
+    /* 下界真正卡的是**速度**：位移够了但周期拖到几十秒，照样看不见。
+       判据取「合成峰值 / 单程秒数」≥ 1.5 px/s（人眼慢运动分辨阈约 1 px/s 的 1.5 倍）。 */
+    const dur = CODE.match(/animation:\s*log-inf-breathe\s+([\d.]+)s/);
+    expect(dur, '呼吸的 animation 里没读到秒数（必须用 s，不要用 ms）').toBeTruthy();
+    const t = Number(dur![1]);
+    expect(t, '呼吸必须是持续动效 ⇒ 要有 alternate 往返，单程太久等于看不见')
+      .toBeLessThan(40);
+    const speed = peak / t;
+    expect(speed, `单程均速 ${speed.toFixed(2)} px/s 低于 1.5 px/s ⇒ 物理上看不见（周期 ${t}s）`)
+      .toBeGreaterThan(1.5);
+  });
+
+  it('★ 呼吸的 duration 与关键帧里的位移量必须同源（周期和幅度分两处改就会对不上）', () => {
+    /* 幅度写在 @keyframes、周期写在 animation —— 改一处忘另一处不会有任何报错，
+       只会让"配好的呼吸"变成另一个速度的另一个幅度。这里把两者钉在同一组数字上：
+       周期 24 s 配 scale 极差 0.070（吸 0.965 / 呼 1.035），平移 ±10 / ±6。 */
+    const dur = Number(CODE.match(/animation:\s*log-inf-breathe\s+([\d.]+)s/)![1]);
+    const sc = [...keyframesBlock('log-inf-breathe').matchAll(/scale\(([\d.]+)\)/g)]
+      .map((m) => Number(m[1]));
+    /* 24 s 那一档的"一次慢深呼吸"；周期翻倍而幅度不变 ⇒ 均速减半，掉到下界之下。 */
+    if (dur === 24) {
+      expect(Math.abs(sc[1] - sc[0]), '24s 配的这组幅度与样机不符').toBeCloseTo(0.07, 3);
+    }
+  });
+
+  it('★★ 齿的生长必须**排在页面过渡之后**（提前量由 --tooth-lead 承担，不许散进相位算法）', () => {
+    /* 站主 2026-10-04：「把根齿依次长出放在过渡动画后」。实测旧参数与过渡重叠 316ms。 */
+    expect(CODE, 'animation-delay 没用 --tooth-lead 叠加，提前量被写死进相位算法了')
+      .toMatch(/animation-delay:\s*calc\(var\(--tooth-delay[^)]*\)\s*\+\s*var\(--tooth-lead/);
+    const lead = CODE.match(/--tooth-lead,\s*(\d+)ms/);
+    expect(lead, '没读到提前量默认值').toBeTruthy();
+    const ms = Number(lead![1]);
+    /* 必须 ≥ 过渡时长（900ms，见 transition.css 的 --pt-sweep），留一点余量。 */
+    expect(ms, `提前量 ${ms}ms 短于页面过渡 900ms ⇒ 齿会在过渡还没走完时就开始冒头`)
+      .toBeGreaterThanOrEqual(1000);
+    /* 相位算法保持纯「依次」：单增断言在下一条，这里只确认它没被提前量污染成常量。 */
+    const delays = [...PAGE.matchAll(/--tooth-delay:(\d+)ms/g)].map((m) => Number(m[1]));
+    expect(new Set(delays).size, '所有齿相位相同 ⇒ 提前量把「依次」抹平了').toBeGreaterThan(1);
   });
 
   it('⑤「生长」：一次性入场，`both` 必须在（否则 delay 期间齿会先完整闪一下）', () => {

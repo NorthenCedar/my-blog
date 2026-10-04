@@ -367,20 +367,32 @@ const CHRONO = (() => {
        拎出来之后「居中」只有一处事实来源，将来换居中方式 keyframes 会自动跟上。 */
     --log-inf-center: translate(-50%, -50%);
     transform: var(--log-inf-center);
-    /* ①「呼吸」（BREATHE，站主 2026-10-04 拍板）——
-       声明式整幅相位：96 s 单程、`alternate` 往返，只动 transform ⇒ 走合成器，
+    /* ①「呼吸」（BREATHE，站主 2026-10-04 拍板，同日**改过一次参数**）——
+       声明式整幅相位：`alternate` 往返，只动 transform ⇒ 走合成器，
        不触发布局/重绘，主线程成本 0。
        ★ 与说说页 FLOAT 的**机制分野**（口径 #5「每页一台机制不同」）：
          FLOAT 是 canvas **每帧解析函数** + **事件式**（雨线、涟漪是个体事件，各有出生/消散）；
          本台是 CSS **声明式**动画 + **整幅相位** —— 无个体、无事件、无出生时刻，
          只有一层纸在极慢地换气。两者同在「只吃时间」这一格，但**介质与驱动不同**
          （合成器插值 vs JS 每帧求值）⇒ 不是同一台装置换了皮。
-       ★ 幅度按站主拍板的 **≤15 px** 配额分配（判据见 `_probe/_log-motion.mjs`）：
-         translate 极差 (8, 5) px ⇒ 9.43 px；scale 1.004→1.012 在 879 px 宽的层上
-         让最远的角再挪 3.97 px ⇒ 合成最大约 **13.4 px**，留 1.6 px 余量。
+       ★★ 参数改过一次，原因是**原来那组根本看不见**（站主原话「呼吸我看不出来啊」）。
+         实测依据（`_probe/_log-motion.mjs` + `_probe/_log-breathe.mjs` v2）：
+           旧组 96 s / 平移极差 9.43 px / scale 极差 0.008
+             ⇒ 关键帧预算 13.47 px，但**轮廓实际只增长 6 px**（软 alpha 边吃掉大半），
+             单程均速 **0.14 px/s**。人眼对慢运动的分辨阈约 1 px/s ⇒ 差一个数量级，
+             不是"弱"，是物理上看不见。
+           现组 24 s / 平移极差 23.32 px / scale 极差 0.070
+             ⇒ 预算上界 ≈58.7 px，实测轮廓增长 **+52 px**，单程均速 **2.45 px/s**。
+         ⇒ **原先的「≤15 px」配额作废**（那条只防"太大"，没有任何东西防"消失"，
+           于是它一路漂到 0.14 px/s 而断言全绿 —— 教训见 `tests/log-chrono.test.ts`：
+           装饰性动效的契约必须**上下界都写**）。新配额见测试里的 70px 上界 + 40px 下界。
+       ★ 24 s 是"一次慢深呼吸"（12 s 吸 / 12 s 呼）。曾同时评估 32 s（+65px，更奔放）
+         与 16 s（+37px，最快但容易显躁），站主选 A。
+       ★ 缩放刻意**不对称**（0.965 ↔ 1.035，中心偏上）—— 缩小时 ∞ 离版心更远、
+         胀大时才靠近，与"吸气/呼气"同向，不是机械地来回。
        ★ 用 px 不用比例单位：判据是**绝对像素**，而层宽随视口变（层宽三档），
          百分比会让「同一个设定」在不同窗口下位移不同。 */
-    animation: log-inf-breathe 96s ease-in-out infinite alternate;
+    animation: log-inf-breathe 24s ease-in-out infinite alternate;
     /* ★ 透明度**不是**照抄 ∞ 的 .2 —— 理由与说说页同一条：**等视觉分量**。
        .2 那个数字只对 ∞ 那张素材成立（近白的米色呢喃，覆盖画布 1.1%）；
        本图是实心墨绿（覆盖 24.2%，且明暗跨满 0–255）⇒ 同样 .2 会重得多。
@@ -405,10 +417,10 @@ const CHRONO = (() => {
        动画只改变墨迹的**位置**、不改变它的**多少**。 */
   @keyframes log-inf-breathe {
     from {
-      transform: var(--log-inf-center) translate3d(-4px, -2.5px, 0) scale(1.004);
+      transform: var(--log-inf-center) translate3d(-10px, -6px, 0) scale(0.965);
     }
     to {
-      transform: var(--log-inf-center) translate3d(4px, 2.5px, 0) scale(1.012);
+      transform: var(--log-inf-center) translate3d(10px, 6px, 0) scale(1.035);
     }
   }
 
@@ -473,7 +485,17 @@ const CHRONO = (() => {
        ★ reduced-motion 下动画整体撤掉 ⇒ scaleY 落回默认 1 ⇒ **齿一根不少、直接给完整高度**
          —— 这正是"只撤动效、不撤信息"。 */
     animation: chrono-tooth-grow 480ms var(--ease-interact) both;
-    animation-delay: var(--tooth-delay, 0ms);
+    /* ★★ `--tooth-lead`：**排在页面过渡之后**（站主 2026-10-04「把根齿依次长出放在过渡动画后」）。
+       为什么要提前量（实测，`_probe/_log-motion.mjs`）：页面过渡 `--pt-sweep: 900ms`，
+       而齿原本 0→736 ms 相位 + 480 ms 时长 = **1.216 s** ⇒ 与过渡**重叠 316 ms**：
+       页面还在暗着扫，齿就开始冒头，两台动效挤在同一段里，读起来像"卡了一下"。
+       提前量取 **1000 ms**（= 过渡 900 ms + 100 ms 余量），改这一个数就能整体挪。
+       ⚠ **不做 `html.pt-play` 条件化**：那个类在 1000 ms 就被摘掉，而末齿要到 1736 ms
+         才开始 —— 靠"改 animation-delay 不影响运行中动画"这条实现细节吃饭，太脆。
+         代价是**直接打开 `/log/` 时齿会晚 1 秒出现**；站内导航过来时正是想要的效果。
+       用 `calc()` 叠加而不是改内联 `--tooth-delay` 的算法 ⇒ 26 根齿的「依次」相位
+       仍由数据算出，这里只做**整体平移**，两者职责不混。 */
+    animation-delay: calc(var(--tooth-delay, 0ms) + var(--tooth-lead, 1000ms));
     /* ★ 缩放轴必须钉在**基线**上，否则齿会从自己的中点往两头长（上下一齐冒头）。
        这里不用 `transform-box: fill-box` —— 齿是 <line>，它的 object bbox **宽为 0**，
        把 origin 交给"零宽包围盒"的百分比行为不划算；改用 view-box 参照系 +
