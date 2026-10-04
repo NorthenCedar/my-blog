@@ -88,6 +88,12 @@
   ★ **判据别在 curl 回来的 HTML 里找 CSS**：样式是**外部文件**（`/_astro/*.css`），HTML 里本来
   就没有那句话 —— 本轮拿 `min(...vw...)` 在 HTML 里轮询 14 次全"没命中"，其实第一版早就上线了，
   只是**判据找错了地方**。要查样式就直接取那个 `/_astro/talks.*.css` 与本地产物 `diff`。
+  ★ **查到了 CSS 也别把"源码写法"当判据**：线上 CSS 过了 lightningcss，写法会变 ——
+  `background: transparent` 压成 **`background: 0 0`**（`0 0` 是位置，颜色默认 transparent）。
+  本轮拿 `background:transparent` 去 grep 线上 CSS，又白扫了 16 轮。⇒ 判据只认**语义**：
+  要么放宽成 `/background:(0 0|transparent)/`，要么换一条与压缩形态无关的（如"`.talk` 规则里
+  **不许**出现 `var(--panel)`"）。★ 同源坑：`.shots[..] img{...}` —— **产物里 `img` 上没有 cid**
+  （`<Image>` 渲染的 img 是组件内部生成的，拿不到 scoped 属性），正则别写成 `img[data-astro-cid-*]`。
   ★ 两档的分工：**默认档页首「尺不出现」是对的**（滚动才抽出，且虚拟时间里 900ms 秒到、几乎截不到
   抽出态）⇒ 要看尺就用 `--force-prefers-reduced-motion`（尺常驻）。
 
