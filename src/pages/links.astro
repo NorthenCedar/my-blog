@@ -1,12 +1,16 @@
 ---
 import { getEntry } from 'astro:content';
+import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
+import infInk from '../assets/links/inf-ink.png';
 
 /** 友链页（2026-09-26 站主按参考站要求新增）。
  *  内容全在 content/pages/links.md（主题不持有正文）；这里只负责把它画出来。
  *  体例取自参考站：先一句引子，再按「分组」摆卡片；本页多两件事 —— 我自己的入口、以及**申请步骤**
- *  （参考站有申请说明，但没写清流程；站上既然有留言板，就让申请走留言，闭环）。 */
+ *  （参考站有申请说明，但没写清流程；站上既然有留言板，就让申请走留言，闭环）。
+ *★ 2026-10-05 站主拍板：把本页的百褶 ∞ 底纹换成他手绘的墨笔 ∞（`../assets/links/inf-ink.png`），
+ *  同时给本页装第七台装置「星座CONSTELLATION」（`src/scripts/constellation.ts`）。 */
 interface Item {
   name: string;
   href: string;
@@ -30,7 +34,52 @@ const groups = d.groups ?? [];
 const isExternal = (h: string) => /^https?:/i.test(h);
 ---
 
-<Base title="友链" current="links" chrome="page">
+<Base title="友链" current="links" chrome="page" bodyClass="links-plate">
+  {/*==================================================================
+   * ① `.inf-ink-plate`：本站墨笔 ∞ 底纹，**替代**百褶 ∞（站主 2026-10-05 拍板）
+   *
+   * 素材：站主手绘的墨笔 ∞（原图 1920×1090，比例 1.7615），构建期由
+   * `src/assets/links/inf-ink.png` 出发。**它已经带 alpha 通道** —— 抠图那一步
+   * 把纸白反相成了不透明度，所以这里不需要、也不允许再做 CSS 底色叠加。
+   * ★ **为什么是墨绿而不是原墨黑**（与 about 页「装饰图保留原始色彩」相反，
+   *   是站主本轮明确拍板的例外，理由见 docs/rhinelab-spec.md §6.34）：
+   *   全站纸白区是一族绿（说说页墨点螺旋、归档卷尺、日志页 ∞ 都是绿），
+   *   一张纯黑的照片放进来会读成"贴了张别人的图"，不是"本站的一种纹理"。
+   *   ⇒ 抠图只留**不透明度**（墨笔的浓淡层次全在这一层），**RGB 统一染成
+   *     `--accent-ink`(#266b3b)**，由 token 决定颜色、素材本身不带死色。
+   *
+   * 挂法照抄 Topbar 的 `body.chrome-page .page-inf`（百褶 ∞ 那一层）：
+   *   fixed 挂视口居中 / `contain` / `z-index:-1` / 不拦指针。
+   * ★ **取宽刻意不照抄** ∞ 的 `min(128vw,1600px)`（那是**故意出血**）——
+   *   本图墨迹**铺满整个画布**（抠图时按 200px 半径收边，飞溅刚好触到四边），
+   *   出血会把最外圈的飞溅切掉半截，读起来像"图被裁坏了"。
+   *   ⇒ `min(92vw, 1400px, 190vh)`，三个上限各管一件事：
+   *      · 92vw —— 任何视口宽下都留 ≥4% 余量
+   *      · 1400px —— 超宽屏不让它无限长
+   *      · 190vh —— 兜住"又宽又扁"的窗（横屏平板），图高 ≤ 85%vh
+   * =================================================================*/}
+  <Fragment slot="plate">
+    <div class="inf-ink-plate" aria-hidden="true">
+      <Image
+        class="inf-ink-img"
+        src={infInk}
+        alt=""
+        widths={[700, 1400]}
+        sizes="92vw"
+        loading="eager"
+        decoding="sync"
+      />
+    </div>
+    {/* ② `.const-bg`：本页装置「星座」的画布，逻辑在 src/scripts/constellation.ts。
+        与底纹同层（z-index:-1）、DOM 在后 ⇒ 连线画在墨笔 ∞ 之上、正文之下。
+        ★ **不用 `hidden` 属性** —— 它会把元素钉成 `display:none`，
+          而 `.const-bg` 是 `position:fixed`，脚本 `fit()` 量的是 `clientWidth/clientHeight`
+          （`display:none` 下恒为 0）⇒ 装置永远量不到尺寸、画不出第一帧。
+          改用首页 DNA 那套**opacity 门控**（`opacity:0` → 脚本加 `.is-ready` → 1）：
+          元素始终占位、可量尺寸，只是没就绪时不可见。 */}
+    <canvas class="const-bg" data-const-bg aria-hidden="true"></canvas>
+  </Fragment>
+
   <header class="pagehead">
     <PageTitle>友链</PageTitle>
     {d.intro && <p class="lede">{d.intro}</p>}
@@ -82,6 +131,74 @@ const isExternal = (h: string) => /^https?:/i.test(h);
 </Base>
 
 <style>
+  /* ===================================================================
+   * 底纹层（PAGE PLATE）—— 墨笔 ∞ **替代**百褶 ∞（站主 2026-10-05 拍板）
+   *
+   * 挂法照抄 Topbar 的 `body.chrome-page .page-inf`（百褶 ∞ 那一层）：
+   *   fixed 挂视口居中 / `contain` / `z-index:-1` / 不拦指针
+   *   —— 全站纸白区只有一套纹理语言，本页换**母题**不换**角色**。
+   * ★ 三项**刻意不照抄**，理由写在 markup 的plate 槽注记里（素材差异逼出来的，
+   *   与说说页/关于页同一课：「唯一不能照抄的是素材本身」）：
+   *   ① 取宽不照抄 `min(128vw,1600px)`（那是**故意出血**，本图铺满画布 ⇒ 收到画内）
+   *   ② 透明度不照抄 `.2` —— 本图墨色重、覆盖 10.3%（实测alpha>0 占比），
+   *      .2 相当于比站内装饰底纹定稿档（8%）重 2.5 倍
+   *   ③ 不需要 background-color：素材自带 alpha，叠底色 = 双重压暗
+   * ★ `--plate-w` / `--plate-op` 留给"再调分量"用（可在 HTML 上内联覆盖，不改样式表）
+   * =================================================================== */
+  .inf-ink-plate {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    width: var(--plate-w, min(92vw, 1400px, 190vh));
+    aspect-ratio: 1920 / 1090;
+    transform: translate(-50%, -50%);
+    /* ★ 透明度 .09：站内装饰底纹定稿档是 8%（`--deco-plate-coarse` = #2d7d4614
+       = 20/255 ≈ 7.8%，文章页方格那轮站主亲选）。本图墨笔的浓淡层次比方格丰富，
+       略抬一档到 9% 让笔锋看得出来，但**不回到百褶 ∞ 的 .2** —— 那一档配的是
+       "近白米色呢喃"的素材，本图是不透明墨，.2 会把「纸白阅读底」压过去。 */
+    opacity: var(--plate-op, 0.09);
+    pointer-events: none;
+    z-index: -1;
+  }
+  /* ★ `max-width: none` 必需：base.css 给 `img` 定了 `max-width:100%`，
+     而这一层刻意比版心宽 —— 不解除限制它会缩到父盒宽度，底纹跟着版心走。 */
+  .inf-ink-plate img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    object-fit: contain;
+  }
+
+  /* 装置画布：与底纹同层（同 z-index:-1），DOM 在后 ⇒ 连线画在墨笔 ∞ **之上**、正文之下。
+     `inset:0` 满屏 ⇒ 一次对尺寸，滚动时不需要任何重算（fixed 不随文档走）。 */
+  .const-bg {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+    /* ★ 显隐门控照抄首页 DNA（`.dna-stack :global(canvas)` + `.is-ready`）：
+       元素始终占位（`fit()` 要量 clientWidth），没就绪时只是不可见。
+       **不用 `hidden` 属性** —— 那会让 clientWidth 恒为 0，装置量不到尺寸。 */
+    opacity: 0;
+    transition: opacity 640ms var(--ease-glass);
+  }
+  .const-bg.is-ready {
+    opacity: 1;
+  }
+
+  /* ★★ 必须关掉本页的百褶 ∞（`.page-inf`，Topbar 渲染、全站内页共用）。
+     不关就是两套母题叠在一起（Topbar 注释里已记过这个教训：「切片档案」四层
+     换 ∞ 底纹时就是因为叠着才整体删掉）。
+     ⚠ 用 `:global(...)`：`.page-inf` 是 Topbar 的元素、带的是**别的**作用域属性；
+       且那边写的是 `body.chrome-page .page-inf`（0,2,1）⇒ 权重必须对齐才压得住。
+     关法用 `display:none` 而非 `opacity:0`：后者仍占一层满屏合成层，很贵。 */
+  :global(body.links-plate .page-inf) {
+    display: none;
+  }
+
   .lede {
     margin: var(--sp-4) 0 0;
     max-width: var(--measure);
@@ -157,5 +274,19 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     .sec {
       margin-top: var(--sp-6);
     }
+    /* ★ 墨笔 ∞ 在窄屏上降档：9% 是按"桌面视口下 1400px 宽"定的，
+       390px 宽时笔锋在屏幕上占的比例大三倍，9% 会糊成一片灰绿、把卡片压住。
+       ⇒ 降到 6%（约等于站内装饰底纹定稿档 8% 再低一档，理由同 `.inf-ink-plate`）。
+       装置**不**关掉：指针在触屏上够不着，但那 5 颗亮星构成的静态星图本身是氛围
+       —— 与说说页浮游同口径（背景要的是"更轻"，不是"没有"）。 */
+    .inf-ink-plate {
+      opacity: var(--plate-op, 0.06);
+    }
   }
 </style>
+
+<script>
+  // 本页的装置「星座 CONSTELLATION」（2026-10-05）：靠近的点连出细线，停留越久连得越多。
+  // 与说说页同样放进这一个 <script> ⇒ Astro 并进同一产物，不新增标签。
+  import '../scripts/constellation';
+</script>
