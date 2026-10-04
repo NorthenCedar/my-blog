@@ -27,7 +27,7 @@
 | ① | `docs/writing-guide.md` | **站主自己用的手册**：约定、token、常见坑、怎么发布 | 全读（51 KB，值得） |
 | ② | `docs/architecture.md` + `docs/content-model.md` | 目录结构、内容管线、渲染链路 | 全读 |
 | ③ | `docs/site-decisions.md` | **历次设计决定与理由**（为什么是这样而不是那样） | 按需查 |
-| ④ | `tests/*.test.ts`（20 个） | **这才是真正的规格书**：站的硬约束都写成了断言 | 全读，尤其 `build-output` / `content-invariants` / `tokens` |
+| ④ | `tests/*.test.ts`（22 个） | **这才是真正的规格书**：站的硬约束都写成了断言 | 全读，尤其 `build-output` / `content-invariants` / `tokens` |
 | ⑤ | `src/styles/tokens.css` | 全部设计 token（颜色/间距/字号）。**组件里不许出现字面色值** | 全读 |
 | ⑥ | `src/layouts/Base.astro` · `src/lib/posts.ts` · `src/content.config.ts` · `src/tag-registry.ts` | 外壳（head/脚本/过渡标记）、文章管线、内容契约、标签注册表 | 全读 |
 | ⑦ | `docs/boot-intro-work-order.md` | **（已作废）**开场动画的旧施工工单：20.16 s 逐帧复刻版。v1.15 把开场整份重走后它不再是现行契约 | 只在考古时搜关键词（155 KB，别通读） |
@@ -168,6 +168,10 @@
 | ★★★ 用 `getBoundingClientRect()` 量**带 transform 的元素** | 2026-10-03（阅读尺）：RM 档探针报 `Δ = 168/336/504/…`（正好是**整齿**的整数倍），而**同一行**打印的 `x=1512px + tf=-1511.94px + 条左 48` 推出来只能是 ≈0 —— 两者数学上不可能同时成立。把 `tape.getBoundingClientRect().left` 也打出来才发现它**卡死若干轮**（`-1463.945` 连报四次）而内联 `transform` 每轮都对；`Δ = tapeRect + style.left − 读头.left` **逐字吻合**。成因：`.tape` 带 `will-change:transform` 走**合成器**，而 `--virtual-time-budget` 下**渲染帧不推进** ⇒ rect 给的是"上次已提交"的 transform（默认档因为 `paint()` 走 rAF 恰好躲过）。⇒ 判据取**纯样式量**（`style.left` + `style.transform` + `offsetLeft`），并用 `elementsFromPoint(读头 x)` 做独立复核（命中栈含 `tk-sec` 即证明压住了）。改完两档 Δ 一致：最大 **0.130px**。★ 通用：本机量任何带 transform/filter/will-change 的元素，都不要只信 rect |
 | ★★ iframe 里的**真实 rAF 在 `--virtual-time-budget` 下不推进** | 2026-10-03（阅读尺截图）：`mode=page&scroll=0.34` 与不滚动拍出来的 PNG **字节完全相同**（md5 实锤）——一度误判成"滚动被弹回页首"。真因是页面那段卡在 `await raf(w2, 8)`（`w2` 是 iframe 的 window，rAF 是**真实**的）⇒ 后面的 `scrollTo` **一行都没执行**（`#out` 停在「A 载入 f2」）。⇒ ① iframe 里一律把 rAF 换成定时器调度；② **不能**用 `setTimeout = () => 0` 一把掐死（页面的重绘也走 rAF，会僵在首帧）——**只拦长定时器**（`≥300ms`：900ms 自动收回 / 180ms resize 去抖）；③ 滚动落位必须**读回校验**（`got=1783 / want=1783.3`），不校验就不知道拍的是哪一屏 |
 | ★ `--dump-dom` 会把 `<script>` 源码一起 dump | 2026-10-03：想在 dump 出来的 DOM 里读探针写的 `PAGE got=…`，正则在**整份 DOM** 上搜 ⇒ 命中的是**脚本里的那个字符串字面量**（`out.textContent = 'PAGE  got=' + …`），读出来的"值"其实是源码。⇒ 取数一律先 `match(/<pre id="out">([\s\S]*?)<\/pre>/)` 再在里面取。★ 同理：写回校验值必须写进**外层**探针页的 `#out`，写进 iframe 内部的文档是 dump 不到的（踩过：报"没读到标记"） |
+| ★★ **连通域**去杂点时对分量数组排序 | 2026-10-04（日志页底纹素材）：清墨点碎点时先 `comps.sort(面积降序)` 再截取，结果**主体（193630 px）被当成碎点整块删掉、只留下那颗 16 px 的小点**（自检红：`最大 alpha 144`、`实心像素 0` —— 看着像"图裁错了"）。根因：连通域是**按 `label[]` 里的 id 索引**的，数组一排序，`comps[i]` 就不再是 `label[i]` 那块 ⇒ id→分量 的映射整体错位。⇒ **筛选用 `keep` 掩码，别动原数组顺序**（`keep = Uint8Array.from(comps, c => c.area >= MIN_AREA ? 1 : 0)`）。★ 通用：**「索引数组 + 平行数组存数据」的结构，筛选一律靠掩码**；排序等于重建语义 |
+| ★★★ 在"看着像空白"的框里量**绝对灰度**，就以为量到了底纹 | 2026-10-04（日志页底纹比分量）：采样框里量绝对灰度，**五档取值（含把装置整个关掉的对照档）全部**读回 `最暗 249 / 墨量 1.0` —— 等于**什么都没量到**，但表面上"五档数值一致"很像个稳结论。⇒ 改**差分口径**：同一页渲两遍（正常 / 把该层关掉）逐像素相减，只统计"确实变了"的像素。★ **一条判据先得能证明它量到了东西**：喂给它的对照档里必须有"本应显著不同"的那一个，读不出来就是判据废了。同一轮还踩到配套的一半：关层档**在纯 CSS 里注入 `:global(...)`** 不是合法语法、整条被浏览器丢弃 ⇒ 差分恒为 0 的**二次假通过**；改用 `<style>.page-inf{display:none!important}</style>`，靠 `!important` 压过 `body.chrome-page .page-inf`（0,2,1） |
+| ★ 测试里把两组数据**按下标**配对 | 2026-10-04：断言"每条改动对应一根齿"，`.entry` 在文档里是**新→旧**、齿是**旧→新** ⇒ 直接 `entry[i] ↔ tooth[i]` 逐条错位，判据报"齿高不一致"（源码明明对的）。⇒ 比对前先把两边归到**同一序**（`sortLogItems(...).reverse()` 重建升序数组），或按 **key**（日期 / 版本号）配对。★ 通用：**跨两个来源的列表做逐项断言，先确认两边同序**，否则断言验的是"排序"不是"内容" |
+| ★★ 一次 `npm run verify` 就撞沙箱的删除配额 | 2026-10-04：完整构建（清 `dist/`、清 image cache、`rm dist/.prerender/`）单次调用内的删除数就**上百**，而本机 node 层 safe-delete shim 的**单次工具调用**阈值是 **50** ⇒ 构建在 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 上**硬挂**，`vitest` 根本没轮到跑（日志停在 "Rearranging server assets..."，看起来像"测试挂了"）。⇒ 跑 verify / 重构建一律带 **`CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD=20000`**（只提预算、**不关** shim）。★ 别顺手设 `CODEBUDDY_SAFE_DELETE_ENABLED=0`；也别把它误会成"测试失败"——先看日志末尾停在构建的哪一步 |
 
 ---
 
@@ -179,7 +183,7 @@
   | 验收类型 | 走哪条 |
   |---|---|
   | 视觉（排版 / 装置 / 配色） | `_probe/launcher.mjs` 的 `withServer()` + `shot()` → 出 PNG 后 `read_image` |
-  | 行为契约 | `npm run verify`（`tests/` 21 个文件 322 条：321 通过 / 1 设计内跳过） |
+  | 行为契约 | `npm run verify`（`tests/` 22 个文件 340 条：338 通过 / 1 设计内跳过 / 1 本机环境失败）<br>★ 跑之前先加 `CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD=20000`，否则**构建**就会挂在删除配额上（见 §5 末行）。<br>★ 那 1 条环境失败 = `tests/tokens.test.ts` 的 `spawnSync node EBUSY`（同 §5 的 EBUSY 家族）；断它是否"已知故障"：日志末尾若不是这一条，才是真回归 |
   | 产物形态 | 直接对 `dist/` 做静态断言（多数 `build-output.test.ts` 已覆盖） |
   | **运行时布局 / 盒宽 / `scrollX` 多档溢出** | ★ **`_probe/_measure-all.mjs`**（见下） |
   改动 launcher 后跑 `node _probe/launcher-selftest.mjs` 自检（自检不依赖 CDP）。

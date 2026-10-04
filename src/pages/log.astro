@@ -1,8 +1,10 @@
 ---
 import { getEntry } from 'astro:content';
+import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
 import { sortLogItems, isoDate } from '../lib/log-order';
+import plate from '../assets/log/plates/main.webp';
 
 /** 日志页（2026-09-26 站主："你顺便把日志自己写了"）。
  *  体例取自参考站：日期 + 版本号 + 该版本改了什么（一条一行）。
@@ -13,17 +15,200 @@ const entry = await getEntry('pages', 'log');
 const d = (entry?.data ?? {}) as unknown as { intro?: string; items?: Parameters<typeof sortLogItems>[0] };
 const items = sortLogItems(d.items ?? []);
 const iso = isoDate;
+
+/** 跳转锚点：**同一天只在第一条上挂 id**。
+ *  09-30 那天有 9 条，逐条挂就会产出 9 个同名 id（非法 HTML，`getElementById` 只认第一个）。 */
+const seenDay = new Set<string>();
+const rows = items.map((it) => {
+  const day = iso(it.date);
+  const anchor = seenDay.has(day) ? undefined : `day-${day}`;
+  seenDay.add(day);
+  return { date: it.date, version: it.version, changes: it.changes, day, anchor };
+});
+
+/* ============================================================================
+ * 走时仪 CHRONO STRIP（站主 2026-10-04：「走时仪 —— 时间刻线随更新频率变化」）
+ *
+ * 「走时仪」不是新发明的名字 —— 它**本来就在最初的十台装置命名表里**
+ * （`src/scripts/rl-core.ts` 头部：归档卷尺 / 关于亲笔 / 阅读尺 / 浮游 / 走时仪 /
+ *   准星 / 墨滴 / 星座 / 裂痕），和上一轮的 FLOAT 是同一种状态：有名字、没规格、没实现。
+ * 本轮兑现它，也把那一行的名单划掉。
+ *
+ * ── 它和站上另外两把「尺」是**镜像**，不是第三把（这是它的身份证明）──────
+ *    索引卷尺（归档）· 阅读尺（文章）都是**跟随器**：齿长恒定，动的是「当前位置」。
+ *    走时仪是**读出器**：**齿长随数据变**，而它自己一动不动 —— 没有「当前进度」这个概念。
+ *    ⇒ 契约里那条硬断言（齿高取值数 ≥ 8 且 max/min ≥ 4）就是它的身份证：
+ *      哪天有人把它「优化」成等长齿，它立刻退化成卷尺，断言当场红。
+ *
+ * ── 三条通道，各自独立（数据实测，不是设计出来的）──────────────────
+ *    齿数 = 当日版本数（1→9，09-30 那天 9 根并排挤在一起）
+ *    齿高 = 该版改动项数（1→12）
+ *    齿位 = 真实日期（9 格，其中 09-29 那格是空的 ⇒ 画一根虚线短柱）
+ *
+ * ── ★ 被数据否掉的那条路（已排除，不留开关）───────────────────────
+ *    「刻线间距 = 版本之间的真实间隔」听起来最自然，但本站数据撑不住：
+ *    26 条里 **72% 的相邻版本是同一天发的** ⇒ 间隔 0 ⇒ 那些刻线会叠成一个点，
+ *    而不是「密」；非零间隔只有 0/1/2 三档 ⇒ 密度只有三档，拉不开。
+ *    （与阅读尺那轮同一条纪律：对照过的映射连同开关一起删，留着两套只会各自腐化。）
+ *
+ * ── 零 JS ────────────────────────────────────────────────────────
+ *    整台是**构建期算好的一支 SVG** + 几十行 CSS。没有 rAF、没有脚本、没有 canvas。
+ *    ⇒ 降级链是**空集**：reduced-motion 只需把 hover 过渡压到 0ms（信息量不变）、
+ *      无 JS 时每个日格仍是 `<a href="#day-…">`（退化成一张可点的日期目录）。
+ *      这是全站第一台「没有可降级之物」的装置 —— 它不是"实现得更稳"，是**没有可坏的部件**。
+ * ========================================================================== */
+const CHRONO = (() => {
+  if (!items.length) return null;
+
+  const DAY_MS = 86_400_000;
+  /* 几何全部给**自然像素**，viewBox 与之一致 ⇒ 视口缩放时整台等比缩，
+     不会出现「只有齿变粗、间距没跟着变」的错位。 */
+  const CELL = 46;      // 日格宽（n=9 时齿组 33.8px，仍留 12px 余量）
+  const PITCH = 4;      // 同日相邻两齿的中心距
+  const TOOTH_W = 1.8;  // 齿宽（= CSS 里的 stroke-width，两处必须同值）
+  const MIN_H = 14;     // 最矮的齿（1 项）
+  const MAX_H = 104;    // 最高的齿（= 全集里最高的项数）
+  const READOUT = 22;   // 齿顶以上的读数带（hover 时才显字）
+  const LABEL = 20;     // 基线以下的日期带
+  const BASE_Y = READOUT + MAX_H;
+
+  const asc = [...rows].reverse(); // 时间正序：左 = 最早（文档里是倒序）
+  const t0 = Date.parse(`${asc[0].day}T00:00:00Z`);
+  const t1 = Date.parse(`${asc[asc.length - 1].day}T00:00:00Z`);
+
+  const days: { date: string; label: string; count: number; total: number; teeth: number[]; anchor: string }[] = [];
+  for (let t = t0; t <= t1; t += DAY_MS) {
+    const date = new Date(t).toISOString().slice(0, 10);
+    const inDay = asc.filter((r) => r.day === date);
+    days.push({
+      date,
+      label: String(Number(date.slice(8, 10))),
+      count: inDay.length,
+      total: inDay.reduce((a, b) => a + (b.changes?.length ?? 0), 0),
+      teeth: inDay.map((r) => r.changes?.length ?? 0),
+      anchor: `day-${date}`,
+    });
+  }
+
+  /* 齿高上限**从数据推**，不写死 12 —— 照抄卷尺那条口径
+     「刻度从内容推导」：明年某项数破纪录时，尺自己长高，不用改代码。 */
+  const maxChanges = Math.max(1, ...days.flatMap((x) => x.teeth));
+  const hOf = (n: number) => MIN_H + (MAX_H - MIN_H) * (n / maxChanges);
+
+  return {
+    days, CELL, PITCH, TOOTH_W, MIN_H, BASE_Y, READOUT, LABEL, maxChanges, hOf,
+    W: days.length * CELL,
+    H: BASE_Y + LABEL,
+    from: asc[0].day,
+    to: asc[asc.length - 1].day,
+    versions: items.length,
+    // 契约用的可见量（探针与测试读它，避免"看着像"）
+    distinctHeights: new Set(days.flatMap((x) => x.teeth.map(hOf))).size,
+    tallest: Math.max(...days.flatMap((x) => x.teeth.map(hOf)), 0),
+    shortest: Math.min(...days.flatMap((x) => x.teeth.map(hOf)), Number.POSITIVE_INFINITY),
+    emptyDays: days.filter((x) => x.count === 0).length,
+  };
+})();
 ---
 
-<Base title="日志" current="log" chrome="page">
+<Base title="日志" current="log" chrome="page" bodyClass="log-plate">
+  {/* ==========================================================================
+   * 视口层（plate 槽）—— 两层：**静态底纹** + **读数装置**
+   *
+   * ① `.log-inf`：站主 2026-10-04 给的蓝色 ∞ 带，转**墨绿**后替代本页的百褶 ∞。
+   *    挂法照抄百褶 ∞（`body.chrome-page .page-inf`）：fixed 挂视口居中 / `contain` /
+   *    `z-index:-1` / 不拦指针 —— 全站纸白区只有**一套纹理语言**，本页换的是母题
+   *    （米色百褶 → 墨绿 ∞），不是角色。
+   * ② `.chrono`：走时仪。它是**读数器兼日期目录**，所以 fixed 常驻、不随文档走。
+   * 两者都必须在 `.shell` **之外**：页面过渡会给 `.shell` 加 transform，
+   * 被 transform 的祖先会成为 `position:fixed` 的包含块 ⇒ 装饰层会从下往上跳
+   * （关于页实测 91px）。plate 槽就是为此存在的，见 Base.astro 的注记。
+   * ======================================================================== */}
+  <Fragment slot="plate">
+    <div class="log-inf" aria-hidden="true">
+      <Image
+        src={plate}
+        alt=""
+        widths={[610, 1222]}
+        sizes="62vw"
+        loading="eager"
+        decoding="sync"
+      />
+    </div>
+
+    {CHRONO && (
+      <nav class="chrono" aria-label="日志时间刻线尺">
+        <p class="chrono-legend">
+          <span>刻线高度 = 该版改动项数</span>
+          <span>刻线根数 = 当日版本数</span>
+        </p>
+        <svg
+          class="chrono-svg"
+          viewBox={`0 0 ${CHRONO.W} ${CHRONO.H}`}
+          role="img"
+          aria-label={`日志时间刻线尺：${CHRONO.from} 至 ${CHRONO.to}，共 ${CHRONO.versions} 个版本`}
+        >
+          <line class="chrono-base" x1="0" y1={CHRONO.BASE_Y} x2={CHRONO.W} y2={CHRONO.BASE_Y} />
+          {CHRONO.days.map((day, di) => {
+            const left = di * CHRONO.CELL;
+            const cx = left + CHRONO.CELL / 2;
+            const n = day.teeth.length;
+            const groupW = n ? (n - 1) * CHRONO.PITCH + CHRONO.TOOTH_W : 0;
+            const x0 = cx - groupW / 2 + CHRONO.TOOTH_W / 2;
+            return (
+              /* ★ 空格（09-29）**不挂 href**：那天没有任何条目 ⇒ 跳过去是一个死锚。
+                 不写 href 的 `<a>` 在 HTML 里不是链接（不可点、不进 Tab 序），
+                 刚好是这里要的语义 —— 它仍然可以被 hover 读出「0 版 · 0 项」。 */
+              <a class="chrono-day" href={day.count ? `#${day.anchor}` : undefined}>
+                <title>{`${day.date} · ${day.count} 版 · ${day.total} 项`}</title>
+                <rect class="chrono-hit" x={left} y="0" width={CHRONO.CELL} height={CHRONO.BASE_Y} />
+                {n === 0 ? (
+                  /* 空格留一根**虚线短柱** ——
+                     "有这一格、但那天没动手"本身是信息，不能让它直接消失。 */
+                  <line
+                    class="chrono-empty"
+                    x1={cx}
+                    y1={CHRONO.BASE_Y}
+                    x2={cx}
+                    y2={CHRONO.BASE_Y - CHRONO.MIN_H}
+                  />
+                ) : (
+                  day.teeth.map((c, ti) => (
+                    <line
+                      class="chrono-tooth"
+                      x1={x0 + ti * CHRONO.PITCH}
+                      y1={CHRONO.BASE_Y}
+                      x2={x0 + ti * CHRONO.PITCH}
+                      y2={CHRONO.BASE_Y - CHRONO.hOf(c)}
+                    />
+                  ))
+                )}
+                <text class="chrono-readout" x={cx} y={CHRONO.READOUT - 10}>
+                  {`${day.count} 版 · ${day.total} 项`}
+                </text>
+                <text class="chrono-lbl" x={cx} y={CHRONO.BASE_Y + 14}>
+                  {day.label}
+                </text>
+              </a>
+            );
+          })}
+        </svg>
+        <p class="chrono-range">
+          <span>{CHRONO.from}</span>
+          <span>{CHRONO.to}</span>
+        </p>
+      </nav>
+    )}
+  </Fragment>
+
   <header class="pagehead">
     <PageTitle>日志</PageTitle>
     {d.intro && <p class="lede">{d.intro}</p>}
   </header>
 
   <ol class="log">
-    {items.map((it) => (
-      <li class="entry">
+    {rows.map((it) => (
+      <li class="entry" id={it.anchor}>
         <p class="head">
           <time datetime={iso(it.date)}>{iso(it.date)}</time>
           {it.version && <span class="ver">{it.version}</span>}
@@ -56,9 +241,30 @@ const iso = isoDate;
   .entry {
     padding: var(--sp-4) 0;
     border-top: 1px solid var(--hair);
+    /* 从走时仪跳过来时，条目不要贴死在视口顶边（顶栏是普通流、会滚走，
+       所以这里给的只是"呼吸"，不是"避让"）。 */
+    scroll-margin-top: var(--sp-5);
   }
   .entry:last-child {
     border-bottom: 1px solid var(--hair);
+  }
+  /* 锚点命中时的落点提示：一条短暂的左边线，告诉眼睛"跳到的是这一条" */
+  .entry:target {
+    box-shadow: inset 2px 0 0 var(--accent);
+    animation: log-hit 900ms var(--ease-interact) both;
+  }
+  @keyframes log-hit {
+    from {
+      background: var(--accent-wash);
+    }
+    to {
+      background: transparent;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .entry:target {
+      animation: none;
+    }
   }
   .head {
     display: flex;
@@ -94,5 +300,182 @@ const iso = isoDate;
   .empty {
     margin: var(--sp-8) 0 0;
     color: var(--muted);
+  }
+
+  /* ===================================================================
+   * 底纹层（PAGE PLATE）—— 墨绿 ∞ **替代**百褶 ∞（站主 2026-10-04）
+   *
+   * 站主原话：「把这个无限符号替代日志背景的百褶无限符号，
+   *   注意把颜色改为墨绿色」。
+   *
+   * ★ 素材侧：`_probe/_log-plate.mjs` 做的只有一件事 —— **亮度→墨绿色阶**。
+   *   没有用 HSL 色相旋转，原因是旋转对**纯黑**像素无效（黑在 HSL 里 S=0，
+   *   转完还是黑），而这张图 38% 的不透明像素落在亮度 0–25 档 ⇒ 会留下一大片
+   *   "没转到的黑"。按亮度查色阶则保证每个像素都落在墨绿族里、明暗结构原样保留。
+   *   色阶锚点取自站上 token：`--accent` #2d7d46 / `--accent-bright` #4caf50。
+   *   ★ 站主这条指令与关于页那句「你不要变他们的颜色」**不矛盾**：
+   *     那条是对**引用素材**（别人的作品）说的，这条是站主对自己给的母题下的指令。
+   * =================================================================== */
+  /* ★★ 必须先关掉本页的百褶 ∞（`.page-inf`，Topbar 渲染、全站内页共用）。
+     不关就是两套母题叠在一起。⚠ 用 `:global(...)`：`.page-inf` 是 Topbar 的元素、
+     带的是**别的**作用域属性；那边写的是 `body.chrome-page .page-inf`（0,2,1）
+     ⇒ 权重必须对齐才压得住。关法用 `display:none` 而不是 `opacity:0`：
+     后者仍占一层满屏合成层，很贵。 */
+  :global(body.log-plate .page-inf) {
+    display: none;
+  }
+
+  .log-inf {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    /* ★★ 取宽**不照抄**百褶 ∞ 的 `min(128vw, 1600px)` —— 那条在两张素材上不是一件事。
+       ① ∞ 的墨迹只占它取景框的 **45.8%**（两边本来就空），出血是它的读法、切掉的只是空白；
+          本图墨迹横跨 x **11.1%–93.0%**（几乎顶满画布）⇒ 同一句 128vw 会**切掉内容**：
+          实测 1366 视口下右缘出头 4px、1280 下出头 47px。
+       ② 就算不切，"等取景框宽"也不等于"等分量"：本图墨迹是 ∞ 的 3.6 倍重（实测差分）。
+       ⇒ 按**墨迹同宽**反推：∞ 的墨迹在 1440 视口下是 733px，除以本图墨迹占比 0.819
+         ⇒ 层宽 895px ⇒ `min(62vw, 895px, 170vh)`。三个上限各管一件事：
+           · 62vw   —— 1440 实测取 879，墨迹与百褶 ∞ **同宽**
+           · 895px  —— 超宽屏不让它无限长
+           · 170vh  —— 兜住"又宽又扁"的窗（图高 = 宽 × 0.5254；没有它，1200×400 会从上下出头）
+       ★ 判据（`_probe/_log-verify.mjs` + `_probe/_log-mass.mjs`，**差分口径**：
+         同一页渲染两遍、一遍 display:none，逐像素相减 —— 只有差值才是底纹自己贡献的墨）：
+           百褶 ∞（/links/ 参照）  mean 0.76  峰值 20.7  覆盖 8.86%
+           本档                    mean 1.15  峰值 19.7  覆盖 7.08%   ← 峰值同档、覆盖几乎相同
+           若照抄 96vw             mean 2.77  覆盖 16.98%          ← 总墨量 3.6 倍，明显偏重
+       （说说页同一条教训：**出血档不能跨素材继承**；这里多补一句 ——
+         **"照抄取景框"也不等于"照抄分量"，得按墨迹算。**） */
+    width: var(--plate-w, min(62vw, 895px, 170vh));
+    aspect-ratio: 1222 / 642;
+    transform: translate(-50%, -50%);
+    /* ★ 透明度**不是**照抄 ∞ 的 .2 —— 理由与说说页同一条：**等视觉分量**。
+       .2 那个数字只对 ∞ 那张素材成立（近白的米色呢喃，覆盖画布 1.1%）；
+       本图是实心墨绿（覆盖 24.2%，且明暗跨满 0–255）⇒ 同样 .2 会重得多。
+       ⇒ 取站上**自己**的装饰底纹定稿档 8%（文章页方格那轮站主亲选，
+         `--deco-plate-coarse` = #2d7d4614 ≈ 7.8%）。实测最深墨点与 ∞ 同档，见探针。
+       `--plate-op` / `--plate-w` 两个旋钮留在层上：想再淡/再小，改一行内联即可。 */
+    opacity: var(--plate-op, 0.08);
+    pointer-events: none;
+    z-index: -1;
+  }
+  .log-inf img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* base.css 给 `img` 定了 `max-width:100%`；这里不解除的话 contain 永远铺不满层 */
+    max-width: none;
+    object-fit: contain;
+  }
+
+  /* ===================================================================
+   * 走时仪（CHRONO STRIP）—— 读数器，不是跟随器
+   *
+   * 落位：`fixed` 常驻右侧（它是"读数器兼日期目录"，滚到哪儿都该看得见），
+   *   贴的是**版心的右缘**而不是视口右缘 —— 宽屏下版心有 82rem 上限，
+   *   贴视口边会飘到很远的地方、读不出"这是这一页的仪器"。
+   *   `right` 取 max(gutter, 50% − wrap/2 + gutter)：窄于版心时退回 gutter。
+   * 只在 ≥1024px 渲染 —— 该断点以下右半屏已经没有空位，硬塞会压正文。
+   * =================================================================== */
+  .chrono {
+    position: fixed;
+    top: 50%;
+    right: max(var(--gutter), calc(50% - var(--wrap) / 2 + var(--gutter)));
+    width: min(34vw, 520px);
+    transform: translateY(-50%);
+    z-index: 1;
+    /* 整台不拦指针，只有日格接 —— 否则它会在右侧抢走一大片选择/滚动区域 */
+    pointer-events: none;
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  .chrono-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.9em;
+    margin: 0 0 var(--sp-3);
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+  .chrono-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    /* 首/末格的 hover 读数会越出 viewBox 一点点（字比格宽）—— 放它出来画 */
+    overflow: visible;
+  }
+  .chrono-base {
+    stroke: var(--hair);
+    stroke-width: 1;
+  }
+  .chrono-day {
+    pointer-events: auto;
+  }
+  .chrono-hit {
+    fill: transparent;
+    pointer-events: all;
+  }
+  .chrono-tooth {
+    stroke: var(--accent);
+    stroke-width: 1.8;
+    transition: stroke var(--dur-hover) var(--ease-interact);
+  }
+  .chrono-empty {
+    stroke: var(--hair);
+    stroke-width: 1.8;
+    stroke-dasharray: 2 3;
+  }
+  .chrono-lbl {
+    fill: var(--muted);
+    font-size: 11px;
+    text-anchor: middle;
+    font-variant-numeric: tabular-nums;
+  }
+  .chrono-readout {
+    fill: var(--accent-ink);
+    font-size: 11px;
+    text-anchor: middle;
+    white-space: pre;
+    opacity: 0;
+    transition: opacity var(--dur-hover) var(--ease-interact);
+  }
+  /* 一格一读数（不逐齿读数：齿细到 1.8px，逐齿 hover 会抖） */
+  .chrono-day:hover .chrono-tooth,
+  .chrono-day:focus-visible .chrono-tooth {
+    stroke: var(--accent-ink);
+  }
+  .chrono-day:hover .chrono-lbl,
+  .chrono-day:focus-visible .chrono-lbl {
+    fill: var(--ink);
+  }
+  .chrono-day:hover .chrono-readout,
+  .chrono-day:focus-visible .chrono-readout {
+    opacity: 1;
+  }
+  .chrono-range {
+    display: flex;
+    justify-content: space-between;
+    margin: var(--sp-2) 0 0;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+  /* reduced-motion：**只撤动效、不撤信息**。hover 的反馈是可用性的一部分
+     （它承载读数），所以留颜色、去过渡 —— 与 hover.css 末尾同一条纪律。 */
+  @media (prefers-reduced-motion: reduce) {
+    .chrono-tooth,
+    .chrono-readout {
+      transition: none;
+    }
+  }
+  /* ★ 窄屏不渲染。诚实说明与阅读尺的差别：阅读尺是 JS 创建的 ⇒ ≤767 时 DOM 里
+     真的没有；本台是构建期 SSR 的 SVG ⇒ DOM 里在、靠 display:none 拿掉。
+     两者"看不见"的结论一致，但断言该断在不同处（见 tests/log-chrono.test.ts）。 */
+  @media (max-width: 1023px) {
+    .chrono {
+      display: none;
+    }
   }
 </style>
