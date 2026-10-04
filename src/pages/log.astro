@@ -142,8 +142,12 @@ const CHRONO = (() => {
           <span>刻线高度 = 该版改动项数</span>
           <span>刻线根数 = 当日版本数</span>
         </p>
+        {/* 「生长」的缩放轴钉在基线上 ⇒ 把 CHRONO.BASE_Y 传给 CSS。
+            不在这里写死、也不在 CSS 里写死：MAX_H 哪天从数据推出来变高，
+            两边只要有一处忘了跟就会错位 —— 现在只有一处事实来源。 */}
         <svg
           class="chrono-svg"
+          style={`--chrono-base:${CHRONO.BASE_Y}px`}
           viewBox={`0 0 ${CHRONO.W} ${CHRONO.H}`}
           role="img"
           aria-label={`日志时间刻线尺：${CHRONO.from} 至 ${CHRONO.to}，共 ${CHRONO.versions} 个版本`}
@@ -173,9 +177,18 @@ const CHRONO = (() => {
                     y2={CHRONO.BASE_Y - CHRONO.MIN_H}
                   />
                 ) : (
+                  /* ⑤「生长」（GROW）的入场相位：**按日格错开**，不是逐齿均分。
+                     ⇒ 同一格的几根齿是一簇、格与格之间推进 ⇒ 读起来是「一天一天地长出来」，
+                       而不是「一根一根地长」（后者会把"一天 = 一格"的结构打散）。
+                     方向也刚好对：di 是时间正序（左 = 最早）⇒ 从最早那天往右长。
+                     ★ 两个系数的**相对大小是硬约束**：格内错开必须 < 格间距，
+                       否则相邻格会交错（09-30 那格有 9 根齿，跨度 8×ti），
+                       一眼看过去就不是"从左往右"而是"逐格来回跳"。
+                       这里是 8ms × 8 = 64ms < 90ms ⇒ 严格单增。断言守着这一条。 */
                   day.teeth.map((c, ti) => (
                     <line
                       class="chrono-tooth"
+                      style={`--tooth-delay:${di * 90 + ti * 8}ms`}
                       x1={x0 + ti * CHRONO.PITCH}
                       y1={CHRONO.BASE_Y}
                       x2={x0 + ti * CHRONO.PITCH}
@@ -348,7 +361,26 @@ const CHRONO = (() => {
          **"照抄取景框"也不等于"照抄分量"，得按墨迹算。**） */
     width: var(--plate-w, min(62vw, 895px, 170vh));
     aspect-ratio: 1222 / 642;
-    transform: translate(-50%, -50%);
+    /* ★★ 居中用的变换**必须拎成变量** —— 呼吸的 keyframes 也要写 `transform`，
+       而 @keyframes 里的 transform 会**整体覆盖**基础声明：直接写死的话，
+       底纹会在动画第一帧就丢掉居中、跳到右下角去。
+       拎出来之后「居中」只有一处事实来源，将来换居中方式 keyframes 会自动跟上。 */
+    --log-inf-center: translate(-50%, -50%);
+    transform: var(--log-inf-center);
+    /* ①「呼吸」（BREATHE，站主 2026-10-04 拍板）——
+       声明式整幅相位：96 s 单程、`alternate` 往返，只动 transform ⇒ 走合成器，
+       不触发布局/重绘，主线程成本 0。
+       ★ 与说说页 FLOAT 的**机制分野**（口径 #5「每页一台机制不同」）：
+         FLOAT 是 canvas **每帧解析函数** + **事件式**（雨线、涟漪是个体事件，各有出生/消散）；
+         本台是 CSS **声明式**动画 + **整幅相位** —— 无个体、无事件、无出生时刻，
+         只有一层纸在极慢地换气。两者同在「只吃时间」这一格，但**介质与驱动不同**
+         （合成器插值 vs JS 每帧求值）⇒ 不是同一台装置换了皮。
+       ★ 幅度按站主拍板的 **≤15 px** 配额分配（判据见 `_probe/_log-motion.mjs`）：
+         translate 极差 (8, 5) px ⇒ 9.43 px；scale 1.004→1.012 在 879 px 宽的层上
+         让最远的角再挪 3.97 px ⇒ 合成最大约 **13.4 px**，留 1.6 px 余量。
+       ★ 用 px 不用比例单位：判据是**绝对像素**，而层宽随视口变（层宽三档），
+         百分比会让「同一个设定」在不同窗口下位移不同。 */
+    animation: log-inf-breathe 96s ease-in-out infinite alternate;
     /* ★ 透明度**不是**照抄 ∞ 的 .2 —— 理由与说说页同一条：**等视觉分量**。
        .2 那个数字只对 ∞ 那张素材成立（近白的米色呢喃，覆盖画布 1.1%）；
        本图是实心墨绿（覆盖 24.2%，且明暗跨满 0–255）⇒ 同样 .2 会重得多。
@@ -366,6 +398,18 @@ const CHRONO = (() => {
     /* base.css 给 `img` 定了 `max-width:100%`；这里不解除的话 contain 永远铺不满层 */
     max-width: none;
     object-fit: contain;
+  }
+  /* ①「呼吸」的关键帧。★ 每个 from/to 都要**带上居中** ——
+     这是"拎成变量"的落点，也是唯一能让动画与居中同时成立的地方。
+     ★ 只动 transform：不碰 opacity ⇒ 墨量判据（§6.30 那张差分表）不受影响，
+       动画只改变墨迹的**位置**、不改变它的**多少**。 */
+  @keyframes log-inf-breathe {
+    from {
+      transform: var(--log-inf-center) translate3d(-4px, -2.5px, 0) scale(1.004);
+    }
+    to {
+      transform: var(--log-inf-center) translate3d(4px, 2.5px, 0) scale(1.012);
+    }
   }
 
   /* ===================================================================
@@ -420,6 +464,30 @@ const CHRONO = (() => {
     stroke: var(--accent);
     stroke-width: 1.8;
     transition: stroke var(--dur-hover) var(--ease-interact);
+    /* ⑤「生长」（GROW，站主 2026-10-04 拍板）—— 一次性入场编排。
+       ★ 这是全站**唯一一台播一次**的动效：另外六台都是持续动态（常驻 / 永续 / 跟随），
+         所以机制上不与任何一台重合。
+       ★ `both` 让 delay 期间停在 from（= 还没长出来），到点后长到 to 并保持。
+       ★ **它不违反「走时仪自己一动不动」**：那条约束管的是"受输入驱动的持续运动"
+         （有累计进度那种）。这是一次性入场，播完永久静止，装置依然没有"当前位置"这个概念。
+       ★ reduced-motion 下动画整体撤掉 ⇒ scaleY 落回默认 1 ⇒ **齿一根不少、直接给完整高度**
+         —— 这正是"只撤动效、不撤信息"。 */
+    animation: chrono-tooth-grow 480ms var(--ease-interact) both;
+    animation-delay: var(--tooth-delay, 0ms);
+    /* ★ 缩放轴必须钉在**基线**上，否则齿会从自己的中点往两头长（上下一齐冒头）。
+       这里不用 `transform-box: fill-box` —— 齿是 <line>，它的 object bbox **宽为 0**，
+       把 origin 交给"零宽包围盒"的百分比行为不划算；改用 view-box 参照系 +
+       绝对用户坐标，值由 CHRONO.BASE_Y 内联在 <svg> 上，这里不写死数字。 */
+    transform-box: view-box;
+    transform-origin: 0 var(--chrono-base, 126px);
+  }
+  @keyframes chrono-tooth-grow {
+    from {
+      transform: scaleY(0);
+    }
+    to {
+      transform: scaleY(1);
+    }
   }
   .chrono-empty {
     stroke: var(--hair);
@@ -468,6 +536,16 @@ const CHRONO = (() => {
     .chrono-tooth,
     .chrono-readout {
       transition: none;
+    }
+    /* ★★ 本轮的两次动效在 reduce 下一律**不播**（不是"播慢一点"）。
+       ⚠ 这两条**必须排在 `animation` 声明之后**（见上面 `.log-inf` / `.chrono-tooth`）——
+         同权重下后写胜。若图省事挪到样式段开头那个 reduce 块里（`.entry:target` 那处），
+         会被后面的 `animation: …` 覆盖 ⇒ 动画照播，而**断言照样全绿**（假通过）。
+       · 底纹呼吸 —— 不播 ⇒ 停在 `transform: var(--log-inf-center)`，与加动画之前逐像素相同
+       · 齿生长   —— 不播 ⇒ `both` 的 from 态一并撤掉、scaleY 落回 1 ⇒ **齿一根不少** */
+    .log-inf,
+    .chrono-tooth {
+      animation: none;
     }
   }
   /* ★ 窄屏不渲染。诚实说明与阅读尺的差别：阅读尺是 JS 创建的 ⇒ ≤767 时 DOM 里

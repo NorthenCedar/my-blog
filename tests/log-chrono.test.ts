@@ -21,6 +21,12 @@ import { sortLogItems } from '../src/lib/log-order';
  *      被 transform 的祖先会成为 `position: fixed` 的包含块（关于页实测跳 91px）。
  *   ⑤ 底纹取宽守**性质**不守数字：所有 vw 值必须 < 100（出血档在两张素材上不是一件事）。
  *   ⑥ 零新增运行时依赖（红线）。
+ *   ⑦ **动效也零 JS**（2026-10-04 追加）—— 「呼吸」（底纹极慢漂移）与「生长」（齿依次
+ *      长出、**只播一次**）都由 CSS 表达，本页依然**一个 `<script>` 都没有**。
+ *      ★ 零 JS 这条身份没有被推翻：它说的是"本台没有脚本"，不是"这页不许有视觉变化"。
+ *        ① 呼吸走合成器（只动 transform），② 生长是一次性入场 —— 两者都不需要 JS。
+ *        若哪天有人要往这页塞 JS（如读现实时钟的 NOW 刻线），那是**契约变更**，
+ *        得连同这条一起改，而不是"顺手加个 script"。
  */
 const ROOT = process.cwd();
 const DIST = join(ROOT, 'dist');
@@ -204,10 +210,11 @@ describe.skipIf(!hasDist)('日志页 · 装饰层挂在 `.shell` 之外', () => 
     expect(CODE, '没关 page-inf ⇒ 两套母题会叠着').toMatch(/:global\(body\.log-plate \.page-inf\)/);
     expect(CODE).toMatch(/:global\(body\.log-plate \.page-inf\)\s*\{[\s\S]*?display:\s*none/);
     expect(PAGE).toContain('log-plate');
-    /* ★ 产物里查那**压缩后**的写法 —— 但别假定它在 `_astro/*.css` 里：
-       Astro 会按体积决定**内联**还是外链，本页是小页 ⇒ 规则直接躺在 HTML 的 `<style>` 里
-       （本轮实测：`dist/_astro/` 下根本没有 log 的 css，只有 talks/about/index/Base）。
-       ⇒ 在两个地方都找，找不到才红。 */
+    /* ★ 产物里查那**压缩后**的写法 —— 别假定它在哪儿：Astro 按体积决定**内联**还是外链，
+       而且**会随体积翻转**。2026-10-04 实测：加了两个 @keyframes、CSS 涨到 4.6 KB 之后，
+       本页就从"内联在 HTML 的 `<style>` 里"变成了外链 `_astro/log.*.css`
+       （前一轮的注释写着"本页是小页、规则直接躺在 HTML 里"，当场过期）。
+       ⇒ 两个地方都找，找不到才红；**别把某一轮观察到的产物形态写进判据**。 */
     const found = /body\.log-plate \.page-inf\{display:none/.test(PAGE) ||
       /body\.log-plate \.page-inf\{display:none/.test(DIST_CSS);
     expect(found, '产物里没有关掉 page-inf 的规则（HTML 内联与 _astro/*.css 都查过了）').toBe(true);
@@ -227,6 +234,127 @@ describe.skipIf(!hasDist)('日志页 · 装饰层挂在 `.shell` 之外', () => 
   it('底纹透明度守站上自己的装饰档，且两个旋钮留着', () => {
     expect(CODE).toMatch(/--plate-op,\s*0?\.08\)/);
     expect(CODE, '取宽要留旋钮').toMatch(/--plate-w,/);
+  });
+});
+
+/* ★ 花括号配对取块 —— **不能用"往后切 N 个字符"**：切多了会吃进下一个规则
+   （本轮实测：取 keyframes 时切到 600 字符，吃到了 `.chrono` 的 `translateY(-50%)`，
+   断言于是报"关键帧没带居中"，而源码明明是对的）。
+   与站上那条「配对区间不能用 `indexOf('</div>')`」是同一个家族 —— 必须做嵌套计数。 */
+function braceBlock(src: string, atBrace: number): string {
+  let d = 0;
+  for (let i = atBrace; i < src.length; i++) {
+    if (src[i] === '{') d++;
+    else if (src[i] === '}') { d--; if (d === 0) return src.slice(atBrace, i + 1); }
+  }
+  return '';
+}
+/** 取 `@keyframes <name> { … }` 的整块（含嵌套） */
+function keyframesBlock(name: string): string {
+  const i = CODE.indexOf(`@keyframes ${name}`);
+  if (i < 0) return '';
+  return braceBlock(CODE, CODE.indexOf('{', i));
+}
+/** 取所有 `@media (prefers-reduced-motion: reduce) { … }` 的块 */
+function reduceBlocks(): { at: number; blk: string }[] {
+  return [...CODE.matchAll(/@media\s*\(prefers-reduced-motion:\s*reduce\)/g)].map((m) => {
+    const b = CODE.indexOf('{', m.index!);
+    return { at: m.index!, blk: braceBlock(CODE, b) };
+  });
+}
+
+describe.skipIf(!hasDist)('日志页 · 动效（站主 2026-10-04：「加一点动态背景」，拍板 ①呼吸+⑤生长 / ≤15px / 只管本页）', () => {
+  /* ★ 这一组守的是**三条容易回归的性质**，不是"上一版调好的参数值"：
+     ① **仍然零 JS** —— 两次动效全部由 CSS 表达（上面那条断言一字未改）。
+     ② **居中不能丢** —— @keyframes 里的 transform 会**整体覆盖**基础声明，
+        所以每个关键帧都必须复用 `--log-inf-center`。丢掉的话，底纹会在动画第一帧
+        就跑到屏幕右下角去（而 `position:fixed` 定位的那几行看起来完全正常）。
+     ③ **reduce 降级必须排在 animation 声明之后** —— 同权重下后写胜。图省事把它挪到
+        样式段开头那个 reduce 块里，会被后面的 `animation: …` 覆盖 ⇒ 动画照播，
+        而**断言照样全绿**。这是本轮最阴的一种假通过，所以专门给它一条顺序断言。
+     ★ 颜色纪律不受影响：本轮只动 transform，没有引入任何字面色值 / rgba()。 */
+
+  it('①「呼吸」：底纹有 animation，且关键帧只动 transform（碰 opacity 会让墨量判据随时辰变）', () => {
+    expect(CODE).toMatch(/\.log-inf\s*\{[\s\S]*?animation:\s*[^;]*log-inf-breathe/);
+    const kf = keyframesBlock('log-inf-breathe');
+    expect(kf, '没有呼吸的关键帧块').toBeTruthy();
+    expect(kf, '关键帧只许动 transform —— 动 opacity/filter 会让 §6.30 的墨量差分判据随时辰失效')
+      .not.toMatch(/opacity|filter/i);
+  });
+
+  it('★★ 居中必须拎成变量：每个关键帧都复用 --log-inf-center（否则底纹第一帧就跳走）', () => {
+    expect(CODE, '没把居中拎出来').toMatch(/--log-inf-center:\s*translate\(-50%,\s*-50%\)/);
+    const frames = [...keyframesBlock('log-inf-breathe').matchAll(/transform:\s*([^;]+);/g)]
+      .map((m) => m[1].trim());
+    expect(frames.length, '关键帧里没有 transform（应为 from/to 各一）').toBe(2);
+    for (const f of frames) {
+      expect(f, `关键帧没带 --log-inf-center ⇒ 动画一开就丢居中：${f}`).toMatch(/^var\(--log-inf-center\)/);
+    }
+  });
+
+  it('★ 呼吸的位移守**配额**（站主拍板 ≤15px）：可解析的平移/缩放分量必须在预算内', () => {
+    const kf = keyframesBlock('log-inf-breathe');
+    const tr = [...kf.matchAll(/translate3d\((-?[\d.]+)px,\s*(-?[\d.]+)px/g)]
+      .map((m) => [Number(m[1]), Number(m[2])]);
+    expect(tr.length, '没解析到两档 translate3d').toBe(2);
+    const dt = Math.hypot(tr[1][0] - tr[0][0], tr[1][1] - tr[0][1]);
+    expect(dt, `平移极差 ${dt.toFixed(2)}px 已吃掉 15px 预算的大头`).toBeLessThan(15);
+    const sc = [...kf.matchAll(/scale\(([\d.]+)\)/g)].map((m) => Number(m[1]));
+    expect(new Set(sc).size, '没解析到两档 scale').toBe(2);
+    expect(Math.abs(sc[1] - sc[0]), '缩放极差过大（边缘会被它带出更多位移）').toBeLessThan(0.05);
+  });
+
+  it('⑤「生长」：一次性入场，`both` 必须在（否则 delay 期间齿会先完整闪一下）', () => {
+    expect(CODE).toMatch(/\.chrono-tooth\s*\{[\s\S]*?animation:\s*[^;]*chrono-tooth-grow[^;]*\bboth\b/);
+    const kf = keyframesBlock('chrono-tooth-grow');
+    expect(kf, '没有生长的关键帧块').toBeTruthy();
+    expect(kf, '必须从 0 长起来').toMatch(/from\s*\{\s*transform:\s*scaleY\(0\)/);
+    expect(kf, '必须长满到 1').toMatch(/to\s*\{\s*transform:\s*scaleY\(1\)/);
+  });
+
+  it('★★ 缩放轴钉在**基线**上，且三处同源（齿 y1 / transform-origin / --chrono-base）', () => {
+    expect(CODE, 'transform-origin 没钉在基线上').toMatch(/transform-origin:\s*0\s*var\(--chrono-base/);
+    expect(CODE, 'transform-box 必须显式给 —— 齿是 <line>，fill-box 的宽为 0，靠不住')
+      .toMatch(/transform-box:\s*view-box/);
+    /* 三处同源：产物里 --chrono-base 的值 == 齿的基线（y1）。
+       MAX_H 哪天从数据推出来变高，三处只要有一处忘了跟就当场红。 */
+    const base = PAGE.match(/--chrono-base:(\d+(?:\.\d+)?)px/);
+    expect(base, '产物里没有 --chrono-base').toBeTruthy();
+    const bases = new Set(readTeeth().map((t) => t.base));
+    expect(bases.size, '齿不在同一条基线上').toBe(1);
+    expect(Number(base![1]), `--chrono-base(${base![1]}) 与齿的基线(${[...bases][0]}) 不一致`).toBe([...bases][0]);
+  });
+
+  it('★★ 生长相位严格单增（从左往右），且格内错开必须小于格间距（否则相邻格交错）', () => {
+    const delays = [...PAGE.matchAll(/--tooth-delay:(\d+)ms/g)].map((m) => Number(m[1]));
+    expect(delays.length, '齿没带生长相位').toBeGreaterThan(0);
+    for (let i = 1; i < delays.length; i++) {
+      expect(delays[i], `第 ${i} 根的相位不比前一根晚 ⇒ 视觉上不是"从左往右长"`).toBeGreaterThan(delays[i - 1]);
+    }
+    const diffs = [...new Set(delays.slice(1).map((v, i) => v - delays[i]))].sort((a, b) => a - b);
+    expect(diffs.length, '所有相位相同 ⇒ 根本没有"依次"').toBeGreaterThan(1);
+    expect(diffs[diffs.length - 1], '最大相邻差（格间距）应明显大于最小（格内错开）')
+      .toBeGreaterThan(diffs[0] * 2);
+  });
+
+  it('★★ reduce 降级必须排在 animation 声明**之后**（写在前面会被覆盖，断言却照样绿）', () => {
+    /* ⚠ 定位要按**结构**来：本页有**两个** reduce 块（`.entry:target` 那处在样式段最前面，
+       撤销本轮的两次动效那处在后面）。`CODE.indexOf('animation: none')` 命中前面那个，
+       会得出"顺序错了"的假失败 —— 本轮实测踩到。 */
+    const iBreathe = CODE.indexOf('animation: log-inf-breathe');
+    const iGrow = CODE.indexOf('animation: chrono-tooth-grow');
+    expect(iBreathe, '找不到呼吸的 animation 声明').toBeGreaterThan(0);
+    expect(iGrow, '找不到生长的 animation 声明').toBeGreaterThan(0);
+
+    const hit = reduceBlocks().filter((b) => /\.log-inf/.test(b.blk));
+    expect(hit.length, '没有"撤销底纹/齿动画"的 reduce 块').toBe(1);
+    const t = hit[0];
+    expect(t.blk, '这个 reduce 块没撤底纹的动画').toMatch(/\.log-inf[\s\S]*?animation:\s*none/);
+    expect(t.blk, '这个 reduce 块没撤齿的动画').toMatch(/\.chrono-tooth/);
+
+    expect(t.at, 'reduce 块排在呼吸的 animation 之前 ⇒ 会被覆盖，动画照播（而断言照样绿 = 假通过）')
+      .toBeGreaterThan(iBreathe);
+    expect(t.at, 'reduce 块排在生长的 animation 之前 ⇒ 会被覆盖').toBeGreaterThan(iGrow);
   });
 });
 
