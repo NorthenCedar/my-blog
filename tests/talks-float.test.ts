@@ -2,13 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-/* 说说页「浮游 FLOAT」（斜飘雨线 + 下半屏椭圆涟漪）+ 卡片面板 + 原位漂浮 + 墨点螺旋底纹
+/* 说说页「浮游 FLOAT」（斜飘雨线 + 下半屏椭圆涟漪）+ 原位漂浮 + 墨点螺旋底纹
  * （2026-10-04）的契约。
  *
  * 站主拍板（先出实验台 `_probe/_float-lab.src.html` 的 ⑤ 号母题，看过真渲染才定的）：
  *   ① 装置 = Canvas 2D 手写；② 背景即装置；③ ≤767 极简版；④ 低频常动（≥8s）；
  *   ⑤ 涟漪用**椭圆**；⑥ 涟漪只在**下半屏**；⑦ 漂浮卡片**原位**小幅浮、不打乱顺序、不乱飘；
- *   ⑧ 振幅 **4px**；⑨ 雨线**密度更密**；⑩ 卡片面板**留**；
+ *   ⑧ 振幅 **4px**；⑨ 雨线**密度更密**；⑩ 条目底色**透明**（先加过后撤）；
  *   ⑪ 站主给的墨点螺旋图**替代本页的百褶 ∞**。
  *
  * 这里守的是「不可退让的性质」，不是「上一版的实现形态」：
@@ -210,7 +210,7 @@ describe('说说页 FLOAT · 装置契约', () => {
   });
 });
 
-describe('说说页 · 原位漂浮 + 卡片面板（只动绘制，不动布局）', () => {
+describe('说说页 · 原位漂浮 + 透明条目底（只动绘制，不动布局）', () => {
   it('★ 原位漂浮是**纯 CSS**：相位只用 :nth-child 排，不写一行 JS', () => {
     expect(ACSS).toMatch(/\.talk\s*\{[\s\S]*?animation:\s*talk-float var\(--dur-orbit, 8s\)/);
     expect(ACSS).toMatch(/@keyframes talk-float/);
@@ -245,22 +245,29 @@ describe('说说页 · 原位漂浮 + 卡片面板（只动绘制，不动布局
     );
   });
 
-  it('★ 卡片面板**留**：只改 .talk 自己的盒子，一行 DOM 都不动', () => {
+  it('★ 条目底色**透明**：只改 .talk 自己的盒子，一行 DOM 都不动', () => {
     expect(ACSS, '.talks 要排成一列留缝').toMatch(
       /\.talks\s*\{[\s\S]*?display:\s*flex;[\s\S]*?gap:\s*var\(--sp-3\)/,
     );
-    expect(ACSS, '卡片底 = --panel').toMatch(/\.talk\s*\{[\s\S]*?background:\s*var\(--panel\)/);
-    expect(ACSS, '卡片内边距').toMatch(/padding:\s*var\(--sp-3\) var\(--sp-4\)/);
-    // 时间轴的 5px 方点仍在（面板左边缘就是那条竖线）
+    /* ★ 站主 2026-10-04：「每一个说说的背景改成透明的」。
+       守的是**性质**：`.talk` 自己那块不许着色。显式 `transparent` 也一并认
+       （要看见"此处刻意不着色"，而不是靠缺省继承）。 */
+    const talkBlock = ACSS.match(/\.talk\s*\{[\s\S]*?\}/)?.[0] ?? '';
+    expect(talkBlock, '没找到 .talk 块').not.toBe('');
+    expect(talkBlock, '.talk 不许有底色（站主：改成透明的）').toMatch(/background:\s*transparent/);
+    expect(talkBlock, '.talk 不许再出现 --panel（撤掉的面板）').not.toMatch(/var\(--panel\)/);
+    // 内边距保留：它只决定内容位置，不产色块（去掉反而要让方点的 top 重算）
+    expect(ACSS, '条目内边距').toMatch(/padding:\s*var\(--sp-3\) var\(--sp-4\)/);
+    // 时间轴的 5px 方点仍在
     expect(ACSS).toMatch(/\.talk::before\s*\{[\s\S]*?background:\s*var\(--accent\)/);
-    // ★ 方点的 top 要补上卡片的上内边距（原来是相对内容盒顶）
-    expect(ACSS, '面板加了上内边距 ⇒ 方点必须跟着补，否则浮到日期上方').toMatch(
+    // ★ 方点的 top 要补上盒子的上内边距（原来是相对内容盒顶）
+    expect(ACSS, '内边距还在 ⇒ 方点必须跟着补，否则浮到日期上方').toMatch(
       /\.talk::before\s*\{[\s\S]*?top:\s*calc\(var\(--sp-3\) \+ 0\.45em\)/,
     );
-    // 配图底要换回纸白（卡片已经是 --panel）
-    expect(ACSS).toMatch(/\.shots :global\(img\)\s*\{[\s\S]*?background:\s*var\(--paper\)/);
+    // 底色透明（纸白）⇒ 配图底回到 --panel：带 alpha 的图仍看得出边界、未加载时有占位
+    expect(ACSS).toMatch(/\.shots :global\(img\)\s*\{[\s\S]*?background:\s*var\(--panel\)/);
     // 面板把原来"末条竖线透明"的收尾去掉了 —— 每张卡自带一段轨
-    expect(ACSS, '末条规则应已删（卡片每张自带一段轨）').not.toMatch(
+    expect(ACSS, '末条规则应已删（每条自带一段轨）').not.toMatch(
       /\.talk:last-child\s*\{[^}]*border-left-color:\s*transparent/,
     );
   });

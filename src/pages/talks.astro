@@ -190,10 +190,12 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     color: var(--muted);
   }
   /* ===================================================================
-   * 说说列表 —— 卡片面板 + 原位漂浮（站主 2026-10-04 拍板）
+   * 说说列表 —— 原位漂浮（站主 2026-10-04 拍板）
    *
    * 站主原话：「漂浮的短句卡片要，但只能在他原来的位置漂浮，不打乱顺序，不要乱飘，
-   *   只是做一个在本来位置小幅漂浮的效果」+ 拍板「振幅 4px」「卡片面板留」。
+   *   只是做一个在本来位置小幅漂浮的效果」+ 拍板「振幅 4px」。
+   * ★ 底色：站主 2026-10-04 后补「每一个说说的背景改成透明的」⇒ `.talk` 不着色
+   *   （曾短暂加过 `--panel` 卡片面板，同一天撤掉）。
    *
    * ★ 「原位浮」的四条约束都落在**机制**上，不靠"小心地写"：
    *   ① 只动 `transform` ⇒ **不参与布局**：不重排、不改顺序、不动文档流。
@@ -218,13 +220,17 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     flex-direction: column;
     gap: var(--sp-3);
   }
-  /* 面板：**只改 `.talk` 自己的盒子，一行 DOM 都不动** ⇒ 结构、顺序与既有断言
+  /* 条目盒子：**只改 `.talk` 自己的盒子，一行 DOM 都不动** ⇒ 结构、顺序与既有断言
      （`<time datetime>` 倒序 / `data-like` / `data-comments-for`）全不受影响。
-     面板的左边缘就是原来那条时间轴竖线（border-left），5px 方点仍钉在它上面。 */
+     左边缘就是原来那条时间轴竖线（border-left），5px 方点仍钉在它上面。
+     ★ 底色**透明**（站主 2026-10-04：「每一个说说的背景改成透明的」）—— 显式写
+       `transparent` 而不是删掉这一行：删掉是"默认继承"，写出来是"此处刻意不着色"，
+       后来人才不会当成漏写又给填回去。内边距保留 —— 它只决定内容位置，不产生色块，
+       去掉反而要让方点的 `top` 重算一遍（见下）。 */
   .talk {
     position: relative;
     padding: var(--sp-3) var(--sp-4);
-    background: var(--panel);
+    background: transparent;
     border-left: 1px solid var(--hair);
     --amp: calc(4px * var(--amp-k, 1));
     animation: talk-float var(--dur-orbit, 8s) ease-in-out infinite;
@@ -281,8 +287,9 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     height: auto;
     display: block;
     border: 1px solid var(--hair);
-    /* 卡片底是 --panel ⇒ 图底得换回纸白，否则图与"装它的面板"糊成一片（实验台里量出来的） */
-    background: var(--paper);
+    /* 卡片底已改透明（= 纸白）⇒ 图底回到 `--panel`：配图带 alpha 时仍能看出图的边界，
+       图没加载完也有个浅灰占位，不至于只剩一条空边框 */
+    background: var(--panel);
   }
   .missing {
     margin: 0;
@@ -421,7 +428,7 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
   }
   @media (max-width: 767px) {
     /* 窄屏振幅 ×0.6（与装置"极简版"同档）。原先是「padding-left 收一档」——
-       卡片面板把左右内边距统一成 --sp-4 之后那条已无差别，删掉不留假规则。 */
+       条目盒子把左右内边距统一成 --sp-4 之后那条已无差别，删掉不留假规则。 */
     .talk {
       --amp-k: 0.6;
     }
