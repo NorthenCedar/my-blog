@@ -123,13 +123,18 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
     {/* ★ `plate` 槽：**视口装饰层**，必须挂在 `.shell` **之外**（2026-10-03 加）。
         为什么不能用普通 slot（`slot` 会落进 `.shell` 内部）：
           页面过渡 `html.pt-play .shell { animation: pt-shell … }` 会给 `.shell`
-          加 transform，而**被 transform 的祖先会成为 `position: fixed` 的包含块**
-          ⇒ 装饰层的 `top:50%` 从「视口 50%」变成「.shell 盒 50%」。
+          加 transform **和 `filter: blur()`**，而**这两样都会建立 `position: fixed`
+          的包含块** ⇒ 装饰层的 `top:50%` 从「视口 50%」变成「.shell 盒 50%」。
           实测跳位幅度 **91px**（about 页：常态 plateY=266 → 过渡中 357 → 摘类后 266）。
           用户看到的就是「打开页面时背景从下面跳回上面」。
+          ⚠ 判「谁建了包含块」时**必须查 filter / backdrop-filter / contain / will-change**，
+            只查 transform 会漏 —— 归档页 `.tape` 就是这么被漏判过一次（实测偏 596px）。
         ⇒ 这个槽与 Topbar 的 `.page-inf`（百褶 ∞）**同一位置层级** ——
           那个装饰层一直没这个问题，正是因为它在 `.shell` 外面。
-        ⚠ 用它的人必须自己保证 z-index 退到内容之下（百褶 ∞ 是 z-index:-1）。 */}
+        ⚠ 用它的人必须自己保证 z-index 退到内容之下（百褶 ∞ 是 z-index:-1）。
+          ★ 但这条**只对纯装饰层成立**：要压在正文**之上**的叠加层也能用这个槽，
+            只要它的 z-index 高于 `body.chrome-page main`（Topbar.astro:81-85 给的
+            `z-index:1` 层叠上下文）—— 归档页 `.tape`（z-index:2）就是这种。 */}
     <slot name="plate" />
     {chrome !== 'console' && chrome !== 'page' && (
       <Band>

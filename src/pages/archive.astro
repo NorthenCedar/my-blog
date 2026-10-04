@@ -100,31 +100,47 @@ for (let i = 0; i < tapeTicks.length - 1; i++) {
       ★ 装置是**叠加层**：归档列表本身服务端渲染完整，卷尺默认 hidden + aria-hidden，
         脚本到位才露面；无 JS 时它**不存在**（不是藏起来）。
       ★ 数据全从上面 tapeTicks / tapeMonthTicks 来（构建期算好，纯 HTML）。
-      ★ 读数区显示「当前年份 · N 篇」，游标随滚动连续走 + 惯性过冲，卷过的刻度留墨。 */}
-  <aside class="tape" data-tape hidden aria-hidden="true">
-    <span class="tape-readout" data-tape-readout>
-      <em data-tape-year>{years[0]}</em>
-      <i data-tape-count>0</i>
-    </span>
-    <div class="tape-track" data-tape-track>
-      {tapeMonthTicks.map((t) => (
-        <span class="tape-tick is-month" style={`top: ${t.pos}%`} data-pos={t.pos.toFixed(2)}></span>
-      ))}
-      {tapeTicks.map((t) => (
-        <span
-          class="tape-tick is-year"
-          style={`top: ${t.pos}%`}
-          data-year={t.year}
-          data-count={t.count}
-          data-pos={t.pos.toFixed(2)}
-        >
-          <i>{t.year}</i>
-          <b>{t.count}</b>
-        </span>
-      ))}
-    </div>
-    <span class="tape-cursor" data-tape-cursor></span>
-  </aside>
+      ★ 读数区显示「当前年份 · N 篇」，游标随滚动连续走 + 惯性过冲，卷过的刻度留墨。
+
+      ★★ 2026-10-04 搬进 `plate` 槽（`.shell` **之外**）—— 修过渡期间跳位 596px。
+        病根：`position: fixed` 的包含块不是视口，而是**最近的建立了层叠上下文的祖先**，
+        而页面过渡给 `.shell` 加的**不止 transform，还有 `filter: blur()`**
+        （`transition.css` 的 `pt-shell`，18%–58% 那段）—— **filter 同样建立包含块**，
+        第一轮只查 `transform`/`will-change` 因而漏判，量出来 `.tape` 中心
+        常态 401.0 / 过渡中 997.0（视口中心 450）⇒ 偏 **+596px**，
+        读数器正好压到年份刻度上（站主截图里那两个「2026」叠在一起）。
+        `.shell` 的 `filter` 还会把它自己裁到 `62..1153`，底端刻度一并顶出视口。
+        `Base.astro` 的 `plate` 槽就是为这类装饰层建的（关于页同类问题实测 91px）。
+        ⚠ 槽的注记写「用它的人必须保证 z-index 退到内容之下」——**对纯装饰层成立，
+          对本装置不成立**：`.tape` 要在正文**之上**，所以保留 `z-index: 2`
+          （`Topbar.astro:81-85` 给 `main`/`footer` 的是 `z-index:1` 的层叠上下文，
+          2 > 1 ⇒ 移出 `#main` 之后仍然压在正文之上，与原来同层同序）。 */}
+  <Fragment slot="plate">
+    <aside class="tape" data-tape hidden aria-hidden="true">
+      <span class="tape-readout" data-tape-readout>
+        <em data-tape-year>{years[0]}</em>
+        <i data-tape-count>0</i>
+      </span>
+      <div class="tape-track" data-tape-track>
+        {tapeMonthTicks.map((t) => (
+          <span class="tape-tick is-month" style={`top: ${t.pos}%`} data-pos={t.pos.toFixed(2)}></span>
+        ))}
+        {tapeTicks.map((t) => (
+          <span
+            class="tape-tick is-year"
+            style={`top: ${t.pos}%`}
+            data-year={t.year}
+            data-count={t.count}
+            data-pos={t.pos.toFixed(2)}
+          >
+            <i>{t.year}</i>
+            <b>{t.count}</b>
+          </span>
+        ))}
+      </div>
+      <span class="tape-cursor" data-tape-cursor></span>
+    </aside>
+  </Fragment>
 </Base>
 
 <script>
@@ -292,8 +308,11 @@ for (let i = 0; i < tapeTicks.length - 1; i++) {
 
   /* ===== INDEX TAPE 索引卷尺（2026-10-01）=====
      ★ 右侧 fixed 竖条，垂直居中 —— 「进度尺」形态，游标沿刻度随滚动走。
-     ★ 逃出 .shell 铺到视口右缘：固定定位相对视口，不占文档流，不推挤列表。
-       归档列表 .title/.summary 都限宽，右侧有留白 ⇒ 竖条（约 44px 宽）不遮正文。
+     ★ **2026-10-04 已搬进 Base 的 `plate` 槽（markup 在 `.shell` 之外）**：
+       固定定位铺到视口右缘，不占文档流、不推挤列表；归档列表 .title/.summary 都限宽，
+       右侧有留白 ⇒ 竖条（约 44px 宽）不遮正文。
+       ⚠ 别把它搬回普通 slot（会落进 `.shell`）：`.shell` 在过渡期间带 `filter: blur()`
+         ⇒ 成为 fixed 的包含块 ⇒ 实测跳位 596px。理由与读数见 markup 处注记。
      ★ 颜色全 token：未卷过的刻度淡灰 --hair，卷过的 --accent-ink（脚本加 .past 类），
        游标 --accent-ink，读数数字 --ink。 */
   .tape {
@@ -301,6 +320,9 @@ for (let i = 0; i < tapeTicks.length - 1; i++) {
     right: var(--gutter);
     top: 50%;
     transform: translateY(-50%);
+    /* ★ z-index 保持 2 —— `plate` 槽的注记要求「退到内容之下」是对**纯装饰层**说的，
+       本装置必须在正文之上（Topbar.astro:81-85 给 main/footer 的是 z-index:1 的
+       层叠上下文，2 > 1）。搬出 `#main` 后这条依然成立，见 markup 注记的推导。 */
     z-index: 2;               /* 在正文之上（正文 z-index:1），在顶栏浮层/灯箱之下 */
     width: 44px;
     height: min(60vh, 460px);

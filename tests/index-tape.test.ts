@@ -128,6 +128,72 @@ describe('归档页索引卷尺：刻度、降级与弹簧', () => {
   });
 });
 
+/* ★ 2026-10-04：装置被搬进 Base 的 `plate` 槽（`.shell` 之外）。这一组守的是**位置**，
+ * 因为位置错了症状极其隐蔽 —— 静态截图完全正常，只有站内导航那 900ms 里跳。
+ * 实测：病根不是 transform 而是 `filter: blur()`（pt-shell 18%–58% 那段），
+ * `.tape` 的 fixed 包含块因此从视口变成 `.shell` ⇒ 中心 401.0 → 997.0（偏 596px），
+ * 读数器正好压到年份刻度上（站主截图里两个「2026」叠在一起）。 */
+describe('归档页索引卷尺：必须挂在 .shell 之外（plate 槽）', () => {
+  it('markup：.tape 在 plate 槽里，不在默认 slot（否则会落进 .shell）', () => {
+    const frag = ACSS.match(/<Fragment\s+slot="plate">[\s\S]*?<\/Fragment>/);
+    expect(frag, 'archive.astro 里找不到 plate 槽的 Fragment —— .tape 又落回 .shell 了').toBeTruthy();
+    expect(frag![0], 'plate 槽里没有 .tape').toContain('class="tape"');
+  });
+
+  it('★ 产物：.tape 在 HTML 里出现在 <main> 之前（=#main/.shell 之外）', () => {
+    expect(ARCHIVE_HTML, '先 npm run build').toBeTruthy();
+    const at = ARCHIVE_HTML.indexOf('<aside class="tape"');
+    const mainAt = ARCHIVE_HTML.indexOf('<main id="main"');
+    const shellAt = ARCHIVE_HTML.indexOf('class="shell"');
+    expect(at, '产物里找不到 .tape').toBeGreaterThan(-1);
+    expect(mainAt, '产物里找不到 <main>').toBeGreaterThan(-1);
+    expect(shellAt, '产物里找不到 .shell').toBeGreaterThan(-1);
+    // plate 槽在 Base.astro 里渲染于 <main> 之前 ⇒ .tape 的下标必须更小。
+    // 这条比读源码更硬：它验的是**浏览器实际看到的 DOM 顺序**，
+    // 以后谁改 Base 的槽顺序、或者 Astro 的槽分发改了，这里都会红。
+    expect(at, '.tape 排在 <main>/.shell 之后 ⇒ 它在 .shell 里，fixed 包含块会被过渡污染')
+      .toBeLessThan(mainAt);
+    expect(at).toBeLessThan(shellAt);
+  });
+
+  it('仍在正文之上：z-index 高于 body.chrome-page main 的层叠上下文（1）', () => {
+    // 槽的注记要求「退到内容之下」只对纯装饰层成立；.tape 要在正文之上，
+    // 所以搬出 #main 之后必须靠 z-index 补回层级（Topbar.astro:81-85 给 main/footer z-index:1）。
+    const m = ACSS.match(/\.tape\s*\{[\s\S]*?\}/);
+    expect(m, '找不到 .tape 的规则块').toBeTruthy();
+    // ★ 必须匹配**带分号**的完整声明，不能只抓数字。
+    //   本轮真踩到：注释里写「z-index 保持 2」时把声明的分号吞了，变成
+    //   `z-index: 20   /* … */ width: 44px` ⇒ 浏览器把 `z-index` 连同 `width` 一起丢弃，
+    //   .tape 的 z-index 实际是 auto —— 而「只抓数字」的断言读文本里的 20，照样绿。
+    //   ⇒ 判据要**复现浏览器的解析行为**（缺分号 = 这条声明不成立），不是读文本。
+    const z = m![0].match(/z-index:\s*(-?\d+)\s*;/);
+    expect(z, '.tape 的 z-index 声明不完整（缺分号？）—— 浏览器会把这整条丢掉，z-index 退回 auto').toBeTruthy();
+    expect(Number(z![1]), 'z-index 必须高于 main 的 1，否则刻度尺被正文盖住').toBeGreaterThan(1);
+  });
+
+  it('fixed 定位与 top:50% 居中写法不变（位置问题的判据就在这两行）', () => {
+    const m = ACSS.match(/\.tape\s*\{[\s\S]*?\}/)![0];
+    expect(m, '.tape 必须继续用 position:fixed').toContain('position: fixed');
+    expect(m, '.tape 必须继续用 top:50% + translateY(-50%) 垂直居中').toMatch(/top:\s*50%/);
+    expect(m).toMatch(/transform:\s*translateY\(-50%\)/);
+  });
+
+  it('★ 槽的注记与实际用法一致：Base.astro 必须写明 filter 也会建包含块', () => {
+    // 这条是给下一个用 plate 槽的人留的：只查 transform 判包含块会漏掉 filter
+    // （本轮就漏判过一次，代价是 596px）。
+    // ⚠ 锚点用 `<slot name="plate" />` 本身，注记在它**之前**；
+    //   早先用 `/plate[\s\S]{0,2000}?<\/slot>/` 量，注记比 2000 字长 ⇒ 匹配到 null，
+    //   一度像"注记被删了"。窗口大小是自由度，不是判据。
+    const base = readFileSync('src/layouts/Base.astro', 'utf8');
+    const at = base.indexOf('<slot name="plate"');
+    expect(at, 'Base.astro 里找不到 plate 槽').toBeGreaterThan(-1);
+    const note = base.slice(Math.max(0, at - 2000), at);
+    expect(note, 'plate 槽的注记不在槽之前（读不到上下文）').toMatch(/filter/);
+    expect(note, '注记里没写「要在正文之上也能用」这个例外 —— 下一个人会误以为一律要退后')
+      .toMatch(/之上/);
+  });
+});
+
 describe('共享工具层 rl-core：二阶欠阻尼弹簧', () => {
   it('有阻尼：从偏离位置出发，逐步收敛到目标', () => {
     const s = createSpring(100, { stiffness: 170, damping: 18 });
