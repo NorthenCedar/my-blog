@@ -234,6 +234,31 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     background: var(--panel);
     text-decoration: none;
     color: var(--ink);
+    /* ★ 装置「星座」的**卡片节点**：星点画在卡片右上角外侧（`::before`）。
+     *
+     *   为什么节点星不能只画在 canvas 上（本轮踩到）：
+     *     canvas 在 `z-index:-1` 层，而 `.card` 有**不透明底色** `--panel` 且在
+     *     `z-index:1` 的层叠上下文里 ⇒ 画在卡片中心的节点会被卡片整个盖住，
+     *     截图中表现为"卡片区一颗星都没有"。连线同理，中心段被遮。
+     *   ⇒ 分工：canvas 只画**连线**（它在卡片之下，正好读作"线从卡片背后连出去"），
+     *     节点星本体交给 `::before` —— 它在卡片之上，永远可见。
+     *
+     *   亮度由脚本写入的 `--node-lit`（0..1）驱动，缺省 0 ⇒ **无 JS 时不画星点**
+     *   （降级态②：无 JS 不该凭空多出一个装饰点）。 */
+    position: relative;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    /* ★ 8 位 hex，不写 rgba()；`calc()` 里用 0/1 相乘得到 0 或 1 的透明度 */
+    opacity: calc(var(--node-lit, 0) * 0.9);
+    box-shadow: 0 0 0 calc(var(--node-lit, 0) * 4px) var(--accent-wash);
   }
   .card:hover {
     border-color: var(--accent);

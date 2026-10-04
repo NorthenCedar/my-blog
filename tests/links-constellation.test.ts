@@ -22,7 +22,11 @@ import { join } from 'node:path';
  *   ⑨ 四态降级 —— reduced-motion 静态星图 / 无 JS 画布空 / ≤767 减量 / 视口外·切标签停帧。
  *   ⑩ **不用 `hidden` 属性**做显隐 —— 它把元素钉成 display:none，
  *      而 fit() 量的是 clientWidth（恒为 0）⇒ 装置量不到尺寸、画不出第一帧。
- *  ⑪ 零新增运行时依赖（红线）。
+ *   ⑪ 零新增运行时依赖（红线）。
+ *
+ *站主第二轮拍板（2026-10-05，就在本页开工当天）：
+ *   ④ 星点来源 = **卡片节点 + 背景散点**两层（不是只有一层背景散点）
+ *   ⑤ 总线数上限 = **15**
  */
 const ROOT = process.cwd();
 const DIST = join(ROOT, 'dist');
@@ -73,6 +77,101 @@ describe('友链页 · 星座 CONSTELLATION（2026-10-05）', () => {
       // 总线数封顶 + 最旧的退休（顺带实现"位置复用"）
       expect(CODE).toMatch(/MAX_EDGES/);
       expect(CODE).toMatch(/edges\.shift\(\)/);
+    });
+  });
+
+  describe('一之二、星点分两层（站主 2026-10-05 拍板：卡片节点 + 背景散点）', () => {
+    it('④-a ★ 星点来源是卡片 DOM，不是只有哈希散点', () => {
+      // 从 a.card 取节点（卡片是 <a>，<li> 只是包裹，不该也成节点）
+      expect(CODE).toMatch(/querySelectorAll\('a\.card'\)/);
+      // 节点索引排在散点**前面** ⇒ resize 不会让语义层的连线错连到别的星
+      expect(CODE).toMatch(/node:\s*1/);
+      expect(CODE).toMatch(/node:\s*0/);
+    });
+
+    it('④-b ★ 卡片节点坐标每帧从 DOM 矩形取（滚动时它跟着卡片走）', () => {
+      expect(CODE).toMatch(/getBoundingClientRect/);
+      // 节点走 pos() 分支，散点走归一化 × 视口 —— 两条路径都要在
+      expect(CODE).toMatch(/function pos\(/);
+      /* ★ 坐标换算必须收口在 pos() 内部：别处若再用 `x.u * cw` 算位置，
+       *   节点就会脱离它自己的卡片（而 advance/draw 看起来还是"正常"的）。
+       *   做法：把 pos() 函数体整段挖掉，剩下的就是"逃逸的换算"。
+       *   ⚠ 不能只查 `s.u * cw` —— 那正是 pos() 里散点分支的合法写法，会误伤收口点。*/
+      const posAt = CODE.indexOf('function pos(');
+      const posEnd = CODE.indexOf('const _p =');
+      expect(posAt).toBeGreaterThan(0);
+      expect(posEnd).toBeGreaterThan(posAt);
+      const outside = CODE.slice(0, posAt) + CODE.slice(posEnd);
+      expect([...outside.matchAll(/\.u\s*\*\s*cw/g)]).toEqual([]);
+      expect([...outside.matchAll(/\.v\s*\*\s*ch/g)]).toEqual([]);
+    });
+
+    it('④-c ★ 节点优先入选（否则指针停在卡片旁时主角反被挤掉）', () => {
+      // 节点有自己的、更大的邻域半径
+      expect(CODE).toMatch(/R_NEAR_NODE/);
+      expect(CODE).toMatch(/s\.node\s*\?\s*R_NEAR_NODE\s*:\s*R_NEAR/);
+      //挑选时先给节点留位，再按距离补足
+      expect(CODE).toMatch(/nodesFirst/);
+    });
+
+    it('④-d ★ 节点星画在卡片上（不是 canvas）—— 否则被不透明底遮住', () => {
+      /* 这条是本轮最贵的教训：canvas 在 z-index:-1 层，`.card` 有不透明底 `--panel`
+         且在 z-index:1 的层叠上下文里 ⇒ 画在 canvas 上的节点被整个盖住，
+         截图表现为"卡片区一颗星都没有"。分工必须是：
+         canvas 只画连线 + 散点，节点星由 `.card::before` 画。*/
+      const cardRule = ACSS.match(/\.card::before\s*\{[^}]*\}/)?.[0] ?? '';
+      expect(cardRule).toMatch(/content\s*:/);
+      expect(cardRule).toMatch(/border-radius\s*:\s*50%/);
+      // 亮度由脚本写入的 --node-lit 驱动，缺省 0 ⇒ 无 JS 时不凭空多个装饰点
+      expect(cardRule).toMatch(/--node-lit/);
+      // 不写 rgba()（站上约定）
+      expect(cardRule).not.toMatch(/rgba\(/);
+      // 脚本侧：回写变量 + 变化才写
+      expect(CODE).toMatch(/setProperty\('--node-lit'/);
+      expect(CODE).toMatch(/lastLit/);
+      // ★ canvas 侧必须跳过节点本体
+      const drawAt = CODE.indexOf('function draw(');
+      const drawBody = CODE.slice(drawAt, CODE.indexOf('function drawStatic'));
+      expect(drawBody).toMatch(/if \(s\.node\) continue;/);
+      // 死常量不许留在脚本里（NODE_R 已随分工删除）
+      expect(CODE).not.toMatch(/NODE_R/);
+    });
+
+    it('④-e ★ reduced-motion 的静态图优先串卡片节点（那是本页语义）', () => {
+      const st = CODE.slice(CODE.indexOf('function drawStatic'));
+      expect(st.slice(0, 900)).toMatch(/nodeIdx/);
+      // ★ 不能在 drawStatic 里再 build()：起停处已调过，build 会重排星序并作废已有边
+      expect(st.slice(0, 400)).not.toMatch(/build\(\)/);
+    });
+
+    it('④-f 上限是站主拍板的 15 条（不是随手写的数）', () => {
+      expect(CODE).toMatch(/MAX_EDGES\s*=\s*15\b/);
+      expect(CODE).not.toMatch(/MAX_EDGES\s*=\s*14\b/);
+    });
+
+    it('④-g ★★ 节点的半径按**实测**分档，不是沿用散点的值', () => {
+      /* 本轮最贵的 bug：R_LINK 一律 176（按散点尺度定），
+         而卡片实测中心距最近 266px ⇒ **任何两张卡都连不上**。
+         实测表现：指针在卡片上停留 51 次、--node-lit 全 0、一根线都没出现。
+         ⇒ 节点必须有自己的成边半径，且要落在"近邻连得上、隔卡连不上"的窗口里。*/
+      expect(CODE).toMatch(/R_LINK_NODE/);
+      // 节点成边上限必须 > 实测最近邻距 266（否则节点孤立）
+      const linkNode = Number(CODE.match(/R_LINK_NODE\s*=\s*(\d+)/)?.[1]);
+      expect(Number.isFinite(linkNode)).toBe(true);
+      expect(linkNode).toBeGreaterThan(266);
+      // 但要 < 实测隔卡距 614（否则全连成一团，语义变成"所有站都相连"）
+      expect(linkNode).toBeLessThan(614);
+      /* 邻域半径必须 > 最近邻距：否则站在一张卡上时邻座进不了邻域，
+         pick 里只有一个节点 ⇒ pick.length < 2 直接 return ⇒ 一根线都出不来。*/
+      const nearNode = Number(CODE.match(/R_NEAR_NODE\s*=\s*(\d+)/)?.[1]);
+      expect(nearNode).toBeGreaterThan(266);
+      // 成边上限按两端取min（只看一端会让"节点和它的邻点连不上"）
+      expect(CODE).toMatch(/sa\.node\s*\?\s*R_LINK_NODE\s*:\s*R_LINK/);
+      /* 实测数据要留在文件里（后人别再按 CSS 公式推）。
+         ⚠ 这里必须用**未剥注释的原文** SRC —— 实测值写在注释里，
+         CODE 是剥掉注释的代码，查不到（正向断言查注释 = 永远失败）。*/
+      expect(SRC).toMatch(/266/);
+      expect(SRC).toMatch(/614/);
     });
   });
 
