@@ -26,9 +26,9 @@
  *      ⇒ 墨痕的**年龄**决定它的样子，形状由 `hash01(i)` 整数哈希定；
  *        同一个 (位置, 年龄) 永远同一个像素值。
  *   ② 「不读内容几何」（float.ts 的约定①，评论展开会插一大堆 DOM）
- *      ⇒ 墨痕**不在每次 pointermove 里量 DOM**：留言区的范围在
- *        **resize / 元素尺寸变化**时量一次 `.prose` 并缓存成**文档坐标**，
- *        判定时只读 `window.scrollY`（廉价、不触发重排）把 clientY 换算过去。
+ *      ⇒ 墨痕**不吃任何 DOM 尺寸**：范围就是**整个画布**，不设留言区/视口带
+ *        之类的门槛。`overMessageArea` 只在窄屏降级时返回 false，
+ *        唯一的坐标钳位用的是画布自身的 `cw/ch`（`fit()` 产出的，不触发重排）。
  *
  *   ⚠★★ 教训（2026-10-06 站主真浏览器实测）：
  *      早先**用视口比例当常数**（`x > cw*0.12 && x < cw*0.88`）——
@@ -256,42 +256,44 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
   let lastX = -1;
   let lastY = -1;
 
-  /* ---------- 留言区范围：量一次，缓存 ---------- *
-   * ★★ 为什么不能拿视口比例当常数 —— 见头部②那条教训。
-   *   量的是 `.prose`（评论列表 + 留言表单这一整块）的真实几何：
-   *     · 水平方向：直接存 rect.left / right（视口坐标，**不随滚动变化**）
-   *     · 垂直方向：存**文档坐标**（rect.top/bottom + scrollY），因为它随滚动变
-   *   判定时只读 `window.scrollY` 把 clientY 换算成文档坐标 —— 这一步极廉价，
-   *   不触发重排，所以不违反「不每帧读 DOM 几何」的约定。
+  /* ---------- 墨痕范围：整页，不设区域门槛 ---------- *
+   * ★★ 2026-10-06 站主二次实测**推翻了上一轮的修法**（「量`.prose` 真实几何」）：
+   *   那一版把范围从"视口带"收窄成"留言框那一小块"，站主反馈两条：
+   *     ①「刚才整个屏幕都能生成墨痕」—— 整屏是**期望行为**，不是事故；
+   *     ②「现在只能在留言框里面看到」—— 收窄本身是**回归**。
+   *   探针实测（_probe/_ink-where.mjs，真实产物上派发 pointermove 后数着色像素）：
+   *
+   *     区域          1920 宽     1440 宽
+   *     留言框内       19440      19437
+   *     框左 260px       970(5%)   1010(5%)   ← 只剩 AREA_PAD 的余量
+   *     框右 300px       968(5%)   1091(6%)
+   *     框上方 180px        0          0
+   *     视口正中12983          0     ← 整条横划**完全不留墨**
+   *
+   *   两条硬结论：
+   *     · `.prose` 判定在**框内**确实是好的（19440）—— 所以上一轮"修好了"是假象，
+   *       它只是把用户本来能用的整屏收窄了，症状（断断续续）没消失、只换了成因
+   *       （从"框左侧被丢"变成"整屏 95% 被丢"）。**局部正确 ≠ 整体正确。**
+   *     · **1440 宽下视口正中一整条划痕为 0**，而 1920 宽下同一位置有 12983
+   *       ⇒ 这才是「开 F12 才能看到」的真正成因，与 F12 无关：
+   *       F12 一开视口变窄，`.prose` 变成 101..679 几乎横跨视口 ⇒ 蒙对了。
+   *
+   *   ⇒ 所以**不设门槛**：`onMove` 只在「窄屏」和「reduced-motion」两种降级档里
+   *     放弃痕迹，**其余情况整页任意位置都留墨**。这样：
+   *       · 不可能再出现"某些区域静默丢墨"（没有区域可丢）；
+   *       · 不需要量任何几何 ⇒ 天然满足「不读内容几何」；
+   *       · 与视口宽度**彻底解耦** ⇒ 换窗口大小不会有任何行为变化。
+   *
+   *   仍然要拦的两种情况（都是降级，不是区域）：
+   *     · 窄屏（≤767px）：手指划屏会挡输入 ⇒ 只保留落滴。
+   *     · reduced-motion：见 onMove 开头的 early return。
    */
-  const AREA_PAD = 28; // 边缘留一点余量，让「刚好擦到框边」也算落在留言区
-  let areaL = 0;
-  let areaR = 0;
-  let areaTop = 0;
-  let areaBottom = -1; // −1 = 还没量到（元素缺失 / fit 未成功）
-
-  function measureArea(): void {
-    if (!cw || !ch) return; // 画布尺寸都还没有，量出来的没有意义
-    const el = document.querySelector<HTMLElement>('.prose');
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    areaL = r.left - AREA_PAD;
-    areaR = r.right + AREA_PAD;
-    areaTop = r.top + window.scrollY - AREA_PAD;
-    areaBottom = r.bottom + window.scrollY + AREA_PAD;
-  }
-
-  /** 指针落点是否在"留言区"内。窄屏只保留落滴 ⇒ 直接返回 false。 */
   function overMessageArea(x: number, y: number): boolean {
     if (narrow.matches) return false;
-    if (areaBottom < 0) {
-      /* 兜底：还没量到（`.prose` 不存在，或 fit() 尚未成功）才退回视口比例。
-         这不是常态路径 —— 常态必须走真实几何，见头部②的教训。 */
-      return y > ch * 0.3 && x > cw * 0.12 && x < cw * 0.88;
-    }
-    const vy = y + window.scrollY; // clientY → 文档坐标
-    return vy > areaTop && vy < areaBottom && x > areaL && x < areaR;
+    /* 唯一还留的边界：指针要真的落在画布内（画布 = fixed 全屏，
+       clientX/Y 天然在范围内，但拖出窗口边缘时可能越界，钳一下更稳）。
+       用的是**画布自身尺寸**（fit() 产出的 cw/ch），不涉及任何内容元素。 */
+    return x >= 0 && y >= 0 && x <= cw && y <= ch;
   }
 
   function onMove(e: PointerEvent) {
@@ -366,18 +368,15 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
   /* 就绪 ⇒ 显形（opacity 门控，见头部） */
   cv.classList.add('is-ready');
 
-  /* ---------- 留言区范围的三个重测时机 ---------- *
-   * ① 首帧之后（`paint()` 已跑完，`cw/ch` 才有值，`measureArea()` 才肯动手）
-   * ② 视口变化（版心是居中/左对齐的，宽度变了边界就变了）
-   * ③ **`.prose` 自身尺寸变化** —— 这是关键的一条：评论展开、留言发表后列表会变长，
-   *    `.prose` 的高度跟着变而视口**没变**。没有 ③ 的话，发表一条留言后
-   *    留言区的下边界就停在旧位置，新出现的表单区域再也留不下墨痕。
-   *    垂直方向存的是文档坐标，所以**普通滚动不需要重测**（换算时加 scrollY 即可）。
+  /* ---------- 上一版的三个「重测留言区范围」时机已全部删除 ---------- *
+   * 2026-10-06：范围不再有门槛（见上面那段），因此
+   *   ① 首帧后量 `.prose`   —— 不需要（没有区域要量）
+   *   ② resize 重量         —— 不需要（范围与视口宽度无关）
+   *   ③ ResizeObserver 观察 —— 不需要（没有会变的边界）
+   * 唯一与尺寸有关的仍保留：`resize` 时重画（画布位图尺寸要跟着 DPR/视口变）。
+   * 这也让上一轮加的 `getBoundingClientRect` / `ResizeObserver` 全部消失 ——
+   * 「不读内容几何」这条约定自动成立，不需要靠"小心地量"来遵守。
    */
-  measureArea();
-  const ro = new ResizeObserver(() => measureArea());
-  const proseEl = document.querySelector('.prose');
-  if (proseEl) ro.observe(proseEl);
 
   const gate = createActivityGate(cv);
   window.addEventListener('pointermove', onMove, { passive: true });
@@ -401,16 +400,15 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
     }
   });
 
-  /* resize 先重量（版心宽度可能变了），再重画（画布尺寸也要跟着变） */
+  /* resize 只重画（画布位图尺寸要跟着视口/DPR 变）。
+     ★ 不再"先重量" —— 范围已无区域边界，换视口宽度不该改变任何行为。 */
   window.addEventListener('resize', () => {
-    measureArea();
     paint(nowSec());
   }, { passive: true });
 
   window.addEventListener('beforeunload', () => {
     stop();
     gate.dispose();
-    ro.disconnect();
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('inkdrop', onDrop as EventListener);
   }, { once: true });

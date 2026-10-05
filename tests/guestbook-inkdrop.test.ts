@@ -13,6 +13,11 @@ import { join } from 'node:path';
  *      否则同 t 逐点比对（唯一可信的形状类验收手段）直接失效。
  *   ③ **不读 DOM 几何** —— 装置一旦量 getBoundingClientRect，评论一展开就会
  *      重排重画并与评论列表抢主线程（float.ts 的约定①）。
+ *   ③′ **墨痕范围 = 整页，不设区域门槛** —— 除窄屏 /reduced-motion 两种降级外，
+ *      不存在"某些位置静默不留墨"。这条是 2026-10-06 二次实测加的：
+ *      先后试过「视口比例带」与「量 `.prose` 真实几何」两种**都有区域的**写法，
+ *      前者把整屏 95% 丢了、后者把范围收窄到留言框（站主明确说整屏才对）——
+ *      **两次都是绿着的假契约**，因为它们守的是"某种实现"而不是"行为"。
  *   ④ 痕迹**必须会自愈**（几秒渗开后收干净）—— 这是墨滴与显影板「涂抹擦痕」
  *      的机制分界：后者越抹越清楚，前者留着会自己淡掉。
  *   ⑤ 时间基准**全文件统一绝对秒** —— t0 与"当前时刻"混用相对/绝对会让年龄恒为负，
@@ -126,14 +131,18 @@ describe('留言页 · 墨滴装置 · 机制硬规矩', () => {
   });
 
   it('★ 不在每次pointermove 里量DOM 几何（评论展开不触发重排重画）', () => {
-    /* ★ 这条判据原来写反过一次，是**绿着的假契约**（2026-10-06 修）：
-     *原断言是 `not.toMatch(/getBoundingClientRect/)` + 「留言区范围必须是视口
-     *    常量算的」—— 而"视口常量"恰恰是本次事故的根因（见下条）。
-     * 真正的约定是「不**每帧**读」，不是「从不读」：
-     *    留言区范围量**一次**并缓存，pointermove 里只读 window.scrollY。
+    /* ★ 这条判据写反过两次，两次都是**绿着的假契约**：
+     *① 2026-10-06 第一轮：`not.toMatch(/getBoundingClientRect/)` +「范围必须是视口
+     *    常量算的」—— 而"视口常量"恰恰是事故根因。
+     * ② 2026-10-06 第二轮：改成「必须量 .prose 真实几何」—— 结果把用户本来
+     *    能用的**整屏**收窄成"只有留言框那一小块"，是**回归**（站主实测：
+     *    「刚才整个屏幕都能生成墨痕」）。
+     * ⇒ 两次的共同教训：**别用"某种实现方式"当约定**。真正的约定是行为层面的
+     *   「任何位置都能留墨」，实现只是达成它的手段之一（见下一条）。
+     * 本条只守最硬的那部分：onMove 里绝不能读 DOM 几何。
      */
     /* ★ 只切 onMove 的**函数体**（从它到下一个顶层段落为止）——
-       切到文件尾会把后面的 measureArea() 也算进来，那是允许的。 */
+       切到文件尾会把后面的辅助函数也算进来，那是允许的。 */
     const from = CODE.indexOf('function onMove');
     const to = CODE.indexOf('function onDrop', from);
     const onMoveBody = CODE.slice(from, to > from ? to : undefined);
@@ -141,42 +150,67 @@ describe('留言页 · 墨滴装置 · 机制硬规矩', () => {
     expect(onMoveBody, 'pointermove 处理器里不许量 DOM 几何').not.toMatch(
       /getBoundingClientRect|offsetWidth|offsetHeight|querySelector/,
     );
-    expect(CODE, 'overMessageArea 必须在缓存的范围上判定').toMatch(/function\s+overMessageArea/);
   });
 
-  it('★★ 留言区范围量真实几何，不用视口比例当常数（2026-10-06 事故）', () => {
-    /* 症状：宽窗下墨痕「断断续续」，且必须开 F12（视口变窄）才看得到。
-     * 根因：`x > cw*0.12 && x < cw*0.88` 用**视口比例**反推留言区位置，
-     *   而版心是左对齐的**固定宽度**。实测 1440 视口：
-     *     留言框真实 [101..679]（宽 578），判定要求 x ∈ [170..1248]
-     *     ⇒ 框左侧 69px 被整段丢弃（旧判定只接受 88% 的采样点）。
-     *   视口越宽阈值越靠右，丢得越多；而 F12 一开视口变窄 ⇒ 阈值左移 ⇒
-     *   看起来像「F12 激活了装置」，实际是窗口宽度 ↔ 阈值的耦合。
+  it('★★★墨痕范围 = 整页，不设任何区域门槛（2026-10-06 二次实测）', () => {
+    /* 症状（站主二次实测，两条同时出现）：
+     *   ①「刚才整个屏幕都能生成墨痕」⇒ 整屏是**期望行为**；
+     *   ②「现在只能在留言框里面看到」⇒ 收窄是**回归**；
+     *   ③「打开 F12 才能看到断断续续」仍未解决。
+     *
+     * 探针实测（_probe/_ink-where.mjs，真实产物上派发 pointermove 数着色像素）：
+     *     区域        视口比例版   .prose几何版   现在
+     *     框内            19440      19440      19440
+     *     框左 260px        970(5%)   1010(5%)   8892 / 3325
+     *     框右 300px        968(5%)   1091(6%)  10281 / 10125
+     *     框上方 180px        0          0    19396 / 19365
+     *     视口正中         12983**       0    25940 / 19626
+     *   （后两列是 1920 / 1440 视口；**0 = 整条划痕完全不留墨）
+     *
+     * 关键：`.prose` 版在**框内是好的**（19440），所以上一轮"修好了"是假象——
+     *   局部正确 ≠ 整体正确，症状没消失只是换了成因。
+     * 而 1440 视口下**视口正中为 0**、1920 下同一位置有 12983 ⇒ 这才是
+     *   「开 F12 才能看到」的真正成因：F12 一开视口变窄，`.prose` 几乎横跨视口
+     *   ⇒ **蒙对了**，与 F12 无关。
+     *
+     * ⇒ 不变式：**除窄屏与 reduced-motion 两种降级外，不存在任何"某些位置不留墨"**
+     *   的区域门槛。范围就是画布全屏。
      */
-    expect(CODE, '必须量 .prose 的真实矩形').toMatch(/querySelector[^\n]*\.prose/);
-    expect(CODE, '必须用 getBoundingClientRect 量真实几何').toMatch(/getBoundingClientRect/);
-    /* 垂直方向存文档坐标（rect.top/bottom + scrollY），
-       这样**普通滚动不需要重测**，判定时只加 scrollY 换算。 */
-    expect(CODE, '垂直范围必须存文档坐标（含 scrollY）').toMatch(
-      /\.top\s*\+\s*window\.scrollY[\s\S]*?\.bottom\s*\+\s*window\.scrollY/,
+    /* ★ 切片必须只到**下一个函数**为止：`onDrop` 里有一处合法的
+     * `cw*0.5 / ch*0.42`（落滴位置兜底，不是区域门槛），切到文件尾会误判。 */
+    const jFrom = CODE.indexOf('function overMessageArea');
+    const jTo = CODE.indexOf('function onMove', jFrom);
+    const judge = CODE.slice(jFrom, jTo > jFrom ? jTo : undefined);
+    expect(judge, '没读到 overMessageArea').toContain('narrow.matches');
+    /* ① 不许量任何内容元素的几何 —— 有了区域就一定会去量它 */
+    expect(judge, '范围判定不许量 .prose（一旦有区域就一定会去量它）').not.toMatch(
+      /\.prose|getBoundingClientRect|querySelector/,
     );
-    /* 视口比例只允许留在兜底分支（还没量到时），不许当主判定 */
-    const mainJudge = CODE.slice(CODE.indexOf('function overMessageArea'));
-    const fallbackAt = mainJudge.indexOf('areaBottom < 0');
-    const ratioUse = mainJudge.search(/cw\s*\*\s*0\.12/);
-    expect(fallbackAt, '兜底分支应存在（.prose 缺失时兜底）').toBeGreaterThanOrEqual(0);
-    expect(ratioUse, '视口比例只能出现在兜底分支之后，不能是主判定').toBeGreaterThan(fallbackAt);
+    /* ② 不许拿视口比例当门槛（第一轮事故的写法，0.12/0.88 那套） */
+    expect(judge, '不许用视口比例当区域门槛（第一轮事故写法）').not.toMatch(
+      /cw\s*\*\s*0\.\d+|ch\s*\*\s*0\.\d+/,
+    );
+    /* ③ 判定只能由**画布自身尺寸**钳位（cw/ch 来自 fit()，不触发重排） */
+    expect(judge, '范围必须用画布自身尺寸 cw/ch 钳位').toMatch(/\bcw\b/);
+    expect(judge, '范围必须用画布自身尺寸 cw/ch 钳位').toMatch(/\bch\b/);
+    /* ④ 唯一允许的例外是窄屏降级（手指划屏会挡输入 → 只保留落滴）*/
+    expect(judge, '必须保留窄屏降级（≤767px 只留落滴）').toMatch(/narrow\.matches\s*\)\s*return false/);
   });
 
-  it('★★ 范围会在三种时机重测（含评论变长——视口不变那种）', () => {
-    /* 只在 resize 重测是不够的：留言发表后评论列表变长，`.prose` 高度变了而
-       **视口没变** ⇒ 下边界停在旧位置，新出现的表单区再也留不下墨痕。 */
-    expect(CODE, '必须有 ResizeObserver 观察 .prose 尺寸变化').toMatch(
-      /new\s+ResizeObserver[\s\S]*?observe\(/,
+  it('★★ 不留任何区域缓存 / 重测机制（范围既然是全屏，就没有边界要跟）', () => {
+    /* 上一轮为此加了三处：measureArea() + ResizeObserver(.prose) + resize 先重量。
+     * 范围变成全屏后**三处全部不再需要**，留着就是死代码 + 无谓的重排来源。
+     * 这条守住「不引入区域机制」—— 防止以后有人手滑又加回来。 */
+    expect(CODE, '不许再有 measureArea（范围是全屏，没有边界要量）').not.toMatch(/measureArea/);
+    expect(CODE, '不许再有 ResizeObserver 观察内容元素（范围与内容尺寸无关）').not.toMatch(
+      /new\s+ResizeObserver[\s\S]{0,200}observe\(/,
     );
-    expect(CODE, 'resize 时必须先重量再重画').toMatch(
-      /addEventListener\(\s*'resize'[\s\S]{0,120}measureArea\(\)[\s\S]{0,120}paint\(/,
-    );
+    expect(CODE, '不许再有 .prose 的范围缓存字段').not.toMatch(/areaL|areaR|areaTop|areaBottom|AREA_PAD/);
+    /* resize 只需重画（画布位图跟着视口/DPR 变），不该再有"先重量" */
+    const rs = CODE.slice(CODE.search(/addEventListener\(\s*'resize'/));
+    const rbody = rs.slice(0, 220);
+    expect(rbody, 'resize 只需重画').toMatch(/paint\(/);
+    expect(rbody, 'resize 里不该再有量范围的调用').not.toMatch(/measureArea|areaBottom|areaL/);
   });
 
 it('★ 痕迹会自愈（几秒渗开后收干净）—— 与显影板「涂抹擦痕」的分界', () => {
