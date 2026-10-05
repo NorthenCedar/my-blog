@@ -163,6 +163,40 @@ it('★ 痕迹会自愈（几秒渗开后收干净）—— 与显影板「涂�
   expect(CODE, '必须清掉淡干净的痕迹（防数组无界增长）').toMatch(/blobs\.splice/);
 });
 
+  it('★★ 笔触必须有实心核（两段渐变会读成"一串珠子"而不是一笔）', () => {
+    /* 2026-10-06 站主实测：屏幕上读出来是"几团孤立的点"、不是墨痕。
+     * 复算排除了插值太稀（间距 5–7px vs 直径 26px）⇒ 另一半根因在**笔触剖面**：
+     * 原来的渐变是 `(0, 0.5k) → (0.55, 0.22k) → (1, 0)`，**从中心就开始衰减**。
+     * 相邻两笔重叠处，两笔各自都还在衰减段 ⇒ 交叠处出现**浅谷**
+     * ⇒ 一串珠子，而不是一笔连续的痕。
+     * ⇒ 加一段近实心核（0.45 处仍有 0.42k），让中段连成实、只让外缘洇开。*/
+    const stops = [...CODE.matchAll(/g\.addColorStop\(\s*([\d.]+)\s*,\s*A\(\s*INK\s*,\s*([\d.]+)\s*\*\s*k/g)]
+      .map((m) => ({ pos: Number(m[1]), k: Number(m[2]) }));
+    expect(stops.length, '没读到墨痕的径向渐变 stops').toBeGreaterThanOrEqual(3);
+    /* ★ 至少要有三段：第一段给峰值，中间给"仍很实"的平台，末段收到 0 */
+    const core = stops.find((s) => s.pos > 0 && s.pos < 0.7);
+    expect(
+      core,
+      '渐变必须在中心与边缘之间有一段"仍然很实"的部分（否则重叠处出现浅谷 ⇒ 读成珠子）',
+    ).toBeTruthy();
+    /* 平台段的浓度必须**接近峰值**（≥ 峰值�� 80%）—— 低了就不是实心核，只是多一个 stop */
+    const peak = stops[0].k;
+    expect(peak, '渐变第一段必须是峰值').toBeGreaterThan(0);
+    expect(
+      core!.k / peak,
+      `实心核浓度 ${core!.k} 只有峰值的 ${((core!.k / peak) * 100).toFixed(0)}%（需 ≥80%，否则等于没加核）`,
+    ).toBeGreaterThanOrEqual(0.8);
+    /* ★★ 变异验证：把 0.45 那档的 0.42 改小（如 0.05）⇒ 上面「≥80% 峰值」立刻转红。*/
+
+    /* 末段单独查：收尾那档写的是 `A(INK, 0)`（**不带 `* k`**），
+       所以不能靠上面那条正则抓它 —— 抓不到就会误判成"没有末段"。
+       ⇒ 单独按 `A(INK, 0)` 的字面形状查（不写死缩进）。 */
+    expect(
+      CODE,
+      '渐变末段必须是 A(INK, 0)（r=1 处完全化开，不留硬边）',
+    ).toMatch(/addColorStop\(\s*1\s*,\s*A\(\s*INK\s*,\s*0\s*\)/);
+  });
+
   it('★ 时间基准全文件统一绝对秒（混用会让痕迹永远淡不掉）', () => {
     /* 症状：t0 存相对秒、当前时刻取绝对秒 ⇒ age 恒为负 ⇒ blobAlpha 一直返回 0
        ⇒ 指针划过什么都不留，而代码看起来完全正常。 */
@@ -315,10 +349,76 @@ it('★ 痕迹会自愈（几秒渗开后收干净）—— 与显影板「涂�
     const TRAIL_MAX = Number(CODE.match(/const\s+TRAIL_MAX\s*=\s*(\d+)/)?.[1]);
     const LIFE = Number(CODE.match(/const\s+LIFE\s*=\s*([\d.]+)/)?.[1]);
     expect(Number.isFinite(TRAIL_MAX), 'TRAIL_MAX 读不到').toBe(true);
+    /* ★★★ 这条判据原本写错了（2026-10-06 修正）：它写的是「上限 ≤1200」，
+     * 守的是"别太大"这个**代理指标**，而真正的不变式是**与 LIFE 自洽**
+     * —— 上限必须 ≥ 每秒生成的点数 × LIFE。
+     *
+     * 事故实录：原上限 420，而 1200px/s 下 4.2 秒需要 1008 个点
+     * ⇒ 数组一满就blobs.shift() 丢最旧的，**而那些点还在可见期里**
+     * ⇒ 真浏览器里划过一段后只剩几团孤立墨点（站主 2026-10-06 报）。
+     * ⚠ 更糟的是旧判据**守着错的方向**：它只查上限大小，
+     *   把 420 改成 1600 反而会"违反 ≤1200"—— 契约在阻止正确的修复。
+     *   ⇒ 换成从源码读生成速率算出来的自洽判据（见下一条 it）。
+     */
     expect(TRAIL_MAX, '上限太小会拖动手感').toBeGreaterThanOrEqual(120);
-    expect(TRAIL_MAX, '上限太大 ⇒长时间涂抹会吃掉内存/帧率').toBeLessThanOrEqual(1200);
+    /* 内存侧的粗 sanity：上限再大也不该是十万级（那会让每帧画爆） */
+    expect(TRAIL_MAX, '上限必须是千级（再大就吃掉帧率了）').toBeLessThanOrEqual(4000);
     /* 配合清理循环：上限只是保险，逻辑上还要真的把淡掉的移除（见上一条 it） */
     expect(LIFE * 60, 'LIFE 太长会让上一轮的墨一直挂在屏上').toBeLessThan(600);
+  });
+
+  it('★★ TRAIL_MAX 与 LIFE 自洽（否则墨痕被截断成几团孤立的点）', () => {
+    /*2026-10-06 站主实测症状：划过一段，屏幕上只剩两团孤立墨点、没有墨痕。
+     * 复算（`_probe/_inkdrop-cap.mjs`）确认根因**不是插值太稀**
+     * （实测采样间距 5–7px vs 笔触直径 26px，本就连得起来），
+     * 而是**生成速率远超上限**：
+     *   点数/秒 = fps × min(STEPS_CAP, (speed/fps) / TRAIL_STEP)
+     *   4.2 秒需要的点数 = 点数/秒 × LIFE
+     * 上限不够 ⇒ 每帧 shift() 丢掉**还在可见期里**的点 ⇒ 前段墨凭空消失。
+     *
+     *★ 判据直接从源码常数算，不写死阈值 —— 改任一常数后这条会跟着重算，
+     *   不会变成"守着旧值的假绿灯"（AGENTS 2026-10-05 同源教训）。*/
+    const num = (name: string) => {
+      const v = CODE.match(new RegExp(`const\\s+${name}\\s*=\\s*([\\d.]+)\\s*;`))?.[1];
+      return v === undefined ? NaN : Number(v);
+    };
+    const TRAIL_STEP = num('TRAIL_STEP');
+    const TRAIL_MAX = num('TRAIL_MAX');
+    const LIFE = num('LIFE');
+    const FPS = 60;
+    for (const [n, v] of Object.entries({ TRAIL_STEP, TRAIL_MAX, LIFE })) {
+      expect(Number.isFinite(v), `${n} 读不到（探针锚点失效？）`).toBe(true);
+    }
+    /* 插值上限：字面量（Math.min(12, ...)）或具名常数（Math.min(STEPS_CAP, ...)）两种都要认。
+     * ⚠ 只认字面量的话，一旦源码改成具名常数就读出 NaN，
+     *   而后面 all NaN 仍会"通过"或整片报错 —— 一律显式失败，不许静默算 NaN。 */
+    const capTok = CODE.match(
+      /Math\.min\(\s*(\w+)\s*,\s*Math\.floor\(\s*dist\s*\/\s*TRAIL_STEP\s*\)\s*\)/,
+    )?.[1];
+    expect(capTok, '没找到插值上限的调用点Math.min(?, floor(dist/TRAIL_STEP))').toBeTruthy();
+    const STEPS_CAP = /^\d+$/.test(capTok!)
+      ? Number(capTok)
+      : Number(CODE.match(new RegExp(`const\\s+${capTok}\\s*=\\s*(\\d+)\\s*;`))?.[1]);
+    expect(Number.isFinite(STEPS_CAP), `插值上限读不出来（${capTok}）`).toBe(true);
+
+    /* 逐档算：常见鼠标速度下 4.2 秒的痕迹必须装得下 */
+    const needAt = (speed: number) => {
+      const steps = Math.min(STEPS_CAP, Math.floor(speed / FPS / TRAIL_STEP));
+      return FPS * steps * LIFE;
+    };
+    /* 覆盖"慢 → 中 → 偏快"三档。偏快那档允许略短（不要求完整 LIFE），
+       但**必须留住 2 秒以上** —— 低于这个数截断就肉眼可见了。 */
+    for (const speed of [400, 900, 1800]) {
+      expect(
+        needAt(speed),
+        `${speed}px/s 时 4.2 秒需要 ${Math.round(needAt(speed))} 个点，上限 ${TRAIL_MAX} 装不下⇒ 墨痕被截断`,
+      ).toBeLessThanOrEqual(TRAIL_MAX);
+    }
+    const fastNeed = needAt(2500);
+    const fastKeptSec = TRAIL_MAX / (FPS * Math.min(STEPS_CAP, Math.floor(2500 / FPS / TRAIL_STEP)));
+    expect(fastKeptSec, `2500px/s 快挥只留${fastKeptSec.toFixed(2)}s（需 ${Math.round(fastNeed)} 点）—— 截断太狠，仍会读成孤立的点`).toBeGreaterThan(2);
+    /* ★ 变异验证：把 TRAIL_MAX 改回 420（事故值）⇒ 上面两档立刻转红。 */
+    expect(TRAIL_MAX, '事故值 420 会截断成孤立墨点，别改回去').toBeGreaterThan(420);
   });
 
   it('构建产物里画布真实在位、脚本已并入', () => {

@@ -90,11 +90,30 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
 
   /* ---------- 母题常数 ---------- */
   const TRAIL_STEP = 5; // 笔刷采样间距（px）：越小越连续，越大越"点状"
-  const TRAIL_MAX = 420; // 痕迹条数上限（超出丢最旧的 ⇒ 长时间涂抹也不会无限涨）
+  /* ★★ TRAIL_MAX 必须与 LIFE **自洽**，否则墨痕会被截断成几团孤立的点。
+   *
+   * 症状（2026-10-06 站主真浏览器实测）：划过一段后，屏幕上只剩两团孤立墨点、
+   * 没有墨痕。复算（`_probe/_inkdrop-cap.mjs`）确认根因**不是插值太稀**
+   * （实测间距 5–7px vs 笔触直径 26px，连得起来），而是**生成速率远超上限**：
+   *   每帧生成 min(STEPS_CAP, dist/TRAIL_STEP) 个点
+   *   60fps + 笔速 1200px/s ⇒ 240 点/秒 ⇒ 4.2 秒需要 **1008** 个点
+   *   而上限只有 420 ⇒ 数组一满就 blobs.shift() 丢最旧的，
+   *   **而那些点还在可见期里**（还没到 4.2s）⇒ 前面的墨凭空消失。
+   *
+   * 自洽算式：TRAIL_MAX ≥ 每秒点数 × LIFE。
+   *   2500px/s（快挥）⇒ 480 点/秒 ⇒ 需 2016 ⇒ 取 1600 保留约 3.3s 的轨迹
+   *   （够读成"一条痕"；再慢一点的划动能完整保留 4.2s）。
+   * 取 1600 而非刚好 2016：每帧多画些小圆，帧率代价可忽略。
+   */
+  const TRAIL_MAX = 1600; // 痕迹条数上限（= 2500px/s 时约 3.3s 的轨迹）
   const BLOB_R = 13; // 单个笔触的半径（css px）
   const SMEAR = 2.6; // 每一笔的"铺开"半径（比笔触大 ⇒ 看起来像墨在渗）
   const LIFE = 4.2; // 一笔墨痕从满到收干净（秒）—— 站主要求的"几秒渗开"
   const HEAL = 0.55; // 每秒收掉的比例（指数自愈，不是线性）
+  /* 单次 pointermove 的插值上限。12 太小：指针快挥时单次事件距离可达 100px+，
+     12 步会把这段稀释成 12 个大间距的点（临界约 7800px/s）。
+     提到 32 ⇒ 即便 400px 的一次跳也还保得住约 12px 的连续间距。 */
+  const STEPS_CAP = 32; // 单次事件的插值步数上限
   const DROP_LIFE = 2.4; // 落滴从落到散尽
   const DROP_FALL = 0.42; // 落下占整段的比例（其余是落地后的扩散）
   const DROP_R = 46; // 落滴砸出的扩散圈最终半径
@@ -154,8 +173,14 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
          种子 `b.s` 决定这一笔的渗开**略不对称**（同i 恒定）。 */
       const r = (BLOB_R + age * SMEAR * (0.7 + b.s * 0.6)) * (narrow.matches ? 0.85 : 1);
       const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, r);
+      /* ★★ 三段而不是两段（2026-10-06 实测后加）：原来的 `(0, 0.5k) → (1, 0)`
+         是**从中心就开始衰减**，相邻两笔的重叠区各自都还在衰减段
+         ⇒ 交叠处出现浅谷 ⇒ 一串珠子，读起来不像一笔。
+         加一段 0.45→0.42k 的**近实心核**，让笔触中段连成实、外缘才化开
+         —— 那才是墨在纸上"中间浓、边上洇"的样子。 */
       g.addColorStop(0, A(INK, 0.5 * k * trailScale));
-      g.addColorStop(0.55, A(INK, 0.22 * k * trailScale));
+      g.addColorStop(0.45, A(INK, 0.42 * k * trailScale));
+      g.addColorStop(0.78, A(INK, 0.16 * k * trailScale));
       g.addColorStop(1, A(INK, 0));
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -240,7 +265,7 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
       const dy = y - lastY;
       const dist = Math.hypot(dx, dy);
       if (dist < TRAIL_STEP) return;
-      const steps = Math.min(12, Math.floor(dist / TRAIL_STEP));
+      const steps = Math.min(STEPS_CAP, Math.floor(dist / TRAIL_STEP));
       const ts = nowSec();
       for (let k = 1; k <= steps; k++) {
         const t = k / steps;
