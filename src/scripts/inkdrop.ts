@@ -26,8 +26,20 @@
  *      ⇒ 墨痕的**年龄**决定它的样子，形状由 `hash01(i)` 整数哈希定；
  *        同一个 (位置, 年龄) 永远同一个像素值。
  *   ② 「不读内容几何」（float.ts 的约定①，评论展开会插一大堆 DOM）
- *      ⇒ 墨痕**不吃 DOM 尺寸**：留言区的范围在**视口坐标系**里由常数给出，
- *        不量 `getBoundingClientRect()`。唯一读 DOM 的是"事件落在哪"（见下）。
+ *      ⇒ 墨痕**不在每次 pointermove 里量 DOM**：留言区的范围在
+ *        **resize / 元素尺寸变化**时量一次 `.prose` 并缓存成**文档坐标**，
+ *        判定时只读 `window.scrollY`（廉价、不触发重排）把 clientY 换算过去。
+ *
+ *   ⚠★★ 教训（2026-10-06 站主真浏览器实测）：
+ *      早先**用视口比例当常数**（`x > cw*0.12 && x < cw*0.88`）——
+ *      而版心是**左对齐的固定宽度**、视口宽度随窗口变。实测 1920 宽时：
+ *        留言框真实范围  left 47.8 → right 507（宽 459）
+ *        代码要求的范围  x  229   →       1679
+ *        交集只有 229..507 ⇒ **框左侧 181px（占 39%）的轨迹被整段丢弃**，
+ *        且被拒时 `lastX=-1` 会**切断插值链** ⇒ 读出来是「断断续续」。
+ *      站主误以为是「开 F12 激活了装置」，真实因果是窗口宽度 ↔ 阈值的耦合。
+ *      ⇒ **「常数」不等于「与版式无关」**：版式是固定的，视口不是。
+ *        凡是「用视口比例反推内容位置」的地方，都要换成量一次真实几何。
  *
  * ★★ 为什么需要一次**事件**，以及为什么改`comments.ts`：
  *   「新留言落下是墨滴扩散」这个需求，装置自己**不可能知道**留言成功了 ——
@@ -243,12 +255,43 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
   /* ---------- 记录一笔墨痕 ---------- */
   let lastX = -1;
   let lastY = -1;
-  /** 指针落点是否在"留言区"：本页留言区大致在版心那一列里，取视口的中间带 + 下半屏。
-      ★ **不量DOM**（见头部②）：留言区位置是版式常量，量DOM 会与评论列表抢主线程。
-        窄屏只保留落滴 ⇒ 直接返回 false。 */
+
+  /* ---------- 留言区范围：量一次，缓存 ---------- *
+   * ★★ 为什么不能拿视口比例当常数 —— 见头部②那条教训。
+   *   量的是 `.prose`（评论列表 + 留言表单这一整块）的真实几何：
+   *     · 水平方向：直接存 rect.left / right（视口坐标，**不随滚动变化**）
+   *     · 垂直方向：存**文档坐标**（rect.top/bottom + scrollY），因为它随滚动变
+   *   判定时只读 `window.scrollY` 把 clientY 换算成文档坐标 —— 这一步极廉价，
+   *   不触发重排，所以不违反「不每帧读 DOM 几何」的约定。
+   */
+  const AREA_PAD = 28; // 边缘留一点余量，让「刚好擦到框边」也算落在留言区
+  let areaL = 0;
+  let areaR = 0;
+  let areaTop = 0;
+  let areaBottom = -1; // −1 = 还没量到（元素缺失 / fit 未成功）
+
+  function measureArea(): void {
+    if (!cw || !ch) return; // 画布尺寸都还没有，量出来的没有意义
+    const el = document.querySelector<HTMLElement>('.prose');
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    areaL = r.left - AREA_PAD;
+    areaR = r.right + AREA_PAD;
+    areaTop = r.top + window.scrollY - AREA_PAD;
+    areaBottom = r.bottom + window.scrollY + AREA_PAD;
+  }
+
+  /** 指针落点是否在"留言区"内。窄屏只保留落滴 ⇒ 直接返回 false。 */
   function overMessageArea(x: number, y: number): boolean {
     if (narrow.matches) return false;
-    return y > ch * 0.3 && x > cw * 0.12 && x < cw * 0.88;
+    if (areaBottom < 0) {
+      /* 兜底：还没量到（`.prose` 不存在，或 fit() 尚未成功）才退回视口比例。
+         这不是常态路径 —— 常态必须走真实几何，见头部②的教训。 */
+      return y > ch * 0.3 && x > cw * 0.12 && x < cw * 0.88;
+    }
+    const vy = y + window.scrollY; // clientY → 文档坐标
+    return vy > areaTop && vy < areaBottom && x > areaL && x < areaR;
   }
 
   function onMove(e: PointerEvent) {
@@ -323,6 +366,19 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
   /* 就绪 ⇒ 显形（opacity 门控，见头部） */
   cv.classList.add('is-ready');
 
+  /* ---------- 留言区范围的三个重测时机 ---------- *
+   * ① 首帧之后（`paint()` 已跑完，`cw/ch` 才有值，`measureArea()` 才肯动手）
+   * ② 视口变化（版心是居中/左对齐的，宽度变了边界就变了）
+   * ③ **`.prose` 自身尺寸变化** —— 这是关键的一条：评论展开、留言发表后列表会变长，
+   *    `.prose` 的高度跟着变而视口**没变**。没有 ③ 的话，发表一条留言后
+   *    留言区的下边界就停在旧位置，新出现的表单区域再也留不下墨痕。
+   *    垂直方向存的是文档坐标，所以**普通滚动不需要重测**（换算时加 scrollY 即可）。
+   */
+  measureArea();
+  const ro = new ResizeObserver(() => measureArea());
+  const proseEl = document.querySelector('.prose');
+  if (proseEl) ro.observe(proseEl);
+
   const gate = createActivityGate(cv);
   window.addEventListener('pointermove', onMove, { passive: true });
   window.addEventListener('inkdrop', onDrop as EventListener);
@@ -345,11 +401,16 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
     }
   });
 
-  window.addEventListener('resize', () => paint(nowSec()), { passive: true });
+  /* resize 先重量（版心宽度可能变了），再重画（画布尺寸也要跟着变） */
+  window.addEventListener('resize', () => {
+    measureArea();
+    paint(nowSec());
+  }, { passive: true });
 
   window.addEventListener('beforeunload', () => {
     stop();
     gate.dispose();
+    ro.disconnect();
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('inkdrop', onDrop as EventListener);
   }, { once: true });

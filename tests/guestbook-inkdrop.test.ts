@@ -125,12 +125,58 @@ describe('留言页 · 墨滴装置 · 机制硬规矩', () => {
     expect(hash, 'hash01 必须用 Math.imul（整数哈希）').toMatch(/Math\.imul/);
   });
 
-  it('★ 不读 DOM 几何（评论展开不触发重排重画）', () => {
-    expect(CODE, '装置不许量 DOM 几何').not.toMatch(/getBoundingClientRect|offsetWidth|offsetHeight|clientTop|clientLeft/);
-    /* 唯一允许的 DOM 读是 clientWidth/clientHeight（画布自己的尺寸）。 */
-    const reads = [...CODE.matchAll(/client(?:Width|Height)/g)];
-    expect(reads.length, '只该在 fit() 里读画布自身尺寸').toBeGreaterThan(0);
-    expect(CODE, '留言区范围必须是视口常量算的，不是量DOM 得来的').toMatch(/function\s+overMessageArea/);
+  it('★ 不在每次pointermove 里量DOM 几何（评论展开不触发重排重画）', () => {
+    /* ★ 这条判据原来写反过一次，是**绿着的假契约**（2026-10-06 修）：
+     *原断言是 `not.toMatch(/getBoundingClientRect/)` + 「留言区范围必须是视口
+     *    常量算的」—— 而"视口常量"恰恰是本次事故的根因（见下条）。
+     * 真正的约定是「不**每帧**读」，不是「从不读」：
+     *    留言区范围量**一次**并缓存，pointermove 里只读 window.scrollY。
+     */
+    /* ★ 只切 onMove 的**函数体**（从它到下一个顶层段落为止）——
+       切到文件尾会把后面的 measureArea() 也算进来，那是允许的。 */
+    const from = CODE.indexOf('function onMove');
+    const to = CODE.indexOf('function onDrop', from);
+    const onMoveBody = CODE.slice(from, to > from ? to : undefined);
+    expect(onMoveBody, 'onMove 切片必须非空').not.toBe('');
+    expect(onMoveBody, 'pointermove 处理器里不许量 DOM 几何').not.toMatch(
+      /getBoundingClientRect|offsetWidth|offsetHeight|querySelector/,
+    );
+    expect(CODE, 'overMessageArea 必须在缓存的范围上判定').toMatch(/function\s+overMessageArea/);
+  });
+
+  it('★★ 留言区范围量真实几何，不用视口比例当常数（2026-10-06 事故）', () => {
+    /* 症状：宽窗下墨痕「断断续续」，且必须开 F12（视口变窄）才看得到。
+     * 根因：`x > cw*0.12 && x < cw*0.88` 用**视口比例**反推留言区位置，
+     *   而版心是左对齐的**固定宽度**。实测 1440 视口：
+     *     留言框真实 [101..679]（宽 578），判定要求 x ∈ [170..1248]
+     *     ⇒ 框左侧 69px 被整段丢弃（旧判定只接受 88% 的采样点）。
+     *   视口越宽阈值越靠右，丢得越多；而 F12 一开视口变窄 ⇒ 阈值左移 ⇒
+     *   看起来像「F12 激活了装置」，实际是窗口宽度 ↔ 阈值的耦合。
+     */
+    expect(CODE, '必须量 .prose 的真实矩形').toMatch(/querySelector[^\n]*\.prose/);
+    expect(CODE, '必须用 getBoundingClientRect 量真实几何').toMatch(/getBoundingClientRect/);
+    /* 垂直方向存文档坐标（rect.top/bottom + scrollY），
+       这样**普通滚动不需要重测**，判定时只加 scrollY 换算。 */
+    expect(CODE, '垂直范围必须存文档坐标（含 scrollY）').toMatch(
+      /\.top\s*\+\s*window\.scrollY[\s\S]*?\.bottom\s*\+\s*window\.scrollY/,
+    );
+    /* 视口比例只允许留在兜底分支（还没量到时），不许当主判定 */
+    const mainJudge = CODE.slice(CODE.indexOf('function overMessageArea'));
+    const fallbackAt = mainJudge.indexOf('areaBottom < 0');
+    const ratioUse = mainJudge.search(/cw\s*\*\s*0\.12/);
+    expect(fallbackAt, '兜底分支应存在（.prose 缺失时兜底）').toBeGreaterThanOrEqual(0);
+    expect(ratioUse, '视口比例只能出现在兜底分支之后，不能是主判定').toBeGreaterThan(fallbackAt);
+  });
+
+  it('★★ 范围会在三种时机重测（含评论变长——视口不变那种）', () => {
+    /* 只在 resize 重测是不够的：留言发表后评论列表变长，`.prose` 高度变了而
+       **视口没变** ⇒ 下边界停在旧位置，新出现的表单区再也留不下墨痕。 */
+    expect(CODE, '必须有 ResizeObserver 观察 .prose 尺寸变化').toMatch(
+      /new\s+ResizeObserver[\s\S]*?observe\(/,
+    );
+    expect(CODE, 'resize 时必须先重量再重画').toMatch(
+      /addEventListener\(\s*'resize'[\s\S]{0,120}measureArea\(\)[\s\S]{0,120}paint\(/,
+    );
   });
 
 it('★ 痕迹会自愈（几秒渗开后收干净）—— 与显影板「涂抹擦痕」的分界', () => {
