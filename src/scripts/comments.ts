@@ -122,6 +122,23 @@ if (root) {
         setCount();
         // 只清空留言框，**不清空名字** —— 同一个人可能想连着说几句
         (form.elements.namedItem('body') as HTMLTextAreaElement).value = '';
+
+        /* 2026-10-06：通知「留言页的墨滴装置」有一滴落下。
+           ★ 为什么用事件而不是让装置去观察 DOM：
+             ① 装置若轮询/监听 DOM 变化，就必须读元素几何（评论一展开会插一大堆 DOM，
+                量几何会与评论列表抢主线程，float.ts 的约定①就是这个）；
+             ② 「DOM 变了」不是「留言成功了」的可靠信号（回复、展开回复同样会改 DOM）。
+           ★ 派发在**成功之后** —— 失败不该有墨滴（那等于给失败做庆祝）。
+           ★ 全站第一个装置↔业务的事件钩子；`window` 上带冒泡，装置用 `window` 收。 */
+        window.dispatchEvent(
+          new CustomEvent('inkdrop', {
+            detail: {
+              // 落点用新评论那一条的位置（"新留言落在列表里"），失败/缺失时装置自己退回常量
+              x: list.firstElementChild?.getBoundingClientRect().left ?? undefined,
+              y: (list.firstElementChild?.getBoundingClientRect().top ?? 0) + 12 || undefined,
+            },
+          }),
+        );
       })
       .catch((err: Error) => {
         // 失败时**保留用户已输入的内容**，绝不重置表单

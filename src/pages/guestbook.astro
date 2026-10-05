@@ -1,5 +1,7 @@
 ---
 import { getEntry } from 'astro:content';
+import type { ImageMetadata } from 'astro';
+import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
 import CommentSection from '../components/CommentSection.astro';
@@ -14,9 +16,45 @@ interface GuestbookData {
 }
 const entry = await getEntry('pages', 'guestbook');
 const d = (entry?.data ?? {}) as unknown as GuestbookData;
+
+/* 底纹母题「墨滴 INK DROP」的第一层（站主 2026-10-06 指定）：蓝色钢笔环线 + 星芒，
+   **替代本页的百褶 ∞**。母题与后续的墨滴装置同源，所以叫 inkdrop-*。
+   ⚠️ 目录必须放在 `guestbook/` 的子目录里 —— 若日后在 `guestbook/` 根下放别的图，
+      记得用非递归 glob 区分开（同 talks 的 talks/plates 约定）。
+   素材处理见 `_probe/_guestbook-plate.mjs`：蓝度抠图 + 反预乘去白边 + 裁到主体框。 */
+const PLATES = import.meta.glob<{ default: ImageMetadata }>('/src/assets/guestbook/plates/*.webp', { eager: true });
+const plate = PLATES['/src/assets/guestbook/plates/inkdrop-orbit.webp']?.default;
 ---
 
-<Base title="留言" current="guestbook" chrome="page">
+<Base title="留言" current="guestbook" chrome="page" bodyClass="guestbook-plate">
+  {/* ===================================================================
+   * 视口装饰层（plate 具名槽）—— 墨滴母题的**两层**：
+   *   ① `.float-plate` 静态底纹（蓝色环线 + 星芒）**替代**百褶 ∞
+   *   ② `.inkdrop-bg` 动态装置（指针留墨痕、几秒渗开；新留言落下墨滴扩散）
+   *
+   * ★★ 必须走 `plate` 具名槽，不能塞进普通 slot：`.shell` 在页面过渡里会被
+   *    `transform`，而被 transform 的祖先会成为 `position:fixed` 的包含块
+   *    ⇒ 装饰层会从下往上跳（关于页实测 91px）。百褶 ∞ 一直没事，
+   *    正因为它在 `.shell` 外面（Topbar 渲染）。
+   * ★ DOM 顺序 = 层序：画布在底纹**之后** ⇒ 墨滴画在底纹**之上**、正文之下
+   *    （与 talks 页雨线压墨点同一条规矩）。
+   * =================================================================== */}
+  <Fragment slot="plate">
+    {plate && (
+      <div class="float-plate" aria-hidden="true">
+        <Image
+          class="float-img"
+          src={plate}
+          alt=""
+          widths={[590, 1180]}
+          sizes="86vw"
+          loading="eager"
+          decoding="sync"
+        />
+      </div>
+    )}
+    <canvas class="inkdrop-bg" data-inkdrop aria-hidden="true"></canvas>
+  </Fragment>
   <header class="pagehead">
     <PageTitle>留言</PageTitle>
     {d.intro && <p class="lede">{d.intro}</p>}
@@ -33,6 +71,9 @@ const d = (entry?.data ?? {}) as unknown as GuestbookData;
     写法与文章页 src/layouts/Post.astro 完全一致。 */}
 <script>
   import '../scripts/comments';
+  // 本页的装置「墨滴 INK DROP」（2026-10-06）：指针留墨痕几秒渗开 + 新留言落下墨滴扩散。
+  // 在同一个 <script> 里 import⇒ Astro 会把两个模块并进同一个产物脚本，不新增标签。
+  import '../scripts/inkdrop';
 </script>
 
 <style>
@@ -46,5 +87,76 @@ const d = (entry?.data ?? {}) as unknown as GuestbookData;
     max-width: var(--measure);
     font-size: var(--fs-sm);
     color: var(--muted);
+  }
+
+  /* ===================================================================
+   * 底纹层（PAGE PLATE）—— 墨滴环线 **替代** 百褶 ∞（站主 2026-10-06）
+   *
+   * 挂法照抄 Topbar 的 `body.chrome-page .page-inf`（百褶 ∞ 那一层）：
+   *   fixed 挂视口居中 / `contain` / `z-index:-1` / 不拦指针
+   *   —— 全站纸白区只有一套纹理语言，本页换**母题**不换**角色**。
+   * ★ 比例与取宽**不照抄**百褶 ∞（唯一不能照抄的是素材本身）：
+   *   ∞ 是 1572/878，本图抠完主体框是 923/464。
+   * ★ `--plate-w` / `--plate-op` 留着"再调分量"用（可以只在 HTML 上内联覆盖，
+   *   不必改样式表）；默认值就是校准后的定稿。
+   * =================================================================== */
+  .float-plate {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    /* 取宽同 talks 墨点档 `min(86vw, 1180px, 200vh)`，三个上限各管一件事：
+       · 86vw —— 任何视口宽下都留 ≥7% 余量
+       · 1180px —— 超宽屏不让它无限长（仍是版心的两倍多，"大尺度氛围"没丢）
+       · 200vh —— 兜住"又宽又扁"的窗：图高 ≤ 85.5vh，上下永远留得下。
+       ★ 不用 128vw 出血档：那会把环线左右两端切掉半截，读起来像"图被裁坏了"。 */
+    width: var(--plate-w, min(86vw, 1180px, 200vh));
+    aspect-ratio: 923 / 464;
+    transform: translate(-50%, -50%);
+    /* 透明度取 8% —— 站上**自己**的装饰底纹定稿档
+       （`--deco-plate-coarse` = `#2d7d4614` = 20/255 ≈ 7.8%）。
+       同一把尺子量所有底纹，比"抄一个只对旧素材成立的数字"更忠实于原意。
+       ★ 本图是**高饱和蓝**， perceptually 比 talks 的近黑墨点更跳；
+         若目检觉得压过正文，第一个该拧的是 --plate-op，不是这个档位本身。 */
+    opacity: var(--plate-op, 0.08);
+    pointer-events: none;
+    z-index: -1;
+  }
+  /* `max-width: none` 必需：base.css 给 `img` 定了 `max-width:100%`，
+     而这一层刻意比版心宽 —— 不解除限制它会缩到父盒宽度，跟着版心走。 */
+  .float-plate img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    object-fit: contain;
+  }
+
+  /* 装置画布：与底纹同层（同 z-index:-1），DOM 在后 ⇒ 墨滴画在底纹**之上**、正文之下。
+     `inset:0` 满屏 ⇒ 一次对尺寸，滚动时不需要任何重算（fixed 不随文档走）。 */
+  .inkdrop-bg {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+    /* ★ 显隐门控照抄友链页星座（首页 DNA 同款）：元素**始终占位**
+       （`fit()` 要量 clientWidth/clientHeight），没就绪时只是不可见。
+       ⚠ **不用 `hidden` 属性** —— 那是 `display:none`，会让 clientWidth 恒为 0
+         ⇒ 装置永远画不出第一帧（AGENTS 2026-10-05 星座那轮的原文教训）。 */
+    opacity: 0;
+    transition: opacity 640ms var(--ease-glass);
+  }
+  .inkdrop-bg.is-ready {
+    opacity: 1;
+  }
+
+  /* ★★ 必须关掉本页的百褶 ∞（`.page-inf`，Topbar 渲染、全站内页共用）。
+     不关的话两套母题会叠在一起（关于页「切片档案」的教训）。
+     ⚠ 用 `:global(...)`：`.page-inf` 是 Topbar 的元素、带的是**别的**作用域属性；
+       且那边写的是 `body.chrome-page .page-inf`（0,2,1）⇒ 权重必须对齐才压得住。
+     关法用 `display:none` 而不是 `opacity:0`：后者仍占一层满屏合成层，很贵。 */
+  :global(body.guestbook-plate .page-inf) {
+    display: none;
   }
 </style>
