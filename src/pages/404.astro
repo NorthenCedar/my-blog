@@ -1,7 +1,9 @@
 ---
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
----
+import type { ImageMetadata } from 'astro';
+import { Image } from 'astro:assets';
+
 {
   /* 404 迁移（2026-09-26）：chrome='band' → 'page'（内页外壳）。
      **'page' 不渲染 <slot name="band" />** ⇒ 标题必须搬进正文流（外壳的 .pagehead），
@@ -10,7 +12,82 @@ import PageTitle from '../components/PageTitle.astro';
      有 canonical 等于让搜索引擎收录一个空页，而且删了不会报任何错（所以验收里有一条断言守着）。
      PageTitle 无颜色、靠继承（about 那轮已读源码 + 实图双重确认）⇒ 无需主题化。 */
 }
-<Base title="页面不存在" noCanonical chrome="page">
+
+/* ============================================================================
+ * 本页的两样装饰（2026-10-06 站主指定），都挂在 `plate` 槽里：
+ *   ① `.frac-inf` —— 底纹 ∞。**替代**全站内页那层「百褶 ∞」（`Topbar` 的 `.page-inf`）。
+ *   ② `.fracture` —— 装置「裂痕 FRACTURE」的画布（指针划过，玻璃开裂并缓慢生长）。
+ *
+ * ★★ 为什么必须走 `plate` 具名槽（页面侧写 `<Fragment slot="plate">`）：
+ *   普通 slot 会落进 `.shell` 内部，而页面过渡 `html.pt-play .shell` 会给它加
+ *   **transform 和 `filter: blur()`** —— 这两样都会建立 `position: fixed`/`absolute`
+ *   的包含块（`absolute` 的包含块也会从"初始包含块"变成 `.shell` 盒），
+ *   于是装饰层在打开页面时会跳（关于页实测 91px、归档卷尺 596px）。
+ *   `plate` 槽在 `.shell` **之外**，天然免疫。
+ *
+ * ★★ 尺寸口径（都是量出来的，不是感觉出来的）：
+ *   · 素材原生 **1080×410**（站主给的图；实测是 PNG/4 通道、alpha 99.8% 为 255
+ *     ⇒ 等价不透明，抠图见 `_probe/_404-plate.mjs`）。
+ *   · **取宽上界 2160px = 原生 × 2** —— 与标签页 ∞ 同一条规矩（超过就是插值糊图）。
+ *     图里这个 ∞ 是"两片扇形 + 一个环"的线面混合，放大 3× 时楔形边缘会明显发毛。
+ *     ⚠ 要更大只能换更高分辨率的源图或矢量化，**不要靠调大 --plate-w 解决**。
+ *   · **可以出血** —— 与标签页那个 ∞ 相反。这张图的构图**本来就是出画的**
+ *     （实测内容触边 l/r/t/b = **8/316/1243/1460**，内容 bbox (1,0)-(1078,409)：
+ *       右侧光锥与上下两片楔形都跑出画外，左边那 8px 是楔形尖端刚好碰到边缘、近乎不算）。
+ *     ⇒ 切掉两端更像"裁了一张大构图"，不是"符号被裁坏"。
+ *     所以这里照抄百褶 ∞ 的 `128vw` 出血口径（而不是标签页那条"不许出血"）。
+ *     ⚠ 这组触边数是**修好掩码、且把五处西文小字抠掉之后**重测的。两个更早的版本：
+ *       · 第一版报 550/774/1245/1400，那个 l=550 **不是出血** —— 源图最左/最右各有
+ *         一整列透明像素（RGB 是 0,0,0），掩码按灰度判定把它们当成了"极黑内容"
+ *         ⇒ 产物左右各多一根整列纯黑。
+ *       · 第二版报 8/304/1239/970 —— 那是**去小字之前**的数。右下角那行说明横跨到
+ *         (1079,409)，抠掉之后右/上/下三边都涨了。
+ *       ★ 教训：**`audit()` 自己报的数也会骗人** —— 它量的是掩码的产物，
+ *         掩码错的时候这个数跟着错，而且错得"看起来像构图信息"。见 `_probe/_404-plate.mjs`。
+ *   · **小字标签按站主指令「全抠掉」**（严格乙档）：微字堆叠 / `IT REFERENCE 2017` /
+ *     `INFINITY` / 左上角 `01` / `Patience` / 右下角说明行，六处全部移除并谐调插值补底。
+ *     判据见 `tests/fracture.test.ts`（近黑像素 1505 → 6，最大连通块 137 → 3）。
+ *     ⚠ 代价（据实记录）：插值是**低频**的，所以被字压住的楔形硬边会变成一段软坡。
+ *       5× 放大肉眼可见，但到不了交付尺寸 —— 按 `min(148vw,2160px,240vh)` 放大 1.97×、
+ *       α 0.18 合成到纸白后不可见（对照图 `_probe/_404/*-real.png`）。
+ *       低频误差人眼本就不敏感，这是"精确去字"换来的必然代价，不是缺陷。
+ *   · **必须带 vh 上界**：站上踩过"只锁宽 ⇒ 在又宽又扁的窗里从上下出画"；
+ *     更硬的一条是 **fixed 元素超出视口的量 Chrome 会计入文档滚动尺寸**
+ *     ⇒ 取宽不给 vh 上界就会给 404 页凭空加一根纵向滚动条。
+ *     240vh ÷ 2.634 = 91vh ⇒ 高度永远不超过视口。
+ * ========================================================================== */
+const PLATES = import.meta.glob<{ default: ImageMetadata }>('/src/assets/404/plates/*.webp', {
+  eager: true,
+});
+const plate = PLATES['/src/assets/404/plates/inf-frac.webp']?.default;
+---<Base title="页面不存在" noCanonical chrome="page" bodyClass="frac-plate">
+  <Fragment slot="plate">
+    {
+      /* 底纹 ∞：与 `.page-inf` 同角色同层级（fixed 挂视口 / z-index:-1 / 不拦指针）
+         —— 全站纸白区只有一套纹理语言，本页换**母题**不换**角色**。 */
+      plate && (
+        <div class="frac-inf" aria-hidden="true">
+          <Image
+            class="frac-inf-img"
+            src={plate}
+            alt=""
+            /* 源图 1080 宽：给 540（0.5×）与 1080（1×）两档。
+               ⚠ **不要 2160 那一档** —— 它恰是原生的 2×，Astro 会把 1080 放大一遍，
+                 构建日志里表现为 (before: X, after: X)：字节没变、像素是插出来的。 */
+            widths={[540, 1080]}
+            sizes="(max-width: 767px) 230vw, 148vw"
+            loading="eager"
+            decoding="sync"
+          />
+        </div>
+      )
+    }
+    {/* 装置「裂痕」的画布。空元素 —— 逻辑全在 src/scripts/fracture.ts。
+        ⚠ 尺寸由脚本写进 style（它是**文档**坐标系的，canvas.style.height 要等于文档高），
+          所以这里的 `100%` 只是"脚本到位前"的兜底。 */}
+    <canvas class="fracture" data-fracture aria-hidden="true"></canvas>
+  </Fragment>
+
   <header class="pagehead">
     <PageTitle size="display">404</PageTitle>
   </header>
@@ -21,9 +98,104 @@ import PageTitle from '../components/PageTitle.astro';
   <p><a href="/">回到首页</a></p>
 </Base>
 
+<script>
+  import '../scripts/fracture';
+</script>
+
 <style>
   /* 拍板 D：页头版心收成 --measure，与正文列左对齐（与文章页 / about 同一条）。 */
   .pagehead {
     max-width: var(--measure);
+  }
+
+  /* ===================================================================
+   * ① 底纹 ∞（替代百褶 ∞）
+   *
+   * 挂法照抄 `Topbar` 的 `body.chrome-page .page-inf`：
+   *   fixed 挂视口居中 / `z-index:-1` / 不拦指针
+   * =================================================================== */
+  .frac-inf {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    width: var(--plate-w, min(148vw, 2160px, 240vh));
+    aspect-ratio: 1080 / 410;
+    transform: translate(-50%, -50%);
+    /* ★ 不透明度 0.18 —— 这个数是**量出来的**，而且用的是**另一把尺子**：
+       站上"最深比纸白低十几级"那条**对本图不适用** —— 它的"形"是**中灰**
+       （源图主体 130–200），不是深墨线条画。实测 0.08 时 p50 只低 6.3 级
+       ⇒ 按那条尺子会判成"太淡"，其实只是量错了量。
+       改用**它要替代的那层当参照**：百褶 ∞（`public/art/inf-orig.webp`）站上 opacity 0.20
+       ⇒ 页面中位比纸白低 **15.4 级**。本图对齐（`_probe/_404-calib.mjs` 口径：素材
+       不透明像素处的合成 luma 中位数，纸白 luma 249.8）：
+         0.14 → 11.0 级   0.18 → **14.2 级**   0.24 → 18.9 级
+       ⇒ 取 **0.18**：换母题不换密度（与参照只差 1.2 级，且是被测区间里的中间档）。
+       ⚠ 留 `--plate-op` 旋钮：目检若觉得压过正文，第一个该拧的就是它。 */
+    opacity: var(--plate-op, 0.18);
+    pointer-events: none;
+    z-index: -1;
+  }
+  /* `max-width: none` 必需：base.css 给 `img` 定了 `max-width:100%`，
+     而这一层刻意比版心宽 —— 不解除限制它会缩到父盒宽度、跟着版心走。 */
+  .frac-inf img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    object-fit: contain;
+  }
+
+  /* ★★ 关掉本页的百褶 ∞（`.page-inf`，Topbar 渲染、全站内页共用）。
+     不关就是两套 ∞ 叠在一起（关于页「切片档案」的教训）。
+     ⚠ 用 `:global(...)`：`.page-inf` 是 Topbar 的元素、带的是**别的**作用域属性；
+       且那边写的是 `body.chrome-page .page-inf`（0,2,1）⇒ 权重必须对齐才压得住。
+     关法用 `display:none` 而不是 `opacity:0`：后者仍占一层满屏合成层，很贵。
+     ⚠ 这个类名由**页面**挂在 `<Base bodyClass="frac-plate">` 上 —— 漏写就是两层 ∞ 叠着，
+       而且构建、测试、截图全都不会报错。 */
+  :global(body.frac-plate .page-inf) {
+    display: none;
+  }
+
+  /* ===================================================================
+   * ② 装置「裂痕」的画布层
+   *
+   * ★ `absolute`（不是别的装置那种 `fixed`）：见 `fracture.ts` 文件头分野 ③ ——
+   *   本装置的几何与**文字盒**绑定，而文字随文档滚动走 ⇒ 裂纹必须活在文档坐标系里。
+   *   挂视口的话，滚一下"绕开文字"就全错位。
+   * ★ z-index 38 = 在正文（`main` 的 1）**之上**、在抽屉（40/41）**之下**。
+   *   介于两者之间的空档是本页唯一站得住的位置：
+   *     压在正文之上 —— 玻璃在正文前面，这是"玻璃裂了"的前提；
+   *     退到 UI 之下 —— 抽屉/过渡蒙版打开时，裂纹必须让路（它们是 UI，不是装饰）。
+   *   ⚠ 与准星（44）不同层：准星是**跟随指针的反馈**，要压过抽屉；裂纹是**静态痕迹**，不该。
+   * ⚠ 别随手改这个值：`transition.css` 的 z-index 阶梯是被事故守着的（见 AGENTS.md §5）。
+   * =================================================================== */
+  .fracture {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 38;
+    /* 显隐门控照抄站上那套（opacity:0 → is-ready → 1），**不能用 `hidden` 属性**：
+       display:none 下 canvas 的 clientWidth/Height 恒为 0 ⇒ 装置量不到尺寸、一帧都画不出
+       （友链页「星座」为此白排查过一轮）。 */
+    opacity: 0;
+    transition: opacity var(--dur-enter) var(--ease);
+  }
+  .fracture.is-ready {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fracture {
+      transition: none;
+    }
+  }
+
+  /* 窄屏：本图不能靠"放大"撑场面（源图就 1080 宽），按屏宽等比收。 */
+  @media (max-width: 767px) {
+    .frac-inf {
+      width: var(--plate-w, min(230vw, 1400px, 150vh));
+    }
   }
 </style>
