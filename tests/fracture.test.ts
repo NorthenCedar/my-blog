@@ -11,12 +11,17 @@ import { join } from 'node:path';
  * 站主原话（**第二版**，装置的行为模型整个反过来）：
  *   「裂纹用半透明的线，别用绿线，且我要真实的玻璃碎裂的感觉，裂纹不是跟着鼠标跑，
  *     而是本来就在上面（类似于在下面的图层），鼠标到那上面裂痕随着线有顿挫的显现了」
+ * 站主原话（**第三版**，回到"一次真实的撞击"）：
+ *   「裂纹更真实点，不要这样好几个中心了，且要真实的裂痕，玻璃质感的。
+ *     你可以直接去搜镜子破碎/玻璃破碎效果去参考别人的」
  * 七处拍板：
  *   · 抠图范围 **乙 · ∞ + 碎屑肌理**（丢小字标签）
  *   · 浓淡 **0.18 · 与百褶 ∞ 同档**
  *   · 小字 **全抠掉**（严格乙档）
  *   · 装置模型 **预置网络 + 沿线揭示**（不是"鼠标生成"）
  *   · 网络形态 **冲击点组：1 主爆点 + 4 次级点**（每点放射线 + 同心环）
+ *     ⚠ **第三版已推翻这一条**：出图一看是"五朵星芒"不是"一块碎玻璃"，
+ *       站主原话「不要这样好几个中心了」⇒ 现在**只有一个爆点**，且故意偏离正中。
  *   · 未揭示时 **极淡可见（约 5%）**
  *   · 揭示节奏 **从鼠标处向两端逐段跳、段间有停顿；离手后继续走完**
  * 另：右侧那束光楔 **保留**（站主拍板，见 `_probe/_404/beam-onoff.png` 对照图）。
@@ -28,15 +33,18 @@ import { join } from 'node:path';
  *   ③ 素材**中性灰**（不是染绿）—— 站主原话是「你自己拿灰色填充」，且源图本就是近单色。
  *      ★ 但去饱和这件事必须**有据可查**，不能悄悄做：断言里带着源图的色差实测。
  *   ④ 底纹必须挂 `.shell` 之外（`plate` 槽）；本页必须关掉百褶 ∞，否则两套母题叠着。
- *   ⑤ 颜色只从 token 读；脚本里只许留**一个字面兜底**，alpha 靠派生。
+ *   ⑤ 颜色只从 token 读；脚本里只许留**两个字面兜底**（--ink / --paper），alpha 靠派生。
  *   ⑥ 三条分野：**离手还在继续** / **几何受 DOM 文字盒约束** / **挂文档坐标系**。
  *   ⑦ ★★ **裂纹是预置的**（固定种子、可复现），指针的职责是**揭示**而不是**生成**。
- *   ⑧ 「真实的玻璃碎裂」= 近直线放射 + 同心环（多边形）+ 小角度细 Y 型分叉。
+ *   ⑧ 「真实的玻璃碎裂」= **一个**爆点 + 近直线放射 + **环止于放射线**（T 形交叉）
+ *      + 小角度细 Y 型分叉 + 爆点近旁的粉碎/雾化区 + 碎片外大内小。
  *   ⑨ 「顿挫的显现」= 攒够一次停顿才跳一格，且**每跳的停顿不匀**（走确定性 PRNG）。
  *   ⑩ 「绕开文字」= 建网时就绕开（逐行紧盒；受阻先偏转、全撞才截断，**绝不硬穿**）。
  *   ⑪ 形状与节奏零 `Math.random`（本站硬规矩）。
  *   ⑫ 降级：触摸 / reduced-motion ⇒ 整个装置不做（不是"装个弱的"）。
  *   ⑬ 零新增运行时依赖（红线）。
+ *   ⑭ ★★ **玻璃质感** = 裂纹不是一根线，是**有厚度的裂口**：暗带 + 暗缝（背光侧）
+ *      + 亮芯（迎光侧，用 --paper）。全页只有一支光，亮/暗边朝向一致。
  */
 const ROOT = process.cwd();
 const DIST = join(ROOT, 'dist');
@@ -124,11 +132,16 @@ const at = (marker: string) => {
 const INPUT = TS.slice(at("'pointermove'"), at('fit();'));
 /** 起停段 */
 const BOOT = TS.slice(at('fit();'));
-/** 构建产物：pushCrack / ray / ring / impact / build 四段 */
+/** 构建产物：pushCrack / ray / crossAt / chord / ring / impact / paintGhost / build */
 const PUSH = TS.slice(at('function pushCrack('), at('function ray('));
-const RAY = TS.slice(at('function ray('), at('function ring('));
+const RAY = TS.slice(at('function ray('), at('function crossAt('));
+/** 环的落点：把"某条放射线在半径 r 处落在哪"解出来 */
+const CROSS = TS.slice(at('function crossAt('), at('function chord('));
+/** 环的弦（端点落在放射线上） */
+const CHORD = TS.slice(at('function chord('), at('function ring('));
 const RING = TS.slice(at('function ring('), at('function impact('));
-const IMPACT = TS.slice(at('function impact('), at('function build('));
+const IMPACT = TS.slice(at('function impact('), at('function paintGhost('));
+const GHOSTL = TS.slice(at('function paintGhost('), at('function build('));
 const BUILD = TS.slice(at('function build('), at('function distSeg('));
 /** 揭示段（点到线段距离 + revealAt） */
 const REVEAL = TS.slice(at('function distSeg('), at('function advance('));
@@ -168,6 +181,16 @@ describe('404 · 装置「裂痕 FRACTURE」的身份（第十台）', () => {
     expect(TS_RAW, '文件头没留站主「本来就在上面」这句原话').toContain('本来就在上面');
     expect(TS_RAW, '文件头没交代"别用绿线"（中性灰的理由）').toContain('别用绿线');
     expect(TS_RAW, '文件头没写「顿挫」是什么（它是这一版的观感核心）').toContain('顿挫');
+  });
+
+  it('★★ 文件头留了第三版的指令原话（一个爆点 / 玻璃质感）', () => {
+    /* 第三版推翻了两条第二版的决定（"冲击点组"与"四道 token"），这些原话必须留在文件头，
+       否则后人只会看到"现在是这样"，不知道"为什么不是那样"、更不知道站主说过什么。 */
+    expect(TS_RAW, '文件头没留站主「不要这样好几个中心了」这句').toContain('不要这样好几个中心');
+    expect(TS_RAW, '文件头没留「玻璃质感的」这句').toContain('玻璃质感');
+    expect(TS_RAW, '文件头没写明"只留一个爆点"').toContain('只留一个爆点');
+    expect(TS_RAW, '文件头没交代亮芯（玻璃的"厚" = Dark Edge）').toContain('Dark Edge');
+    expect(TS_RAW, '文件头没留参考来源（站主让"直接去搜"）').toContain('NIST');
   });
 });
 
@@ -452,47 +475,70 @@ describe('404 · 底纹 ∞ 素材契约', () => {
 });
 
 describe('404 · token 契约（颜色只许住在 tokens.css）', () => {
-  it('★★ 三道裂纹色都是**中性近黑**（--ink）压 alpha —— 站主明说「别用绿线」', () => {
-    for (const name of ['--deco-fracture-line', '--deco-fracture-glow', '--deco-fracture-ghost']) {
+  it('★★ 暗的那三道都是**中性近黑**（--ink）压 alpha —— 站主明说「别用绿线」', () => {
+    for (const name of [
+      '--deco-fracture-line',
+      '--deco-fracture-band',
+      '--deco-fracture-light',
+      '--deco-fracture-ghost',
+    ]) {
       expect(TOKENS, `tokens.css 里没有 ${name}`).toContain(name);
     }
-    /* ★★ 这条是**站主这一轮的指令**（原话「裂纹用半透明的线，别用绿线」）的机器证明。
+    /* ★★ 这条是**站主第二版的指令**（原话「裂纹用半透明的线，别用绿线」）的机器证明。
        第一版是 `--accent`(#2d7d46) 压 alpha —— 全站装置都是绿的，当时顺手沿用；
        但玻璃裂纹不是绿的，它是纸面上的一道暗缝。⇒ 不许退回绿色家族。
        ⚠ 负向断言**排在正向前面**：否则改成绿色时先失败的是"必须是 #1a1a1a"，
          这条永远轮不到，于是它是不是活着就无从证明（变异验证就是照这种死门闩的）。 */
     expect(TOKENS, '裂纹用了 --accent 绿(#2d7d46) ⇒ 站主明说「别用绿线」').not.toMatch(
-      /--deco-fracture-(line|glow|ghost):\s*#2d7d46/,
+      /--deco-fracture-(line|band|light|ghost):\s*#2d7d46/,
     );
     expect(TOKENS, '裂纹用了 --accent-bright(#4caf50) 的绿').not.toMatch(
-      /--deco-fracture-(line|glow|ghost):\s*#4caf50/,
+      /--deco-fracture-(line|band|light|ghost):\s*#4caf50/,
     );
     /* 8 位 hex：6 位色 + 2 位 alpha。站上约定 alpha 由 hex 承载、不写 rgba() */
-    expect(TOKENS, '主线必须是 --ink(#1a1a1a) 压 alpha').toMatch(/--deco-fracture-line:\s*#1a1a1a[0-9a-f]{2}/);
-    expect(TOKENS, '柔光必须是 --ink(#1a1a1a) 压 alpha').toMatch(/--deco-fracture-glow:\s*#1a1a1a[0-9a-f]{2}/);
+    expect(TOKENS, '暗缝必须是 --ink(#1a1a1a) 压 alpha').toMatch(/--deco-fracture-line:\s*#1a1a1a[0-9a-f]{2}/);
+    expect(TOKENS, '暗带必须是 --ink(#1a1a1a) 压 alpha').toMatch(/--deco-fracture-band:\s*#1a1a1a[0-9a-f]{2}/);
     expect(TOKENS, '未揭示的底必须是 --ink(#1a1a1a) 压 alpha').toMatch(/--deco-fracture-ghost:\s*#1a1a1a[0-9a-f]{2}/);
-    /* 浓度必须**递减**：主线 > 柔光 > 未揭示的底 */
+    /* ★★ 亮芯是**唯一不是 ink**的那道 —— 它的语义是"裂口里透出来的光"，
+       所以必须是**纸色**（`--paper` = #fafaf7）压 alpha。换成 ink 就退回"一根黑线"，
+       换成绿色就更是另一回事了。 */
+    /* ★ 负向在前（站上惯例）：改纯白时该报的是"不许用纯白"这句，
+       排在后面就会被上面那条"必须是 #fafaf7"先逮住 ⇒ 报错指向不精确
+       （变异脚本的期望标签「不许用纯白」就是这么暴出来的）。 */
+    expect(TOKENS, '亮芯不许用纯白 —— 那会在纸白上留一道比纸还亮的线').not.toMatch(
+      /--deco-fracture-light:\s*#ffffff/,
+    );
+    expect(TOKENS, '亮芯必须是 --paper(#fafaf7) 压 alpha（它是"裂口里透出来的光"）').toMatch(
+      /--deco-fracture-light:\s*#fafaf7[0-9a-f]{2}/,
+    );
+    /* 浓度必须**递减**：暗缝 > 暗带 > 未揭示的底 */
     const a1 = TOKENS.match(/--deco-fracture-line:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
-    const a2 = TOKENS.match(/--deco-fracture-glow:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
+    const a2 = TOKENS.match(/--deco-fracture-band:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
     const a3 = TOKENS.match(/--deco-fracture-ghost:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
-    expect(parseInt(a1, 16), `主线 alpha ${a1} 应比柔光 ${a2} 浓`).toBeGreaterThan(parseInt(a2, 16));
-    expect(parseInt(a2, 16), `柔光 alpha ${a2} 应比未揭示的底 ${a3} 浓`).toBeGreaterThan(parseInt(a3, 16));
+    expect(parseInt(a1, 16), `暗缝 alpha ${a1} 应比暗带 ${a2} 浓`).toBeGreaterThan(parseInt(a2, 16));
+    expect(parseInt(a2, 16), `暗带 alpha ${a2} 应比未揭示的底 ${a3} 浓`).toBeGreaterThan(parseInt(a3, 16));
+    /* 亮芯要够浓 —— 淡了就压不住暗带、读不出"亮边"（这就是"玻璃质感"的全部） */
+    const a4 = TOKENS.match(/--deco-fracture-light:\s*#fafaf7([0-9a-f]{2})/)?.[1] ?? '';
+    expect(parseInt(a4, 16), `亮芯 alpha ${a4} 太淡 ⇒ 压不出亮边`).toBeGreaterThan(100);
   });
 
-  it('★ 脚本侧只留一个字面兜底（--ink），其余全部派生', () => {
+  it('★ 脚本侧只留两个字面兜底（--ink / --paper），其余全部派生', () => {
     const hexes = [...TS.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((m) => m[0]);
-    expect(hexes.length, `脚本里有 ${hexes.length} 处字面色值：${hexes.join(',')} ⇒ 颜色只许住在 tokens.css`).toBeLessThanOrEqual(1);
-    if (hexes.length === 1) expect(hexes[0], '唯一那个字面兜底该是 --ink').toBe('#1a1a1a');
-    /* 三个 token 都要读；兜底的 alpha 后缀必须与 token 里的一致（防两处对不上） */
+    expect(hexes.length, `脚本里有 ${hexes.length} 处字面色值：${hexes.join(',')} ⇒ 颜色只许住在 tokens.css`).toBeLessThanOrEqual(2);
+    expect(hexes.slice().sort(), '两个字面兜底该是 --ink 与 --paper').toEqual(['#1a1a1a', '#fafaf7']);
+    /* 四个 token 都要读；兜底的 alpha 后缀必须与 token 里的一致（防两处对不上） */
     expect(TS).toMatch(/getPropertyValue\('--deco-fracture-line'\)/);
-    expect(TS).toMatch(/getPropertyValue\('--deco-fracture-glow'\)/);
+    expect(TS).toMatch(/getPropertyValue\('--deco-fracture-band'\)/);
+    expect(TS).toMatch(/getPropertyValue\('--deco-fracture-light'\)/);
     expect(TS).toMatch(/getPropertyValue\('--deco-fracture-ghost'\)/);
     const a1 = TOKENS.match(/--deco-fracture-line:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
-    const a2 = TOKENS.match(/--deco-fracture-glow:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
+    const a2 = TOKENS.match(/--deco-fracture-band:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
     const a3 = TOKENS.match(/--deco-fracture-ghost:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
+    const a4 = TOKENS.match(/--deco-fracture-light:\s*#fafaf7([0-9a-f]{2})/)?.[1] ?? '';
     expect(TS, `脚本兜底的 alpha 后缀与 token(${a1}) 不一致`).toContain(`'${a1}'`);
     expect(TS, `脚本兜底的 alpha 后缀与 token(${a2}) 不一致`).toContain(`'${a2}'`);
     expect(TS, `脚本兜底的 alpha 后缀与 token(${a3}) 不一致`).toContain(`'${a3}'`);
+    expect(TS, `脚本兜底的 alpha 后缀与 token(${a4}) 不一致`).toContain(`'${a4}'`);
     /* 不写 rgba() */
     expect(TS, '脚本里不许出现 rgba()/rgb()（alpha 由 8 位 hex 承载）').not.toMatch(/\brgba?\(/);
   });
@@ -514,40 +560,73 @@ describe('404 · 装置脚本契约（fracture.ts）', () => {
     expect(INPUT, '指针事件里只该做一件事：揭示').toMatch(/revealAt\(/);
   });
 
-  it('★★ 形态按真实冲击碎裂：近直线 + 放射 + 同心环 + 小角度细 Y 型分叉', () => {
-    /* 站主要「真实的玻璃碎裂的感觉」。玻璃是脆性材料，形貌有定式：
-       放射线近直线（沿最大拉应力直着走）、有同心环（近似垂直）、分叉是小角度。 */
-    const curve = Number(TS.match(/const CURVE\s*=\s*([\d.]+)/)?.[1]);
-    expect(Number.isFinite(curve), '读不到 CURVE').toBe(true);
-    expect(
-      curve,
-      `每段曲率 ${curve} rad 太大 ⇒ 那是"撕裂/爬行"的语言，不是玻璃的脆性断裂`,
-    ).toBeLessThan(0.05);
-    /* 第一版是 JITTER 0.17 + SPREAD 0.45（撕裂/树枝的语言），别退回去 */
+  it('★★ 形态按真实冲击碎裂：**一个**爆点 + 近直线放射 + **环止于放射线**', () => {
+    /* 站主要「真实的玻璃碎裂的感觉」。法庭玻璃断裂学（NIST / SWGMAT《Glass Fractures》）
+       给的定式：放射线**先**裂、同心裂**后**裂；裂纹遇到已有的自由面就停
+       ⇒ 交叉处是 T 形，竖笔在后（**环止于放射线，放射线不止于环**）；
+       同心裂是**直线段**、端点落在已有放射线上。再叠上画碎玻璃教程的三条经验：
+       爆点要偏离正中、碎片外大内小、爆点近旁碎成末。
+       ⚠ 第三版推翻第二版的"冲击点组（1 主 + 4 次）"—— 站主原话「不要这样好几个中心了」。 */
+    /* ① **只有一个爆点** */
+    expect(TS, '主爆点常量 MAIN 又回来了（那是"好几个中心"那一版的写法）').not.toMatch(/const MAIN\s*=/);
+    expect(TS, '次级冲击点 SUBS 又出现了 ⇒ 又变成"好几个中心"').not.toMatch(/const SUBS\s*=/);
+    expect(BUILD, 'build 必须调用 impact()').toMatch(/impact\(\)/);
+    expect(BUILD.match(/impact\(\)/g)?.length, 'build 里只能建**一个**爆点').toBe(1);
+    /* ★ 爆点要**偏离正中**：正中央的爆点读起来像"排版出来的装饰"，不像被砸的 */
+    const fx = Number(TS.match(/const IMPACT_X\s*=\s*([\d.]+)/)?.[1]);
+    const fy = Number(TS.match(/const IMPACT_Y\s*=\s*([\d.]+)/)?.[1]);
+    expect(Number.isFinite(fx) && Number.isFinite(fy), '没有 IMPACT_X / IMPACT_Y').toBe(true);
+    expect(Math.abs(fx - 0.5), `爆点 fx=${fx} 太靠正中 ⇒ 读起来像装饰`).toBeGreaterThan(0.08);
+    expect(Math.abs(fy - 0.5), `爆点 fy=${fy} 太靠正中`).toBeGreaterThan(0.08);
+    /* ② **近直线**：每段是数学直线，只有稀疏折点（第一版 JITTER 是"撕裂/爬行"的语言） */
     expect(TS, '又出现了第一版那种大抖动常量（JITTER / SPREAD）').not.toMatch(/\bJITTER\b|\bSPREAD\b/);
-    /* 分叉必须是小角度 */
+    expect(TS, '平滑连续弯折的 CURVE 应已被"稀疏折点"取代').not.toMatch(/const CURVE\s*=/);
+    const kd = Number(TS.match(/const KINK_DEG\s*=\s*([\d.]+)/)?.[1]);
+    const kp = Number(TS.match(/const KINK_P\s*=\s*([\d.]+)/)?.[1]);
+    expect(Number.isFinite(kd), '读不到 KINK_DEG').toBe(true);
+    expect(kd, `一次折点 ${kd}° 太大 ⇒ 放射线会读成锯齿`).toBeLessThanOrEqual(4);
+    expect(kp, `折点概率 ${kp} 太高 ⇒ 那就不是"近直线"了，等于退回连续弯折`).toBeLessThan(0.4);
+    expect(Number(TS.match(/const DRIFT\s*=\s*([\d.]+)/)?.[1]), '每段的漂移不能大').toBeLessThan(0.01);
+    /* ③ ★★ **环止于放射线** —— 这是第三版最要紧的一条形态契约 */
+    expect(TS, '没有 crossAt（环要靠它把端点落到放射线上）').toMatch(/function crossAt\(/);
+    /* ★★ 光"RING 里有 crossAt(" 不够：`p0` 自己按角度造点、`p1` 还走 crossAt 也能过 ——
+       那正是"半条弦落回放射线上"，读起来还是独立的波浪圈。两端都要**从 radials 反查**。 */
+    expect(RING, '环必须从 radials 反查落点（不许自己造一圈独立的波浪多边形）').toMatch(/const p0 = crossAt\(/);
+    expect(RING, '环的另一端也必须从放射线反查落点（不许一端查、一端自己算）').toMatch(/const p1 = crossAt\(/);
+    /* ★ 环**不许**是一圈规整的正圆，也不许绕满一圈 —— 两条都是"完美蛛网"的配方 */
+    expect(RING, '每段弦要有自己的半径（RING_R_JIT）—— 不许直接取 r（那是同一圈正圆 ⇒ "完美蛛网"）').not.toMatch(/const rr = r;/);
+    expect(RING, '每段弦要有自己的半径（RING_R_JIT）—— 环才是有起伏的环带').toMatch(/RING_R_JIT/);
+    expect(RING, '环要是断的（RING_SKIP）—— 绕满一圈就是"完美蛛网"，不是碎玻璃').toMatch(/RING_SKIP/);
+    expect(RING, '环要先把落点按角度排序，再在**相邻两条**之间连弦').toMatch(/sort\(/);
+    expect(RING, '弦长太短的环要跳过（爆点那一圈交给粉碎/雾化区）').toMatch(/MIN_CHORD/);
+    expect(CROSS, 'crossAt 要按"离爆点的距离"找跨过 r 的那一段').toMatch(/Math\.hypot/);
+    expect(CROSS, 'crossAt 要线性插值出交点（不是取最近的顶点）').toMatch(/rl\[k\]\s*-\s*rl\[k\s*-\s*2\]/);
+    /* 放射线与它的分叉都必须登记进 radials（否则环落不到它们身上） */
+    expect(RAY, '放射线要登记进 radials（环要靠它落点）').toMatch(/radials\.push\(/);
+    /* ④ 爆点近旁的**粉碎区 + 雾化区**（真玻璃这里碎成末） */
+    expect(TS, '没有粉碎区半径（CRUSH_R）').toMatch(/const CRUSH_R\s*=\s*\d+/);
+    expect(TS, '没有粉碎区根数（CRUSH_N）').toMatch(/const CRUSH_N\s*=\s*\d+/);
+    expect(TS, '没有雾化区根数（MIST_N）').toMatch(/const MIST_N\s*=\s*\d+/);
+    expect(IMPACT, '粉碎区要贴着爆点（起点在 CRUSH_R 以内）').toMatch(/CRUSH_R/);
+    expect(IMPACT, '雾化区要在粉碎区之外铺开').toMatch(/MIST_R/);
+    /* ⑤ **碎片外大内小**：环半径按等比数列长 */
+    const q = Number(TS.match(/const RING_Q\s*=\s*([\d.]+)/)?.[1]);
+    expect(q, `环半径公比 ${q} 必须 > 1（近密远疏 ⇒ 碎片外大内小）`).toBeGreaterThan(1.2);
+    expect(q, `环半径公比 ${q} 太大 ⇒ 整页就剩两三圈环`).toBeLessThan(2);
+    /* ⑥ 小角度分叉（细 Y 型，不是树枝） */
     const bd = TS.match(/const BRANCH_DEG\s*=\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]/);
     expect(bd, '没有 BRANCH_DEG（分叉角范围）').toBeTruthy();
     const dmax = Number(bd![2]);
     expect(dmax, `分叉角最大 ${dmax}° ⇒ 超过 30° 就读成"树枝"而不是"玻璃"`).toBeLessThanOrEqual(30);
     expect(Number(bd![1]), '分叉角下限不该是 0').toBeGreaterThan(0);
-    /* 同心环必须是**多边形**（按弧长取顶点），不能用 canvas 的圆 */
-    expect(RING, '同心环不许用 arc()/ellipse() —— 真实玻璃的环是多边形').not.toMatch(/\.arc\(|\.ellipse\(/);
-    expect(RING, '环的顶点数要按弧长算（RING_SEG）').toMatch(/RING_SEG/);
-    expect(RING, '环必须有半径抖动 ⇒ 不是正多边形').toMatch(/0\.9\d*\s*\+|\(0\.94/);
-    /* 放射线要铺满一圈（不是一束同向的） */
-    expect(IMPACT, '放射线要按射线数铺满一圈').toMatch(/rays/);
-    expect(IMPACT, '放射线角度要加抖动（否则是机械的"米字"）').toMatch(/rnd\(\)/);
-    /* 冲击点组：1 主 + 4 次 */
-    expect(TS, '主爆点常量没了（MAIN）').toMatch(/const MAIN\s*=/);
-    expect(TS, '次级冲击点没了（SUBS）').toMatch(/const SUBS\s*=/);
-    const mainRays = Number(TS.match(/MAIN\s*=\s*\{[^}]*rays:\s*(\d+)/)?.[1]);
-    const subsBlock = TS.slice(at('const SUBS'), at('interface Rect'));
-    const subRays = [...subsBlock.matchAll(/rays:\s*(\d+)/g)].map((m) => Number(m[1]));
-    expect(subRays.length, '次级冲击点应有 4 个').toBe(4);
-    expect(mainRays, `主爆点的放射线（${mainRays}）应当明显多于任一次级点`).toBeGreaterThan(Math.max(...subRays));
-    /* 冲击点若落在文字盒上要被挪开（否则放射线一出发就被截断） */
-    expect(IMPACT, '冲击点落在文字盒上时必须先挪出去').toMatch(/blocked\(cx,\s*cy\)/);
+    /* ⑦ 同心裂是**直线段**（不是画出来的圆） */
+    expect(RING, '同心环不许用 arc()/ellipse() —— 真实的同心裂是直线段').not.toMatch(/\.arc\(|\.ellipse\(/);
+    expect(CHORD, '弦要按 SEG 细分（顿挫的格子就是它）').toMatch(/SEG/);
+    /* ⑧ 放射线铺满一整周、且角度带抖动（否则是机械的"米字"） */
+    expect(IMPACT, '放射线要按射线数铺满一圈').toMatch(/RAYS/);
+    expect(IMPACT, '放射线角度要加抖动').toMatch(/rnd\(\)/);
+    /* 爆点若落在文字盒上要被挪开（否则放射线一出发就被截断） */
+    expect(IMPACT, '爆点落在文字盒上时必须先挪出去').toMatch(/blocked\(CX,\s*CY\)/);
   });
 
   it('★★ 字尾 ②（改后）：**建网时**就绕开文字盒（不是生长时逐段问）', () => {
@@ -572,14 +651,31 @@ describe('404 · 装置脚本契约（fracture.ts）', () => {
     expect(RAY, '放射线必须逐段问文字盒').toMatch(/segBlocked\(/);
     expect(RAY, '撞上了要按 TURN_DEG 试探偏转').toMatch(/TURN_DEG/);
     expect(RAY, '受阻要两边都试（只试一边会贴着字走）').toMatch(/\[1,\s*-1\]/);
+    /* ★★ 但**只许试两个角，再不行就停** —— 这是第三版修掉的一个真缺陷：
+       第二版「先近角后远角、两边都试」会一路转下去，撞上导航条的那些射线就**贴着盒子
+       边缘排成一排平行线**（出图 `_probe/_404/fig-net.png` 里那一片影线），
+       完全是机械的痕迹。真玻璃撞上自由面就是**停**。 */
+    const turn = TS.match(/const TURN_DEG\s*=\s*\[([^\]]*)\]/)?.[1] ?? '';
+    expect(turn.split(',').length, `TURN_DEG 有 ${turn.split(',').length} 个试探角 ⇒ 超过 2 个就会"贴着文字盒排成影线"`).toBe(2);
     expect(RAY, '转向后本段不推进（continue）').toMatch(/continue/);
     expect(RAY, '全都不行必须截断（break），不许硬穿').toMatch(/break/);
-    /* 环：撞上就断开成多段（真玻璃的环遇到障碍是断的，不是绕过去） */
-    expect(RING, '环撞上文字盒要断开').toMatch(/blocked\(/);
-    /* ★★ 环也必须检查**线段** —— 只测顶点的话，两个盒外的顶点连成的段照样从盒子边擦过去。
+    /* ★★ 转不动就**跨过去**（`JUMP_MAX` / `JUMP_BUDGET`）—— 第二版是"就地停"，
+       出图一看文字背后是一大片**死区**（裂纹在字的上沿齐刷刷停住）。
+       ★ 跨过去之后**必须换一段新折线**（`pts = [x, y]`）：忘了这一句，折线会把
+         起跳点与落点直接连起来 —— 那一段是从字上**拉过去的直线**，正好压在字上。 */
+    expect(RAY, '转不动时要跨过障碍（JUMP_MAX）而不是就地停').toMatch(/JUMP_MAX/);
+    expect(RAY, '跳过去之后要换一段新的折线（否则会从字上拉一条直线穿过去）').toMatch(/pts = \[x, y\];/);
+    /* ★ 跳过去之后**那一段也要登记进 radials** —— 否则环只能落在近端那半截放射线上，
+       远端那半截的 T 形交叉全丢（画面上就是"环在障碍外侧没接上"）。 */
+    const pushes = (RAY.match(/radials\.push\(/g) ?? []).length;
+    expect(pushes, `RAY 里只登记了 ${pushes} 处 ⇒ 跳过去之后的新一段没登记进 radials`).toBe(2);
+    /* 环：撞上就断开成多段（真玻璃的环遇到障碍也是断的，不是绕过去） */
+    expect(CHORD, '弦撞上文字盒要断开成多段').toMatch(/blocked\(/);
+    /* ★★ 弦也必须检查**线段** —— 只测顶点的话，两个盒外的顶点连成的段照样从盒子边擦过去。
        实测证据（实验室第二版首跑）：只测顶点时「墨离字形盒最近 **4.35px**」
        （PAD=9 应当给到 ≥6px）；改成整段检查后回到阈值以上。 */
-    expect(RING, '环也要整段检查（只测顶点会从盒边擦过去）').toMatch(/segBlocked\(/);
+    expect(CHORD, '弦也要整段检查（只测顶点会从盒边擦过去）').toMatch(/segBlocked\(/);
+    expect(CHORD, '弦撞断之后剩下的部分要继续成段（不是整条丢掉）').toMatch(/run\s*=\s*\[\]/);
     /* ★★ 线段也要躲 —— 只测落点不够：两端都在盒外的一段直线仍可能从盒角**切过去** */
     expect(TS, '必须有 segBlocked（只测落点会从盒角切过去）').toMatch(/const segBlocked\s*=/);
     const seg = TS.slice(at('const segBlocked'), at('function pushCrack('));
@@ -678,25 +774,43 @@ describe('404 · 装置脚本契约（fracture.ts）', () => {
     expect(rule, 'canvas 不许 fixed').not.toMatch(/position:\s*fixed/);
   });
 
-  it('★ 绘制：未揭示的网走**离屏一次合成**；已揭示的先柔光后主线', () => {
-    /* 站主「本来就在上面（类似于在下面的图层）」⇒ 未揭示的网也要看得见（极淡）。 */
+  it('★★ 绘制：裂口是**有厚度的**（暗带 → 暗缝 → 亮芯），未揭示的网走离屏一次合成', () => {
+    /* 站主第三版：「玻璃质感的」。玻璃有几毫米厚，砸开之后断面朝向不同 ⇒
+       一侧背光成**暗缝**、另一侧迎光出**亮边**（画碎镜子的教程里管这叫 Dark Edge）。
+       单调的一根黑线永远读成"铅笔划痕" —— 第二版就是这么画的。 */
     expect(TS, '必须读 --deco-fracture-ghost').toMatch(/getPropertyValue\('--deco-fracture-ghost'\)/);
+    expect(TS, '必须读 --deco-fracture-band').toMatch(/getPropertyValue\('--deco-fracture-band'\)/);
+    expect(TS, '必须读 --deco-fracture-light（亮芯）').toMatch(/getPropertyValue\('--deco-fracture-light'\)/);
     expect(TS, '必须有 paintGhost（把整张网画到离屏）').toMatch(/function paintGhost\(/);
     expect(BUILD, 'build 末尾要把底重画到离屏（fit 会清空它）').toMatch(/paintGhost\(\)/);
-    expect(TS, 'paintGhost 里要用**实心** --ink（透明度交给整层 blit）').toMatch(/octx\.strokeStyle\s*=\s*INK/);
+    expect(GHOSTL, 'paintGhost 里要用**实心** --ink（透明度交给整层 blit）').toMatch(/octx\.strokeStyle\s*=\s*INK/);
     /* ★★ 这条是实验室首跑抓到的**真缺陷**，不是风格要求：
-       逐段直接描边时，冲击点附近 20 多条放射线共用起点，同一个像素被叠十几次
+       逐段直接描边时，爆点附近 40 多条放射线共用起点，同一个像素被叠几十次
        ⇒ token 写的 5%（α13）在画面上成了峰值 **α99**（合成到纸白 = 暗 87 级）——
        "极淡的底"变成一片肉眼可见的灰团。离屏一次合成后任何重叠都只算一次。 */
     expect(DRAW, '底那一层必须是**整层 blit**（drawImage），不是逐段描边').toMatch(/drawImage/);
     expect(DRAW, 'blit 必须带 globalAlpha（浓度由 ghost token 决定）').toMatch(/globalAlpha/);
     expect(DRAW, '不许再逐段描边画底（密集处会叠成灰团）').not.toMatch(/ctx\.strokeStyle\s*=\s*GHOST/);
-    /* 已揭示：先柔光后主线（玻璃的裂口是"细亮缝"，只画一根 1px 像铅笔划痕） */
-    const iGlow = DRAW.indexOf('GLOW');
-    const iLine = DRAW.indexOf('LINE');
-    expect(iGlow, '没画柔光').toBeGreaterThanOrEqual(0);
-    expect(iLine, '没画主线').toBeGreaterThanOrEqual(0);
-    expect(iGlow, '先柔光、后主线（柔光垫在下面）').toBeLessThan(iLine);
+    /* ★★ 三道叠画的**顺序**：暗带 → 暗缝 → 亮芯 */
+    const iBand = DRAW.indexOf('strokeStyle = BAND');
+    const iLine = DRAW.indexOf('strokeStyle = LINE');
+    const iLight = DRAW.indexOf('strokeStyle = LIGHT');
+    expect(iBand, '没画暗带').toBeGreaterThanOrEqual(0);
+    expect(iLine, '没画暗缝').toBeGreaterThanOrEqual(0);
+    expect(iLight, '没画亮芯').toBeGreaterThanOrEqual(0);
+    expect(iBand, '暗带要垫在最下面（最先画）').toBeLessThan(iLine);
+    expect(iLine, '亮芯要压在最上面（最后画，才压得住暗带成一道亮边）').toBeLessThan(iLight);
+    /* 暗缝与亮芯必须朝**相反的两侧**偏 —— 这才叫"有厚度"；同侧偏就只是"一根粗线" */
+    expect(DRAW, '暗缝要朝背光侧偏（-LX / -LY）').toMatch(/translate\(-LX\s*\*/);
+    expect(DRAW, '亮芯要朝迎光侧偏（+LX / +LY）').toMatch(/translate\(LX\s*\*/);
+    /* 全页**只有一支光**：偏移是屏幕空间的固定向量（LX/LY）——
+       若按每条裂纹自己的走向去算偏移，朝向就乱飞，读起来是"一堆贴图"而不是"一块玻璃" */
+    expect(TS, '光照方向要写成常量 LX').toMatch(/const LX\s*=/);
+    expect(TS, '光照方向要写成常量 LY').toMatch(/const LY\s*=/);
+    expect(DRAW, '不许按每条裂纹的走向重算偏移（那样朝向就乱飞了）').not.toMatch(/Math\.cos\(|Math\.sin\(/);
+    /* 墨重分档：细碎的（环/雾/粉碎）要比主干轻 —— 一刀切会让满屏一样重 */
+    expect(DRAW, '要按裂纹的墨重分档（globalAlpha = c.w）').toMatch(/globalAlpha\s*=\s*w/);
+    expect(DRAW, '观感旋钮要在脚本里：暗缝/亮芯的偏移量').toMatch(/OFF_LINE|OFF_LIGHT/);
     /* 画布是整个文档高 ⇒ 必须有视口裁剪（否则滚到页脚还在重画首屏） */
     expect(DRAW, '画布是文档高 ⇒ 必须有视口裁剪').toMatch(/window\.scrollY/);
   });
