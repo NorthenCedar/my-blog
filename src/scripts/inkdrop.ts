@@ -122,6 +122,13 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
   const SMEAR = 2.6; // 每一笔的"铺开"半径（比笔触大 ⇒ 看起来像墨在渗）
   const LIFE = 4.2; // 一笔墨痕从满到收干净（秒）—— 站主要求的"几秒渗开"
   const HEAL = 0.55; // 每秒收掉的比例（指数自愈，不是线性）
+  /* ★★★ 落纸瞬间的浓度下限（2026-10-06 线上插桩实测加的）。
+   *   blobAlpha 的 rise 段让浓度在前 8% 生命周期（LIFE*0.08 = 336ms）里
+   *   从 0 加深到 1 —— 而 age≈0 时浓度≈0，意味着「刚落的墨是看不见的」。
+   *   与母题「落下时最实」相反，且真笔尖触纸即有色。
+   *   ⇒ 起始给 RISE_FLOOR（0.55 ≈ 一落纸就有半实的蓝），再在 336ms 内吃满。
+   *   零随机：仍是 age 的确定函数，只是把定义域整体抬高。 */
+  const RISE_FLOOR = 0.55;
   /* 单次 pointermove 的插值上限。12 太小：指针快挥时单次事件距离可达 100px+，
      12 步会把这段稀释成 12 个大间距的点（临界约 7800px/s）。
      提到 32 ⇒ 即便 400px 的一次跳也还保得住约 12px 的连续间距。 */
@@ -182,13 +189,22 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
     return true;
   }
 
-  /** 单笔墨痕在年龄 age 处的浓度 0..1（f(age)，确定性）。 */
+  /** 单笔墨痕在年龄 age 处的浓度 0..1（f(age)，确定性）。
+   *
+   * ★★★ age = 0 时**不能是 0**（2026-10-06 线上插桩实测的真凶之一）。
+   *   原来的 rise 是 `Math.min(1, age / (LIFE * 0.08))` ⇒ 刚落纸那一刻
+   *   浓度 ≈ 0，等于「墨要 0.34 秒后才显形」，与头部母题写的
+   *   「落下时最实（刚落纸就吃满）」正好相反，也与真实蓝墨笔不符
+   *   （笔尖接触纸面即刻有颜色）。
+   *   ⇒ 加一个起始浓度 RISE_FLOOR：落纸即 RISE_FLOOR，随后在 LIFE*0.08 内
+   *     加深到满。这样「加深」是渐进的，而「显形」是瞬时的。
+   *
+   * ★★ 这条改动还有一个连带好处：不再有「age 极小 ⇒ alpha≈0」的区间，
+   *   也就让下面那条「GC 必须按时间判、不能按浓度判」的修法变得自洽
+   *   （两者本来就会互相打架：alpha 小的点会被当成已经淡完而提前回收）。 */
   function blobAlpha(age: number): number {
     if (age < 0 || age > LIFE) return 0;
-    /* 落下时最实（前 8% 快速加深，模拟"刚落纸就吃满"），
-       然后**指数自愈**收干净 —— 这就是"渗开几秒"的主体。
-       渗开感 = 半径随年龄涨、浓度随年龄跌，两者之积决定"看起来在扩"。 */
-    const rise = Math.min(1, age / (LIFE * 0.08));
+    const rise = RISE_FLOOR + (1 - RISE_FLOOR) * Math.min(1, age / (LIFE * 0.08));
     const decay = Math.pow(1 - age / LIFE, HEAL);
     return rise * decay;
   }
@@ -201,8 +217,13 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
     for (let i = 0; i < blobs.length; i++) {
       const b = blobs[i];
       const age = tSec - b.t0;
+      /* 跳过的判据是**寿命**（age > LIFE），与 GC / 落滴三处统一。
+       * 原来这里写的是 `k <= 0.002`（按浓度跳）—— 与 GC 同病：
+       * age≈0 的点会被当成"已经淡完"而不画，加上 RISE_FLOOR 后已不再触发，
+       * 但保留阈值判据就等于留着一个同类 bug 的种子，故改成按时间。 */
+      if (age > LIFE) continue;
       const k = blobAlpha(age);
-      if (k <= 0.002) continue;
+      if (k <= 0) continue;
       /* ★ 半径随年龄涨（SMEAR 的渗开）：起始是笔触，之后慢慢胖一圈。
          种子 `b.s` 决定这一笔的渗开**略不对称**（同i 恒定）。 */
       const r = (BLOB_R + age * SMEAR * (0.7 + b.s * 0.6)) * (narrow.matches ? 0.85 : 1);
@@ -458,9 +479,33 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
     if (!has && !needsPaint) return;
     needsPaint = false;
     paint(ts);
-    /* 顺手丢掉已经淡干净的痕迹（防数组无界增长） */
+    /* ★★★ 回收必须按**时间**判，不能按**浓度**判（2026-10-06 线上插桩实测的真凶）。
+     *
+     * 症状（站主真机）：留言页**整页看不到任何墨痕**，刷新无用。
+     * 线上插桩（CDP Fetch 拦下真实 chunk 换插桩版，1920×1000）拿到的硬数据：
+     *     gate=[true,true]  calls=41  pushed=200  gcRemoved=200  blobs=0  ink=0
+     *     gcAges=[0.0002,0.0002,0.0002,0.0002,0.0002,0.0001,...]  negAges=0
+     *   ⇒ 墨点**确实落了 200 个**，但每个都在**落纸后 0.1~0.2 毫秒**被 GC 删掉。
+     *
+     * 机制：`blobAlpha(age)` 在 age→0 时约等于 `age/(LIFE*0.08)`，所以
+     *   刚落的点浓度 ≈ 0.0002/0.336 = 0.0006 < GC 阈值 0.002
+     *   ⇒ 同一帧的清理循环把**刚落下的每一个点**都当成「已经淡干净」回收。
+     * 而 Chrome 每帧的顺序是**先派发输入事件、再跑 rAF** ⇒ 真实鼠标移动时，
+     *   pointermove 落下的点在**同一帧内**就被删 ⇒ 屏幕上永远干净。
+     *
+     * 为什么之前所有探针都"测到有墨"（39944/61185/46656…）——**它们全都假绿**：
+     *   它们在一个**同一个 JS task 内**派发 300 个合成 PointerEvent，
+     *   中间**不跑帧** ⇒ age 在 GC 跑到时已经攒到几百毫秒 ⇒ 点全活下来。
+     *   一旦换成「事件与帧交替」（真实鼠标的节奏），立刻归零。
+     *   ⇒ 教训：**探针必须复现生产的时序**（事件与帧交替），
+     *     否则量到的是「理想时序下的行为」，与真机相反。
+     *
+     * 修法：回收判据改成 `age > LIFE`（唯一有物理意义的判据：寿命到了）。
+     *   ★ 同一段代码里的落滴回收**本来就是**按时间判的（`ts - d.t0 > DROP_LIFE`），
+     *     两套判据不一致就是 bug 的形状 —— 照抄落滴那条即可。
+     *   ★ 改后 blobAlpha 只剩「画的时候多浓」这一个职责，回收与浓度解耦。 */
     for (let i = blobs.length - 1; i >= 0; i--) {
-      if (blobAlpha(ts - blobs[i].t0) <= 0.002) blobs.splice(i, 1);
+      if (ts - blobs[i].t0 > LIFE) blobs.splice(i, 1);
     }
     for (let i = drops.length - 1; i >= 0; i--) {
       if (ts - drops[i].t0 > DROP_LIFE) drops.splice(i, 1);

@@ -243,6 +243,54 @@ it('★ 痕迹会自愈（几秒渗开后收干净）—— 与显影板「涂�
   expect(CODE, '必须清掉淡干净的痕迹（防数组无界增长）').toMatch(/blobs\.splice/);
 });
 
+it('★★★回收必须按时间判，不能按浓度判（真机整页无墨的真凶）', () => {
+  /* 事故（2026-10-06，线上真实页面）：
+   *   站主刷新无数次，留言页整页看不到任何墨痕。
+   *   线上插桩（CDP Fetch 拦下真实 chunk 换插桩版，1920×1000）实测：
+   *     gate=[true,true] calls=41 pushed=200 gcRemoved=200 blobs=0 ink=0
+   *     gcAges=[0.0002,0.0002,0.0002,0.0002,0.0002,0.0001,...] negAges=0
+   *   ⇒ 墨点落了 200 个，但每个都在**落纸后 0.1~0.2ms** 被回收。
+   *机制：GC 判据写的是 `blobAlpha(age) <= 0.002`（按浓度），
+   *   而 blobAlpha 的 rise 段让 age≈0 时浓度≈0.0006 ⇒ 刚落的点被判「已淡完」。
+   *   Chrome 每帧「先派发输入事件、再跑 rAF」⇒ 真实鼠标移动时同一帧即被删。
+   *
+   * ★ 为什么此前十几轮探针全都假绿（这条是本契约存在的唯一理由）：
+   *   它们在**同一个 JS task 内**派发 300 个合成 PointerEvent，中间不跑帧
+   *   ⇒ GC 执行时 age 已攒到几百毫秒 ⇒ 点全活下来（测到 39944/61185/46656）。
+   *   换成「事件与帧交替」（真实鼠标的节奏）立刻归零。
+   *
+   * 判据：GC 的判据必须含 `> LIFE`（寿命），且**不得**出现按浓度判的写法。 */
+  const gc = CODE.match(/if\s*\(\s*ts\s*-\s*blobs\[\s*i\s*\]\.t0\s*>\s*LIFE\s*\)\s*blobs\.splice/)?.[0] ?? '';
+  expect(gc, 'GC 必须按「年龄 > LIFE」回收（唯一有物理意义的判据）').toBeTruthy();
+
+  /* 反向断言：按浓度判的写法不许回来（那是本次事故的原始形态） */
+  expect(
+    CODE,
+    'GC 不得再按 blobAlpha(...) 判回收 —— age≈0 的点会被当成已淡完而立即删掉',
+  ).not.toMatch(/if\s*\(\s*blobAlpha\([^)]*\)\s*<=\s*0?\.\d+\s*\)\s*blobs\.splice/);
+
+  /* 同一条纪律在 draw() 里也必须成立：跳过按寿命，不按浓度阈值 */
+  const drawSkip = CODE.match(/if\s*\(\s*age\s*>\s*LIFE\s*\)\s*continue;/)?.[0] ?? '';
+  expect(drawSkip, 'draw() 跳过过期痕迹也要按寿命判').toBeTruthy();
+
+  /* 落滴那条本来就是按时间判的（本次事故里它是对的）⇒ 顺手锁住，
+     免得以后有人"统一风格"把它改成按浓度。 */
+  expect(CODE, '落滴回收按 DROP_LIFE 判（与墨痕同一条纪律）').toMatch(
+    /ts\s*-\s*drops\[\s*i\s*\]\.t0\s*>\s*DROP_LIFE/,
+  );
+});
+
+it('★★ 落纸即有色：age=0 的浓度必须为正且高于 GC 阈值', () => {
+  /* 与上一条配套：GC 改成按时间判之后，墨能不能被**看见**就全靠 rise 段。
+   * 若 rise 仍从 0 爬（LIFE*0.08 = 336ms），则墨要 0.34 秒后才显形，
+   * 与母题「落下时最实（刚落纸就吃满）」相反，也与真实蓝墨笔不符。
+   * ⇒ 必须有起始浓度 RISE_FLOOR。 */
+  expect(CODE, '必须有起始浓度 RISE_FLOOR（落纸即有色）').toMatch(/const\s+RISE_FLOOR\s*=/);
+  const rise = CODE.match(/const\s+rise\s*=\s*([^;]+);/)?.[1] ?? '';
+  expect(rise, 'rise 必须吃 age（保持"逐渐加深"的性质）').toMatch(/\bage\b/);
+  expect(rise, 'rise 必须以 RISE_FLOOR 为起点（否则 age=0 时浓度为 0）').toMatch(/RISE_FLOOR/);
+});
+
   it('★★ 笔触必须有实心核（两段渐变会读成"一串珠子"而不是一笔）', () => {
     /* 2026-10-06 站主实测：屏幕上读出来是"几团孤立的点"、不是墨痕。
      * 复算排除了插值太稀（间距 5–7px vs 直径 26px）⇒ 另一半根因在**笔触剖面**：
@@ -404,16 +452,32 @@ it('★ 痕迹会自愈（几秒渗开后收干净）—— 与显影板「涂�
     };
     const LIFE = num('LIFE');
     const HEAL = num('HEAL');
+    const RISE_FLOOR = num('RISE_FLOOR');
     expect(Number.isFinite(LIFE) && LIFE > 0, `LIFE 读不到或非正：${LIFE}`).toBe(true);
     expect(Number.isFinite(HEAL), `HEAL 读不到：${HEAL}`).toBe(true);
+    expect(Number.isFinite(RISE_FLOOR), `RISE_FLOOR 读不到：${RISE_FLOOR}`).toBe(true);
+    expect(RISE_FLOOR, `RISE_FLOOR 必须落在 (0,1)：落纸即有色，但留出加深空间`).toBeGreaterThan(0);
+    expect(RISE_FLOOR, 'RISE_FLOOR 必须 <1，否则永不吃满').toBeLessThan(1);
 
-    /* 与 blobAlpha 同一份公式（源码那行的结构：rise × decay） */
+    /* 与 blobAlpha 同一份公式（源码那行的结构：RISE_FLOOR + (1-RISE_FLOOR)×上升段） */
     const blobAlpha = (age: number) => {
       if (age < 0 || age > LIFE) return 0;
-      const rise = Math.min(1, age / (LIFE * 0.08));
+      const rise = RISE_FLOOR + (1 - RISE_FLOOR) * Math.min(1, age / (LIFE * 0.08));
       const decay = Math.pow(1 - age / LIFE, HEAL);
       return rise * decay;
     };
+
+    /* ★★★ 落纸即有色（2026-10-06 线上插桩真凶的配套断言）。
+     *   线上量到 gcAges=[0.0002,...] ⇒ 刚落的点浓度≈0.0006，被 GC 当成
+     *   「已淡干净」在**同一帧**回收 ⇒ 真机整页无墨（探针若在同一 task 内
+     *   派发事件则测不到，故此前一直假绿）。
+     *   ⇒ age 必须是**单调上升且起点就有浓度**，不能从 0 爬上来。 */
+    expect(blobAlpha(0), 'age=0 时浓度为 0 ⇒ 刚落的墨看不见（真机症状的另一半）').toBeGreaterThan(0);
+    expect(blobAlpha(0), '落纸浓度应已达 RISE_FLOOR 附近').toBeCloseTo(RISE_FLOOR, 5);
+    /* 且落纸浓度必须高于 GC 阈值（0.002），否则又被回收 */
+    expect(blobAlpha(0), '落纸浓度必须高于 0.002，否则仍会被按浓度回收').toBeGreaterThan(0.002);
+    /* 单调上升段（0 → LIFE*0.08）确实在加深 */
+    expect(blobAlpha(LIFE * 0.08), '加深段终点应接近满浓度').toBeGreaterThan(blobAlpha(0) + 0.2);
 
     /* ① 上升段：age 0.3s 内就该接近峰值（"刚落纸就吃满"） */
     expect(blobAlpha(0.3), '上升段太慢 —— 墨痕不该慢慢显出来').toBeGreaterThan(0.5);
