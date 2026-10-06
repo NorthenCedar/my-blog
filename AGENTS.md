@@ -96,6 +96,17 @@
   （`<Image>` 渲染的 img 是组件内部生成的，拿不到 scoped 属性），正则别写成 `img[data-astro-cid-*]`。
   ★ 两档的分工：**默认档页首「尺不出现」是对的**（滚动才抽出，且虚拟时间里 900ms 秒到、几乎截不到
   抽出态）⇒ 要看尺就用 `--force-prefers-reduced-motion`（尺常驻）。
+- ★ **线上判据一律用 literal，别用正则转义**（2026-10-06 实测，标签页那轮）：跑在 `<<'EOF'` heredoc 里的
+  正则，**`\s` 会被吞成 `/s`**（打印出来就是 `/s`，`re` 于是去找"斜杠 + 任意个 s + none"⇒ 永不匹配）。
+  同轮还因为**两个片段都读到空**（没有 perl）而让 `cmp` 报出"两页相同"的**假阳性**。
+  ⇒ ① 线上检查用 `grep -o -F` / Python `in`；② **"相同"类判据必须先断言"读到了"**（长度下限），
+  否则"两个空文件相等"就会冒充通过。`/tmp` 也不是共享的 —— 那是 **Git Bash 的**
+  `%LOCALAPPDATA%\Temp`，原生 Windows Python 看不到，跨 Bash/Python 传文件用 `cygpath -m`。
+- ★ **literal 判据别漏 cid**（同上轮）：线上写的是 `.crosshair[data-astro-cid-ecag5wrs]{display:none}`，
+  拿 cid-free 的 `.crosshair{display:none}` 去 `grep -F` 会得到"缺"这个**假阴性**。
+  这与上一条「产物里 `img` 上没有 cid」是**双向**的 —— **有的选择器上确实有 cid**。
+  ⇒ 查选择器要么按**前缀**查（`grep -F 'prefers-reduced-motion:reduce){.crosshair'`），
+  要么把 cid 段算进去。
 
 ---
 
