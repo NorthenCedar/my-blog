@@ -63,6 +63,24 @@ describe('友链页 · 星座 CONSTELLATION（2026-10-05）', () => {
       expect(CODE).toMatch(/\bp:\s*number/);
     });
 
+    it('②-b ★★ 「出现」要够快，但也不许快到只剩"闪"（站主两轮口径）', () => {
+      /* 站主两轮「星链出来快一点」（§6.36 / §6.38）⇒ 这条把**到位耗时**锁进一个窗口。
+         为什么锁性质、不锁数值 0.12：它是观感参数，站主随时可能再微调；但两条性质不可退让 ——
+           · **不许慢回去**：第二轮实测症结就是"浓度要 0.42s 才爬满"（读作"慢慢长"）；
+           · **不许快到只剩闪**：2 帧内到顶 ⇒ "擦过 vs 停留"的区分一起塌掉。
+         实测曲线（`_probe/_const-timing.mjs`：劫持 rAF + performance.now，按 60fps 手动步进，
+         逐帧读指针邻域最大连通块面积）：0.42s 档要 26 帧才爬到顶，0.10s 档 6 帧。
+         ⚠ 断言必须由**源码里的三个常量**算出来，不能把 0.101 写死 —— 写死就变成"锁数值"了。 */
+      const speed = 1 / Number(CODE.match(/SPEED\s*=\s*1\s*\/\s*([\d.]+)/)?.[1]);
+      const limit = Number(CODE.match(/LIMIT\s*=\s*([\d.]+)/)?.[1]);
+      const bonus = Number(CODE.match(/BOTH_BONUS\s*=\s*([\d.]+)/)?.[1]);
+      expect(Number.isFinite(speed)).toBe(true);
+      expect(Number.isFinite(limit + bonus)).toBe(true);
+      const full = (limit + bonus) / speed; // 一条线 0 → 单次上限的秒数
+      expect(full).toBeLessThan(0.2); // 慢于 200ms ⇒ 就是站主说的"那么慢"
+      expect(full).toBeGreaterThan(0.05); // 快于 50ms ≈ 3 帧 ⇒ 是"闪"不是"出现"
+    });
+
     it('③ ★「离开不回落」—— 站主口径的直接推论，否则"越久"不成立', () => {
       const onLeave = CODE.slice(CODE.indexOf('const onLeave'));
       // onLeave 只置 on=false，**不许**出现清零/回落语句
