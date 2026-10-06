@@ -281,3 +281,105 @@ describe.skipIf(!hasDist)('交互基线 · 产物里的 hover 与过渡', () => 
       .toMatch(/opacity:\s*\.32/);
   });
 });
+
+/* ---------- 3. activityGate 的 onScreen 初值必须是 true ---------- */
+
+describe('交互基线 · activityGate 不得因IO 未回调而永久停帧（2026-10-06）', () => {
+  /* 症状（留言页墨滴，站主真浏览器连报三次）：
+   *   「整页看不到任何墨痕」+「打开 F12 还什么都没输入就有墨痕了」
+   *   +「改成小屏切各种尺寸都不行，只有开 F12 才行」。
+   *   前三轮我一直在改墨痕的生成/范围逻辑，全部改错了地方。
+   *
+   * 机制（探针实测，_probe/_ink-gate2.mjs，真实产物）：
+   *   `startLoop` 的调用方每帧开头判 `if (!gate.onScreen) return`，
+   *   而 IntersectionObserver 的**首次回调是异步的**、对
+   *   `position:fixed; inset:0` 的满屏画布**不保证一定来**
+   *   （实测 1920×1000 视口下自建 IO 回调 **0 次**，1440×900 下 1 次）。
+   *   初值 false ⇒「IO 没来」直接等价于「永久停帧」⇒ 一笔墨都画不出；
+   *   而 F12 一开强制重排 ⇒ IO 重新求值⇒ 恢复 ⇒ 站主误以为 F12 激活了装置。
+   *
+   * ⇒ 不变式：**「IO 不回调」永远不等于「停帧」**。
+   * 这条是**全站**门闩：rl-core 的 createActivityGate 被七台装置共用，
+   * 任何一个调用方拿到的 onScreen 初值都必须是可用的（true）。
+   */
+  const RLCORE = readFileSync(join(ROOT, 'src/scripts/rl-core.ts'), 'utf8');
+
+  it('★ onScreen 初值是 true，不是 false（IO 不回调 ≠ 停帧）', () => {
+    /* ★★ 必须**剥掉块注释**再匹配 ——
+       赋值语句上方那十几行注释里就写着"初值 true（不是 false）"、
+       "初值 false ⇒ 永久停帧"等字样，不剥注释的话 `onScreen:` 会先匹配到注释
+       里的文字，判据就变成"注释里有没有 true"这种自证循环。
+       （第一版就踩了这个坑：判据转红，转红原因却是指向注释。）
+     * ★★ 还必须**锚定 `const state =`** ——
+       函数签名里有一处 `): { onScreen: boolean; visible: boolean; ... }`，
+       那是**返回类型标注**、不是赋值。直接 `match(/onScreen:/)` 会先命中它，
+       拿到 `"boolean; visible: boolean; dispose: () => void"`（第一版又踩了）。
+     *⇒ 三条一起：剥注释 + 锚定 const state +只取第一个逗号前的内容。 */
+    const fn = RLCORE.slice(RLCORE.indexOf('export function createActivityGate'))
+      .replace(/\/\*[\s\S]*?\*\//g, ' ');
+    expect(fn, '没读到 createActivityGate').toContain('const state = {');
+    const stateLine = fn.slice(fn.indexOf('const state = {'));
+    const init = stateLine.match(/onScreen:\s*([^,}]+)/);
+    expect(init, '没读到 onScreen 的初值赋值').toBeTruthy();
+    /*★★ 判据必须区分「选项被引用」与「默认值是什么」——
+     * 写成 `toMatch(/true|initialOnScreen/)` 是个陷阱：变异把默认值改成
+     * `opts.initialOnScreen ?? false` 后，这个字符串**仍然含 initialOnScreen**
+     * ⇒ 照样通过 ⇒ 契约抓不住本轮的真凶（变异实测：0 failed）。
+     * ⇒ 改为：把整个初值表达式取出，逐个**否定**掉已知错误形态。
+     *   允许的形态只有一个：`opts.initialOnScreen ?? true` / `true`。
+     *   `?? false`、`!1`、`: false` 一律转红。 */
+    const expr = init![1].trim();
+    expect(expr, `onScreen 初值表达式是「${expr}」，含 false/!1 —— `
+      + '初值 false 时「IO 不回调」= 永久停帧，装置整个不工作，'
+      + '且只有强制重排（开 F12）才能恢复')
+      .not.toMatch(/false|!1|!0\s*$/);
+    /* 兜底：仍然要求它确实引用了 true 或选项（避免把表达式删掉也能过） */
+    expect(expr, 'onScreen 初值必须显式给 true（或经 initialOnScreen 选项）')
+      .toMatch(/true|initialOnScreen/);
+    /* 默认值也必须是 true：`?? true` 而不是 `?? false` */
+    expect(fn, 'initialOnScreen 的默认值必须是 true（?? true）').toMatch(
+      /initialOnScreen\s*\?\?\s*true/,
+    );
+  });
+
+  it('★ startLoop 的调用方判onScreen 时，不得让「未初始化」等价于停帧', () => {
+    /* 反向核对：装置侧必须显式传 initialOnScreen 或依赖默认 true。
+       若将来有人把默认改回 false，这条会先于上面那条报警。 */
+    const INK = readFileSync(join(ROOT, 'src/scripts/inkdrop.ts'), 'utf8');
+    expect(INK, '墨滴必须显式传 initialOnScreen: true').toMatch(
+      /createActivityGate\(\s*cv\s*,\s*\{[^}]*initialOnScreen:\s*true/,
+    );
+  });
+
+  it('★ 产物里 onScreen 的初值也是 true（构建没把它优化回 false）', () => {
+    if (!hasDist) return;
+    const files = readdirSync(join(DIST, '_astro')).filter((x) => x.endsWith('.js'));
+    /* ★ 产物形态实测（rl-core.B3WVrOde.js）：
+     *     {onScreen: t.initialOnScreen ?? !0, visible: ...}
+     *   `true` 被压缩成 `!0`（`false` 则是 `!1`）。
+     *   ⚠ 所以判据要同时吃两种形态：
+     *     ① `onScreen: !0`（直接给字面量）
+     *     ② `onScreen: <任意>.initialOnScreen ?? !0`（走选项，合并器可能这么编）
+     *   只查①会漏掉②，变异"把默认改回 false"恰好编成① —— 那就漏判了。
+     *   ⇒ 分开数：①里出现 `!1` 就转红；②里出现 `?? !1` 也转红。 */
+    let found = 0;
+    for (const f of files) {
+      const js = readFileSync(join(DIST, '_astro', f), 'utf8');
+      /* ⚠ minifier 的true/false 记法是`!0` = !false = **true**、`!1` = !true = false。
+       *   所以"正确"对应数字 **0**，不是 1。（第一版这里写反了，判据自己转红。）*/
+      for (const m of js.matchAll(/onScreen:\s*!([01])\b/g)) {
+        found++;
+        expect(m[1], `产物 ${f} 里 onScreen 初值被编译成了 !${m[1]}`
+          + `${m[1] === '0' ? '（= true，正确）' : '（= false！）'}`
+          + '。初值 false 会让 IO 不回调的视口永久停帧').toBe('0');
+      }
+      for (const m of js.matchAll(/initialOnScreen\s*\?\?\s*!([01])\b/g)) {
+        found++;
+        expect(m[1], `产物 ${f} 里 initialOnScreen 的默认值被编译成了 !${m[1]}`
+          + `${m[1] === '0' ? '（= true，正确）' : '（= false！）'}`
+          + '。调用方不传该选项时装置会永久停帧').toBe('0');
+      }
+    }
+    expect(found, '产物里一条 onScreen 初值都没抓到 —— 契约与产物脱节了').toBeGreaterThan(0);
+  });
+});

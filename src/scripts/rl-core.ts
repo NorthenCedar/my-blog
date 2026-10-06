@@ -71,12 +71,34 @@ export function startLoop(cb: (dt: number, t: number) => void): () => void {
  *   · 切到别的标签页（visibilitychange）⇒ visible=false
  * 返回 { onScreen, visible, dispose }；调用方在每帧开头判 `onScreen && visible`。
  * ★ onScreen / visible 是活引用（对象属性），调用方读的是最新值，别解构成布尔。
+ *
+ * ★★★ 2026-10-06 墨滴实测修掉的真凶：`onScreen` 的初值必须是 **true**，不是 false。
+ *   症状（留言页墨滴站主真浏览器）：**整页看不到任何墨痕，一开 F12 就全出现**
+ *   （甚至没动鼠标就有了），刷新无用、换窗口尺寸无用、无头 Chrome 完全正常。
+ *
+ *   机制：IntersectionObserver 的**首次回调是异步的**，而 `startLoop` 的调用方
+ *   每帧开头就 `if (!gate.onScreen) return`。IO 对 `position:fixed; inset:0`
+ *   的满屏画布**不保证一定回调**——实测在 1920×1000 视口下自建 IO 回调 **0 次**
+ *   （1440×900 下正常回调 1 次）。回调不来 ⇒ onScreen 永远停在初值
+ *   ⇒ 每一帧都 early-return ⇒ **一笔墨都画不出来**。
+ *   而 F12 一开，Chrome 强制重新布局 ⇒ 触发 IO 重新求值 ⇒ 恢复。
+ *
+ *   ⇒ 初值取 `true`（"默认认为在视口内，IO 来了再纠正"）而不是 `false`：
+ *     · 对**固定定位/满屏**元素，IO 回调与否都应是 true，纠正不了什么，
+ *       但初值 false 会让"IO 没来"直接等价于"永久停帧"（灾难性默认值）。
+ *     · 对**随文档滚动**的元素，IO 首次回调通常在下一帧就到（只晚一帧），
+ *       初值 true 的代价是首帧多画一次，可接受。
+ *   ★ 代价换来的不变式：**「IO 不回调」永远不等于「停帧」**。
  */
 export function createActivityGate(
   el: Element,
-  opts: { onTick?: () => void; onHidden?: () => void; rootMargin?: string } = {},
+  opts: { onTick?: () => void; onHidden?: () => void; rootMargin?: string; initialOnScreen?: boolean } = {},
 ): { onScreen: boolean; visible: boolean; dispose: () => void } {
-  const state = { onScreen: false, visible: document.visibilityState === 'visible' };
+  /* ★★ 初值 true（不是 false）—— 见函数头那条★★★ 真凶注释：
+     IO 首次回调是异步的，而调用方每帧开头就判 onScreen。
+     初值 false ⇒「IO 没回调」直接等价于「永久停帧」⇒ 装置整个不工作，
+     且只有强制重排（开 F12）才能恢复。默认 true，IO 来了再纠正。 */
+  const state = { onScreen: opts.initialOnScreen ?? true, visible: document.visibilityState === 'visible' };
 
   const tick = () => opts.onTick?.();
 

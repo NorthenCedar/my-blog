@@ -132,6 +132,28 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
   const RINGS = 3; // 每滴扩散的圈数
   const RM_T = 2.0; // reduced-motion 那一帧的时刻（几滴正在渗开）
 
+  /* ---------- 笔尖驻留（站主 2026-10-06 追加要求）----------
+   * 母题从「划过留痕」改成「**笔尖一直按在纸上**」：
+   *   · 移动时：照旧按 TRAIL_STEP 插值落点（一条连续的痕）；
+   *   · **停住时**：笔尖仍持续洇墨（每 DWELL_MS 一个点，位置几乎不动），
+   *     所以停住的地方会积出一个**越来越实**的墨点，随后一起慢慢消退。
+   * 为什么要它：原来只在 pointermove 里落点 ⇒ 鼠标一停，纸上的痕就不再延伸，
+   *   读起来是「一笔划完的东西」；而"墨迹"应该像笔尖还蘸着墨按在那儿。
+   *
+   * ★ 浓度封顶靠 blobAlpha 的**幂律**（HEAL），不靠限流：
+   *   每秒 DWELL_HZ 个点全叠在同一处，alpha 用 source-over 叠加会趋向全黑。
+   *   但每个点的 k = (1-age/LIFE)^HEAL 会随年龄衰减 ⇒ 叠出来的总浓度
+   *   收敛到一个**有限平台**（约 DWELL_HZ × HEAL/LIFE 量级），不会爆。
+   *   这也是 LIFE/HEAL 必须存在的另一个理由 —— 它们同时是"消退速度"和"封顶"。
+   * ★ 零随机：驻留点的位置抖动用 hash01(整数索引)，同一位置恒定。
+   */
+  const DWELL_MS = 90; // 停住时每隔多久洇出一个点
+  const DWELL_HZ = 1000 / DWELL_MS; // 驻留落点频率（点/秒）
+  /* 驻留自洽上限：驻留点密度比移动时高得多（同一位置反复叠），
+     所以 TRAIL_MAX 的自洽算式要按**驻留**这一档来兜底：
+     纯驻留 DWELL_HZ = 11.1 点/秒 × LIFE 4.2s ≈ 47 个点，远低于 1600。 */
+  const DWELL_JITTER = 1.4; // 驻留点的位置抖动半径（px），让墨点不长得像个圆饼
+
   /** 一笔墨痕：位置 + 出生时刻 + 各自的种子。★ 不存"形状"，形状由年龄算出。 */
   type Blob = { x: number; y: number; t0: number; s: number };
   const blobs: Blob[] = [];
@@ -255,6 +277,13 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
   /* ---------- 记录一笔墨痕 ---------- */
   let lastX = -1;
   let lastY = -1;
+  /* 笔尖驻留状态（站主 2026-10-06 追加：墨要"一直跟随鼠标"）。
+     hoverX/Y = −1 表示「指针不在画布内」⇒ 不驻留落墨。
+     lastDwell  = 上一次落墨（移动或驻留）的绝对秒，用于算"停了多久"。 */
+  let hoverX = -1;
+  let hoverY = -1;
+  let lastDwell = 0;
+  let dwellSeq = 0; // 驻留点序号（喂给 hash01，保证同位置的点形状各异）
 
   /* ---------- 墨痕范围：整页，不设区域门槛 ---------- *
    * ★★ 2026-10-06 站主二次实测**推翻了上一轮的修法**（「量`.prose` 真实几何」）：
@@ -296,6 +325,12 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
     return x >= 0 && y >= 0 && x <= cw && y <= ch;
   }
 
+  /** 在 (x,y) 落一个墨点。抖动由整数哈希定 ⇒ 同一坐标恒定（零随机）。 */
+  function pushBlob(x: number, y: number, t0: number, seedKey: number) {
+    blobs.push({ x, y, t0, s: hash01(seedKey) });
+    if (blobs.length > TRAIL_MAX) blobs.shift();
+  }
+
   function onMove(e: PointerEvent) {
     if (reduce.matches) return; // RM 下不记痕迹（否则画出来却不动，很怪）
     const x = e.clientX;
@@ -303,12 +338,20 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
     if (!overMessageArea(x, y)) {
       lastX = -1;
       lastY = -1;
+      hoverX = -1; // 指针出界 ⇒ 停止驻留落墨
+      hoverY = -1;
       return;
     }
+    hoverX = x;
+    hoverY = y;
     if (lastX >= 0) {
       const dx = x - lastX;
       const dy = y - lastY;
       const dist = Math.hypot(dx, dy);
+      /* ★ 移动中：按 TRAIL_STEP 插值落点，让痕是**连续**的一条而不是一串珠子。
+         ★ `dist < TRAIL_STEP` 时直接 return，但**必须先更新 hoverX/hoverY**
+         —— 否则慢速移动时（每帧位移不足一个 TRAIL_STEP）笔尖会被判成"停住"，
+             驻留与移动两种落点会打架。 */
       if (dist < TRAIL_STEP) return;
       const steps = Math.min(STEPS_CAP, Math.floor(dist / TRAIL_STEP));
       const ts = nowSec();
@@ -316,9 +359,11 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
         const t = k / steps;
         const px = lastX + dx * t;
         const py = lastY + dy * t;
-        blobs.push({ x: px, y: py, t0: ts, s: hash01(Math.round(px * 7 + py * 13)) });
-        if (blobs.length > TRAIL_MAX) blobs.shift();
+        pushBlob(px, py, ts, Math.round(px * 7 + py * 13));
       }
+      lastDwell = ts; // 刚移动过 ⇒ 重置驻留计时
+    } else {
+      lastDwell = nowSec(); // 刚进入页面/刚出界回来 ⇒ 从现在开始驻留
     }
     lastX = x;
     lastY = y;
@@ -378,15 +423,37 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
    * 「不读内容几何」这条约定自动成立，不需要靠"小心地量"来遵守。
    */
 
-  const gate = createActivityGate(cv);
+  /* ★ 显式传 `initialOnScreen: true`—— 这台的画布是 `position:fixed; inset:0`，
+     IO 对满屏固定层的首次回调**不保证一定来**（实测 1920×1000 下自建 IO
+     回调 0 次）。而本装置每帧开头就 `if (!gate.onScreen) return`
+     ⇒ IO 不回调 = 一笔都不画，且只有强制重排（开 F12）才恢复。
+     站主 2026-10-06 实测症状正是「整页没墨、开 F12 立刻全出现」。
+     详见 rl-core.ts `createActivityGate` 函数头的★★★ 那条注释。 */
+  const gate = createActivityGate(cv, { initialOnScreen: true });
   window.addEventListener('pointermove', onMove, { passive: true });
   window.addEventListener('inkdrop', onDrop as EventListener);
 
   const stop = startLoop(() => {
     if (!gate.onScreen || !gate.visible) return;
+    const ts = nowSec();
+
+    /* ---------- 笔尖驻留：鼠标停住也持续洇墨（站主 2026-10-06 追加）----------
+     * 母题：「笔尖一直按在纸上」而不是「划过留一道」。
+     * 触发条件：指针仍在画布内（hoverX ≥ 0），且距上次落墨已超过 DWELL_MS。
+     * 位置抖动用 hash01(驻留序号) ⇒ **零随机**（同一序号恒定，同 t 可逐点比对）。
+     * 浓度封顶不靠限流，靠 blobAlpha 的幂律衰减 ⇒ 叠出有限平台（见 DWELL_MS 段）。 */
+    if (hoverX >= 0 && ts - lastDwell >= DWELL_MS / 1000) {
+      dwellSeq++;
+      /* 抖动取 [-1,1] 两次哈希（x/y 各一次），乘 DWELL_JITTER 得偏移 */
+      const jx = (hash01(dwellSeq * 2 + 11) * 2 - 1) * DWELL_JITTER;
+      const jy = (hash01(dwellSeq * 2 + 97) * 2 - 1) * DWELL_JITTER;
+      pushBlob(hoverX + jx, hoverY + jy, ts, dwellSeq * 131);
+      lastDwell = ts;
+      needsPaint = true;
+    }
+
     /* ★ 累积状态（痕迹/落滴）不是 f(t)，所以**每帧都要重画**——
        痕迹在淡、落滴在扩散，不重画就会僵住。只有"确实什么都没有"才省帧。 */
-    const ts = nowSec();
     const has = blobs.length > 0 || drops.length > 0;
     if (!has && !needsPaint) return;
     needsPaint = false;

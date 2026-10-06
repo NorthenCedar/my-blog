@@ -289,14 +289,21 @@ it('★ 痕迹会自愈（几秒渗开后收干净）—— 与显影板「涂�
     /const\s+nowSec\s*=\s*\(\s*\)\s*=>\s*performance\.now\(\)\s*\/\s*1000/,
   );
   /* 墨痕的出生时刻。
-     ⚠ 允许两种写法：`t0: nowSec()` 直接取，或先 `const ts = nowSec()` 再 `t0: ts`
+     ⚠ 2026-10-06 笔尖驻留那轮起，落点走 `pushBlob(x, y, t0, seed)` 辅助函数
+       （移动与驻留共用同一条路径，避免两份代码各写一遍 t0），
+       所以这里匹配 `pushBlob` 的**第三个实参**，而不是 `blobs.push({...})` 里的字段。
+     ⚠ 允许两种写法：t0 直接取 `nowSec()`，或先 `const ts = nowSec()` 再传 ts
        —— 后者**整批共用同一时刻**是**正确**的（一笔里那12 个采样点同时出生，
-       物理上就该同时开始渗开；逐点各调一次nowSec() 反而会让它们差几微秒）。
+       物理上就该同时开始渗开；逐点各调一次 nowSec() 反而会让它们差几微秒）。
        所以判据认「t0 最终来自 nowSec()」这条链，不强求写法。 */
-  const trailT0 = CODE.match(/blobs\.push\(\{[^}]*t0:\s*(\w+)/)?.[1] ?? '';
-  expect(trailT0, '没读到墨痕的 t0 来源').toBeTruthy();
+  const trailT0 = CODE.match(/pushBlob\(\s*[^,]+,\s*[^,]+,\s*(\w+)\s*,/)?.[1] ?? '';
+  expect(trailT0, '没读到墨痕的 t0 来源（pushBlob 第三个实参）').toBeTruthy();
+  /* ⚠ 上面刻意**不匹配** pushBlob 的函数定义（`pushBlob(x: number, y: number, ...)`）：
+     那里的第二个实参形态不同，溯源链会指向类型标注而不是真实调用。
+     办法是只取**调用点**（定义行以 `number,` 这种类型标注结尾）——
+     用 `[^,]+,\s*[^,]+,` 已能同时排除定义（定义的第一个实参是 `x: number`）。*/
   /* 溯源：t0 的来源要么就是 nowSec，要么是个"由 nowSec 赋值"的局部变量。
-     ★ 关键在**必须能在源码里找到那个赋值** —— 变异把 `t0: ts` 改成 `t0: age` 时，
+     ★ 关键在**必须能在源码里找到那个赋值** —— 变异把 t0 改成 age 时，
        age 既不是 nowSec、也没有 `= nowSec()` 的赋值 ⇒ 这里转红。*/
   if (trailT0 !== 'nowSec') {
     expect(
@@ -307,6 +314,13 @@ it('★ 痕迹会自愈（几秒渗开后收干净）—— 与显影板「涂�
   expect(CODE, '墨痕出生时刻必须来自 nowSec()').toMatch(
     /const\s+ts\s*=\s*nowSec\(\)/,
   );
+  /* ★ 驻留落点也必须用**绝对秒**（不是相对秒）：驻留是每帧判的，
+     若传相对时间，驻留点的年龄会是巨大的负数 ⇒ 永远画不出来。 */
+  const dwellT0 = CODE.slice(CODE.indexOf('DWELL_MS / 1000'));
+  expect(
+    dwellT0.slice(0, 400),
+    '驻留落点的 t0 必须传绝对秒 ts（传相对时间 ⇒ 年龄恒负 ⇒ 驻留墨点画不出来）',
+  ).toMatch(/pushBlob\([^)]*,\s*ts\s*,/);
   /* 落滴的出生时刻 */
   expect(CODE, '落滴 t0 必须取 nowSec()（绝对秒）').toMatch(/drops\.push\(\{[^}]*t0:\s*nowSec\(\)/);
   /* 不许出现相对时间基准 T0（那正是混用的来源） */
@@ -505,6 +519,85 @@ it('★ 痕迹会自愈（几秒渗开后收干净）—— 与显影板「涂�
     expect(hasDist, '先 npm run build').toBe(true);
     expect(GUEST, '产物里没有 inkdrop 画布').toContain('data-inkdrop');
     expect(GUEST, '产物里没有 .is-ready 门控类名').toContain('is-ready');
+  });
+
+
+  it('★★★ 笔尖驻留：鼠标停住也持续洇墨（站主 2026-10-06 追加要求）', () => {
+    /* 站主要求原文：「把墨痕改成可以一直跟随鼠标，墨痕从末端随时间慢慢消退」
+       澄清后定为「仅移动时跟随，但写下几秒后的墨慢慢消，不是一下消完」。
+     *
+     * 机制拆成两半，缺一不可：
+     *   ① 移动中：按 TRAIL_STEP 插值落点 ⇒ 连续的一条，不是「一串珠子」。
+     *   ② **停住中**：每 DWELL_MS 仍落一个点（位置几乎不动）⇒
+     *      笔尖像一直按在纸上，纸上会积出一个越来越实的墨点。
+     * 旧实现只在 onMove 里落点 ⇒ 鼠标一停，痕就不再延伸，
+     *   读出来是「一笔划完的东西」而不是「墨迹」。
+     *
+     * 实测（_probe/_ink-dwell.mjs，真实产物、两个视口）：
+     *   1920×1000：划过 39944 → 停住 2.5s 后 61188（+21244）
+     *   1440×900 ：划过 30279 → 停住 2.5s 后 47109（+16830）
+     */
+    /* ① 移动插值（原有，不许退化） */
+    expect(SRC, '移动中必须按 TRAIL_STEP 插值落点，否则痕会变成一串珠子').toMatch(
+      /Math\.min\(STEPS_CAP,\s*Math\.floor\(dist\s*\/\s*TRAIL_STEP\)\)/,
+    );
+    /* ② 驻留落点：每帧检查「距上次落墨超过 DWELL_MS」 */
+    expect(SRC, '必须有驻留节流常数 DWELL_MS').toMatch(/const\s+DWELL_MS\s*=\s*\d+/);
+    expect(SRC, '每帧必须判断驻留时机（ts - lastDwell >= DWELL_MS/1000）').toMatch(
+      /ts\s*-\s*lastDwell\s*>=\s*DWELL_MS\s*\/\s*1000/,
+    );
+    expect(SRC, '驻留必须复用 pushBlob（与移动共用同一条落点路径）').toMatch(
+      /hoverX[\s\S]{0,320}pushBlob\(/,
+    );
+    /* ③ 驻留必须以「指针仍在画布内」为前提 —— 移出窗口就不能继续洇墨 */
+    /* ★ 必须切到 onMove 的**出界分支**里判，不能全文搜 ——
+       全文第一处 `hoverX = -1` 是**声明**（`let hoverX = -1;`），
+       删掉真正的出界重置它照样匹配 ⇒ 契约形同虚设
+       （变异实测：删掉出界重置，37 条全绿）。
+       正确锚点是 `lastX = -1` 之后那一段 —— 出界时三个变量一起清。 */
+    const onMoveSrc = CODE.slice(CODE.indexOf('function onMove'), CODE.indexOf('function onDrop'));
+    expect(onMoveSrc, '没读到 onMove').toContain('hoverX');
+    expect(
+      onMoveSrc,
+      '出界时必须同时清掉 hoverX/hoverY（否则鼠标移出窗口后还在原地持续洇墨）',
+    ).toMatch(/hoverX\s*=\s*-1[\s\S]{0,60}?hoverY\s*=\s*-1/);
+    /* 兜底：确认命中的是**赋值**而不是声明（声明是 `let hoverX = -1`）*/
+    expect(onMoveSrc, '上面那条不能只匹配到 `let hoverX = -1` 声明').toMatch(
+      /(?<!let\s)hoverX\s*=\s*-1/,
+    );
+    /* ④ 浓度封顶不靠限流，靠 blobAlpha 的幂律衰减——
+     *    若改成「无限叠点」或「直接置 alpha=1」，停住会烧出一个纯黑圆饼。 */
+    const alpha = SRC.slice(SRC.indexOf('function blobAlpha'), SRC.indexOf('function draw'));
+    expect(alpha, 'blobAlpha 必须保留幂律衰减 decay（驻留浓度封顶靠它）').toMatch(
+      /Math\.pow\([^)]*HEAL/,
+    );
+    /* ⑤ 零随机：驻留点抖动必须走 hash01（否则同 t 逐点比对失效） */
+    const dwell = SRC.slice(SRC.indexOf('DWELL_MS / 1000'));
+    expect(dwell.slice(0, 500), '驻留点抖动必须用 hash01（零随机红线）').toMatch(/hash01/);
+    expect(SRC, '装置里不许出现 Math.random').not.toMatch(/Math\.random/);
+  });
+
+  it('★★ 墨痕从末端逐段消退（不是一刀切）', () => {
+    /* 站主要求「从末端随时间慢慢消退」「不是一下消完」。
+     * 判据：消退必须是**每个点按各自年龄**独立衰减 —— 所以要有一个
+     * 以 t0 为基准的 f(age)，且 age 用的是绝对秒之差。
+     * ⚠ 若改成「整条痕统一淡出」（比如整体乘一个系数），末端会一起消失，
+     *   读出来是「整块橡皮擦过去」，不是墨干涸。 */
+    expect(SRC, '必须有以年龄为参数的浓度函数 blobAlpha').toMatch(
+      /function\s+blobAlpha\(\s*age\s*:\s*number\s*\)/,
+    );
+    const alpha = SRC.slice(SRC.indexOf('function blobAlpha'), SRC.indexOf('function draw'));
+    expect(alpha, '浓度必须由 age 与 LIFE 的比值决定（f(t) 确定函数）').toMatch(/age\s*\/\s*LIFE/);
+    expect(alpha, 'LIFE 之外必须是 0（痕迹能收干净）').toMatch(/age\s*>\s*LIFE[\s\S]{0,40}return\s+0/);
+    /* 生命期与自愈参数都必须是正数、且 LIFE 不为 0（否则"慢慢消退"退化成瞬间消失） */
+    const LIFE = Number(SRC.match(/const\s+LIFE\s*=\s*([\d.]+)/)?.[1]);
+    const HEAL = Number(SRC.match(/const\s+HEAL\s*=\s*([\d.]+)/)?.[1]);
+    expect(Number.isFinite(LIFE) && LIFE > 0, 'LIFE 必须是正数').toBe(true);
+    expect(LIFE, 'LIFE 太小 ⇒ 墨"一下消完"，与站主要求相反').toBeGreaterThan(1);
+    expect(HEAL, 'HEAL 必须为正（指数自愈的指数，0 或负会异常）').toBeGreaterThan(0);
+    /* 半径必须随年龄涨（渗开）—— 消退与渗开同时发生才是"墨在干" */
+    const draw = SRC.slice(SRC.indexOf('function draw'));
+    expect(draw, '笔触半径必须随年龄增长（SMEAR 渗开）').toMatch(/BLOB_R\s*\+\s*age\s*\*\s*SMEAR/);
   });
 
   it('零新增运行时依赖（红线）', () => {
