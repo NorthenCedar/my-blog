@@ -362,13 +362,20 @@ it('★★ 落纸即有色：age=0 的浓度必须为正且高于 GC 阈值', ()
   expect(CODE, '墨痕出生时刻必须来自 nowSec()').toMatch(
     /const\s+ts\s*=\s*nowSec\(\)/,
   );
-  /* ★ 驻留落点也必须用**绝对秒**（不是相对秒）：驻留是每帧判的，
-     若传相对时间，驻留点的年龄会是巨大的负数 ⇒ 永远画不出来。 */
-  const dwellT0 = CODE.slice(CODE.indexOf('DWELL_MS / 1000'));
+  /* ★ 所有 pushBlob 调用都必须传绝对秒 ts（传相对时间 ⇒ 年龄恒负 ⇒ 墨点画不出来）。
+     ⚠ 必须排除**函数定义行**（`pushBlob(x: number, y: number, t0: number, ...)`）——
+       它的第三个实参形态是类型标注 `t0: number`，会被当成"传了变量 t0"。
+     办法：只取**调用点** —— 调用点的第一个实参是纯变量名，不带 `: number`。*/
+  const pushBlobCalls = [...CODE.matchAll(/pushBlob\(([^)]*)\)/g)]
+    .map((m) => m[1])
+    .filter((args) => !/:\s*number/.test(args.split(',')[0] ?? ''));
   expect(
-    dwellT0.slice(0, 400),
-    '驻留落点的 t0 必须传绝对秒 ts（传相对时间 ⇒ 年龄恒负 ⇒ 驻留墨点画不出来）',
-  ).toMatch(/pushBlob\([^)]*,\s*ts\s*,/);
+    pushBlobCalls,
+    `pushBlob 的调用点：${JSON.stringify(pushBlobCalls)}（应为 1 处，t0 传绝对秒 ts）`,
+  ).toHaveLength(1);
+  expect(pushBlobCalls[0], '唯一那个 pushBlob 调用的 t0 必须是绝对秒 ts').toMatch(
+    /^\s*[^,]+,\s*[^,]+,\s*ts\s*,/,
+  );
   /* 落滴的出生时刻 */
   expect(CODE, '落滴 t0 必须取 nowSec()（绝对秒）').toMatch(/drops\.push\(\{[^}]*t0:\s*nowSec\(\)/);
   /* 不许出现相对时间基准 T0（那正是混用的来源） */
@@ -586,59 +593,131 @@ it('★★ 落纸即有色：age=0 的浓度必须为正且高于 GC 阈值', ()
   });
 
 
-  it('★★★ 笔尖驻留：鼠标停住也持续洇墨（站主 2026-10-06 追加要求）', () => {
-    /* 站主要求原文：「把墨痕改成可以一直跟随鼠标，墨痕从末端随时间慢慢消退」
-       澄清后定为「仅移动时跟随，但写下几秒后的墨慢慢消，不是一下消完」。
+  it('★★★ 停住不出墨（站主 2026-10-06 晚明确要求），且已落的墨继续消退', () => {
+    /* 站主要求原文：「鼠标停着不动的时候不要出墨」。
      *
-     * 机制拆成两半，缺一不可：
-     *   ① 移动中：按 TRAIL_STEP 插值落点 ⇒ 连续的一条，不是「一串珠子」。
-     *   ② **停住中**：每 DWELL_MS 仍落一个点（位置几乎不动）⇒
-     *      笔尖像一直按在纸上，纸上会积出一个越来越实的墨点。
-     * 旧实现只在 onMove 里落点 ⇒ 鼠标一停，痕就不再延伸，
-     *   读出来是「一笔划完的东西」而不是「墨迹」。
+     * ★ 这条是**反转契约**。上一轮我把「墨痕可以一直跟随鼠标」实现成
+     *   「停住时每 90ms 在原地继续洇墨」，站主验收后要求去掉 ——
+     *   那是过度解读：「跟随」指的是**位置**跟着笔走，不是「笔不动时纸自己出墨」。
+     *   ⇒ 现在痕迹数组**只在 pointermove 里增长**；rAF 只负责重画与回收。
      *
-     * 实测（_probe/_ink-dwell.mjs，真实产物、两个视口）：
-     *   1920×1000：划过 39944 → 停住 2.5s 后 61188（+21244）
-     *   1440×900 ：划过 30279 → 停住 2.5s 后 47109（+16830）
+     * 实现形态（两处，缺一不可）：
+     *   ① 痕迹的唯一增长点是 onMove（没有第二条 pushBlob 路径）；
+     *   ② onMove 里`dist < TRAIL_STEP` 直接 return —— 亚像素抖动不落点。
      */
-    /* ① 移动插值（原有，不许退化） */
+    /* ① 驻留机制必须彻底不存在。
+       ⚠ 负向断言要用 **CODE**（已剥注释）而不是 SRC ——
+          否则「驻留机制已移除」这段**解释性注释**里出现的 DWELL_MS
+          会把自己判成违规（这次就踩了一次：SRC 全文匹配 ⇒ 转红）。
+       ⇒ 纪律：**负向断言一律用 CODE，正向断言才用 SRC。** */
+    expect(CODE, '驻留节流常数 DWELL_MS 必须删掉（停住不出墨）').not.toMatch(/DWELL_MS/);
+    expect(CODE, '驻留抖动常数 DWELL_JITTER 必须删掉').not.toMatch(/DWELL_JITTER/);
+    expect(CODE, '驻留状态 hoverX/hoverY 必须删掉').not.toMatch(/hoverX|hoverY/);
+    expect(CODE, '驻留计时 lastDwell 必须删掉').not.toMatch(/lastDwell/);
+    expect(CODE, '驻留序号 dwellSeq 必须删掉').not.toMatch(/dwellSeq/);
+    /* ② pushBlob 只能有一个调用点 —— 在 onMove 里。
+          ★ 变异验证：把 onMove 里改成 pushBlob 之外的第二条路径（比如在rAF 里补落点）
+            会被这条抓住；只查"DWELL_MS 不存在"则守不住那种改法。 */
+    const calls = [...CODE.matchAll(/pushBlob\(/g)].length;
+    expect(calls, `pushBlob 出现 ${calls} 次：落点只能有「移动」这一条路径`).toBe(2); // 1 定义 + 1 调用
+    const onMoveSrc = CODE.slice(CODE.indexOf('function onMove'), CODE.indexOf('function onDrop'));
+    expect(onMoveSrc, '没读到 onMove').toMatch(/pushBlob\(/);
+    /* ③ rAF 主循环里不许有任何落点调用（这是「停住不出墨」的决定性判据） */
+    const loop = CODE.match(/startLoop\(\(\)\s*=>\s*\{[\s\S]*?\n\s{2}\}\)/)?.[0] ?? '';
+    expect(loop, '没读到主循环').toBeTruthy();
+    expect(
+      loop,
+      '主循环里不许落墨（指针静止 ⇒ 纸面静止；主循环只负责重画与回收）',
+    ).not.toMatch(/pushBlob|blobs\.push/);
+    /* ④ 移动插值仍要保留（不许为了「停住不出墨」把移动也一起干掉） */
     expect(SRC, '移动中必须按 TRAIL_STEP 插值落点，否则痕会变成一串珠子').toMatch(
       /Math\.min\(STEPS_CAP,\s*Math\.floor\(dist\s*\/\s*TRAIL_STEP\)\)/,
     );
-    /* ② 驻留落点：每帧检查「距上次落墨超过 DWELL_MS」 */
-    expect(SRC, '必须有驻留节流常数 DWELL_MS').toMatch(/const\s+DWELL_MS\s*=\s*\d+/);
-    expect(SRC, '每帧必须判断驻留时机（ts - lastDwell >= DWELL_MS/1000）').toMatch(
-      /ts\s*-\s*lastDwell\s*>=\s*DWELL_MS\s*\/\s*1000/,
+    expect(SRC, '位移不足一个笔刷间距时必须不落点（亚像素抖动不算移动）').toMatch(
+      /if\s*\(\s*dist\s*<\s*TRAIL_STEP\s*\)\s*return/,
     );
-    expect(SRC, '驻留必须复用 pushBlob（与移动共用同一条落点路径）').toMatch(
-      /hoverX[\s\S]{0,320}pushBlob\(/,
-    );
-    /* ③ 驻留必须以「指针仍在画布内」为前提 —— 移出窗口就不能继续洇墨 */
-    /* ★ 必须切到 onMove 的**出界分支**里判，不能全文搜 ——
-       全文第一处 `hoverX = -1` 是**声明**（`let hoverX = -1;`），
-       删掉真正的出界重置它照样匹配 ⇒ 契约形同虚设
-       （变异实测：删掉出界重置，37 条全绿）。
-       正确锚点是 `lastX = -1` 之后那一段 —— 出界时三个变量一起清。 */
-    const onMoveSrc = CODE.slice(CODE.indexOf('function onMove'), CODE.indexOf('function onDrop'));
-    expect(onMoveSrc, '没读到 onMove').toContain('hoverX');
-    expect(
-      onMoveSrc,
-      '出界时必须同时清掉 hoverX/hoverY（否则鼠标移出窗口后还在原地持续洇墨）',
-    ).toMatch(/hoverX\s*=\s*-1[\s\S]{0,60}?hoverY\s*=\s*-1/);
-    /* 兜底：确认命中的是**赋值**而不是声明（声明是 `let hoverX = -1`）*/
-    expect(onMoveSrc, '上面那条不能只匹配到 `let hoverX = -1` 声明').toMatch(
-      /(?<!let\s)hoverX\s*=\s*-1/,
-    );
-    /* ④ 浓度封顶不靠限流，靠 blobAlpha 的幂律衰减——
-     *    若改成「无限叠点」或「直接置 alpha=1」，停住会烧出一个纯黑圆饼。 */
+    /* ⑤ ★ 但「停住时旧墨继续消退」必须仍在 ——
+          把 ③④⑤ 一起实现成「停住就整块冻结」是常见的过度修正，
+          那样墨痕会永远留在屏幕上，反而违背「从末端慢慢消退」。 */
     const alpha = SRC.slice(SRC.indexOf('function blobAlpha'), SRC.indexOf('function draw'));
-    expect(alpha, 'blobAlpha 必须保留幂律衰减 decay（驻留浓度封顶靠它）').toMatch(
+    expect(alpha, 'blobAlpha 必须保留按年龄的衰减（停住时旧墨靠它继续消退）').toMatch(
       /Math\.pow\([^)]*HEAL/,
     );
-    /* ⑤ 零随机：驻留点抖动必须走 hash01（否则同 t 逐点比对失效） */
-    const dwell = SRC.slice(SRC.indexOf('DWELL_MS / 1000'));
-    expect(dwell.slice(0, 500), '驻留点抖动必须用 hash01（零随机红线）').toMatch(/hash01/);
+    expect(CODE, '回收仍按寿命判（停住时超期的墨要消失）').toMatch(
+      /ts\s*-\s*blobs\[i\]\.t0\s*>\s*LIFE/,
+    );
+    expect(CODE, '每帧仍必须重画（否则停住时墨痕会僵住不消退）').toMatch(/paint\(ts\)/);
+    /* ⑥ 零随机红线仍在 */
     expect(SRC, '装置里不许出现 Math.random').not.toMatch(/Math\.random/);
+  });
+
+  it('★★★ 落滴必须"够响"：实测峰值像素数与各段尺度都有下限', () => {
+    /* 站主反馈原文：「发评论那个效果我没看到」。
+     *
+     * 线上插桩诊断（1920×1000，真实留言页派发真实 detail）：
+     *     事件链路   __gotDrop = 1        ⇒ 派发是通的，不是 comments.ts 的问题
+     *     落点几何   left=364 top=554     ⇒ 在视口内，不是被裁掉
+     *     画布       ready/opacity=1      ⇒ 显隐正常
+     *     **着色像素 t≈150ms n=229  peakAlpha=140**  ← 只有229 个像素！
+     * 对照：墨痕划过整屏是 3~4 万像素。⇒ **不是没画，是画得不够响**。
+     *   三个量级都太小：① 水滴半径 4~9px（πr²·dpr² ≈ 230，正好对上实测）
+     *                    ② 扩散环 ry=rx*0.42 + 线宽 2.2，又扁又细
+     *                    ③ DROP_LIFE 2.4s，一次眨眼就过去
+     *
+     * ⇒ 下面锁的是**量级下限**，不是"某个系数等于某值"：
+     *   太小 ⇒ 一定看不见（回归）；太大 ⇒ 也拦得住（防止调过头糊屏）。
+     */
+    const num = (name: string) => {
+      const m = SRC.match(new RegExp(`const\\s+${name}\\s*=\\s*([\\d.]+)`));
+      expect(m, `读不到 ${name}`).toBeTruthy();
+      return Number(m![1]);
+    };
+    /* ① 下落高度：要看得见"从上砸下来"（原来 70） */
+    expect(num('DROP_FALL_H'), '下落高度太小 ⇒ 读不出"砸下来"').toBeGreaterThanOrEqual(150);
+    /* ② 水滴头部半径：原来 4~9（实测 n=229 的直接原因） */
+    expect(num('DROP_HEAD_R'), '水滴头部半径太小 ⇒ 就是一个小点').toBeGreaterThanOrEqual(10);
+    /* ③ 砸开那团墨的半径：原来 7，且立刻就收 */
+    expect(num('DROP_BURST_R'), '砸点墨团太小').toBeGreaterThanOrEqual(30);
+    /* ④ 最外圈涟漪半径：原来 46 */
+    expect(num('DROP_R'), '涟漪范围太小').toBeGreaterThanOrEqual(110);
+    /* ⑤ 压扁比：0.42 太扁 ⇒ 环读不出来；上限防过圆 */
+    expect(num('DROP_RING_RY'), '涟漪压扁比太小 ⇒ 环读不出来').toBeGreaterThanOrEqual(0.6);
+    expect(num('DROP_RING_RY'), '涟漪压扁比过大 ⇒ 不像落在纸面上').toBeLessThanOrEqual(0.9);
+    /* ⑥ 涟漪线宽：原来 2.2 */
+    expect(num('DROP_RING_W'), '涟漪线宽太细').toBeGreaterThanOrEqual(3.5);
+    /* ⑦ 溅射颗数：原来**一颗都没有** ⇒ 落地只有同心环，读成涟漪不像砸落 */
+    expect(num('SPLAT_N'), '必须有溅射小墨珠（不然落地只有同心环）').toBeGreaterThanOrEqual(8);
+    /* ⑧ 生命期：原来 2.4s 太快 */
+    expect(num('DROP_LIFE'), '生命期太短 ⇒ 一眨眼就过去').toBeGreaterThanOrEqual(3.2);
+    /* ⑨ 落点必须钳制到可见带：列表长时新评论 prepend 到顶部、位置在视口之上
+          ⇒ 落滴落在屏幕外 ⇒ 提交成功却"什么都没发生"（这是"没看到"的一类成因） */
+    /* ⚠ 切片边界：源文件里 `onDrop` 定义在 `paint` **之后**（第451 行 vs 352 行），
+       所以结束锚点必须取 onDrop 后面那个真实存在的 `function startLoop`
+       之前的段落；用 paint 当结束锚点会切出空串（这次踩到了）。*/
+    const onDropEnd = CODE.indexOf('function startLoop') > 0
+      ? CODE.indexOf('function startLoop')
+      : CODE.indexOf('if (!animate)');
+    const onDropSrc = CODE.slice(CODE.indexOf('function onDrop'), onDropEnd);
+    expect(onDropSrc, '没读到 onDrop').toBeTruthy();
+    expect(
+      onDropSrc,
+      '落点必须钳制到可见带（几何不在场时落滴会落在视口外）',
+    ).toMatch(/Math\.max\(marginY/);
+    /* ⑩ 溅射的随机量必须来自 hash01（零随机红线）。
+       ⚠ 锚点是 **draw 里那段溅射循环**，不是常数区（常数区当然没有 hash01）。
+          锚点用 `for (let j = 0; j < SPLAT_N; j++)` 这句唯一的循环头。*/
+    const splatLoop = CODE.indexOf('for (let j = 0; j < SPLAT_N');
+    expect(splatLoop, '没读到溅射循环（锚点：for (let j = 0; j < SPLAT_N ...)）').toBeGreaterThan(0);
+    const splatBody = CODE.slice(splatLoop, splatLoop + 900);
+    expect(splatBody, '溅射角度/初速/大小必须走 hash01（零随机红线）').toMatch(/hash01/);
+    expect(
+      CODE.slice(splatLoop, splatLoop + 900),
+      '溅射段内不许出现 Math.random',
+    ).not.toMatch(/Math\.random/);
+    /* ⑪ 三段形态都要在：下落（带拖尾）／砸点／涟漪+溅射 */
+    expect(CODE, '必须有下落的拖尾（水滴不能是纯圆饼）').toMatch(/createLinearGradient/);
+    expect(CODE, '必须有砸点墨团').toMatch(/DROP_BURST_R/);
+    expect(CODE, '必须有溅射').toMatch(/SPLAT_N/);
   });
 
   it('★★ 墨痕从末端逐段消退（不是一刀切）', () => {

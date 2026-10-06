@@ -2,9 +2,10 @@
  * 留言页 · 墨滴（INK DROP）—— 指针在留言区留墨痕、几秒渗开；新留言落下是墨滴扩散
  *
  * ★ 母题（站主 2026-10-06 指定，与本页静态底纹同源）：
- *   · 墨痕：指针在**留言区上方**移动 ⇒ 留下渐深的蓝墨痕
+ *   · 墨痕：指针在**移动**时留下渐深的蓝墨痕；**停住不动 ⇒ 不出墨**，
+ *     已落的墨按各自年龄从末端慢慢消退（站主 2026-10-06 晚明确要求）
  *   · 渗开：痕迹不立刻消失，按 f(t) **慢慢往外渗并变淡**，几秒后收干净
- *   · 落滴：留言发表成功 ⇒ 墨滴**从上方落下、砸出一圈扩散**
+ *   · 落滴：留言发表成功 ⇒ 墨滴**从上方砸下、炸开、溅出一圈**
  *
  * ★★ 机制与其余装置**不重复**（口径 #5「每页一台机制不同的装置」）：
  *
@@ -133,33 +134,35 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
      12 步会把这段稀释成 12 个大间距的点（临界约 7800px/s）。
      提到 32 ⇒ 即便 400px 的一次跳也还保得住约 12px 的连续间距。 */
   const STEPS_CAP = 32; // 单次事件的插值步数上限
-  const DROP_LIFE = 2.4; // 落滴从落到散尽
-  const DROP_FALL = 0.42; // 落下占整段的比例（其余是落地后的扩散）
-  const DROP_R = 46; // 落滴砸出的扩散圈最终半径
-  const RINGS = 3; // 每滴扩散的圈数
+  /* ---------- 落滴常数（留言发表的反馈，2026-10-06 晚按"够响"重做）---------- */
+  const DROP_LIFE = 3.6; // 落滴从落到散尽（秒）—— 原 2.4s 太短，一次眨眼就过去
+  const DROP_FALL = 0.3; // 落下占整段的比例（其余是落地后的扩散）
+  const DROP_FALL_H = 210; // 下落起点距落点的高度（px）—— 要看得见"从上砸下来"
+  const DROP_HEAD_R = 13; // 水滴头部半径（原 4~9，太小）
+  const DROP_BURST_R = 46; // 砸点那团墨的炸开半径（原 7，且立刻就收）
+  const DROP_R = 132; // 最外圈涟漪半径（原 46，在大屏上只有一小圈）
+  const DROP_RING_RY = 0.72; // 涟漪的压扁比（原 0.42 ⇒ 又扁又小，读不出来）
+  const DROP_RING_W = 5.2; // 涟漪线宽（原 2.2）
+  const RINGS = 3; // 涟漪圈数
+  const SPLAT_N = 11; // 溅射小墨珠颗数（原**没有** ⇒ 落地只有几个同心环，像涟漪不像砸落）
+  const SPLAT_V = 190; // 溅射初速（px/s，按 su 线性推进）
+  const DROP_SPLAT_R = 7.5; // 溅射小珠半径
   const RM_T = 2.0; // reduced-motion 那一帧的时刻（几滴正在渗开）
 
-  /* ---------- 笔尖驻留（站主 2026-10-06 追加要求）----------
-   * 母题从「划过留痕」改成「**笔尖一直按在纸上**」：
-   *   · 移动时：照旧按 TRAIL_STEP 插值落点（一条连续的痕）；
-   *   · **停住时**：笔尖仍持续洇墨（每 DWELL_MS 一个点，位置几乎不动），
-   *     所以停住的地方会积出一个**越来越实**的墨点，随后一起慢慢消退。
-   * 为什么要它：原来只在 pointermove 里落点 ⇒ 鼠标一停，纸上的痕就不再延伸，
-   *   读起来是「一笔划完的东西」；而"墨迹"应该像笔尖还蘸着墨按在那儿。
+  /* ---------- 笔尖驻留：**已按站主要求移除**（2026-10-06 晚）----------
+   * 曾有一版「笔尖一直按在纸上」：鼠标停住时每 DWELL_MS 仍在原位落点，
+   * 于是停住的地方会积出一个越来越实的墨点。
+   * 站主验收后明确要求去掉：「鼠标停着不动的时候不要出墨」。
    *
-   * ★ 浓度封顶靠 blobAlpha 的**幂律**（HEAL），不靠限流：
-   *   每秒 DWELL_HZ 个点全叠在同一处，alpha 用 source-over 叠加会趋向全黑。
-   *   但每个点的 k = (1-age/LIFE)^HEAL 会随年龄衰减 ⇒ 叠出来的总浓度
-   *   收敛到一个**有限平台**（约 DWELL_HZ × HEAL/LIFE 量级），不会爆。
-   *   这也是 LIFE/HEAL 必须存在的另一个理由 —— 它们同时是"消退速度"和"封顶"。
-   * ★ 零随机：驻留点的位置抖动用 hash01(整数索引)，同一位置恒定。
+   * ★ 教训（比功能本身更值得记）：
+   *   上一轮加这个时，站主要的是「墨痕**持续跟随**鼠标、末端随时间慢慢消退」，
+   *   我把它实现成「停住也在原地洇墨」—— 这是**过度解读**：
+   *   「跟随」指的是痕的**位置跟着笔走**，不是「笔不动时纸自己出墨」。
+   *   凡是「增强持续感」的需求，先问一句"停住时应该发生什么"，
+   *   否则很容易做出用户没要的、还很难解释的常驻墨团。
+   *   ⇒ 现在墨痕**只在 pointermove 里落点**：指针静止 ⇒ 纸面静止，
+   *     只有已落的墨按各自年龄继续消退（消退机制完全不受影响）。
    */
-  const DWELL_MS = 90; // 停住时每隔多久洇出一个点
-  const DWELL_HZ = 1000 / DWELL_MS; // 驻留落点频率（点/秒）
-  /* 驻留自洽上限：驻留点密度比移动时高得多（同一位置反复叠），
-     所以 TRAIL_MAX 的自洽算式要按**驻留**这一档来兜底：
-     纯驻留 DWELL_HZ = 11.1 点/秒 × LIFE 4.2s ≈ 47 个点，远低于 1600。 */
-  const DWELL_JITTER = 1.4; // 驻留点的位置抖动半径（px），让墨点不长得像个圆饼
 
   /** 一笔墨痕：位置 + 出生时刻 + 各自的种子。★ 不存"形状"，形状由年龄算出。 */
   type Blob = { x: number; y: number; t0: number; s: number };
@@ -243,39 +246,103 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
       ctx.fill();
     }
 
+    /* ---------- 落滴（留言发表成功）----------
+     * ★★ 2026-10-06 站主「发评论那个效果我没看到」—— 线上插桩实测到的真相：
+     *   事件链路是通的（`__gotDrop = 1`）、落点几何正常（视口内 left=364 top=554）、
+     *   画布也确实画了 —— 但**整段生命周期的着色像素峰值只有 229**：
+     *     t≈150ms  n=229  peakAlpha=140
+     *   原因是三个量级都太小：
+     *     ① 下落的水滴 r = 4 + 5(1−fu) ⇒ 直径 8~18px，在 1898×902 的画布上
+     *        就是**一个小点**（n≈πr²·dpr² ≈ 230，正好对上实测值）；
+     *     ② 扩散环被压成 `ry = rx * 0.42` 的扁椭圆 + 线宽 2.2−j*0.4
+     *        ⇒ 环又细又扁，叠在浅色底纹上几乎不可辨；
+     *     ③ DROP_LIFE 只有 2.4s ⇒ 一次眨眼就过去了。
+     *   ⇒ 不是"没画"，是**画得不够响**。落滴是留言成功的唯一反馈，
+     *     必须一眼可见，所以按"物理上应该多大"重做，而不是微调系数。
+     *
+     * 新形态（三段，全部仍是 age 的确定函数 ⇒ 零随机）：
+     *   下落：带**拖尾的水滴**，从落点上方 DROP_FALL_H 高处加速砸下来；
+     *   砸点：一团实心墨在原地**炸开再收**（快涨慢收，读成"啪"的一下）；
+     *   扩散：3 道**近圆**涟漪 + SPLAT_N 颗**溅射**小墨珠沿确定性角度飞出。
+     */
     for (let i = 0; i < drops.length; i++) {
       const d = drops[i];
       const age = tSec - d.t0;
       if (age < 0 || age > DROP_LIFE) continue;
-      const u = age / DROP_LIFE;
-      /* 前 DROP_FALL 比例是"下落"：一个小墨滴从上往下；
-         后者是"落地扩散"：一圈圈往外推、越来越淡。 */
+      /* 前 DROP_FALL 比例是"下落"，其后是"落地扩散"。 */
       if (age < DROP_LIFE * DROP_FALL) {
         const fu = age / (DROP_LIFE * DROP_FALL);
-        const r = 4 + 5 * (1 - fu);
-        const y = d.y - 70 * (1 - fu) * (1 - fu);
+        /* 自由落体：位移 ∝ fu²（加速），末尾趋近落点 */
+        const fall = DROP_FALL_H * (1 - fu) * (1 - fu);
+        const y = d.y - fall;
+        /* 拖尾：从当前位置向上拉一条**渐细**的水痕，长度随速度增长 */
+        const tail = 16 + 30 * fu;
+        const g = ctx.createLinearGradient(d.x, y - tail, d.x, y);
+        g.addColorStop(0, A(INK, 0));
+        g.addColorStop(1, A(INK, 0.72 * trailScale));
+        ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(d.x, y, r, 0, 6.283);
-        ctx.fillStyle = A(INK, 0.55 * trailScale);
+        /* 水滴形状：上尖下圆（水滴的经典轮廓），不画成纯圆饼 */
+        ctx.moveTo(d.x, y - tail - 9);
+        ctx.quadraticCurveTo(d.x + DROP_HEAD_R * 0.62, y - tail * 0.35, d.x + DROP_HEAD_R, y);
+        ctx.arc(d.x, y, DROP_HEAD_R, 0, Math.PI);
+        ctx.quadraticCurveTo(d.x - DROP_HEAD_R * 0.62, y - tail * 0.35, d.x, y - tail - 9);
+        ctx.fill();
+        /* 头部实心（拖尾是渐变，头部要够实才看得见） */
+        const gh = ctx.createRadialGradient(d.x, y, 0, d.x, y, DROP_HEAD_R);
+        gh.addColorStop(0, A(INK, 0.88 * trailScale));
+        gh.addColorStop(0.6, A(INK, 0.7 * trailScale));
+        gh.addColorStop(1, A(INK, 0));
+        ctx.fillStyle = gh;
+        ctx.beginPath();
+        ctx.arc(d.x, y, DROP_HEAD_R, 0, 6.283);
         ctx.fill();
       } else {
         const su = (age - DROP_LIFE * DROP_FALL) / (DROP_LIFE * (1 - DROP_FALL));
+        /* ① 砸点那团墨：前 18% 快速涨开（读成"啪"），之后慢慢收 */
+        const burst = Math.min(1, su / 0.18);
+        const br = DROP_BURST_R * Math.sin(Math.PI * Math.min(1, burst * 0.62 + su * 0.38));
+        if (br > 0.5) {
+          const gb = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, br);
+          /* ★★ 衰减指数从 2 降到 1.3（2026-10-06 验收实测）：
+              (1−su)² 在 su=0.7 时只剩 0.09 —— 墨还没扩散到最大就已经看不见了，
+              实测峰值 alpha 只有 120/255（淡得读不出是"砸"）。*/
+          const bk = 0.85 * Math.pow(1 - su, 1.3);
+          gb.addColorStop(0, A(INK, bk * trailScale));
+          gb.addColorStop(0.5, A(INK, bk * 0.66 * trailScale));
+          gb.addColorStop(1, A(INK, 0));
+          ctx.fillStyle = gb;
+          ctx.beginPath();
+          ctx.arc(d.x, d.y, br, 0, 6.283);
+          ctx.fill();
+        }
+        /* ② 近圆涟漪：DROP_RING_RY 从 0.42 提到 0.72 —— 原来压得太扁，
+              环叠在浅底纹上读不出来。线宽也整体加粗。*/
         for (let j = 0; j < RINGS; j++) {
-          const uu = su - j * 0.16;
+          const uu = su - j * 0.15;
           if (uu <= 0 || uu >= 1) continue;
           const rx = DROP_R * Math.sqrt(uu);
           ctx.beginPath();
-          ctx.ellipse(d.x, d.y, rx, rx * 0.42, 0, 0, 6.283);
-          ctx.strokeStyle = A(INK, 0.4 * (1 - uu) * (1 - uu) * trailScale);
-          ctx.lineWidth = 2.2 - j * 0.4;
+          ctx.ellipse(d.x, d.y, rx, rx * DROP_RING_RY, 0, 0, 6.283);
+          ctx.strokeStyle = A(INK, 0.72 * Math.pow(1 - uu, 1.3) * trailScale);
+          ctx.lineWidth = DROP_RING_W - j * 0.7;
           ctx.stroke();
         }
-        /* 落点那一团墨，越淡越小 */
-        const r0 = 7 * (1 - su);
-        if (r0 > 0.4) {
+        /* ③ 溅射：SPLAT_N 颗小墨珠沿确定性角度飞出，各自延时起飞。
+              ★ 角度/初速/大小全部来自 hash01(常量下标) ⇒ 零随机，
+                同一条落滴在任何时刻的形态完全一致（同 t 可逐像素比对）。*/
+        for (let j = 0; j < SPLAT_N; j++) {
+          const ang = hash01(j * 3 + 5) * 6.283;
+          const v = SPLAT_V * (0.45 + hash01(j * 7 + 11) * 0.85);
+          const sz = DROP_SPLAT_R * (0.5 + hash01(j * 13 + 3) * 0.8);
+          const uu = su - j * 0.045; // 每颗错开一点 ⇒ 看起来是"先后溅开"
+          if (uu <= 0 || uu >= 1) continue;
+          /* y 方向按 DROP_RING_RY 压扁，模拟落在纸面上（视角是斜的）*/
+          const sx = d.x + Math.cos(ang) * v * uu;
+          const sy = d.y + Math.sin(ang) * v * uu * DROP_RING_RY;
           ctx.beginPath();
-          ctx.arc(d.x, d.y, r0, 0, 6.283);
-          ctx.fillStyle = A(INK, 0.4 * (1 - su) * trailScale);
+          ctx.arc(sx, sy, Math.max(0.4, sz * (1 - uu)), 0, 6.283);
+          ctx.fillStyle = A(INK, 0.8 * Math.pow(1 - uu, 1.15) * trailScale);
           ctx.fill();
         }
       }
@@ -298,13 +365,9 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
   /* ---------- 记录一笔墨痕 ---------- */
   let lastX = -1;
   let lastY = -1;
-  /* 笔尖驻留状态（站主 2026-10-06 追加：墨要"一直跟随鼠标"）。
-     hoverX/Y = −1 表示「指针不在画布内」⇒ 不驻留落墨。
-     lastDwell  = 上一次落墨（移动或驻留）的绝对秒，用于算"停了多久"。 */
-  let hoverX = -1;
-  let hoverY = -1;
-  let lastDwell = 0;
-  let dwellSeq = 0; // 驻留点序号（喂给 hash01，保证同位置的点形状各异）
+  /* ★ 不再有 hoverX / hoverY / lastDwell / dwellSeq：
+     「停住不出墨」是站主明确要求（见上面那段注释）。
+     换句话说，**痕迹数组只在 pointermove 里增长**，rAF 回调不再落点。*/
 
   /* ---------- 墨痕范围：整页，不设区域门槛 ---------- *
    * ★★ 2026-10-06 站主二次实测**推翻了上一轮的修法**（「量`.prose` 真实几何」）：
@@ -357,22 +420,20 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
     const x = e.clientX;
     const y = e.clientY;
     if (!overMessageArea(x, y)) {
+      /* 出界 ⇒ 断开插值链。指针不在纸上 ⇒ 纸面静止（站主要求：不动不出墨）*/
       lastX = -1;
       lastY = -1;
-      hoverX = -1; // 指针出界 ⇒ 停止驻留落墨
-      hoverY = -1;
       return;
     }
-    hoverX = x;
-    hoverY = y;
     if (lastX >= 0) {
       const dx = x - lastX;
       const dy = y - lastY;
       const dist = Math.hypot(dx, dy);
       /* ★ 移动中：按 TRAIL_STEP 插值落点，让痕是**连续**的一条而不是一串珠子。
-         ★ `dist < TRAIL_STEP` 时直接 return，但**必须先更新 hoverX/hoverY**
-         —— 否则慢速移动时（每帧位移不足一个 TRAIL_STEP）笔尖会被判成"停住"，
-             驻留与移动两种落点会打架。 */
+         ★ `dist < TRAIL_STEP` 时直接 return —— 这条同时也是「停住不出墨」的实现：
+           指针不动 ⇒ 没有新的 pointermove ⇒ 这段根本不执行；
+           即使有零抖动事件（亚像素），位移不足一个笔刷间距也不落新点，
+           所以停住时纸面**不会**继续变浓。 */
       if (dist < TRAIL_STEP) return;
       const steps = Math.min(STEPS_CAP, Math.floor(dist / TRAIL_STEP));
       const ts = nowSec();
@@ -382,9 +443,6 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
         const py = lastY + dy * t;
         pushBlob(px, py, ts, Math.round(px * 7 + py * 13));
       }
-      lastDwell = ts; // 刚移动过 ⇒ 重置驻留计时
-    } else {
-      lastDwell = nowSec(); // 刚进入页面/刚出界回来 ⇒ 从现在开始驻留
     }
     lastX = x;
     lastY = y;
@@ -396,10 +454,19 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
   function onDrop(e: Event) {
     const det = (e as CustomEvent<{ x?: number; y?: number }>).detail;
     /* 落点：优先用评论列表首项的位置（"新留言落在列表里"），
-       没有就给视口上方 —— 站主要的是"落下的墨滴"，位置可退化为常量。 */
-    const x = det?.x ?? cw * 0.5;
-    const y = det?.y ?? ch * 0.42;
-    drops.push({ x, y, t0: nowSec() });
+       没有就给视口上方 —— 站主要的是"落下的墨滴"，位置可退化为常量。
+     *
+     * ★ 钳制到**可见带**（2026-10-06 加，理由是几何不在场）：
+     *   列表很长时，新评论被 prepend 到列表**顶部**，那个位置很可能在
+     *   视口**之上** ⇒ 落滴会落在屏幕外 ⇒ 站主提交成功却"什么都没发生"。
+     *   这正是"没看到"的一类可能成因，不能只靠事件链路通就认为效果成立。
+     *   ⇒ 把落点夹进「离视口上下边缘各留 DROP_FALL_H 的带子里」，
+     *     超出的部分直接贴到带边（不重新居中，保持"落在留言那边"的方向感）。*/
+    const inX = det?.x ?? cw * 0.5;
+    const inY = det?.y ?? ch * 0.42;
+    const marginY = Math.min(DROP_FALL_H, ch * 0.4);
+    const y = Math.max(marginY, Math.min(ch - marginY * 0.5, inY));
+    drops.push({ x: Math.max(0, Math.min(cw, inX)), y, t0: nowSec() });
     if (drops.length > 8) drops.shift();
     needsPaint = true;
   }
@@ -458,20 +525,10 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
     if (!gate.onScreen || !gate.visible) return;
     const ts = nowSec();
 
-    /* ---------- 笔尖驻留：鼠标停住也持续洇墨（站主 2026-10-06 追加）----------
-     * 母题：「笔尖一直按在纸上」而不是「划过留一道」。
-     * 触发条件：指针仍在画布内（hoverX ≥ 0），且距上次落墨已超过 DWELL_MS。
-     * 位置抖动用 hash01(驻留序号) ⇒ **零随机**（同一序号恒定，同 t 可逐点比对）。
-     * 浓度封顶不靠限流，靠 blobAlpha 的幂律衰减 ⇒ 叠出有限平台（见 DWELL_MS 段）。 */
-    if (hoverX >= 0 && ts - lastDwell >= DWELL_MS / 1000) {
-      dwellSeq++;
-      /* 抖动取 [-1,1] 两次哈希（x/y 各一次），乘 DWELL_JITTER 得偏移 */
-      const jx = (hash01(dwellSeq * 2 + 11) * 2 - 1) * DWELL_JITTER;
-      const jy = (hash01(dwellSeq * 2 + 97) * 2 - 1) * DWELL_JITTER;
-      pushBlob(hoverX + jx, hoverY + jy, ts, dwellSeq * 131);
-      lastDwell = ts;
-      needsPaint = true;
-    }
+    /* ★★★ 这里**不再有任何"指针停住也落墨"的逻辑**（站主 2026-10-06 晚要求：
+       「鼠标停着不动的时候不要出墨」）。痕迹数组只在 onMove 里增长。
+       rAF 回调只负责「把已有的痕迹按年龄重新画一遍 + 回收超期的」。
+      ⇒ 这也意味着：停住时纸面**只淡不增**，这正是墨在纸上干涸的样子。*/
 
     /* ★ 累积状态（痕迹/落滴）不是 f(t)，所以**每帧都要重画**——
        痕迹在淡、落滴在扩散，不重画就会僵住。只有"确实什么都没有"才省帧。 */
