@@ -625,6 +625,19 @@ describe('404 · 装置脚本契约（fracture.ts）', () => {
     /* ⑧ 放射线铺满一整周、且角度带抖动（否则是机械的"米字"） */
     expect(IMPACT, '放射线要按射线数铺满一圈').toMatch(/RAYS/);
     expect(IMPACT, '放射线角度要加抖动').toMatch(/rnd\(\)/);
+    /* ⑨ ★★ 站主第四轮原话「**线不要那么密，稀疏一点**」—— 密度上限写进门闩。
+       ★ 密度**不是一个旋钮**：放射线、雾化碎屑、粉碎屑、分叉各占一份。只拉放射线
+         一处，收出来是"辐条稀了、爆点还糊着一坨" —— 那是换了个不匀，不是变稀疏。
+         所以四个数各有一条上限，一起管；下限只管放射线（它同时是可用性保证）。 */
+    const raysN = Number(TS.match(/const RAYS\s*=\s*(\d+)/)?.[1]);
+    expect(raysN, `放射线 ${raysN} 根 ⇒ 超过 20 根就回到"线太密"（站主第四轮的原话）`).toBeLessThanOrEqual(20);
+    expect(raysN, `放射线 ${raysN} 根 ⇒ 少于 12 根铺不满一周，"指针随处能碰到裂纹"这条保证会破`).toBeGreaterThanOrEqual(12);
+    const mistN = Number(TS.match(/const MIST_N\s*=\s*(\d+)/)?.[1]);
+    expect(mistN, `雾化区 ${mistN} 根 ⇒ 超过 32 根，爆点外围又糊成一团`).toBeLessThanOrEqual(32);
+    const crushN = Number(TS.match(/const CRUSH_N\s*=\s*(\d+)/)?.[1]);
+    expect(crushN, `粉碎区 ${crushN} 根 ⇒ 超过 24 根，爆点那坨会黑成一片`).toBeLessThanOrEqual(24);
+    const branchP = Number(TS.match(/const BRANCH_P\s*=\s*([\d.]+)/)?.[1]);
+    expect(branchP, `分叉概率 ${branchP} ⇒ 超过 0.12 时中景会长出一层"毛"`).toBeLessThanOrEqual(0.12);
     /* 爆点若落在文字盒上要被挪开（否则放射线一出发就被截断） */
     expect(IMPACT, '爆点落在文字盒上时必须先挪出去').toMatch(/blocked\(CX,\s*CY\)/);
   });
