@@ -4,14 +4,22 @@ import { join } from 'node:path';
 
 /* 404 页 2026-10-06 这一轮的契约：底纹 ∞ 换新 + 装置「裂痕 FRACTURE」。
  *
- * 站主原话：
+ * 站主原话（第一版）：
  *   「开始做 404  FRACTURE 裂痕　鼠标划过玻璃裂开并缓慢生长，裂纹绕开文字」
  *   「404 页背景用 <图> 这个左半边是开口的无限符号（无限两个汉字不要，你自己拿灰色填充）
  *     替代百褶无限符号，你自己抠图」
- * 三处拍板：
- *   · 抠图范围 **乙 · ∞ + 碎屑肌理**（丢小字标签与右侧独立光锥）
+ * 站主原话（**第二版**，装置的行为模型整个反过来）：
+ *   「裂纹用半透明的线，别用绿线，且我要真实的玻璃碎裂的感觉，裂纹不是跟着鼠标跑，
+ *     而是本来就在上面（类似于在下面的图层），鼠标到那上面裂痕随着线有顿挫的显现了」
+ * 七处拍板：
+ *   · 抠图范围 **乙 · ∞ + 碎屑肌理**（丢小字标签）
  *   · 浓淡 **0.18 · 与百褶 ∞ 同档**
- *   · 裂痕生命周期 **甲 · 永久累积 + 总量封顶**（不愈合；超了淡出最旧那条）
+ *   · 小字 **全抠掉**（严格乙档）
+ *   · 装置模型 **预置网络 + 沿线揭示**（不是"鼠标生成"）
+ *   · 网络形态 **冲击点组：1 主爆点 + 4 次级点**（每点放射线 + 同心环）
+ *   · 未揭示时 **极淡可见（约 5%）**
+ *   · 揭示节奏 **从鼠标处向两端逐段跳、段间有停顿；离手后继续走完**
+ * 另：右侧那束光楔 **保留**（站主拍板，见 `_probe/_404/beam-onoff.png` 对照图）。
  *
  * 这里守的是「不可退让的性质」，不是「这一版的实现形态」：
  *   ① 「裂痕」不是新造的名字 —— 它本来就在 `rl-core.ts` 头部那份**最初的十台装置命名表**里。
@@ -20,13 +28,15 @@ import { join } from 'node:path';
  *   ③ 素材**中性灰**（不是染绿）—— 站主原话是「你自己拿灰色填充」，且源图本就是近单色。
  *      ★ 但去饱和这件事必须**有据可查**，不能悄悄做：断言里带着源图的色差实测。
  *   ④ 底纹必须挂 `.shell` 之外（`plate` 槽）；本页必须关掉百褶 ∞，否则两套母题叠着。
- *   ⑤ 颜色只从 token 读；脚本里只许留**一个字面兜底**（--accent），alpha 靠派生。
- *   ⑥ 三条分野：**离手还在长** / **几何受 DOM 文字盒约束** / **挂文档坐标系**。
- *   ⑦ 「缓慢生长」= 前沿速度是 px/s（吃 dt），不是"一段动画的时长"。
- *   ⑧ 「绕开文字」= 逐行紧盒（Range.getClientRects），受阻先转向、全撞才收工，**绝不硬穿**。
- *   ⑨ 形状零 `Math.random`（本站硬规矩）—— 用按种子确定的 mulberry32。
- *   ⑩ 降级：触摸 / reduced-motion ⇒ 整个装置不做（不是"装个弱的"）。
- *   ⑪ 零新增运行时依赖（红线）。
+ *   ⑤ 颜色只从 token 读；脚本里只许留**一个字面兜底**，alpha 靠派生。
+ *   ⑥ 三条分野：**离手还在继续** / **几何受 DOM 文字盒约束** / **挂文档坐标系**。
+ *   ⑦ ★★ **裂纹是预置的**（固定种子、可复现），指针的职责是**揭示**而不是**生成**。
+ *   ⑧ 「真实的玻璃碎裂」= 近直线放射 + 同心环（多边形）+ 小角度细 Y 型分叉。
+ *   ⑨ 「顿挫的显现」= 攒够一次停顿才跳一格，且**每跳的停顿不匀**（走确定性 PRNG）。
+ *   ⑩ 「绕开文字」= 建网时就绕开（逐行紧盒；受阻先偏转、全撞才截断，**绝不硬穿**）。
+ *   ⑪ 形状与节奏零 `Math.random`（本站硬规矩）。
+ *   ⑫ 降级：触摸 / reduced-motion ⇒ 整个装置不做（不是"装个弱的"）。
+ *   ⑬ 零新增运行时依赖（红线）。
  */
 const ROOT = process.cwd();
 const DIST = join(ROOT, 'dist');
@@ -110,15 +120,23 @@ const at = (marker: string) => {
   if (i < 0) throw new Error(`fracture.ts 里找不到锚「${marker}」—— 测试锚要跟着源码走`);
   return i;
 };
-/** 输入段：从 pointermove 起、到起停段之前 */
+/** 输入段：从 pointermove 起、到起停段（fit();）之前 */
 const INPUT = TS.slice(at("'pointermove'"), at('fit();'));
 /** 起停段 */
 const BOOT = TS.slice(at('fit();'));
-const GROW = TS.slice(at('function grow('), at('function draw('));
-const BLOCKED = TS.slice(at('const blocked'), at('const cracks'));
+/** 构建产物：pushCrack / ray / ring / impact / build 四段 */
+const PUSH = TS.slice(at('function pushCrack('), at('function ray('));
+const RAY = TS.slice(at('function ray('), at('function ring('));
+const RING = TS.slice(at('function ring('), at('function impact('));
+const IMPACT = TS.slice(at('function impact('), at('function build('));
+const BUILD = TS.slice(at('function build('), at('function distSeg('));
+/** 揭示段（点到线段距离 + revealAt） */
+const REVEAL = TS.slice(at('function distSeg('), at('function advance('));
+/** 顿挫推进 */
+const ADV = TS.slice(at('function advance('), at('function draw('));
 const DRAW = TS.slice(at('function draw('), at("'pointermove'"));
 /** ⚠ 锚必须是 `startLoop((` —— 裸 `startLoop` 会先命中 **import 那一行**，
- *  于是切片从文件头开始，`grow(dt)` 的函数定义排到了调用点之前（第一版就报了这个）。 */
+ *  于是切片从文件头开始，`advance(dt)` 的函数定义排到了调用点之前（第一版就报了这个）。 */
 const LOOP = TS.slice(at('startLoop(('));
 
 describe('404 · 装置「裂痕 FRACTURE」的身份（第十台）', () => {
@@ -127,8 +145,6 @@ describe('404 · 装置「裂痕 FRACTURE」的身份（第十台）', () => {
        （准星那轮就栽过一次）。 */
     expect(RL_CORE, 'rl-core 的命名表里没有「裂痕」⇒ 装置谱系对不上').toContain('裂痕');
     expect(read('src/pages/log.astro'), 'log.astro 的命名表里没有「裂痕」').toContain('裂痕');
-    /* 十台：归档卷尺 / 关于亲笔 / 阅读尺 / 浮游 / 走时仪 / 准星 / 墨滴 / 星座 / 裂痕
-       —— 列了 9 个名字而总数说 10，是因为「走时仪」在 log.astro 里已兑现、不在内页编号里 */
     expect(RL_CORE, '命名表被改过 —— 装置谱系是契约，动了要回头对').toMatch(/十台装置/);
     expect(TS_RAW, '文件头没写清它是第十台').toContain('第十台');
   });
@@ -141,8 +157,17 @@ describe('404 · 装置「裂痕 FRACTURE」的身份（第十台）', () => {
 
   it('★ 三条"不做"也写在文件头（克制要有理由）', () => {
     expect(TS_RAW, '没写明"不做点击砸碎"（站主说的是"划过"）').toContain('不做点击砸碎');
-    expect(TS_RAW, '没写明"不做愈合式淡出"（站主拍板甲档）').toContain('不做愈合式淡出');
+    expect(TS_RAW, '没写明"不做愈合式淡出"').toContain('不做愈合式淡出');
     expect(TS_RAW, '没写明"不引入不可复现的随机"（本站硬规矩）').toContain('不做');
+  });
+
+  it('★★ 文件头留了第二版的三条指令原话（模型 / 碎裂感 / 别用绿线）', () => {
+    /* 这三条是站主 2026-10-06 第二版的原话。把它们钉在文件头，是为了让后来改这个文件的人
+       知道**为什么**是"预置网络"而不是"鼠标生成"、**为什么**是中性灰而不是站上那族绿。 */
+    expect(TS_RAW, '文件头没写明模型换成了「预置网络 + 沿线揭示」').toContain('预置网络');
+    expect(TS_RAW, '文件头没留站主「本来就在上面」这句原话').toContain('本来就在上面');
+    expect(TS_RAW, '文件头没交代"别用绿线"（中性灰的理由）').toContain('别用绿线');
+    expect(TS_RAW, '文件头没写「顿挫」是什么（它是这一版的观感核心）').toContain('顿挫');
   });
 });
 
@@ -344,7 +369,7 @@ describe('404 · 底纹 ∞ 素材契约', () => {
        而且源图本身就是近单色。⇒ 这里断言的是**中性**，不是绿。
        ⚠ 去饱和属于"改动了原始素材"，必须留下依据，不能悄悄做：
          源图 441980 个不透明像素里，色差 >12 的只有 **1044** 个（0.24%）、>60 的 **131** 个、
-         **没有任何一个 >100** —— 那是 JPEG 在高对比边缘的色度振铃 + 一处 4×3 的偏紫小片
+         **没有任何一个 >100** —— 那是高对比边缘的色度振铃 + 一处 4×3 的偏紫小片
          （x1040–1043, y35–37），不是真彩内容。⇒ 显式去饱和是安全的。 */
     const sharp = (await import('sharp')).default;
     const stats = async (file: string) => {
@@ -385,7 +410,7 @@ describe('404 · 底纹 ∞ 素材契约', () => {
     expect(out.avg[0], '平均灰度不该被提亮成纸白').toBeLessThan(215);
   });
 
-  it('★ 构图**出血**：内容触到右/上/下三边（左边只 4px，近乎不算）', async () => {
+  it('★ 构图**出血**：内容触到右/上/下三边（左边只 8px，近乎不算）', async () => {
     /* 与标签页那条"不许出血"**相反**：这张图的构图本来就是出画的。
        ⚠ 上一轮 `audit()` 报 l=550 是**假出血** —— 掩码把源图的透明列当成了内容。
          修好后实测 l/r/t/b = 8/316/1243/1460，内容 bbox (1,0)-(1078,409)。
@@ -427,48 +452,205 @@ describe('404 · 底纹 ∞ 素材契约', () => {
 });
 
 describe('404 · token 契约（颜色只许住在 tokens.css）', () => {
-  it('★ 两道裂纹色的 token 都在，且是 --accent 压 alpha（8 位 hex）', () => {
-    for (const name of ['--deco-fracture-line', '--deco-fracture-glow']) {
+  it('★★ 三道裂纹色都是**中性近黑**（--ink）压 alpha —— 站主明说「别用绿线」', () => {
+    for (const name of ['--deco-fracture-line', '--deco-fracture-glow', '--deco-fracture-ghost']) {
       expect(TOKENS, `tokens.css 里没有 ${name}`).toContain(name);
     }
-    /* ★ 这两条**必须排在**下面那条 `#2d7d46` 的正向前面 —— 否则会被它挡住：
-       改成 #4caf50 时先失败的是"必须是 #2d7d46"，这一条永远轮不到，
-       于是它是不是活着就无从证明（变异验证就是用来照这种死门闩的）。
-       ★ 不许用 --accent-bright(#4caf50)：token 注释明写它对纸白只有 2.66:1、"只许用在深色底"，
-       而 404 是纸白底。 */
-    expect(TOKENS, '裂纹用了 --accent-bright 的色值 ⇒ 对纸白对比度不足').not.toMatch(/--deco-fracture-line:\s*#4caf50/);
-    expect(TOKENS, '裂纹用了 --accent-bright 的色值').not.toMatch(/--deco-fracture-glow:\s*#4caf50/);
+    /* ★★ 这条是**站主这一轮的指令**（原话「裂纹用半透明的线，别用绿线」）的机器证明。
+       第一版是 `--accent`(#2d7d46) 压 alpha —— 全站装置都是绿的，当时顺手沿用；
+       但玻璃裂纹不是绿的，它是纸面上的一道暗缝。⇒ 不许退回绿色家族。
+       ⚠ 负向断言**排在正向前面**：否则改成绿色时先失败的是"必须是 #1a1a1a"，
+         这条永远轮不到，于是它是不是活着就无从证明（变异验证就是照这种死门闩的）。 */
+    expect(TOKENS, '裂纹用了 --accent 绿(#2d7d46) ⇒ 站主明说「别用绿线」').not.toMatch(
+      /--deco-fracture-(line|glow|ghost):\s*#2d7d46/,
+    );
+    expect(TOKENS, '裂纹用了 --accent-bright(#4caf50) 的绿').not.toMatch(
+      /--deco-fracture-(line|glow|ghost):\s*#4caf50/,
+    );
     /* 8 位 hex：6 位色 + 2 位 alpha。站上约定 alpha 由 hex 承载、不写 rgba() */
-    expect(TOKENS, '主线必须是 --accent(#2d7d46) 压 alpha').toMatch(/--deco-fracture-line:\s*#2d7d46[0-9a-f]{2}/);
-    expect(TOKENS, '柔光必须是 --accent(#2d7d46) 压 alpha').toMatch(/--deco-fracture-glow:\s*#2d7d46[0-9a-f]{2}/);
-    /* 柔光要比主线**淡**（它是垫在主线之下的宽光）：alpha 数值必须更小 */
-    const a1 = TOKENS.match(/--deco-fracture-line:\s*#2d7d46([0-9a-f]{2})/)?.[1] ?? '';
-    const a2 = TOKENS.match(/--deco-fracture-glow:\s*#2d7d46([0-9a-f]{2})/)?.[1] ?? '';
+    expect(TOKENS, '主线必须是 --ink(#1a1a1a) 压 alpha').toMatch(/--deco-fracture-line:\s*#1a1a1a[0-9a-f]{2}/);
+    expect(TOKENS, '柔光必须是 --ink(#1a1a1a) 压 alpha').toMatch(/--deco-fracture-glow:\s*#1a1a1a[0-9a-f]{2}/);
+    expect(TOKENS, '未揭示的底必须是 --ink(#1a1a1a) 压 alpha').toMatch(/--deco-fracture-ghost:\s*#1a1a1a[0-9a-f]{2}/);
+    /* 浓度必须**递减**：主线 > 柔光 > 未揭示的底 */
+    const a1 = TOKENS.match(/--deco-fracture-line:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
+    const a2 = TOKENS.match(/--deco-fracture-glow:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
+    const a3 = TOKENS.match(/--deco-fracture-ghost:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
     expect(parseInt(a1, 16), `主线 alpha ${a1} 应比柔光 ${a2} 浓`).toBeGreaterThan(parseInt(a2, 16));
+    expect(parseInt(a2, 16), `柔光 alpha ${a2} 应比未揭示的底 ${a3} 浓`).toBeGreaterThan(parseInt(a3, 16));
   });
 
-  it('★ 脚本侧只留一个字面兜底（--accent），其余全部派生', () => {
+  it('★ 脚本侧只留一个字面兜底（--ink），其余全部派生', () => {
     const hexes = [...TS.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((m) => m[0]);
     expect(hexes.length, `脚本里有 ${hexes.length} 处字面色值：${hexes.join(',')} ⇒ 颜色只许住在 tokens.css`).toBeLessThanOrEqual(1);
-    if (hexes.length === 1) expect(hexes[0], '唯一那个字面兜底该是 --accent').toBe('#2d7d46');
-    /* 两个 token 都要读；兜底的 alpha 后缀必须与 token 里的一致（防两处对不上） */
+    if (hexes.length === 1) expect(hexes[0], '唯一那个字面兜底该是 --ink').toBe('#1a1a1a');
+    /* 三个 token 都要读；兜底的 alpha 后缀必须与 token 里的一致（防两处对不上） */
     expect(TS).toMatch(/getPropertyValue\('--deco-fracture-line'\)/);
     expect(TS).toMatch(/getPropertyValue\('--deco-fracture-glow'\)/);
-    const a1 = TOKENS.match(/--deco-fracture-line:\s*#2d7d46([0-9a-f]{2})/)?.[1] ?? '';
-    const a2 = TOKENS.match(/--deco-fracture-glow:\s*#2d7d46([0-9a-f]{2})/)?.[1] ?? '';
+    expect(TS).toMatch(/getPropertyValue\('--deco-fracture-ghost'\)/);
+    const a1 = TOKENS.match(/--deco-fracture-line:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
+    const a2 = TOKENS.match(/--deco-fracture-glow:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
+    const a3 = TOKENS.match(/--deco-fracture-ghost:\s*#1a1a1a([0-9a-f]{2})/)?.[1] ?? '';
     expect(TS, `脚本兜底的 alpha 后缀与 token(${a1}) 不一致`).toContain(`'${a1}'`);
     expect(TS, `脚本兜底的 alpha 后缀与 token(${a2}) 不一致`).toContain(`'${a2}'`);
+    expect(TS, `脚本兜底的 alpha 后缀与 token(${a3}) 不一致`).toContain(`'${a3}'`);
     /* 不写 rgba() */
     expect(TS, '脚本里不许出现 rgba()/rgb()（alpha 由 8 位 hex 承载）').not.toMatch(/\brgba?\(/);
   });
 });
 
 describe('404 · 装置脚本契约（fracture.ts）', () => {
-  it('★ 形状零随机 —— 用按种子确定的 mulberry32', () => {
+  it('★★ 模型：裂痕是**预置**的 —— 指针事件里绝不许"现造几何"', () => {
+    /* 这是第二版的立身之本。第一版在 `pointermove` 里 `spawn()` 出一条新裂纹；
+       现在几何在建网时一次性生成，指针只做**揭示**。
+       ⇒ 指针事件段里出现 ray/ring/impact/build/spawn 任何一个，就是退回了第一版。 */
+    expect(TS, '没有 build()：网络不是预置的').toMatch(/function build\(/);
+    expect(BUILD, 'build 必须先清空上一张网（resize 会重建）').toMatch(/cracks\.length\s*=\s*0/);
+    expect(TS, '没有冲击点生成器（impact）').toMatch(/function impact\(/);
+    expect(TS, '没有放射线生成器（ray）').toMatch(/function ray\(/);
+    expect(TS, '没有同心环生成器（ring）').toMatch(/function ring\(/);
+    expect(INPUT, '指针事件里出现了"现造一段几何"⇒ 退回第一版模型了').not.toMatch(
+      /\bspawn\(|\bray\(|\bring\(|\bimpact\(|\bbuild\(/,
+    );
+    expect(INPUT, '指针事件里只该做一件事：揭示').toMatch(/revealAt\(/);
+  });
+
+  it('★★ 形态按真实冲击碎裂：近直线 + 放射 + 同心环 + 小角度细 Y 型分叉', () => {
+    /* 站主要「真实的玻璃碎裂的感觉」。玻璃是脆性材料，形貌有定式：
+       放射线近直线（沿最大拉应力直着走）、有同心环（近似垂直）、分叉是小角度。 */
+    const curve = Number(TS.match(/const CURVE\s*=\s*([\d.]+)/)?.[1]);
+    expect(Number.isFinite(curve), '读不到 CURVE').toBe(true);
+    expect(
+      curve,
+      `每段曲率 ${curve} rad 太大 ⇒ 那是"撕裂/爬行"的语言，不是玻璃的脆性断裂`,
+    ).toBeLessThan(0.05);
+    /* 第一版是 JITTER 0.17 + SPREAD 0.45（撕裂/树枝的语言），别退回去 */
+    expect(TS, '又出现了第一版那种大抖动常量（JITTER / SPREAD）').not.toMatch(/\bJITTER\b|\bSPREAD\b/);
+    /* 分叉必须是小角度 */
+    const bd = TS.match(/const BRANCH_DEG\s*=\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]/);
+    expect(bd, '没有 BRANCH_DEG（分叉角范围）').toBeTruthy();
+    const dmax = Number(bd![2]);
+    expect(dmax, `分叉角最大 ${dmax}° ⇒ 超过 30° 就读成"树枝"而不是"玻璃"`).toBeLessThanOrEqual(30);
+    expect(Number(bd![1]), '分叉角下限不该是 0').toBeGreaterThan(0);
+    /* 同心环必须是**多边形**（按弧长取顶点），不能用 canvas 的圆 */
+    expect(RING, '同心环不许用 arc()/ellipse() —— 真实玻璃的环是多边形').not.toMatch(/\.arc\(|\.ellipse\(/);
+    expect(RING, '环的顶点数要按弧长算（RING_SEG）').toMatch(/RING_SEG/);
+    expect(RING, '环必须有半径抖动 ⇒ 不是正多边形').toMatch(/0\.9\d*\s*\+|\(0\.94/);
+    /* 放射线要铺满一圈（不是一束同向的） */
+    expect(IMPACT, '放射线要按射线数铺满一圈').toMatch(/rays/);
+    expect(IMPACT, '放射线角度要加抖动（否则是机械的"米字"）').toMatch(/rnd\(\)/);
+    /* 冲击点组：1 主 + 4 次 */
+    expect(TS, '主爆点常量没了（MAIN）').toMatch(/const MAIN\s*=/);
+    expect(TS, '次级冲击点没了（SUBS）').toMatch(/const SUBS\s*=/);
+    const mainRays = Number(TS.match(/MAIN\s*=\s*\{[^}]*rays:\s*(\d+)/)?.[1]);
+    const subsBlock = TS.slice(at('const SUBS'), at('interface Rect'));
+    const subRays = [...subsBlock.matchAll(/rays:\s*(\d+)/g)].map((m) => Number(m[1]));
+    expect(subRays.length, '次级冲击点应有 4 个').toBe(4);
+    expect(mainRays, `主爆点的放射线（${mainRays}）应当明显多于任一次级点`).toBeGreaterThan(Math.max(...subRays));
+    /* 冲击点若落在文字盒上要被挪开（否则放射线一出发就被截断） */
+    expect(IMPACT, '冲击点落在文字盒上时必须先挪出去').toMatch(/blocked\(cx,\s*cy\)/);
+  });
+
+  it('★★ 字尾 ②（改后）：**建网时**就绕开文字盒（不是生长时逐段问）', () => {
+    /* 网是预置的 ⇒ 绕开只发生在建网那一刻。 */
+    expect(TS, '必须走 TreeWalker 逐文本节点').toMatch(/createTreeWalker/);
+    expect(TS, '必须用 Range 取框').toMatch(/createRange\(\)/);
+    expect(TS, '必须用 getClientRects（逐行紧盒；getBoundingClientRect 是元素级）').toMatch(
+      /getClientRects\(\)/,
+    );
+    expect(TS, '文字盒必须换算到文档坐标（与裂纹同一坐标系）').toMatch(/scrollX/);
+    expect(TS, '文字盒必须换算到文档坐标').toMatch(/scrollY/);
+    expect(TS, '空文本节点要跳过').toMatch(/trim\(\)/);
+    expect(TS, '要滤掉 0/极小的框').toMatch(/b\.width\s*<\s*\d/);
+    expect(TS, '文字盒要有上限（RECT_LIMIT）').toMatch(/RECT_LIMIT/);
+    /* ★ 顺序：先取文字盒，再生成第一个冲击点 */
+    const iRects = BUILD.indexOf('rects = textRects()');
+    const iImpact = BUILD.indexOf('impact(');
+    expect(iRects, 'build 里没取文字盒').toBeGreaterThanOrEqual(0);
+    expect(iImpact, 'build 里没生成冲击点').toBeGreaterThanOrEqual(0);
+    expect(iRects, '文字盒必须在**第一个 impact 之前**取（否则第一批几何就压在字上）').toBeLessThan(iImpact);
+    /* 放射线：撞上先偏转、两边都试、全不行才截断（绝不硬穿） */
+    expect(RAY, '放射线必须逐段问文字盒').toMatch(/segBlocked\(/);
+    expect(RAY, '撞上了要按 TURN_DEG 试探偏转').toMatch(/TURN_DEG/);
+    expect(RAY, '受阻要两边都试（只试一边会贴着字走）').toMatch(/\[1,\s*-1\]/);
+    expect(RAY, '转向后本段不推进（continue）').toMatch(/continue/);
+    expect(RAY, '全都不行必须截断（break），不许硬穿').toMatch(/break/);
+    /* 环：撞上就断开成多段（真玻璃的环遇到障碍是断的，不是绕过去） */
+    expect(RING, '环撞上文字盒要断开').toMatch(/blocked\(/);
+    /* ★★ 环也必须检查**线段** —— 只测顶点的话，两个盒外的顶点连成的段照样从盒子边擦过去。
+       实测证据（实验室第二版首跑）：只测顶点时「墨离字形盒最近 **4.35px**」
+       （PAD=9 应当给到 ≥6px）；改成整段检查后回到阈值以上。 */
+    expect(RING, '环也要整段检查（只测顶点会从盒边擦过去）').toMatch(/segBlocked\(/);
+    /* ★★ 线段也要躲 —— 只测落点不够：两端都在盒外的一段直线仍可能从盒角**切过去** */
+    expect(TS, '必须有 segBlocked（只测落点会从盒角切过去）').toMatch(/const segBlocked\s*=/);
+    const seg = TS.slice(at('const segBlocked'), at('function pushCrack('));
+    expect(seg, 'segBlocked 内部要取若干内点').toMatch(/\[0\.25,\s*0\.5,\s*0\.75\]/);
+    expect(seg, 'segBlocked 也必须包含落点本身的判定').toMatch(/blocked\(x1,\s*y1\)/);
+  });
+
+  it('★★ 「顿挫的显现」= 攒够一次停顿才跳一格，且每跳的停顿**不匀**', () => {
+    /* 站主那四个字全在这个函数里。它必须：
+       ① 是**离散跳格**（不是连续生长）；② 每跳之间**有停顿**；③ 停顿长度**不匀**。 */
+    expect(TS, '没有停顿常量（DWELL）').toMatch(/const DWELL\s*=\s*\d+/);
+    expect(ADV, '推进必须吃真实 dt（帧率无关）').toMatch(/c\.acc\s*\+=\s*dtMs/);
+    expect(ADV, '跳的门槛必须是"攒够一次停顿"（不是"本帧有推进量"）').toMatch(
+      /while\s*\(c\.acc\s*>=\s*c\.dwell\)/,
+    );
+    expect(ADV, '跳完要扣掉这一次的停顿').toMatch(/c\.acc\s*-=\s*c\.dwell/);
+    expect(ADV, '必须真的向两端各跳一格（左游标 --）').toMatch(/c\.i--/);
+    expect(ADV, '必须真的向两端各跳一格（右游标 ++）').toMatch(/c\.j\+\+/);
+    /* ★ 不匀：每一跳的停顿都在 DWELL 的某个倍数区间里重取 ⇒"啪啪啪"而不是"哒哒哒哒" */
+    const dwell = ADV.match(
+      /c\.dwell\s*=\s*DWELL\s*\*\s*\(\s*([\d.]+)\s*\+\s*c\.rnd\(\)\s*\*\s*([\d.]+)\s*\)/,
+    );
+    expect(dwell, '每跳的停顿必须重取（而且要走 c.rnd ⇒ 不匀也可复现）').toBeTruthy();
+    expect(Number(dwell![2]), '不匀的幅度不该是 0').toBeGreaterThan(0.2);
+    /* 未揭示的裂纹不许"自己动" */
+    expect(ADV, '未被碰过的裂纹（i >= j）必须跳过，不许自己推进').toMatch(/if\s*\(c\.i\s*>=\s*c\.j\)\s*continue/);
+    /* 走完就停在完成态（永久保留 —— 甲档语义） */
+    expect(ADV, '走完（i=0 且 j=segs）要判掉，不再推进').toMatch(
+      /c\.i\s*===\s*0\s*&&\s*c\.j\s*===\s*c\.segs/,
+    );
+    /* 顿挫的粒度就是"一段"（SEG），所以跳跃边界天然对齐顶点 */
+    expect(TS, '段长常量 SEG 没了').toMatch(/const SEG\s*=\s*\d+/);
+  });
+
+  it('★★ 揭示：指针碰到哪一段，就从那儿向两端展开（一条同时只一个前沿）', () => {
+    expect(TS, '没有 revealAt').toMatch(/function revealAt\(/);
+    expect(TS, '没有"碰到"的判定半径（REVEAL_R）').toMatch(/const REVEAL_R\s*=\s*\d+/);
+    expect(TS, '没有点到线段距离（revealAt 的判定）').toMatch(/function distSeg\(/);
+    /* bbox 粗筛：否则每次 pointermove 都要遍历全部段 */
+    expect(REVEAL, '必须先用 bbox 粗筛（每次 pointermove 都会跑这个函数）').toMatch(/c\.bx0|c\.bx1/);
+    /* ★ 一条裂纹同时只有一个前沿：已在揭示中的直接跳过。
+       若允许重开，指针划过时沿途多处会同时起头 ⇒ 观感从"这条裂被你唤醒、自己沿路展开"
+       退化成"跟着指针亮" —— 那正是站主这一轮要摆脱的。 */
+    expect(REVEAL, '已在揭示中的裂纹不许重开').toMatch(/if\s*\(c\.i\s*<\s*c\.j\)\s*continue/);
+    /* 起头那一段立刻亮（"碰到了"的反馈） */
+    expect(REVEAL, '起头要立刻把碰到的那一段纳入区间').toMatch(/c\.i\s*=\s*bestI/);
+    expect(REVEAL, '起头要立刻把碰到的那一段纳入区间').toMatch(/c\.j\s*=\s*bestI\s*\+\s*1/);
+    /* 最近的那一段（不是随便一段） */
+    expect(REVEAL, '必须取**最近**的段（不是第一段命中的）').toMatch(/bestD|bestI/);
+  });
+
+  it('★★ 分野 ①：指针离开之后，已经开始揭示的那条**继续走完**', () => {
+    /* 第一版是"接着长"，现在是"把已经开始的那条走完" —— 性质不变：
+       指针停住 / 离开，画面还在动。其余九台指针一停就停。 */
+    expect(INPUT, '指针事件里不许"把前沿掐掉"（那就不叫离手继续了）').not.toMatch(
+      /c\.i\s*=\s*c\.segs|c\.j\s*=\s*0/,
+    );
+    /* 推进只发生在帧循环里 ⇒ 指针不动它也走 */
+    expect(LOOP, '推进必须在帧循环里（离手后仍继续）').toMatch(/advance\(/);
+    expect(LOOP.indexOf('advance('), 'advance 必须在 draw 之前').toBeLessThan(LOOP.indexOf('draw('));
+  });
+
+  it('★ 形状与节奏零随机 —— 固定种子的 mulberry32', () => {
     expect(TS, '源码含 Math.random ⇒ 形状不可复现，没法验收').not.toMatch(/Math\.random/);
     expect(TS, '没看到 mulberry32').toMatch(/mulberry32/);
     expect(TS, 'mulberry32 的魔数应留下（认出是哪个 PRNG）').toMatch(/0x6d2b79f5/);
-    expect(TS, '每条前沿要带自己的 rnd（不是全局一个）').toMatch(/rnd:\s*\(\)\s*=>\s*number/);
+    expect(TS, '没有写死的形状种子').toMatch(/const SEED\s*=\s*\d+/);
+    /* ★ 每次建网都要把种子**重置** ⇒ 同一个长宽下逐点相同（resize 重建后也一样） */
+    expect(BUILD, 'build 开头必须重置种子').toMatch(/seed\s*=\s*SEED/);
+    expect(BUILD, 'build 开头必须重置 rnd').toMatch(/rnd\s*=\s*mulberry32\(SEED\)/);
+    expect(TS, '每条裂纹要带自己的 rnd（顿挫的不匀用它）').toMatch(/rnd:\s*\(\)\s*=>\s*number/);
   });
 
   it('★ 走共享底盘：startLoop + 视口停帧，且**同步首帧 + is-ready**', () => {
@@ -487,9 +669,7 @@ describe('404 · 装置脚本契约（fracture.ts）', () => {
   });
 
   it('★★ 分野 ③：挂在**文档**坐标系（不是视口）', () => {
-    /* 其余九台都是 fixed 挂视口；这一台必须与文字盒保持相对关系，而文字随滚动走。
-       裁决证据：高度取 scrollHeight 并**写回 canvas.style.height** ——
-       绝对定位元素的 `height:100%` 只解析到视口高。 */
+    /* 其余九台都是 fixed 挂视口；这一台必须与文字盒保持相对关系，而文字随滚动走。 */
     expect(TS, '高度必须取文档高（scrollHeight）').toMatch(/scrollHeight/);
     expect(TS, '必须把文档高写回 canvas.style.height（height:100% 只到视口）').toMatch(/cv\.style\.height\s*=/);
     expect(TS, '宽度也要写回 style（与画布像素宽是两件事）').toMatch(/cv\.style\.width\s*=/);
@@ -498,100 +678,27 @@ describe('404 · 装置脚本契约（fracture.ts）', () => {
     expect(rule, 'canvas 不许 fixed').not.toMatch(/position:\s*fixed/);
   });
 
-  it('★★ 分野 ②：「绕开文字」用 Range 的**逐行紧盒**，不是元素框', () => {
-    /* 取元素框会把整段版心都算进去（`.prose` 有一行字也算整块）⇒ "绕开"变成"半个页面不许裂"。 */
-    expect(TS, '必须走 TreeWalker 逐文本节点').toMatch(/createTreeWalker/);
-    expect(TS, '必须用 Range 取框').toMatch(/createRange\(\)/);
-    expect(TS, '必须用 getClientRects（逐行紧盒；getBoundingClientRect 是元素级）').toMatch(
-      /getClientRects\(\)/,
-    );
-    expect(TS, '文字盒必须换算到文档坐标（与裂纹同一坐标系）').toMatch(/scrollX/);
-    expect(TS, '文字盒必须换算到文档坐标').toMatch(/scrollY/);
-    /* 空文本节点要跳过，否则一堆 0 尺寸框混进来 */
-    expect(TS, '空文本节点要跳过').toMatch(/trim\(\)/);
-    expect(TS, '要滤掉 0/极小的框').toMatch(/b\.width\s*<\s*\d/);
-    /* 必须有上限，防病态页面把每帧拖死 */
-    expect(TS, '文字盒要有上限（RECT_LIMIT）').toMatch(/RECT_LIMIT/);
-  });
-
-  it('★★ 「绕开」的三层语义都在：安全距离 / 先转向 / 全撞才收工（绝不硬穿）', () => {
-    /* ① 安全距离：文字盒要外扩 */
-    expect(TS_RAW, '要用 PAD 给文字盒留安全距离').toMatch(/const PAD\s*=/);
-    expect(BLOCKED, 'blocked() 必须把 PAD 算进去').toMatch(/PAD/);
-    /* ② 撞上先转向试探，且**两边都试** */
-    expect(GROW, '生长里必须先问文字盒').toMatch(/if\s*\(segBlocked\(/);
-    expect(GROW, '受阻要按 TURN 表试探角度').toMatch(/TURN/);
-    expect(GROW, '受阻要两边都试（只试一边会贴着字走）').toMatch(/\[1,\s*-1\]/);
-    expect(GROW, '转向后本段不推进（continue）').toMatch(/continue/);
-    /* ③ 全都撞 ⇒ 这条前沿到头，而不是穿过去 */
-    expect(GROW, '全都撞时必须收工（dead），不许硬穿').toMatch(/dead\s*=\s*true/);
-    /* ④ ★★ 线段也要躲 —— 只测落点不够。
-       两端都在盒外的一段直线仍可能从盒角**切过去**（凸区域也有这个性质）。
-       实测（`_probe/_404-lab.mjs`）：只测落点时，约 2% 的墨落在"字形盒 + 9px"那条安全带里。 */
-    expect(TS, '必须有一个"沿段采样"的判定，不能只测落点').toMatch(/const segBlocked\s*=/);
-    const seg = TS.slice(at('const segBlocked'), at('const cracks'));
-    expect(seg, 'segBlocked 内部要取若干内点（不是直接返回 blocked(x1,y1)）').toMatch(
-      /\[0\.25,\s*0\.5,\s*0\.75\]|\[0\.2,\s*0\.4,\s*0\.6,\s*0\.8\]/,
-    );
-    expect(seg, 'segBlocked 也必须包含落点本身的判定').toMatch(/blocked\(x1,\s*y1\)/);
-    /* ⑤ 起点落在文字上 ⇒ 这一下根本不裂 */
-    expect(INPUT, '起点在文字上时不该生裂纹（"绕开"也包括"不在字上开缝"）').toMatch(
-      /if\s*\(blocked\(x,\s*y\)\)\s*return/,
-    );
-    /* ⑥ 文字盒每次生成时**重取**（字号/换行/滚动都会变，缓存会绕开一个旧位置） */
-    expect(INPUT, '生成时必须重取文字盒').toMatch(/rects\s*=\s*textRects\(\)/);
-  });
-
-  it('★★ 分野 ①：「缓慢生长」= 前沿速度吃 dt（px/s），不是动画时长', () => {
-    const speed = Number(TS.match(/const SPEED\s*=\s*([\d.]+)/)?.[1]);
-    expect(Number.isFinite(speed), '读不到 SPEED').toBe(true);
-    expect(TS, '推进量必须正比于 dt（真实 dt，不是每帧固定系数）').toMatch(/SPEED\s*\*\s*dtMs\s*\/\s*1000|SPEED\s*\*\s*dt/);
-    /* ★★ 光"乘了 dt"还不够 —— 落笔是按 SEG 整段落的，得先把余量攒起来。
-       没有 `acc` 时 `while (remain > 0)` 在 60fps 下**每帧恰好落一段**
-       （adv=2px 却走 SEG=7px）⇒ 实际速度 = SEG × 帧率 = 420px/s（144Hz 上是 1008），
-       既与 SPEED 无关、也与帧率有关。`_probe/_404-lab.mjs` 实测：改前 40 帧到头。 */
-    expect(TS, 'Tip 要有"未走满一段的余量" acc').toMatch(/acc:\s*number/);
-    expect(TS, 'newTip 要把 acc 初始化').toMatch(/acc:\s*0/);
-    expect(GROW, '生长要先攒余量（t.acc += adv）').toMatch(/t\.acc\s*\+=\s*adv/);
-    expect(GROW, '落笔的门槛必须是"攒够一段"（t.acc >= SEG），不是"本帧有推进量"').toMatch(
-      /while\s*\(t\.acc\s*>=\s*SEG/,
-    );
-    expect(GROW, '落笔后要扣掉余量').toMatch(/t\.acc\s*-=\s*SEG/);
-    expect(GROW, '不许再出现"每帧走一格"的旧写法（remain）').not.toMatch(/remain/);
-    /* 余量也得画出来，否则 120px/s 会变成"每 3~4 帧蹦 7px"的卡顿 */
-    expect(DRAW, '还没走满一段的刀尖也要画（否则看着是卡顿的生长）').toMatch(/t\.acc\s*>\s*0/);
-    /* 单条裂纹走完 MAX_TIP 的秒数 = 观感"缓慢"的机器读数 */
-    const maxTip = Number(TS.match(/const MAX_TIP\s*=\s*([\d.]+)/)?.[1]);
-    const secs = maxTip / speed;
-    expect(secs, `单条裂纹走完要 ${secs.toFixed(2)}s ⇒ 快于 1.2s 就不叫"缓慢生长"了`).toBeGreaterThan(1.2);
-    expect(secs, `单条裂纹走完要 ${secs.toFixed(2)}s ⇒ 慢于 6s 会让人以为卡住`).toBeLessThan(6);
-    /* 而且指针**离开之后它还要继续长**（分野 ① 的正身）—— 指针事件里不许出现"停长" */
-    expect(INPUT, '指针离开时不许把裂纹停掉（失焦只重置"划"的追踪）').not.toMatch(/dead\s*=\s*true/);
-  });
-
-  it('★ 生裂纹靠"指针累计走过 SPAWN_DIST"，不是每帧/每次移动都生', () => {
-    expect(INPUT, '没有累计距离').toMatch(/acc\s*\+=/);
-    expect(INPUT, '没按阈值门控（手抖也会裂、而且帧帧裂）').toMatch(/acc\s*<\s*SPAWN_DIST/);
-    expect(INPUT, '生过之后要清零').toMatch(/acc\s*=\s*0/);
-    /* 抖动不算"划" */
-    expect(INPUT, '极小的位移要忽略').toMatch(/d\s*<\s*1/);
-  });
-
-  it('★ 甲档：永久累积 + 总量封顶，且淘汰是**淡出**不是瞬删', () => {
-    expect(TS, '没有总量封顶 ⇒ 划过一屏会积成蛛网').toMatch(/const MAX_CRACKS\s*=\s*\d+/);
-    /* ★ 只是"定义了常量"不算数 —— 必须真的拿去比较（否则把上限调成 999999 也能过） */
-    expect(TS, 'MAX_CRACKS 必须真的用作比较，不能只是定义了常量').toMatch(
-      /cracks\.length\s*>=\s*MAX_CRACKS/,
-    );
-    expect(TS, '封顶后要淘汰最旧那条').toMatch(/for\s*\(const c of cracks\)/);
-    expect(TS, '淘汰必须是淡出：记时刻（gone），不是立即移除').toMatch(/c\.gone\s*=\s*performance\.now\(\)/);
-    expect(TS, '淡出要有时长常量').toMatch(/const FADE\s*=\s*\d+/);
-    /* 不愈合：不许出现"时间到了一律消失/整体衰减"的写法 */
-    expect(TS, '不许有愈合式整体淡出（站主拍板甲档）').not.toMatch(/globalAlpha\s*=\s*[^\n]*\*\s*0\.9/);
-    /* 同时生长的前沿也要有上限（防"一划炸开"） */
-    expect(TS, '并发前沿要有上限（MAX_LIVE）').toMatch(/MAX_LIVE/);
-    /* 淡出结束才真正移除 —— 这是"淡出"与"瞬删"的判据 */
-    expect(DRAW, '淡出结束才 splice 掉').toMatch(/cracks\.splice\(/);
+  it('★ 绘制：未揭示的网走**离屏一次合成**；已揭示的先柔光后主线', () => {
+    /* 站主「本来就在上面（类似于在下面的图层）」⇒ 未揭示的网也要看得见（极淡）。 */
+    expect(TS, '必须读 --deco-fracture-ghost').toMatch(/getPropertyValue\('--deco-fracture-ghost'\)/);
+    expect(TS, '必须有 paintGhost（把整张网画到离屏）').toMatch(/function paintGhost\(/);
+    expect(BUILD, 'build 末尾要把底重画到离屏（fit 会清空它）').toMatch(/paintGhost\(\)/);
+    expect(TS, 'paintGhost 里要用**实心** --ink（透明度交给整层 blit）').toMatch(/octx\.strokeStyle\s*=\s*INK/);
+    /* ★★ 这条是实验室首跑抓到的**真缺陷**，不是风格要求：
+       逐段直接描边时，冲击点附近 20 多条放射线共用起点，同一个像素被叠十几次
+       ⇒ token 写的 5%（α13）在画面上成了峰值 **α99**（合成到纸白 = 暗 87 级）——
+       "极淡的底"变成一片肉眼可见的灰团。离屏一次合成后任何重叠都只算一次。 */
+    expect(DRAW, '底那一层必须是**整层 blit**（drawImage），不是逐段描边').toMatch(/drawImage/);
+    expect(DRAW, 'blit 必须带 globalAlpha（浓度由 ghost token 决定）').toMatch(/globalAlpha/);
+    expect(DRAW, '不许再逐段描边画底（密集处会叠成灰团）').not.toMatch(/ctx\.strokeStyle\s*=\s*GHOST/);
+    /* 已揭示：先柔光后主线（玻璃的裂口是"细亮缝"，只画一根 1px 像铅笔划痕） */
+    const iGlow = DRAW.indexOf('GLOW');
+    const iLine = DRAW.indexOf('LINE');
+    expect(iGlow, '没画柔光').toBeGreaterThanOrEqual(0);
+    expect(iLine, '没画主线').toBeGreaterThanOrEqual(0);
+    expect(iGlow, '先柔光、后主线（柔光垫在下面）').toBeLessThan(iLine);
+    /* 画布是整个文档高 ⇒ 必须有视口裁剪（否则滚到页脚还在重画首屏） */
+    expect(DRAW, '画布是文档高 ⇒ 必须有视口裁剪').toMatch(/window\.scrollY/);
   });
 
   it('★ 不做点击砸碎（站主说的是"划过"）', () => {
@@ -616,15 +723,17 @@ describe('404 · 装置脚本契约（fracture.ts）', () => {
     expect(LOOP, 'loop 里要先问 gate 再干活').toMatch(
       /gate\.onScreen\s*&&\s*gate\.visible|!gate\.onScreen\s*\|\|\s*!gate\.visible/,
     );
-    expect(LOOP.indexOf('gate.'), 'gate 判断要在 grow 之前').toBeLessThan(LOOP.indexOf('grow('));
+    expect(LOOP.indexOf('gate.'), 'gate 判断要在 advance 之前').toBeLessThan(LOOP.indexOf('advance('));
   });
 
-  it('★ resize 要重算尺寸与文字盒，且节流', () => {
+  it('★ resize 要重算尺寸并**重建整张网**（字尾 ② 的必然代价）', () => {
     expect(TS, '没接 resize').toMatch(/addEventListener\(\s*\n?\s*'resize'/);
     const rz = TS.slice(at("'resize'"));
-    expect(rz, 'resize 要重算文字盒（换行会变）').toMatch(/rects\s*=\s*textRects\(\)/);
     expect(rz, 'resize 要重算画布尺寸').toMatch(/fit\(\)/);
-    expect(rz, 'resize 要节流（防拖动窗口时每像素重算）').toMatch(/<\s*200/);
+    /* ★ 网是预置的、绕开只发生在建网那一刻 ⇒ 文字盒一变就必须重建整张网。
+       代价是丢掉已揭示状态（resize 低频，取这个取舍）—— 注释里写明了。 */
+    expect(rz, 'resize 必须重建整张网（文字盒与尺寸都变了）').toMatch(/build\(\)/);
+    expect(rz, 'resize 要节流（防拖动窗口时每像素重建）').toMatch(/<\s*200/);
   });
 });
 
