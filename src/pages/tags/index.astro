@@ -1,26 +1,45 @@
 ---
 import Base from '../../layouts/Base.astro';
 import PageTitle from '../../components/PageTitle.astro';
+import TagsPlate from '../../components/TagsPlate.astro';
 import { getAllTags } from '../../lib/posts';
 
 const tags = await getAllTags();
+
+/* 格号 01…08：**由位置派生**，不是新信息 —— 它就是"第几格"。
+   与归档页卷尺的年份刻度同一路数（是"格"的标号，不是内容）。
+   两位补零是有意的：矩阵里每一格的字宽必须一样，否则那列会参差不齐。 */
+const cellNo = (i: number) => String(i + 1).padStart(2, '0');
 ---
 {
-  /* 标签总览迁移（2026-09-26）：chrome='band' → 'page'。
-     **'page' 不渲染 <slot name="band" />** ⇒ 标题必须搬进正文流（外壳的 .pagehead）。
-     **刻意不写 max-width: var(--measure)** —— 本页的内容列是 .chips 的通栏 flex 列表，不是 .prose 正文列；
-     页头收成 34em 会让下缘实线短于内容、两条线错位（同归档那轮的"版心要对齐的是内容，不是习惯"）。 */
+  /* 标签总览（2026-09-26 迁移 chrome='band'→'page'；2026-10-06 由胶囊串改**矩阵**）。
+     · **'page' 不渲染 `<slot name="band" />`** ⇒ 标题必须留在正文流（外壳的 .pagehead）。
+     · **刻意不写 max-width: var(--measure)** —— 本页内容列是通栏矩阵，不是 .prose 正文列；
+       页头收成 34em 会让下缘实线短于内容、两条线错位（同归档那轮的"版心要对齐的是内容"）。
+
+     ★ 2026-10-06 站主：「标签总览 CROSSHAIR 准星…矩阵本身，单标签页共用一套实现」
+       ⇒ ① 这份 flex 胶囊串改成**格线矩阵**；② 底纹换成本区自己的 ∞（`TagsPlate`，
+       它同时把准星装置一并挂上）；③ 两页都挂同一个 `TagsPlate` ⇒ 装置只有一份实现。
+
+     ★ 为什么矩阵用"（格线）"而不是"卡片 + 间距"：
+       本站的卡片网格（友链/说说）用间距分隔，读的是"一堆卡片"；
+       而准星是**示波器十字光标**，它要扫的是一张**有格线的坐标纸**——
+       格线让"两根线扫过一个坐标面"这件事读得出来，间距做不到。 */
 }
-<Base title="标签" current="tags" chrome="page">
+<Base title="标签" current="tags" chrome="page" bodyClass="tags-plate">
+  <Fragment slot="plate"><TagsPlate /></Fragment>
+
   <header class="pagehead">
     <PageTitle>标签</PageTitle>
   </header>
 
-  <ul class="chips">
-    {tags.map((t) => (
-      <li>
+  <ul class="tag-matrix">
+    {tags.map((t, i) => (
+      <li class="tag-cell">
         <a href={`/tags/${encodeURIComponent(t.tag)}/`}>
-          {t.tag} <span class="n">{t.count}</span>
+          <span class="t-no">{cellNo(i)}</span>
+          <span class="t-name">{t.tag}</span>
+          <span class="t-n">{t.count}</span>
         </a>
       </li>
     ))}
@@ -28,28 +47,95 @@ const tags = await getAllTags();
 </Base>
 
 <style>
-  .chips {
+  /* ===================================================================
+   * 格线矩阵（TAG MATRIX）
+   *
+   * 格线画法：**每一格是一个完整的方框**，再用 `margin: 0 -1px -1px 0`
+   * 把自己那条边框压到邻格边框下面 ⇒ 内部线 1px、不出现 2px 双线。
+   * ★ 为什么不用更省字节的"容器给上/左边、格子给右/下边"那种写法：
+   *   那样在**最后一行没填满**时，容器的上边线仍然横贯全宽，而最后一行的下边线
+   *   只画了一半 ⇒ 看上去像"线画漏了"（矩阵在 3 列档下就是 3/3/2，正好命中）。
+   *   完整方框写法下每个用到的格子都是闭合的，没用到的格子**根本不存在线**——
+   *   未填满的矩阵就该长得像"格纸只用了前几格"，那是正常样子，不是渲染错误。
+   *   ⚠ 副作用：最右列/最下行会**越出容器 1px**，落在 `.shell` 的 gutter 里
+   *     （`body` 另有 `overflow-x: clip`，不会造成横向滚动）。
+   *
+   * 列数走 `--mx-cols`（默认 4）：4 / 3 / 2 三档。
+   * 不用 `minmax(13rem,1fr)` 自适应列数，是因为矩阵的"列"是**设计对象**而不是
+   * 浏览器的副产物 —— 列数一变，格线的节奏就变了。三档对应三种读法：
+   * 四列=仪表盘排布、三列=中等窗、两列=与旧胶囊串一样好读。
+   * ★ 单标签页（`tags/[tag].astro`）的 `.post-matrix` 用的是**同一套画法与注释镜像**，
+   *   只有列数档不同（那边一格里是"标题 + 摘要"，要更宽）——两页要改就一起改。
+   * =================================================================== */
+  .tag-matrix {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-3);
+    display: grid;
+    grid-template-columns: repeat(var(--mx-cols, 4), minmax(0, 1fr));
   }
-  .chips a {
-    font-size: var(--fs-lede);
+  /* 格子本身是 grid 容器（只为让里面的 <a> 自动拉到满格 ⇒ 悬停热区 = 整格）。 */
+  .tag-cell {
+    display: grid;
+    border: 1px solid var(--hair);
+    margin: 0 -1px -1px 0;
+    background: transparent; /* 保持透空，让底纹 ∞ 从格子后面透出来 */
+  }
+  .tag-cell a {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-3);
+    padding: var(--sp-5) var(--sp-4);
     color: inherit;
     text-decoration: none;
-    border: 1px solid var(--hair);
-    padding: var(--sp-2) var(--sp-4);
+    /* ★ 悬停底 = `--accent-wash`（浅绿）—— 站主原话要的是"亮**淡绿**"。
+       ⚠ 这是**不透明**的一层，会把底纹 ∞ 在本格内盖住。这是有意的：
+         被扫到的那一格"亮起来"、底纹退到后面，正是光标经过的感觉。
+       ⚠ 只有颜色与位移的过渡参数，写在 `src/styles/hover.css`（全站基线），
+         本页不重复时长/曲线 —— 形态归本页、参数归基线，这条口径别破。 */
   }
-  .chips a:hover {
-    border-color: var(--accent-ink);
+  .tag-cell a:hover,
+  .tag-cell a:focus-visible {
+    background: var(--accent-wash);
+  }
+  .tag-cell a:hover .t-name,
+  .tag-cell a:focus-visible .t-name {
     color: var(--accent-ink);
   }
-  .n {
+  /* 等宽行内数字：字宽不一致会让矩阵每行的"右边距"看着都不一样。
+     字体栈照抄 Topbar 的等宽写法（站上没有 mono 字体 token，只有字号 token）。 */
+  .t-no,
+  .t-n {
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-mono);
     color: var(--muted);
-    font-size: var(--fs-sm);
     font-variant-numeric: tabular-nums;
+  }
+  /* 格号压得更淡一点：它是坐标不是内容（内容只有一个——标签名与篇数）。 */
+  .t-no {
+    opacity: 0.62;
+  }
+  .t-name {
+    font-size: var(--fs-lede);
+    font-weight: 700;
+    /* 中文标签在窄格里不该被挤断成两行 */
+    white-space: nowrap;
+  }
+  /* 篇数推到行的右端：它和格号是同一类"读数"，一左一右把格撑开。 */
+  .t-n {
+    margin-left: auto;
+  }
+
+  /* 列数档（4 / 3 / 2）。断点取的是**格宽**而不是设备 ——
+     900px 以下四列会窄到放不下"01 建站 2"，600px 以下三列同理。 */
+  @media (max-width: 900px) {
+    .tag-matrix {
+      --mx-cols: 3;
+    }
+  }
+  @media (max-width: 600px) {
+    .tag-matrix {
+      --mx-cols: 2;
+    }
   }
 </style>

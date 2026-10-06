@@ -83,17 +83,25 @@
   transform: translateY(1px);
 }
 
-/* ══════════════ 3. 文字型链接（目录 / 页脚 / 归档条目 / 标签片）══════════════
+/* ══════════════ 3. 文字型链接（目录 / 页脚 / 归档条目 / 标签矩阵）══════════════
    ★ 刻意**不给 transform**：文字行横向抖动在窄栏里很难看。
      首页的位移是给**卡片**的（`.entry a` 横移 6px），不是给文字的。
      ⇒ 这里对齐首页的**参数**，不对齐它的**形态**。
    覆盖：`Toc.astro` 的 `.toc a`、`SiteFooter.astro` 的 `.foot .links a`、
-        `PostIndex.astro` 的 `.index a`、`tags/index.astro` 的 `.chips a`、
-        `about.astro` 的 `.social a` / `.lang-list a` / `.stack-list a`。 */
+        `PostIndex.astro` 的 `.index a`、
+        `tags/index.astro` 的 `.tag-matrix a` 与 `tags/[tag].astro` 的 `.post-matrix a`、
+        `about.astro` 的 `.social a` / `.lang-list a` / `.stack-list a`。
+   ★ 2026-10-06：`.chips a` → `.tag-matrix a`（标签总览由胶囊串改成**格线矩阵**），
+     并新增 `.post-matrix a`（单标签页同批改成矩阵，两页共用同一装置）。
+     ⚠ 这两个矩阵的 `<a>` **只进这一段，不进下面第 4 段的位移组**：
+       格子的悬停靠 `background` 变色（那是"被点亮"），而位移在**有边框的格子里**会
+       让整格与自己的边框脱开，看着像格子破了一块。文字型链接一律不给 transform，
+       这条口径不变。 */
 .toc a,
 .foot .links a,
 .index a,
-.chips a,
+.tag-matrix a,
+.post-matrix a,
 .social a,
 .lang-list a,
 .stack-group a,
@@ -159,7 +167,8 @@
   .copy-btn,
   .foot .links a,
   .index a,
-  .chips a,
+  .tag-matrix a,
+  .post-matrix a,
   .social a,
   .lang-list a,
   .stack-group a,

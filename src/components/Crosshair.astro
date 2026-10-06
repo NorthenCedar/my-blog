@@ -1,0 +1,120 @@
+---
+/**
+ * 标签页装置「准星 CROSSHAIR」—— 示波器十字光标（站主 2026-10-06）
+ *
+ * 站主原话：「鼠标所在行列亮淡绿准星（示波器十字光标）；键盘 Tab 有同样效果。
+ *            矩阵本身，单标签 CROSSHAIR 准星与标签总览共用一套实现。」
+ * ★ 拍板澄清（选「乙」）：是**贯穿全屏的十字线**，不是"网格行列亮起"。
+ *
+ * ★★ 这个组件就是"两页共用一套实现"的落点：
+ *   标签总览（`/tags/`）与单标签页（`/tags/[tag]/`）**各自挂同一个 `<Crosshair />`**，
+ *   markup / 样式 / 脚本三样都在这里，页面侧只写一行。
+ *   ⚠ 不把样式复制到两个页面里 —— 那样两边会各自腐化（站上"横排导航收抽屉"那条
+ *     散在三处、首页漏写一次的教训就是复制粘贴造成的）。
+ *
+ * ★ 挂法：**必须放进 `plate` 具名槽**（`<Fragment slot="plate">`），不能塞普通 slot。
+ *   原因见 `Base.astro` 那条注记：普通 slot 会落进 `.shell` 内部，而页面过渡
+ *   `html.pt-play .shell` 会加 **transform + filter: blur()** —— 这两样都会建立
+ *   `position: fixed` 的包含块 ⇒ 本组件的 `inset:0` 会从"视口"变成".shell 盒"。
+ *   （关于页实测跳 91px、归档页卷尺跳 596px，都是这一条。）
+ *   `plate` 槽在 `.shell` **之外**，天然免疫。
+ *
+ * ★ 层级 44（见下面 `.crosshair` 里的说明）—— 是本台唯一"压在正文之上"的装饰层。
+ *
+ * ★ 降级照抄 `CursorRing.astro`：触摸设备 / reduced-motion ⇒ 整个装置不出现。
+ *   无 JS ⇒ `.crosshair` 恒 `opacity:0`（脚本不跑就没人加 `.is-on`），十字线不存在。
+ *
+ * 脚本在 `src/scripts/crosshair.ts` —— 机制说明、为什么零 rAF、为什么不过渡，
+ * 全在那份文件头（那里是"为什么"，这里是"长什么样"）。
+ */
+---
+
+<div class="crosshair" data-crosshair aria-hidden="true">
+  <span class="ch-h"></span>
+  <span class="ch-v"></span>
+  <span class="ch-dot"></span>
+</div>
+
+<style>
+  .crosshair {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    /* ★ 层级 44 —— 夹在"内容之上、过渡蒙版之下"：
+         · 高于 `main`（Topbar 给的 z-index:1）与归档尺（2）⇒ 线真的"贯穿"在内容之上
+         · 高于抽屉（40/41）⇒ 它是"示波器光标"，穿过一切覆盖层
+         · **低于页面过渡蒙版（45）** ⇒ 过渡那 900ms 整页被墨色浸染时，
+           不会有一条绿线浮在墨上（那会破掉"浸染"的完整感）
+         · 低于灯箱（50）⇒ 看大图时不该有准星
+         · 低于跟手光标环（64/65/66）⇒ 那个是"原生光标的替身"，必须最上
+       ⚠ 别随手改这个值：`transition.css` 的 z-index 阶梯是被事故守着的（见 AGENTS.md §5）。 */
+    z-index: 44;
+    /* 位置：视口坐标（px），由脚本写。初值刻意放到**视口外** ——
+       万一脚本慢一拍，也是"在屏幕外"而不是"在左上角闪一下"。 */
+    --ch-x: -100px;
+    --ch-y: -100px;
+    opacity: 0;
+    /* ★ 只有「出现」有过渡，「移动」没有。
+       给 transform 加过渡会制造"线追着指针跑"的拖尾 —— 而示波器光标的全部意义
+       就是**即时**（见 crosshair.ts 头部）。这两件事别混：淡入是"出现"，不是"移动"。 */
+    transition: opacity var(--dur-hover) var(--ease-interact);
+  }
+  .crosshair.is-on {
+    opacity: 1;
+  }
+
+  /* 三条都是绝对定位的直条 / 环，位置**全部**由父级的两个变量派生 ——
+     所以"指针"与"键盘焦点"两种输入走的是同一条路径，这也是两页能共用同一份
+     实现的原因（页面侧不需要知道交点是怎么来的）。 */
+  .ch-h,
+  .ch-v,
+  .ch-dot {
+    position: absolute;
+    display: block;
+    will-change: transform;
+  }
+  /* 水平线：贯穿视口宽，只沿 y 平移 */
+  .ch-h {
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    transform: translateY(var(--ch-y));
+    background: var(--deco-crosshair-line);
+  }
+  /* 垂直线：贯穿视口高，只沿 x 平移 */
+  .ch-v {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 1px;
+    transform: translateX(var(--ch-x));
+    background: var(--deco-crosshair-line);
+  }
+  /* 焦点环：坐在两线交点上。
+     ⚠ 用 `translate()` **函数**写在同一个 transform 串里，不用独立的 `translate` 属性 ——
+       独立属性与 transform 合成时位移会被一起变换（CursorRing 的涟漪踩过：
+       scale 当独立属性后圆心一路飞到右下角）。 */
+  .ch-dot {
+    top: 0;
+    left: 0;
+    width: 9px;
+    height: 9px;
+    border: 1px solid var(--deco-crosshair-dot);
+    border-radius: 50%;
+    transform: translate(var(--ch-x), var(--ch-y)) translate(-50%, -50%);
+  }
+
+  /* 触摸设备 / reduced-motion：整个装置不出现（与 CursorRing 同一口径）。
+     脚本侧也会提前 return，两边都不做 ⇒ 不留半截状态。 */
+  @media (hover: none), (prefers-reduced-motion: reduce) {
+    .crosshair {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  // 本装置的全部逻辑在 src/scripts/crosshair.ts（两页共用同一份）。
+  import '../scripts/crosshair';
+</script>
