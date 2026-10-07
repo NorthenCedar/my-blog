@@ -252,6 +252,17 @@ describe('螺旋盘 · 几何契约', () => {
     expect(FADE_OUT, 'FADE_OUT 太大 ⇒ 远端全堆在两侧').toBeLessThanOrEqual(8);
     const paint = CODE.slice(CODE.indexOf('const paint = () => {'));
     expect(paint, '淡出没走 smoothstep').toMatch(/sm\(clamp\(\(d - FADE_IN\) \/ \(FADE_OUT - FADE_IN\)/);
+    /* ★★ 2026-10-08：淡出必须带**死区** —— 低于阈值一次归零，不留半透明残影。
+       站主两次报"照片缩小时的边缘异常"，其中一块实测就是**淡出中的邻片**
+       （逐片量 rect 定位到 #4「向日葵味的蓝天」：op 0.137、投影 74×96px、
+       区域均色 rgb(209,211,204)，比纸白暗 15~41 级）—— 它半透明地叠在纸上，
+       读起来不是"一张远处的照片"而是"照片旁边一块脏的残影"。
+       ★ 上下界都要有：太低咬不住（第一版取 0.12，实测**没盖住** op 0.137 那一张），
+         太高会切掉"还看得出形状"的螺旋侧壁（#3 是 op 0.448 的窄条，那个是该留的）。 */
+    const fadeOff = num(/const FADE_OFF = ([\d.]+)/, CODE, 'FADE_OFF');
+    expect(fadeOff, '淡出没有死区（或太低）⇒ 极淡的残影会留在装置里').toBeGreaterThan(0.12);
+    expect(fadeOff, '死区太高 ⇒ 会切掉"还看得出形状"的那些片（螺旋侧壁）').toBeLessThan(0.35);
+    expect(paint, '死区没有真的作用到 opacity 上').toMatch(/raw > FADE_OFF \? raw : 0/);
   });
 });
 
@@ -696,20 +707,36 @@ describe('螺旋盘 · 红线与预算', () => {
        惰性量在 `background:` 之前能跨过任意多个非 `}` 字符，负向预查又是**匹配之后**才求值，
        于是它落到了别处的 `background:` 上（实测第一次写就被这条自己打脸）。
        正解：先把方槽那一块切出来，再在块内比。 */
+    /* ★ 取**最后一条** background 声明 —— CSS 是后者胜。
+       用 `match()` 只取第一条会漏掉"悄悄在后面加一条"这种绕过（本轮变异验证抓到的）。 */
+    const lastBg = (block: string) => {
+      const all = [...block.matchAll(/background(?:-[a-z]+)?\s*:\s*([^;}]*)/g)];
+      return all.length ? all[all.length - 1][1].trim() : undefined;
+    };
     const slotBlock = CODE.match(/\.sp-frame\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(slotBlock, '切不出方槽那一块（选择器写法变了？）').not.toBe('');
-    const slotBg = slotBlock.match(/background(?:-[a-z]+)?\s*:\s*([^;}]*)/)?.[1]?.trim();
+    const slotBg = lastBg(slotBlock);
     expect(slotBg, '方槽那块没有 background 声明 ⇒ 判据失效').toBeDefined();
     expect(slotBg, `方槽的底色必须是 none，实际是 ${slotBg}`).toBe('none');
-    /* 正对照：占位底仍在，只是搬到了真正会空的那一层（照片盒） */
-    expect(CODE, '占位底丢了（"图还没到之前看得出这儿有一张"是它原本的用途）').toMatch(
-      /\.sp-frame img\s*\{[^}]*?background:\s*var\(--deco-plate-fine\)/,
+    /* ★★ 2026-10-08（站主第二次报同一处）定稿：占位底**整个去掉** ——
+       槽上没有，**照片盒上也没有**。两层的 background 都必须是 `none`。
+       ★ 为什么不是"换个色"：可见色块本身就是异常，换个色还是块；而"图还没到"的
+         提示在这一台里本来就不成立（装置态下片是 3D 旋转 + 淡出的，访客分不清
+         "没加载"与"还没转到"）。理由与实测写在 `SpiralPlate.astro` 的那两段注里。
+       ★ 这条必须**双向**：上一版只钉了"槽上没有"，于是底色在 img 上活了下来，
+         站主隔了一轮又报了一次。钉位置不钉存在性 ⇒ 换个层就复活。 */
+    const imgBlock = CODE.match(/\.sp-frame img\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(imgBlock, '切不出照片盒那一块（选择器写法变了？）').not.toBe('');
+    const imgBg = lastBg(imgBlock);
+    expect(imgBg, '照片盒那块没有 background 声明 ⇒ 判据失效').toBeDefined();
+    expect(imgBg, `照片盒上不许有占位底色，实际是 ${imgBg}`).toBe('none');
+    /* 再钉一条"整个文件里都不许有"：免得它换个第三层复活。
+       ★ 负向断言必须先剥注释（本仓老坑）—— `--deco-plate-fine` 这个名字在
+         `.sp-frame` 的理由注释里是要出现的，不剥就会恒红。 */
+    const CODE_NC = CODE.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    expect(CODE_NC, '占位底又从别处回来了（只该有 `none`）').not.toMatch(
+      /background[^;}]*(--deco-plate-fine|--deco-plate-coarse|--accent-wash)/,
     );
-    /* ★ 钉住"只能落在 img 上"这件事：槽与照片盒是两层，钉位置不钉存在性 ——
-       有人把底色加回 .sp-frame 那条 while 保留 img 那条，上面的 not.toMatch 会抓到；
-       反过来删掉 img 那条、只留槽上的，第一条会红。两向都堵死。 */
-    const slot = CODE.slice(CODE.indexOf('.sp-frame {'), CODE.indexOf('.sp-frame img {'));
-    expect(slot, '占位底出现在方槽那一层了').not.toMatch(/background:\s*var\(--deco-plate-fine\)/);
   });
 
   it('★ 一律不裁图：整块**没有** `object-fit`（与 /gallery 同一条红线）', () => {
