@@ -1,10 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="北杉札记">
-  <!-- 杉：一根主干三道枝。不用文字，避免依赖访客机器上的中文字体。 -->
-  <rect width="32" height="32" fill="#0E0E0E"/>
-  <g fill="#FFFFFF">
-    <rect x="14.6" y="5" width="2.8" height="22"/>
-    <rect x="6" y="8.5" width="20" height="2.6"/>
-    <rect x="8.5" y="14.5" width="15" height="2.6"/>
-    <rect x="11" y="20.5" width="10" height="2.6"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="北杉札记">
+  <!-- 墨绿底 + 白 ∞：形取自站点既有的标志（BootIntro.astro 的 MARK 常量），
+       d 属性一字不差地复制过来 —— 换 favicon 不等于另画一个 ∞，
+       站上只有这一份 ∞ 的权威定义，favicon 是它的一个小尺寸复刻。
+       与站上那份相比只动了两件与 favicon 尺寸有关的事：
+         · 整体缩放 1.3（把 20x8 的墨迹放大到 26x10.4，左右各留 3）
+         · 描边 0.32 → 1.85（站上那是开场动画的笔画，会被放大到整屏读作细线；
+           16px 的标签页上按原比例只剩 0.2px，等于没有）
+       底色的绿取 accent(#2d7d46) 的同色相压暗版 —— 标签页只有 16px，
+       直接用 accent 太亮抢眼，用 ink-deep(#0b1a14) 又读不出绿，故取中间。
+       线宽不是猜的：4 档笔宽各渲染 16/32/64px 逐格比过（_probe/_fav-mark.mjs）。
+       注意：XML 注释内不得出现连续两个短横线，否则整个文件解析失败、图标直接不显示。 -->
+  <rect width="32" height="32" fill="#17402A"/>
+  <g transform="translate(3 10.8) scale(1.3) translate(-2 -2)">
+    <path d="M12 6c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2-2.67 4-4 6-4a4 4 0 0 1 0 8c-2 0-4-1.33-6-4"
+          fill="none" stroke="#FFFFFF" stroke-width="1.85"
+          stroke-linecap="round" stroke-linejoin="round"/>
   </g>
 </svg>

@@ -928,9 +928,52 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
 
   it('favicon 存在且每页都声明了它（否则浏览器会 404 请求 /favicon.ico）', () => {
     expect(existsSync(join(DIST, 'favicon.svg')), 'dist/favicon.svg 不存在').toBe(true);
+    // 浏览器即使只看到 rel="icon" 指到 .svg，仍会去请求 /favicon.ico —— 少了就是一条 404
+    // （历史上正是它把 Lighthouse 最佳实践从 100 拉到 96），所以两个都要在产物里。
+    expect(existsSync(join(DIST, 'favicon.ico')), 'dist/favicon.ico 不存在').toBe(true);
     for (const f of htmlFiles()) {
       expect(readFileSync(f, 'utf8'), `${f} 没有声明 favicon`).toContain('rel="icon"');
     }
+  });
+
+  it('favicon 的 ∞ 取自站点标志（与 BootIntro 的 MARK 一字不差），.ico 是它的 16/32/48 光栅化', async () => {
+    // ★ 判据为什么是「路径一字不差」而不是「看起来像个 ∞」：站上只有一份 ∞ 的权威定义
+    //   （BootIntro.astro 的 MARK，开场动画那笔）。换 favicon 时另画一条贝塞尔也能骗过肉眼，
+    //   但从此站上就有两个 ∞，下次改标志必然漏掉一个。
+    const svg = readFileSync('public/favicon.svg', 'utf8');
+    const markMatch = readFileSync('src/components/BootIntro.astro', 'utf8').match(/const MARK = '([^']+)'/);
+    expect(markMatch, '读不到 BootIntro 的 MARK').not.toBeNull();
+    expect(svg, 'favicon 里的 ∞ 不是站点标志那条路径（同源断了）').toContain(markMatch![1]);
+
+    // 墨绿底 + 白 ∞
+    expect(svg, '底色不是墨绿').toMatch(/<rect[^>]*fill="#17402A"/i);
+    expect(svg, '∞ 不是白色').toMatch(/stroke="#FFFFFF"/i);
+
+    // ★★ 光栅化实测：XML 不良构（例如注释里出现连续两个短横线）会让整个文件解析失败、
+    //    图标直接不显示，而上面那些字符串断言**照样全绿** —— 只有真渲染一次才拦得住。
+    const sharp = (await import('sharp')).default;
+    const px16 = await sharp(Buffer.from(svg)).resize(16, 16).png().toBuffer();
+    expect(px16.length, 'favicon.svg 渲染不出 16px 位图').toBeGreaterThan(0);
+
+    // .ico：三档，且每档内嵌 PNG 的真尺寸必须与 ICO 目录里声明的一致
+    const ico = readFileSync('public/favicon.ico');
+    const count = ico.readUInt16LE(4);
+    const declared: number[] = [];
+    for (let i = 0; i < count; i++) {
+      const o = 6 + i * 16;
+      const w = ico.readUInt8(o) || 256;
+      const h = ico.readUInt8(o + 1) || 256;
+      declared.push(w);
+      const size = ico.readUInt32LE(o + 8);
+      const off = ico.readUInt32LE(o + 12);
+      const png = ico.subarray(off, off + size);
+      expect(png.subarray(0, 8), `.ico 第 ${i} 档不是 PNG`).toEqual(
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      );
+      expect(png.readUInt32BE(16), `.ico 第 ${i} 档 PNG 宽 ${png.readUInt32BE(16)} ≠ 目录声明 ${w}`).toBe(w);
+      expect(png.readUInt32BE(20), `.ico 第 ${i} 档 PNG 高 ${png.readUInt32BE(20)} ≠ 目录声明 ${h}`).toBe(h);
+    }
+    expect(declared, '.ico 应含 16/32/48 三档').toEqual([16, 32, 48]);
   });
 
   it('正文图片带 srcset（否则整张原图会被传下去）', () => {
