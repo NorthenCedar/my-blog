@@ -42,6 +42,14 @@ describe('低对比 token 越界（--accent-bright 只许用在深色底上）',
     'nav a[aria-current]',
     '.lb button:hover',
     '.lb button:focus-visible',
+    // 2026-10-07 追加：相册「螺旋盘」新页（`/gallery/spiral/`）的灯箱，类名是 `.splb`。
+    // 它照抄的正是 /gallery 那个灯箱的体例 —— 遮罩同为 `#1a1a1aeb`（近 --ink），
+    // 按钮的 hover / focus 文字同理在深底上取 --accent-bright（对 --ink 6.26:1，高于 AA 4.5:1）。
+    // ★ 为什么不干脆把新页的类名改成 `.lb` 去"顺带"被上面两条覆盖：
+    //   那样子名单就**不再逐处认领**了 —— 而"每一处裸 --accent-bright 都有人写清理由"
+    //   正是这份名单存在的意义（见上面那条"已不存在用法不许留在名单里"的规矩）。
+    '.splb button:hover',
+    '.splb button:focus-visible',
     // 2026-09-30 追加：原型 v10.6 首屏（深墨绿场）里 eyebrow 前面那道 1px × 1.6rem 的短横。
     // 它与上面两条同属「深色底上的亮绿」——对 --ink-deep(#0b1a14) 远超 4.5:1，
     // 且它是**非文字图形**（一根 1px 线），不是小字。抄的是原型 .eyebrow i 的原色。

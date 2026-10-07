@@ -242,7 +242,7 @@
   | 验收类型 | 走哪条 |
   |---|---|
   | 视觉（排版 / 装置 / 配色） | `_probe/launcher.mjs` 的 `withServer()` + `shot()` → 出 PNG 后 `read_image` |
-  | 行为契约 | `npm run verify`（`tests/` **27** 个文件 **482** 条：**481 通过 / 1 设计内跳过**；**偶发**再多 1 条本机环境失败）<br>★ 跑之前先加 `CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD=20000`，否则**构建**就会挂在删除配额上（见 §5 末行）。<br>★ 那条环境失败 = `tests/tokens.test.ts` 的 `spawnSync node EBUSY`（同 §5 的 EBUSY 家族，**时好时坏** ⇒ 有时一条都不失败）；断它是否"已知故障"：日志末尾**若多出一条别的**，才是真回归 |
+  | 行为契约 | `npm run verify`（`tests/` **29** 个文件 **522** 条：**521 通过 / 1 设计内跳过**；**偶发**再多 1 条本机环境失败 ⇒ 那一次读作 **520 通过 / 1 失败 / 1 跳过**）<br>★ 跑之前先加 `CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD=20000`，否则**构建**就会挂在删除配额上（见 §5 末行）。<br>★ 那条环境失败 = `tests/tokens.test.ts` 的 `spawnSync node EBUSY`（同 §5 的 EBUSY 家族，**时好时坏** ⇒ 有时一条都不失败）；断它是否"已知故障"：日志末尾**若多出一条别的**，才是真回归 |
   | 产物形态 | 直接对 `dist/` 做静态断言（多数 `build-output.test.ts` 已覆盖） |
   | **运行时布局 / 盒宽 / `scrollX` 多档溢出** | ★ **`_probe/_measure-all.mjs`**（见下） |
   改动 launcher 后跑 `node _probe/launcher-selftest.mjs` 自检（自检不依赖 CDP）。
