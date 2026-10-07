@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-/* 留言页底纹「墨滴 INK DROP · 蓝色环线 + 星芒」**替代**百褶 ∞（站主 2026-10-06）的契约。
+/* 留言页底纹「墨滴 INK DROP · ∞ 环线 + 星芒」**替代**百褶 ∞（站主 2026-10-06）的契约。
+ * ★ 2026-10-08 站主：「背景那个**蓝色**的无限符号改为**墨绿色**」⇒ 素材重出（色变了，契约的
+ *   其余部分一条没动）。下面 ② 已按这次指令改写。
  *
  * 这一轮只做**静态底纹**（母题层）。墨滴装置（鼠标留墨痕几秒渗开 + 新留言落下墨滴扩散）
  * 是同一母题的第二层，站主明确要求"先做底纹" ⇒ 装置不在本文件范围内，
@@ -11,8 +13,9 @@ import { join } from 'node:path';
  * 这里守的是「不可退让的性质」，不是「上一版的实现形态」：
  *   ① 素材必须**自带 alpha** —— 不透明矩形底 + opacity 会在纸白上留下一片灰、
  *      看得见矩形边（同 talks / 关于页同源教训）。
- *   ② 素材必须**是蓝色**且**未被去饱和** —— 母题就叫墨滴，站主给的原图是蓝钢笔，
- *      染成灰等于换母题（站主关于 ref-plate 已明确立过这条规矩）。
+ *   ② 素材的颜色必须**按站主的当前指令**来，且**不许被去饱和** —— 2026-10-06 立时
+ *      是站主给的蓝钢笔原图色，2026-10-08 站主改口「改为**墨绿色**」⇒ 现在必须是墨绿。
+ *      两个方向守的是同一条底线：**不许染成灰**（染灰等于换母题 —— about 页 ref-plate 那条）。
  *   ③ 素材必须**裁到主体框** —— 原图 1080×1351 里上方 44.5% 是纯纸白，
  *      不裁会让视觉重心掉到视口下半部，且白占下载体积。
  *   ④ 装饰层必须挂 `.shell` **之外**（走 plate 具名槽）—— `.shell` 在页面过渡里会被
@@ -74,11 +77,19 @@ describe('留言页 · 墨滴底纹（替代百褶 ∞）· 素材契约', () =>
     }
     expect(maxA, '最大 alpha 为 0 ⇒ 图案被整体清掉了').toBeGreaterThanOrEqual(200);
     expect(n, '没有不透明像素 ⇒ 图案没了').toBeGreaterThan(1000);
-    /* ★ 保留原始蓝色：站主在 about 页 ref-plate 立过"禁止去饱和/禁止绿色偏移"的规矩，
-       母题既然叫墨滴、给的原图是蓝钢笔，染灰等于换母题。蓝必须是 B 明显高于 R。 */
+    /* ★ 颜色：2026-10-08 站主「背景那个**蓝色**的无限符号改为**墨绿色**」。
+       这条原先守的是"必须是蓝的"，现在守同一件事的**反面** —— 底线一个字没变：
+       ① 必须**饱和**（染灰等于换母题，about 页 ref-plate 那条规矩）；
+       ② 必须落在站主**当前指定**的色族里（现在是墨绿：G 明显高于 R 与 B）。
+       ★ 判据只认"色族 + 饱和度"，**不写十六进制快照** —— 快照会在下一次改色时误报。 */
     const avgR = sumR / n, avgG = sumG / n, avgB = sumB / n;
-    expect(avgB - avgR, `不透明区平均色 rgb(${avgR.toFixed(0)},${avgG.toFixed(0)},${avgB.toFixed(0)}) —— 蓝色被去饱和了`).toBeGreaterThan(30);
-    expect(avgB - avgG, '蓝色被往绿色方向偏移了').toBeGreaterThan(20);
+    const rgb3 = `${avgR.toFixed(0)},${avgG.toFixed(0)},${avgB.toFixed(0)}`;
+    expect(avgG - avgR, `不透明区平均色 rgb(${rgb3}) —— 墨绿被去饱和了`).toBeGreaterThan(30);
+    expect(avgG - avgB, `不透明区平均色 rgb(${rgb3}) —— 墨绿被往蓝/灰方向偏移了`).toBeGreaterThan(20);
+    expect(
+      Math.max(avgR, avgG, avgB) - Math.min(avgR, avgG, avgB),
+      `不透明区平均色 rgb(${rgb3}) 彩度太低（接近灰）⇒ 读成"染灰"而不是墨绿`,
+    ).toBeGreaterThan(30);
   });
 
   it('★ 已裁到主体框（不留原图上方那 44.5% 的纸白）', async () => {

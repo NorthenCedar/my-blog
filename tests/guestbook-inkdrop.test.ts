@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /* 留言页装置「墨滴 INK DROP」（指针留墨痕几秒渗开 + 新留言落下墨滴扩散）的契约。
- * 站主 2026-10-06 指定，与本页静态底纹同源（蓝色钢笔母题）。
+ * 站主 2026-10-06 指定，与本页静态底纹同源（钢笔 ∞ 母题；颜色 2026-10-08 由蓝改墨绿）。
  *
  * 这里守的是「不可退让的性质」，不是「上一版的实现形态」：
  *   ① 画布**不许有 hidden** —— `hidden` 是 display:none，clientWidth 恒为 0，
@@ -283,7 +283,7 @@ it('★★★回收必须按时间判，不能按浓度判（真机整页无墨�
 it('★★ 落纸即有色：age=0 的浓度必须为正且高于 GC 阈值', () => {
   /* 与上一条配套：GC 改成按时间判之后，墨能不能被**看见**就全靠 rise 段。
    * 若 rise 仍从 0 爬（LIFE*0.08 = 336ms），则墨要 0.34 秒后才显形，
-   * 与母题「落下时最实（刚落纸就吃满）」相反，也与真实蓝墨笔不符。
+   * 与母题「落下时最实（刚落纸就吃满）」相反，也与真实钢笔落墨的观感不符。
    * ⇒ 必须有起始浓度 RISE_FLOOR。 */
   expect(CODE, '必须有起始浓度 RISE_FLOOR（落纸即有色）').toMatch(/const\s+RISE_FLOOR\s*=/);
   const rise = CODE.match(/const\s+rise\s*=\s*([^;]+);/)?.[1] ?? '';
@@ -393,10 +393,28 @@ it('★★ 落纸即有色：age=0 的浓度必须为正且高于 GC 阈值', ()
   it('★ 落滴由事件驱动，且只在提交成功后派发', () => {
     /* 装置不可能自己知道留言成功了 —— 必须有一条显式信号。 */
     expect(SRC, '装置要监听 inkdrop 事件').toMatch(/addEventListener\(\s*'inkdrop'/);
-    expect(SRC, '墨滴要用蓝色（与底纹同母题），不许退回绿accent 当唯一来源').toMatch(/--ink-blue/);
-    expect(TOKENS, '蓝墨 token 没了（底纹是蓝的、墨滴却是绿的 ⇒ 读成两种东西）').toMatch(
-      /--ink-blue:\s*#6981b7/,
+    /* ★ 守的是**关系**，不是某个十六进制快照（AGENTS §7.3：把契约写成快照，
+       素材一改就误报 —— 2026-10-08 底纹由蓝改墨绿正是这样的改动）。
+       真正不可退让的两条：① 墨滴的墨色**自成一支 token**（不许只剩 --accent 兜底）；
+       ② 那支 token 得是**墨绿**（与底纹素材同族），且旧名按约定留成别名。 */
+    expect(SRC, '墨滴要用母题自己的墨色 token，不许退回 --accent 当唯一来源').toMatch(/--ink-motif/);
+    expect(SRC, '取不到 token 时才允许退回 --accent（fallback 链要留着）').toMatch(
+      /--ink-motif'\)\s*\|\|[\s\S]{0,40}--accent/,
     );
+    const motif = TOKENS.match(/--ink-motif:\s*(#[0-9a-fA-F]{6})/)?.[1];
+    expect(motif, 'tokens.css 里没有 --ink-motif（底纹与墨滴必须同色系）').toBeTruthy();
+    expect(motif, '--ink-motif 必须写字面值 —— 本断言要读它来判色族').toMatch(/^#/);
+    const mr = parseInt(motif!.slice(1, 3), 16);
+    const mg = parseInt(motif!.slice(3, 5), 16);
+    const mb = parseInt(motif!.slice(5, 7), 16);
+    expect(mg - mr, `--ink-motif ${motif} 不是墨绿（G 未明显高于 R）`).toBeGreaterThan(30);
+    expect(mg - mb, `--ink-motif ${motif} 不是墨绿（G 未明显高于 B）`).toBeGreaterThan(20);
+    expect(
+      Math.max(mr, mg, mb) - Math.min(mr, mg, mb),
+      `--ink-motif ${motif} 彩度太低（接近灰）⇒ 读成"染灰"而不是墨绿`,
+    ).toBeGreaterThan(30);
+    /* 旧名按 spec §1 的改名/弃用约定**留成别名**（不直接删）—— 考古时才对得上。 */
+    expect(TOKENS, '旧名 --ink-blue 没留成指向新名的别名').toMatch(/--ink-blue:\s*var\(--ink-motif\)/);
     /* comments.ts：成功分支里派发 */
     const ok = COMMENTS.match(/\.then\(\s*\(c\)\s*=>\s*\{([\s\S]*?)\}\)/)?.[1] ?? '';
     expect(ok, '没读到提交成功的 then 分支').toBeTruthy();

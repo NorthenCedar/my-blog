@@ -2,7 +2,7 @@
  * 留言页 · 墨滴（INK DROP）—— 指针在留言区留墨痕、几秒渗开；新留言落下是墨滴扩散
  *
  * ★ 母题（站主 2026-10-06 指定，与本页静态底纹同源）：
- *   · 墨痕：指针在**移动**时留下渐深的蓝墨痕；**停住不动 ⇒ 不出墨**，
+ *   · 墨痕：指针在**移动**时留下渐深的墨痕（墨绿）；**停住不动 ⇒ 不出墨**，
  *     已落的墨按各自年龄从末端慢慢消退（站主 2026-10-06 晚明确要求）
  *   · 渗开：痕迹不立刻消失，按 f(t) **慢慢往外渗并变淡**，几秒后收干净
  *   · 落滴：留言发表成功 ⇒ 墨滴**从上方砸下、炸开、溅出一圈**
@@ -82,10 +82,11 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
 
   /* ---------- 颜色：只从 token 读，alpha 以 8 位 hex 承载（站上约定） ---------- */
   const CS = getComputedStyle(document.documentElement);
-  /* ★ 母题是**蓝**钢笔（底纹素材就是蓝的）—— 墨滴必须同色系。
-     取accent 的 fallback 仍是站上绿，但站内 accent 是绿；
-     所以这里显式取一个蓝 token 优先、退回 accent。 */
-  const INK = (CS.getPropertyValue('--ink-blue') || CS.getPropertyValue('--accent') || '#2d7d46').trim();
+  /* ★ 墨色必须是**这张底纹的**墨色 —— 底纹与墨滴同色系，否则读成两种东西。
+     2026-10-08 站主「背景那个蓝色的无限符号改为墨绿色，墨痕和发留言的墨滴也改成墨绿色」：
+     底纹已重出成墨绿、`--ink-motif` 同步跟上（旧名 `--ink-blue` 已弃用，见 tokens.css）。
+     fallback 链保留：token 取不到就退回站上绿 --accent，再不行才落字面值。 */
+  const INK = (CS.getPropertyValue('--ink-motif') || CS.getPropertyValue('--accent') || '#2d7d46').trim();
   const A = (hex: string, a: number) => {
     const h = hex.replace('#', '').slice(0, 6);
     const v = Math.round(Math.max(0, Math.min(1, a)) * 255);
@@ -127,7 +128,7 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
    *   blobAlpha 的 rise 段让浓度在前 8% 生命周期（LIFE*0.08 = 336ms）里
    *   从 0 加深到 1 —— 而 age≈0 时浓度≈0，意味着「刚落的墨是看不见的」。
    *   与母题「落下时最实」相反，且真笔尖触纸即有色。
-   *   ⇒ 起始给 RISE_FLOOR（0.55 ≈ 一落纸就有半实的蓝），再在 336ms 内吃满。
+   *   ⇒ 起始给 RISE_FLOOR（0.55 ≈ 一落纸就有半实的墨），再在 336ms 内吃满。
    *   零随机：仍是 age 的确定函数，只是把定义域整体抬高。 */
   const RISE_FLOOR = 0.55;
   /* 单次 pointermove 的插值上限。12 太小：指针快挥时单次事件距离可达 100px+，
@@ -197,7 +198,7 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
    * ★★★ age = 0 时**不能是 0**（2026-10-06 线上插桩实测的真凶之一）。
    *   原来的 rise 是 `Math.min(1, age / (LIFE * 0.08))` ⇒ 刚落纸那一刻
    *   浓度 ≈ 0，等于「墨要 0.34 秒后才显形」，与头部母题写的
-   *   「落下时最实（刚落纸就吃满）」正好相反，也与真实蓝墨笔不符
+   *   「落下时最实（刚落纸就吃满）」正好相反，也与真实钢笔落墨的观感不符
    *   （笔尖接触纸面即刻有颜色）。
    *   ⇒ 加一个起始浓度 RISE_FLOOR：落纸即 RISE_FLOOR，随后在 LIFE*0.08 内
    *     加深到满。这样「加深」是渐进的，而「显形」是瞬时的。

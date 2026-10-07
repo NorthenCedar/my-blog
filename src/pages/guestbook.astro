@@ -17,11 +17,15 @@ interface GuestbookData {
 const entry = await getEntry('pages', 'guestbook');
 const d = (entry?.data ?? {}) as unknown as GuestbookData;
 
-/* 底纹母题「墨滴 INK DROP」的第一层（站主 2026-10-06 指定）：蓝色钢笔环线 + 星芒，
+/* 底纹母题「墨滴 INK DROP」的第一层（站主 2026-10-06 指定）：钢笔 ∞ 环线 + 星芒，
    **替代本页的百褶 ∞**。母题与后续的墨滴装置同源，所以叫 inkdrop-*。
+   ★ 2026-10-08 站主：「背景那个**蓝色**的无限符号改为**墨绿色**」⇒ 素材按
+     `_probe/_gb-plate-recolor.mjs` 重出（亮度→墨绿色阶，色阶与日志页底纹同源，
+     所以站上两处 ∞ 是同一个绿）。改色前的蓝版备份在 `_probe/_inkdrop-out/`。
    ⚠️ 目录必须放在 `guestbook/` 的子目录里 —— 若日后在 `guestbook/` 根下放别的图，
       记得用非递归 glob 区分开（同 talks 的 talks/plates 约定）。
-   素材处理见 `_probe/_guestbook-plate.mjs`：蓝度抠图 + 反预乘去白边 + 裁到主体框。 */
+   抠底那一步（蓝度抠图 + 反预乘去白边 + 裁到主体框）的脚本已不在仓里，
+     现行可复跑的是上面那支改色脚本。 */
 const PLATES = import.meta.glob<{ default: ImageMetadata }>('/src/assets/guestbook/plates/*.webp', { eager: true });
 const plate = PLATES['/src/assets/guestbook/plates/inkdrop-orbit.webp']?.default;
 ---
@@ -29,7 +33,7 @@ const plate = PLATES['/src/assets/guestbook/plates/inkdrop-orbit.webp']?.default
 <Base title="留言" current="guestbook" chrome="page" bodyClass="guestbook-plate">
   {/* ===================================================================
    * 视口装饰层（plate 具名槽）—— 墨滴母题的**两层**：
-   *   ① `.float-plate` 静态底纹（蓝色环线 + 星芒）**替代**百褶 ∞
+   *   ① `.float-plate` 静态底纹（墨绿环线 + 星芒）**替代**百褶 ∞
    *   ② `.inkdrop-bg` 动态装置（指针留墨痕、几秒渗开；新留言落下墨滴扩散）
    *
    * ★★ 必须走 `plate` 具名槽，不能塞进普通 slot：`.shell` 在页面过渡里会被
@@ -115,8 +119,9 @@ const plate = PLATES['/src/assets/guestbook/plates/inkdrop-orbit.webp']?.default
     /* 透明度取 8% —— 站上**自己**的装饰底纹定稿档
        （`--deco-plate-coarse` = `#2d7d4614` = 20/255 ≈ 7.8%）。
        同一把尺子量所有底纹，比"抄一个只对旧素材成立的数字"更忠实于原意。
-       ★ 本图是**高饱和蓝**， perceptually 比 talks 的近黑墨点更跳；
-         若目检觉得压过正文，第一个该拧的是 --plate-op，不是这个档位本身。 */
+       ★ 2026-10-08 由蓝改墨绿之后，本图与 talks 的近黑墨点**同族**了
+         （原先"高饱和蓝比墨点更跳"那条顾虑不再成立）。
+         若目检仍觉得压过正文，第一个该拧的是 --plate-op，不是这个档位本身。 */
     opacity: var(--plate-op, 0.08);
     pointer-events: none;
     z-index: -1;
