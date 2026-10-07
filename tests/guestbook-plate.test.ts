@@ -69,11 +69,17 @@ describe('留言页 · 墨滴底纹（替代百褶 ∞）· 素材契约', () =>
     ] as const) {
       expect(at(x, y), `${where}角不透明 ⇒ 纸白没抠干净`).toBeLessThanOrEqual(8);
     }
-    let maxA = 0, opaque = 0, n = 0, sumR = 0, sumB = 0, sumG = 0;
+    let maxA = 0, n = 0, sumR = 0, sumB = 0, sumG = 0, blue = 0;
     for (let i = 0; i < data.length; i += info.channels) {
       const a = data[i + 3];
       if (a > maxA) maxA = a;
-      if (a > 200) { opaque++; n++; sumR += data[i]; sumG += data[i + 1]; sumB += data[i + 2]; }
+      if (a > 200) {
+        n++; sumR += data[i]; sumG += data[i + 1]; sumB += data[i + 2];
+        /* 「残留偏蓝」的判据：蓝通道**反超**红与绿各 20 以上。必须带余量 ——
+           裸 `b > g` 会把笔画极淡边缘的压缩噪声也算进去（过严的零容差判据）。
+           与 `tests/log-chrono.test.ts`、`_probe/_log-plate.mjs`、`_gb-plate-recolor.mjs` 同口径。 */
+        if (data[i + 2] > data[i] + 20 && data[i + 2] > data[i + 1] + 20) blue++;
+      }
     }
     expect(maxA, '最大 alpha 为 0 ⇒ 图案被整体清掉了').toBeGreaterThanOrEqual(200);
     expect(n, '没有不透明像素 ⇒ 图案没了').toBeGreaterThan(1000);
@@ -90,6 +96,9 @@ describe('留言页 · 墨滴底纹（替代百褶 ∞）· 素材契约', () =>
       Math.max(avgR, avgG, avgB) - Math.min(avgR, avgG, avgB),
       `不透明区平均色 rgb(${rgb3}) 彩度太低（接近灰）⇒ 读成"染灰"而不是墨绿`,
     ).toBeGreaterThan(30);
+    /* ★ 均值对了还可能"整体偏绿、局部残留蓝" —— 这才是"墨绿"唯一能被机器断言的部分
+       （同 log 页 `log-chrono.test.ts` 那条）。带余量口径，主体区必须一个都没有。 */
+    expect(blue, `主体区还有 ${blue} 个像素偏蓝 —— 转色没转干净`).toBe(0);
   });
 
   it('★ 已裁到主体框（不留原图上方那 44.5% 的纸白）', async () => {
