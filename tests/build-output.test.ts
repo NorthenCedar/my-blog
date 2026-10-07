@@ -630,14 +630,21 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
 
     // 页脚统计：除首页与 404 外的每个页面都要有。
     // ★ 2026-10-02 第七轮，站主原话「把主页下面这一栏删了」（截图里那栏就是它）⇒
-    //   首页（dist/index.html）**刻意不再有** data-since，必须从这条判据里排除。
+    //   首页（dist/index.html）**刻意不再有**页脚统计，必须从这条判据里排除。
     //   内页那一条（SiteFooter）是站主 2026-09-26「在每页最底部加上」要的，仍然守。
+    // ★★ 2026-10-07 判据从 `data-since` 换成 `data-stats` —— 这是**换得更准，不是放宽**：
+    //   `data-since` 只是 SiteStats 的一个**参数**，却被借来当"这个组件在不在"的代理，
+    //   于是任何别处用到 `data-since` 都会在这里误伤。本轮真撞上了：首屏新增的「时间切片」
+    //   要带一个 since（站龄起点），属性名写成 `data-since` 就被这条拦下 ——
+    //   拦得**对**（名字确实借错了），但判据本身选错了代理。
+    //   `data-stats` 是 SiteStats 容器**自己的**标记（`<div class="stats" data-stats …>`），
+    //   它表达的正是这条断言要问的那件事。意图（内页有 / 首页没有）一个字没改。
     const HOME = `${DIST}/index.html`; // 只排除主页这一个（内页也各有 index.html，别误伤）
     const pages = htmlFiles().filter((f) => !f.endsWith('404.html') && f.replace(/\\/g, '/') !== HOME);
-    const missing = pages.filter((f) => !readFileSync(f, 'utf8').includes('data-since'));
+    const missing = pages.filter((f) => !readFileSync(f, 'utf8').includes('data-stats'));
     expect(missing, `这些页面没有页脚统计：${missing.slice(0, 6).join(', ')}`).toEqual([]);
     const home = readFileSync(join(DIST, 'index.html'), 'utf8');
-    expect(home, '站主第七轮要求删掉主页底部那一栏 ⇒ 首页不该再有页脚统计').not.toContain('data-since');
+    expect(home, '站主第七轮要求删掉主页底部那一栏 ⇒ 首页不该再有页脚统计').not.toContain('data-stats');
     expect(home, '站主第七轮要求删掉主页底部那一栏 ⇒ 首页不该再有 .foot 版式').not.toContain('class="foot');
     // 起点日期来自内容层，不是写死在组件里
     const siteMd = readFileSync('content/site.md', 'utf8');

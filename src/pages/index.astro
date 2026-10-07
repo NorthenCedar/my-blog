@@ -39,6 +39,10 @@ import { readLanguageStats } from '../lib/lang-stats';
 const site = await getSite();
 const posts = await getVisiblePosts();
 
+// 首屏 wordmark 的副标 = 站点域名。取值走 astro.config 的 `site`（**不硬编码**）——
+// 换域名时这里自动跟，不会变成第二处真相。见样式表 `.wordmark small` 的注释。
+const domain = Astro.site?.host ?? '';
+
 // ── S3 的四张卡 ────────────────────────────────────────────────
 // 原型这一屏写的是它自己的迭代史（「v4 改了什么」）；站主拍板换成**站点更新日志**。
 // 排序与日期复用日志页那套（sortLogItems / isoDate），两处永远同序。
@@ -60,8 +64,20 @@ const langSlices = readLanguageStats();
 const HOME_POST_LIMIT = 3;
 const recentPosts = posts.slice(0, HOME_POST_LIMIT);
 
-// 坐标行三个字段都可选：缺任何一个就整行不渲染，不渲染空值
-const hasCoord = Boolean(site.lat && site.lon && site.status);
+// 坐标行：只渲染真实存在的字段（缺一个就整行不渲染，不渲染空值）。
+// ★ 2026-10-07 第五轮：`STATUS …` 那一格撤掉 —— 它与首屏 `身份 · ONLINE` 说的是同一件事，
+//   一行坐标里重复报一次状态，正是 A-2 要清的那种"读数通胀"。status 字段本身没删，
+//   它还在身份行里生效（改内容层 site.md 仍然全站生效）。
+const hasCoord = Boolean(site.lat && site.lon);
+
+// ── 首屏「时间切片」（站主 2026-10-07 第五轮 A-3）────────────────────────
+// 站龄 = since → 今天的**天数**。构建期先算一版给无 JS 兜底（天级粒度，构建那一刻
+// 是真的）；运行时由首页内联脚本按访客本地时钟刷新（见下方的「4) 时间切片」）。
+const sinceISO = /^\d{4}-\d{2}-\d{2}$/.test(site.since ?? '') ? (site.since as string) : '2026-09-25';
+const buildAgeDays = Math.max(
+  0,
+  Math.floor((Date.now() - new Date(sinceISO + 'T00:00:00+08:00').getTime()) / 864e5),
+);
 
 // 滚动带要用到的品牌词：从 wordmark 里取第一段（去掉空格与撇号之后的部分）。
 // 不写死字面量 —— tests/content-invariants.test.ts 禁止站点文案出现在 src/ 里。
@@ -140,15 +156,52 @@ const titleLines: { ch: string; i: number }[][] = (() => {
       <svg class="rh-grid__svg" id="rhGridSvg" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
 
-    <div class="band-glass g1 par-fast" aria-hidden="true"></div>
+    {/* ★ 2026-10-07 站主第五轮（首屏 A-3）原话：「我更倾向于做成切片类似的，比如主页的那个
+        蝴蝶切片，装本地时间 / 站龄也可以，文章和照片就不装了」。
+        ⇒ 右上那块不再是**空舱窗**，改成一块**时间切片**：视觉语法照 S6 的 TIME SLICE 来
+          （层层往里收的框 + 毛玻璃底 + 一圈极淡绿晕），最里层装**本地时间**与**站龄**。
+
+        ★ 它因此**不再是纯装饰**：从 `aria-hidden` 装饰清单里移出（门闩同步改，见
+          tests/b2-motion.test.ts 的「背景装饰层」那条）—— 装饰层不许承载信息，
+          信息层也不许装成装饰，这两个方向都要有人守。
+
+        ★ 时间的初值写 `--:--:--`（**不写构建时刻**）：一个不走的钟比没有钟更糟，
+          它正是本轮要清理的那种"贴上去的字"。站龄不同 —— 它是"天"级粒度，
+          构建期算出来的天数在无 JS 时也是**真的**（SiteStats 用 `—` 是因为它细到秒）。
+          脚本到位后两者每秒刷新（对齐整秒）。
+
+        ★ 保留 `.par-fast`：它仍是首屏的一块玻璃，滚动时照样错速位移。
+
+        ★★ 属性名**必须**是 `data-slice-since`，不能图省事写 `data-since` ——
+          `data-since` 是页脚统计（SiteStats）的存在标记，而 tests/build-output.test.ts
+          有一条「站主第七轮删了主页底部那一栏 ⇒ 首页不该含 data-since」。
+          名字撞上去会被那条门闩**正确**地拦下（它守的意图没错，是我借错了名字）。 */}
+    <div class="band-glass g1 par-fast" data-slice data-slice-since={sinceISO}>
+      <div class="slice-frame" aria-hidden="true"></div>
+      <div class="slice-frame" aria-hidden="true"></div>
+      <div class="slice-core">
+        <p class="slice-k">本地时间</p>
+        <p class="slice-time" data-slice-time>--:--:--</p>
+        <p class="slice-age">站龄 <span data-slice-age>{buildAgeDays}</span> 天</p>
+      </div>
+    </div>
     <div class="band-glass g2 par-fast" aria-hidden="true"></div>
     <div class="band-glass g3 par-fast" aria-hidden="true"></div>
 
     <div class="band-inner">
       <div class="topbar">
+        {/* ★ 2026-10-07 站主第五轮（首屏 A-2）：`<small>RHINE GLASS · v10.6</small>` 删除。
+            理由：它是**视觉原型的版本号**（本站没有 v10.6 这个东西），对读者零信息 ——
+            首屏 5 处仪器读数里它是最纯的一处伪信息（见 _probe/_review/design-proposal.html A-2）。 */}
         <div class="wordmark">
           {site.wordmark}
-          <small>RHINE GLASS · v10.6</small>
+          {/* ★ 2026-10-07 第五轮 A-2b：A-2 把 `RHINE GLASS · v10.6` 删了（它是原型版本号，
+              站上没有 v10.6 这东西 ⇒ 纯伪读数）。删完站主看了 before/after 反馈
+              「那个英文下面没东西感觉有点空」⇒ 补一行**真**副标：站点域名。
+              它是全站唯一既真、读者又用得上的副标（地址），且首屏此前**没有任何地方**
+              出现域名（坐标行那格 `SITE {site.name}` 是中文站名）。
+              值来自 astro.config 的 site ⇒ 不是写死的第二个真相。 */}
+          {domain && <small>{domain}</small>}
         </div>
         {/* 原型的 nav 是 flex-wrap 的胶囊按钮（横排）。
             ≤1023px 由站点抽屉接管（纯 CSS、零 JS）：原型靠 nav flex-wrap 换行，
@@ -173,7 +226,10 @@ const titleLines: { ch: string; i: number }[][] = (() => {
       </div>
 
       <div class="band-copy par">
-        <p class="eyebrow"><i></i>POD 01 · 身份 · {site.status}</p>
+        {/* ★ 2026-10-07 站主第五轮（首屏 A-2）：去掉 `POD 01 · `。
+            世上没有 POD 02 —— 编号是**伪结构**；原型里它是原型自己的舱位编号。
+            留下的两个词（身份 / 状态值来自内容层 site.md）才是这一行真正在说的。 */}
+        <p class="eyebrow"><i></i>身份 · {site.status}</p>
         {/* ★ 原型这里是一条固定文案 + 硬 <br> 折行。本站 wordmark 是内容层字段，不能写死，
             所以按第一个空格断行 —— 与原型一致；若 wordmark 是一个词，照常单行渲染。
             ★ 2026-09-30：为了开场揭幕的"逐字上滑"，整串被拆成逐字 <span>（见 titleLines）。
@@ -195,13 +251,11 @@ const titleLines: { ch: string; i: number }[][] = (() => {
             <span>SITE {site.name}</span>
             <span>LAT {site.lat}</span>
             <span>LON {site.lon}</span>
-            <span>STATUS {site.status}</span>
           </p>
         )}
       </div>
     </div>
 
-    <div class="scroll-hint" aria-hidden="true"><s></s>SCROLL</div>
   </header>
 
   {/* ===== 晨昏带（原型 v4）：深墨绿 → 暖灰绿 → 灰白 → 纸白 =====
@@ -495,6 +549,28 @@ const titleLines: { ch: string; i: number }[][] = (() => {
             if (b.style.opacity === '0' && !b.getAnimations().length) b.style.removeProperty('opacity');
           });
         });
+      }
+
+      /* 4) 时间切片（首屏右上那块玻璃 —— 站主 2026-10-07 第五轮 A-3）：
+            本地时间 + 站龄。两条立场写在这：
+            ★ **不受 reduce 门控** —— `prefers-reduced-motion` 关的是"动效"，
+              而这两个数是**信息**；因为读者怕晃就把内容撤掉，等于对这部分人隐瞒
+              （与 SiteStats 的「本站已运行」同一立场，它也没被 reduce 关掉）。
+            ★ 走 1 Hz（对齐不了整秒也只在毫秒级差），**不常驻 rAF** ——
+              首屏那条 rAF 只在指针真的动时活着，别为了一个钟让它常转。
+            ★ 直接写 textContent（本站禁用 innerHTML，有测试守着）。 */
+      const sl = document.querySelector('[data-slice]');
+      if (sl) {
+        const t0 = new Date((sl.dataset.sliceSince || '2026-09-25') + 'T00:00:00+08:00').getTime();
+        const st = sl.querySelector('[data-slice-time]');
+        const sa = sl.querySelector('[data-slice-age]');
+        const tick = () => {
+          const d = new Date();
+          st.textContent = d.toTimeString().slice(0, 8);
+          sa.textContent = Math.max(0, Math.floor((d.getTime() - t0) / 864e5));
+        };
+        tick();
+        setInterval(tick, 1e3);
       }
     })();
   </script>
@@ -934,7 +1010,16 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     will-change: transform;
   }
   .band-glass.g1 {
-    top: 11%; right: 6%; width: min(22vw, 240px); height: min(30vh, 220px);
+    /* ★ 2026-10-07 第五轮 A-3：`top` 11% → 22%（两轮才到位，记下来）。
+       原来它是**空的**，被顶栏导航压着只是"层次"；装上读数之后就是**打架**。
+       实测（1440×900，`--screenshot` 出原图后按像素量）：
+         · `top: 11%`（99px）→ 导航胶囊（底边 ≈ 185px）整条压在「本地时间」那一行上，两种灰字糊成一团；
+         · `top: 17%`（153px）→ 读数让开了，但导航仍落在**玻璃内部**，
+           看上去像这块玻璃的"标题栏" —— 而它是全站导航，不属于这块玻璃；
+         · `top: 22%`（198px）→ 玻璃整体落在导航行**之下**，13px 间隙，层次与归属都清楚。
+       ★ 包含块是**视口**（不是 `.band`）：`.band` 没有 position ⇒ 这里 1% = 9px（1440×900）。
+         所以百分比要按视口高算，别按 `--band-h` 算。 */
+    top: 22%; right: 6%; width: min(22vw, 240px); height: min(30vh, 220px);
     transform: translate3d(calc(var(--mx) * 22px), calc(var(--my) * 22px), 0)
       rotateY(calc(var(--mx) * var(--tilt))) rotateX(calc(var(--my) * var(--tilt) * -1));
   }
@@ -959,6 +1044,60 @@ const titleLines: { ch: string; i: number }[][] = (() => {
       #ffffff26,
       transparent 70%
     );
+  }
+  /* ── 首屏「时间切片」（站主 2026-10-07 第五轮 A-3）───────────────────────
+     「做成切片类似的，比如主页的那个蝴蝶切片，装本地时间 / 站龄」。
+     视觉语法照 S6 的 TIME SLICE：**层层往里收的框**（隧道截面）+ 毛玻璃底 + 一圈极淡绿晕。
+     它坐在 .band-glass.g1 这块玻璃**里面** —— 玻璃自己那层毛玻璃与游走高光原样不动，
+     这里只加「往里收的框」与「最里层的读数」。
+
+     ★ 框用 `inset` 百分比、字号用 `clamp(…vw…)`：玻璃自己是 `min(22vw,240px)` 缩放的，
+       写死 px 的框和字在手机档（22vw ≈ 86px）会顶出边界。
+     ★ 读数不用容器查询 `cqw`：`container-type` 会带来 layout containment（进而建立
+       包含块），站上为此吃过亏（见 AGENTS.md §5 的 fixed 包含块那条）—— 这里 vw 够用。 */
+  .slice-frame {
+    position: absolute;
+    border-radius: 10px;
+    border: 1px solid #ffffff1f;
+    pointer-events: none;
+    /* 最外那层给一点绿晕 —— TIME SLICE 的 .tsl-ring 用的也是这一档
+       （--accent 系 + drop-shadow），两处同源，不新造颜色。 */
+    box-shadow: 0 0 12px -3px var(--deco-orbit-strong);
+  }
+  .slice-frame:nth-of-type(1) { inset: 9%; }
+  .slice-frame:nth-of-type(2) { inset: 20%; border-color: #ffffff14; box-shadow: none; }
+  /* ★ 内容层必须显式抬到 `.band-glass::after`（游走高光，inset:0）**之上**：
+     伪元素默认盖在子元素上，不抬的话指针一动，高光就从读数上扫过去。 */
+  .slice-core {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3em;
+    text-align: center;
+  }
+  .slice-k,
+  .slice-age {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: clamp(0.5rem, 0.86vw, 0.64rem);
+    letter-spacing: 0.2em;
+    color: var(--on-band-meta);
+    margin: 0;
+  }
+  .slice-time {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: clamp(0.7rem, 1.55vw, 1.02rem);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--on-band);
+    /* ★ tabular-nums：每秒刷新时每个数字占同样宽，秒位不会左右跳。
+       （站上 SiteStats 的 `本站已运行 …秒` 用的也是这一条。） */
+    font-variant-numeric: tabular-nums;
+    margin: 0;
+    line-height: 1.15;
   }
   .band-inner {
     position: relative;
@@ -985,6 +1124,12 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     letter-spacing: 0.14em;
     font-size: 0.9rem;
   }
+  /* ★ 2026-10-07 第五轮 A-2b：`.wordmark small` 回来了，但**换了个身份**。
+     A-2 删掉的 `RHINE GLASS · v10.6` 是原型版本号（伪读数），删得对；
+     可删完那行留了个空 —— 站主看过 before/after 后反馈「那个英文下面没东西感觉有点空」。
+     现在这行装的是**站点域名**（真数据，取自 astro.config 的 site）。
+     样式取值与被删的那版一致（0.7rem / letter-spacing .08em / 400 字重 / --on-band-meta），
+     视觉重量与原来那行相等 ⇒ 顶栏的平衡没变，只是内容从"假的编号"换成"真的地址"。 */
   .wordmark small {
     display: block;
     font-weight: 400;
@@ -1167,40 +1312,11 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     color: var(--on-band-meta);
     letter-spacing: 0.06em;
   }
-  /* SCROLL 提示：左下角横排（一条 28px 短横线 + 2.2s 绿色跑光） */
-  .scroll-hint {
-    position: absolute;
-    left: var(--gutter);
-    bottom: 1rem;
-    z-index: 2;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: var(--fs-mono);
-    color: var(--on-band-meta);
-    letter-spacing: 0.2em;
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
-  .scroll-hint s {
-    display: block;
-    width: 28px;
-    height: 1px;
-    background: #ffffff33;
-    position: relative;
-    overflow: hidden;
-    text-decoration: none;
-  }
-  .scroll-hint s::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--accent-bright);
-    animation: hint 2.2s var(--ease) infinite;
-  }
-  @keyframes hint {
-    0% { transform: translateX(-100%); }
-    60%, 100% { transform: translateX(100%); }
-  }
+  /* ★ 2026-10-07 第五轮 A-2：`.scroll-hint`（SCROLL 提示）连同它的 `@keyframes hint` 一起删除。
+     理由：首屏下方本来就有内容边缘，"SCROLL" 是个**没有功能的标签**；而它那条 2.2s 绿色跑光
+     是全首屏最"活"的一处动效 —— 一个不承载任何信息的跑光，比静止更消耗读者的注意力预算。
+     ★ 三处一起删干净（DOM / 样式 / keyframes），不留死样式、不留孤儿动画：
+       `@keyframes hint` 已从 tests/b2-motion.test.ts 的动效清单里同步移除（它是契约，不是备注）。 */
 
   /* ====================== 晨昏带 ====================== */
   .dusk {
@@ -1808,7 +1924,17 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     .entry .s { grid-column: 1; }
     .dna-stack { display: none; }        /* 手机上 3D 太重且挤 */
     .band-glass.g2, .band-glass.g3 { display: none; }
-    .scroll-hint { display: none; }
+    /* ★ 2026-10-07 第五轮 A-3：手机上原来只剩 g1（22vw ≈ 70~113px 宽的一条窄竖玻璃）。
+       它那时**什么都不装**，窄点无所谓；现在它装读数 ⇒ 三条一起改（实测 512×900）：
+         · 宽度放开到 50vw —— 否则「13:21:23」会把 inset 20% 的内框顶穿；
+         · 高度收到 16vh —— 横过来成一条**薄切片**（"切片"这个词本来就该是薄的）；
+         · 位置下移到 30% —— 手机顶栏（wordmark + 汉堡）落在视口约 25% 处，
+           实测汉堡与「站龄 12 天」正好同一行、挤成一团。 */
+    .band-glass.g1 {
+      top: 30%;
+      width: min(50vw, 240px);
+      height: min(16vh, 120px);
+    }
     .tsl-view { display: none; }         /* 时间切片：手机走静态回退层 */
     .tsl-stage { min-height: 52vh; }
   }

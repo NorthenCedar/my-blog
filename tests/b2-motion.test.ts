@@ -104,13 +104,15 @@ describe.skipIf(!hasDist)('B2 动效层：产物静态契约', () => {
     // ★ 2026-09-30 换清单：旧的七组里 sweep-in / type-in / wipe-in 是给
     //   扫描带 / HUD / 磁带水印做入场的，sweep-x / orbit / blink 是常驻循环 ——
     //   这六组的宿主 DOM 已随 console 外壳全部删除，留着断言就是"守空气"。
-    //   现在的清单 = 首页真实在用的五组：∞ 落款摆动、语言占比条的「生长/淡入」、
-    //   SCROLL 跑光、背景网格呼吸、字母滚动带。
+    //   现在的清单 = 首页真实在用的四组：∞ 落款摆动、语言占比条的「生长/淡入」、
+    //   背景网格呼吸、字母滚动带。
+    //   ★ 2026-10-07 第五轮：`hint`（SCROLL 提示那条约 2.2s 的绿色跑光）随 .scroll-hint
+    //     一起删除 —— 宿主 DOM 没了还留着断言，就是上面说的"守空气"。
     //   （rise-in 是首屏文案的错位入场，原型用 IntersectionObserver + Web Animations，
     //    不靠 CSS keyframes ⇒ 本轮删除，别再往这个清单里加回去。）
     //   产物里还有 base/comment 侧的其它 @keyframes，所以只查名字不查总数。
     const css = allCss();
-    for (const k of ['logo-sway', 'lang-grow', 'lang-fade', 'hint', 'breathe']) {
+    for (const k of ['logo-sway', 'lang-grow', 'lang-fade', 'breathe']) {
       expect(css, `产物 CSS 缺 @keyframes ${k}`).toContain(`@keyframes ${k}`);
     }
   });
@@ -153,8 +155,11 @@ describe.skipIf(!hasDist)('B2 动效层：产物静态契约', () => {
       ['rh-grid', /class="rh-grid"[^>]*aria-hidden="true"/],
       ['dna-stack', /class="dna-stack"[^>]*aria-hidden="true"/],
       /* ★ 类名换回原型原名 .band-glass（2026-09-30：本轮以原型为源逐段照抄，
-         上一版为了避开「中扫描带」而改名 .hero-glass，那套扫描带早已删除）。 */
-      ['band-glass g1', /class="band-glass g1 par-fast"[^>]*aria-hidden="true"/],
+         上一版为了避开「中扫描带」而改名 .hero-glass，那套扫描带早已删除）。
+         ★ 2026-10-07 第五轮：**g1 从这份装饰清单里移出** —— 它成了「时间切片」，
+           承载本地时间与站龄，是**信息**不是装饰（站主 A-3）。
+           "装饰层不许承载信息"和"信息不许伪装成装饰"是同一条规则的两端，
+           所以移出之后必须补上**反向**的那条（见本 it 块末尾）。 */
       ['band-glass g2', /class="band-glass g2 par-fast"[^>]*aria-hidden="true"/],
       ['band-glass g3', /class="band-glass g3 par-fast"[^>]*aria-hidden="true"/],
       ['dusk', /class="dusk"[^>]*aria-hidden="true"/],
@@ -164,6 +169,22 @@ describe.skipIf(!hasDist)('B2 动效层：产物静态契约', () => {
       expect(h, `${name} 缺 aria-hidden`).toMatch(re);
     }
     expect(allCss(), '装饰层必须 pointer-events:none').toMatch(/pointer-events:\s*none/);
+
+    // ── 反向那条：首屏「时间切片」是信息层（站主 2026-10-07 第五轮 A-3）───────────
+    // 三件都要守，缺一件它就会退回"装饰"或退回"空壳"：
+    //   ① 不带 aria-hidden —— 否则读屏用户永远读不到这两个读数；
+    //   ② 站龄在**无 JS**时也要有真值（构建期算的天数），不是 `—` 也不是空；
+    //   ③ 它仍然**不是入口**（A-3 原方案明确不把玻璃片做成链接）—— 由
+    //      `.band-glass` 的 pointer-events:none 兜着，这里只钉住没有 <a>。
+    const g1 = h.match(/<div class="band-glass g1[^>]*>/)?.[0] ?? '';
+    expect(g1, '找不到首屏 g1 那块玻璃（判据失效，别当通过）').not.toBe('');
+    expect(g1, '时间切片（g1）带了 aria-hidden —— 它承载读数，不该对读屏隐身').not.toContain(
+      'aria-hidden',
+    );
+    expect(h, '时间切片缺本地时间读数格').toContain('data-slice-time');
+    expect(h, '首屏时间切片必须给出站龄的初值（无 JS 也要看得见真数）').toMatch(
+      /data-slice-age[^>]*>\d+</,
+    );
   });
 
   it('正文层显式抬到装饰层之上（否则 fixed 装饰会盖住静态正文）', () => {
