@@ -1217,6 +1217,13 @@ npm run build
    换个顺序得到的不是螺旋（`translateZ` 在前是**柱面**）。有断言守着。
 2. ★★ **`.sp-on` 只许由脚本给 `<html>` 挂**，而且**挂在 `<html>` 上** ⇒ CSS 里它的前导段必须写 `:global(.sp-on)`。
    无 JS 与"减少动效"下**根本不建装置**，页面就是那个平铺网格（82 张全在，一条不少）。
+3. ★★★ **照片片（`.sp-frame`）上不许有任何描边** —— `border`、`outline`、
+   以及 `box-shadow: inset …` 一律禁止（站主 2026-10-07：「点击螺旋盘里的照片会有绿色框，直接删了」）。
+   原来有 `border: 1px solid transparent` + `.sp-item.on .sp-frame { border-color: var(--accent) }` 两层，
+   一起删掉了 —— 留 `transparent` 那层也会让 2px 边框宽度继续吃掉照片内容。
+   ★ "哪张是焦点"现在**只由读数承担**（右下角 `.sp-hud` 报 `NN / 82` 与册名），
+     另有量规上那枚 `.sp-mark` 绿标记（位置标记，不是框）。
+     键盘可达性不受影响：那条走的是 `.sp-viewport:focus-visible` 的**容器级 outline**，仍然保留。
 
 **加点什么之前先看**：`docs/rhinelab-spec.md` §6.44（这一台的设计记录与实测读数）·
 `docs/site-decisions.md`（拍板与"没采用的"）。

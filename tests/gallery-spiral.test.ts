@@ -661,8 +661,25 @@ describe('螺旋盘 · 红线与预算', () => {
     expect(devCss, '切片越界：把灯箱的样式也切进来了 ⇒ 这条断言失去意义').not.toContain('.splb');
     expect(devCss, '装置样式里出现了字面色值').not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(devCss, '装置样式里出现了 rgba()（alpha 由 8 位 hex 承载）').not.toMatch(/\brgba?\(/);
-    /* 正对照：焦点那圈绿确实是既有 token，不是新造的颜色 */
-    expect(devCss, '对焦描边必须用 --accent').toMatch(/border-color:\s*var\(--accent\)/);
+    /* ★★ 2026-10-07 站主：「点击螺旋盘里的照片会有绿色框，直接删了」⇒ 现在是**反向**断言。
+       原来这里钉的是"对焦描边必须用 --accent"（正对照）—— 那是站主要删的那一处。
+       ★ 判据钉的是"照片片上不许有边框"这个性质本身，不是"不许写某个色值"：
+         换成 `border-color: red`、换成 `--accent-bright`、或者改回 transparent 占位，
+         都会被下面两条抓住。 */
+    expect(devCss, '照片片上又出现描边（站主明令删掉点击后的绿框）').not.toMatch(
+      /\.sp-frame\s*\{[^}]*?\b(?:border|outline)(?:-[a-z]+)?\s*:/,
+    );
+    expect(devCss, '又出现 .sp-item.on .sp-frame 那条描边规则').not.toMatch(/\.sp-item\.on\s+\.sp-frame\s*\{/);
+    /* ★ 围边还有第三条路：`box-shadow: inset 0 0 0 2px …`（第一次变异验证漏的就是这条）。
+       放大态那圈**外扩**影子 `--glass-shadow` 是合法的，所以判据不是"不许 box-shadow"，
+       而是"片框上的 box-shadow 不许带 inset" —— inset 就是画在内容盒内侧的描边。 */
+    expect(devCss, '用 box-shadow: inset 在片框内侧描边（换个写法绕过上面两条）').not.toMatch(
+      /\.sp-frame\s*\{[^}]*?box-shadow:[^}]*?\binset\b/,
+    );
+    /* 正对照：--accent 仍有一处正当用途 —— 容器级键盘焦点 outline（删的是"对焦那张照片"，不是它） */
+    expect(devCss, '键盘焦点 outline 也不许删（那是可达性，不是那个绿框）').toMatch(
+      /\.sp-viewport:focus-visible\s*\{[^}]*?outline:\s*2px solid var\(--accent\)/,
+    );
   });
 
   it('★ 一律不裁图：整块**没有** `object-fit`（与 /gallery 同一条红线）', () => {

@@ -5780,3 +5780,129 @@ type=mouseWheel` 是合成事件，不带浏览器的默认滚动行为** ⇒ �
 
 ---
 
+### 6.49 螺旋盘：删掉对焦那张的绿框（2026-10-07 站主「直接删了」）
+
+**症状**：点击（或键盘 Tab 到）某张照片后，那一片上出现一圈绿色边框；鼠标一移开仍在，
+缩小复原的过程中也能看见。站主要求直接删掉。
+
+**来源**：`SpiralPlate.astro` 里两层叠加 ——
+
+```css
+.sp-on .sp-frame       { border: 1px solid transparent; }   /* 占位层 */
+.sp-on .sp-item.on .sp-frame { border-color: var(--accent); } /* 显形层 */
+```
+
+`.sp-item.on` 是脚本每帧写在**当前对焦那张**上的类，所以"哪张被框住"随焦点移动。
+
+**改法**：两层**一起**删。
+★ 删占位层不是顺手：留着 `transparent` 的那层，边框的 2px 宽度仍会挤占照片内容盒
+（`box-sizing: border-box` 下照片可视区少 2px），而且"这里曾经有过框"这件事会被人重新实现一遍。
+
+**信息没有丢**：焦点由两处承担 —— 右下角 `.sp-hud` 读数（`NN / 82` + 册名）与量规上的 `.sp-mark` 绿标记。
+★ 键盘可达性**不受影响**：走的是 `.sp-viewport:focus-visible` 的**容器级** `outline: 2px solid var(--accent)`，
+那是"这个装置有焦点"（可达性），与"这张照片是焦点"（被站主判为多余）是两回事，没有一起删。
+
+#### 门闩
+
+`tests/gallery-spiral.test.ts` 的「颜色只用 token」那条从**正对照改成反向断言**：
+原来钉的是"对焦描边必须用 `--accent`"—— 那正是站主要删的一处。
+
+三条反向 + 一条正对照，钉的是**性质**而不是某个字面量：
+
+| 断言 | 拦住什么 |
+|---|---|
+| `.sp-frame {` 内不许有 `border*` / `outline*` | 直接加回边框或改用 `outline` 伪装 |
+| 不许再出现 `.sp-item.on .sp-frame {` 规则 | 只加显形层、不动占位层 |
+| `.sp-frame` 的 `box-shadow` 不许带 `inset` | ★ 用 `box-shadow: inset 0 0 0 2px` 造边线 |
+| 正对照：`.sp-viewport:focus-visible` 的 `outline` 仍须在 | 不许把可达性一起删掉 |
+
+★★★ 判据"不许有某写法"必须**先看剥过注释的代码**（`CODE`）——
+否则新写的那一大段"为什么不许有它"的注记里若出现 `border-color: var(--accent)` 字样，
+正向断言会匹配到注释而**永远绿**。这次是把正对照改反向，顺带避开了这个坑。
+
+#### 变异验证 6 条全部被红
+
+加回 `transparent` 占位边框 / 只加回 `border-color` 规则 / 占位边框换成 `--accent-bright` /
+改用 `outline` 伪装 / 用 `box-shadow: inset` 造框 / 删掉键盘焦点 `outline`。
+
+**头两轮各漏了一条，都是"换一种写法绕过"**：`outline` 与 `box-shadow: inset`。
+⇒ 「不许出现绿框」这类断言，**只钉 `border` 一个属性是不够的** ——
+描边在 CSS 里有三条独立通路（`border` / `outline` / `inset box-shadow`），三条都要钉。
+放大态那圈**外扩**影子 `--glass-shadow` 是合法的，所以第三条钉的是"不许带 `inset`"，不是"不许有 box-shadow"。
+
+### 6.50 从绿幕跳过去之后按返回键 ⇒ 滚回主页顶部（2026-10-07 站主报 bug）
+
+**症状**：在主页把时间切片装置滚到底 ⇒ 绿幕满屏 ⇒ 自动进 `/gallery/`；
+这时按浏览器返回键，回来的是**一屏纯绿**（站主截图），滚轮也划不动 ——
+什么也点不动，也回不到上面。
+
+**真因（不是渲染错，是历史记录错）**：跳转那一刻滚动位置在**链尾**
+（`exit ≥ 0.95`，绿幕 opacity 已经 1），`location.assign` 走人时浏览器把
+**当前滚动位置记成主页这一条历史项的位置**。返回时它照原样恢复 ⇒ 装置的输入
+（滚动位置）已经在终点 ⇒ `p=1` / `exit=1` / 绿幕满屏 / `atTail` 锁滚。
+
+⇒ 屏幕没坏，是**读者被放回了一个"已经结束"的帧里**。
+
+**改法**：跳转前写下第二个标记，回来那次读到就滚回顶部。
+
+```ts
+sessionStorage.setItem(EXIT_KEY, '1');   // 与 NAV_HANDOFF_KEY 同一刻写下
+…
+if (window.scrollY > 0) { window.scrollTo(0, 0); navOk = true; }
+```
+
+三条设计决定：
+
+1. ★ **复位用 `scrollTo(0,0)`，不改装置内部状态**。滚动位置是这台装置**唯一的输入**，
+   把输入归零，`p` / `exit` / 绿幕 / `atTail` 全部在下一帧 `render` 里自己归零。
+   手动去改 `tailT0` / `exit` 只会制造"输入与状态不一致"的新 bug。
+2. ★ **判据是 `scrollY > 0`，不是 `pRaw`**。读者从相册点导航栏回首页时
+   `navType` 同样是 `back_forward`，但那次**不该**被弹回顶部——他是从导航来的，
+   不在链尾。`pRaw` 是装置进度，对"从导航回首页"这件事没有区分力。
+3. ★ **复位后 `navOk = true`（重新武装）**。`navOk` 原本只管"别在返回的瞬间
+   又把读者弹回相册"；复位之后那个顾虑不存在了（读者已回到顶部，离链尾很远），
+   不重新武装就会变成新 bug：「回主页后装置失灵、再也进不去相册」。
+
+#### ★★ 复位必须在**两处**做（这是本轮最容易漏的一半）
+
+| 路径 | 机制 | 谁负责复位 |
+|---|---|---|
+| 整页重载 | `navigation type = back_forward` | 初始化时 `if (navType === 'back_forward') rewindToTop()` |
+| **bfcache 恢复** | `pageshow.persisted`，**脚本不重跑** | `pageshow` 监听器 |
+
+bfcache 那条是关键：初始化时那段代码**根本没执行过**（页面是从缓存原样恢复的），
+只在初始化里判 ⇒ 恢复路径永远认不出标记 ⇒ bug 原样留着。
+
+`pageshow` 里还必须**复用「已经认出来」这个事实**（`backFromGate` 布尔）而不是重读
+`sessionStorage` —— 标记是"读掉即删"，第二次读必然是 `null`，会静默退化成不复位。
+
+#### 门闩（`tests/time-slice.test.ts` 加 3 条）
+
+| 断言 | 拦住什么 |
+|---|---|
+| `setItem(EXIT_KEY,'1')` 在 + 常量在 + **两个 key 不许相同** | 不写标记 / 与目标页那个合并 |
+| `rewindToTop` 切片里与 `pageshow` 切片里**各自**有一句 `scrollTo(0,0)` | 删掉其中一处 |
+| 判据 `scrollY <= 0 return` + **不许用 `pRaw`** | 拿进度当判据，误伤"从导航回首页" |
+| `pageshow` 复用 `backFromGate` + 复位后 `navOk = true` | 重读标记 / 不重新武装 |
+| `if (persisted) navOk = false` 仍在 | 把"防回跳"那件事一起删掉 |
+| `removeItem(EXIT_KEY)` 紧跟 `getItem` | 标记不读掉即删，反复弹 |
+
+**变异验证 12 条全部被红**（不写标记 / 两个 key 合并 / 删 rewindToTop 的 scrollTo /
+删 pageshow 的 scrollTo / 去掉 scrollY 守卫 / pageshow 不复位 / pageshow 重读标记 /
+pageshow 不重新武装 / 删首帧那次 / 删 persisted 的 navOk=false / 标记不读掉即删 /
+把判据换成 pRaw）。
+
+★★★ **"只钉存在性"这一条，本轮又被抓到一次**：
+`expect(SRC).toContain('window.scrollTo(0, 0)')` 在删掉 `rewindToTop` 里那处之后
+**仍然是绿的** —— 因为 `pageshow` 里还有一句一模一样的。
+⇒ 一条机制有**多条落点**时，必须**按落点切片分别钉**。
+
+★★★ **切片边界本身也会骗人**（同一个坑的第二层）：
+第一版改法是 `SRC.slice(SRC.indexOf('const rewindToTop'))` —— 从 `rewindToTop`
+一路切到**文件尾**，把 `pageshow` 那处也包进来了 ⇒ 删掉 `rewindToTop` 的照样绿。
+必须切到**下一个函数边界**（这里切到 `pageshow` 之前）。
+⇒ 「切一段来断言」这类门闩，**上下界都要有存在性守卫**，否则切片悄悄越界。
+
+
+**全量**：`npm run verify` —— **30 文件 553 条：551 通过 / 1 设计内跳过 / 1 在册 EBUSY**
+（`tests/tokens.test.ts` 的 `execFileSync` 本机环境故障，`node scripts/assert-tokens.mjs` 直跑达标）。

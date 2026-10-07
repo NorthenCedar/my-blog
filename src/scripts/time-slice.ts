@@ -39,6 +39,11 @@
  *     （相册页开场同一套深绿）→ **绿幕一满屏就直接进相册**（站主第九轮 ③：
  *     不要「进入相册」按钮、不要出口那道绿菱形框、别卡、更别「进不去」）。
  *     从相册按返回键回来的那一档不自动跳（防回跳死循环），读者往回滚即解封；
+ *     ★★ 第十轮追加（站主报 bug）：按返回键回来时**还要把页面滚回顶部** ——
+ *       跳转那一刻滚动位置在链尾，浏览器就把它记成主页的历史位置，于是回来看到的是
+ *       「蝴蝶飞到尽头」那一帧：一屏纯绿、滚轮也被 atTail 吞着，什么也点不动。
+ *       改法：跳转前写下 `tsl-exit`，回来的那次读到它就 `scrollTo(0,0)`
+ *       （首帧 + pageshow 各一次，理由见实现处注释）。
  *   ⑦ 落位 = footer 之前（纸白区底部，SECTOR 06）；
  *   ⑧ 滚动手感 = 轻惯性：滚动目标值过 rl-core 弹簧（临界阻尼，滑而不弹）。
  *
@@ -277,6 +282,13 @@ function init() {
   const TAIL_MS = 1900;
   const NAV_HOLD_MS = 90; // 绿幕满屏后再停这么一下（确保它已上屏）就切页
   const NAV_HANDOFF_KEY = 'tsl-nav'; // 给目标页留的交接标记：这次是从剧场绿幕切过来的
+  /* ★★ 「上一次离开主页是穿过绿幕跳过去的」—— 站主 2026-10-07 第十轮报的那个 bug：
+     按返回键回来看到的是"蝴蝶飞到尽头"那一帧（一屏纯绿、什么也点不动）。
+     真因：跳转那一刻滚动位置在**链尾**，浏览器把主页的历史位置就恢复在那里。
+     ⇒ 这个标记让"回来的那次"能认出自己该复位，而不是被当成一次普通的浏览中断。
+     ★ 与 NAV_HANDOFF_KEY 的分工：那个**给目标页**用（Base.astro 读掉即删）；
+       这个**给来源页自己**用（主页的装置读），两者不是一回事，不能合用一个。 */
+  const EXIT_KEY = 'tsl-exit';
   /* 本次载入是不是「按了返回键回来的」——是的话先不许自动跳 */
   const navType = (() => {
     try {
@@ -289,7 +301,66 @@ function init() {
     }
   })();
   let navOk = navType !== 'back_forward';
+  /* ★★ 「回来 ⇒ 直接回主页起点」的复位（站主 2026-10-07 第十轮）。
+     症状：绿幕满屏那一刻 assign 去了相册，浏览器把主页的滚动位置记在**链尾**；
+     按返回键回来看到的就是"蝴蝶飞到尽头"那一帧 —— 一屏纯绿、什么也点不动
+     （滚轮也被 atTail 吞掉：读者既回不去上面，也进不去别的页）。
+     改法：认出 EXIT_KEY（= 上一次是从绿幕跳过去的）就把窗口滚回顶部。
+
+     ★★ 为什么两条路径都要处理：
+       · 整页重载（navigation type = back_forward）⇒ 复位必须在**首帧之前**，
+         否则读者会先看到一屏绿再被弹上去（闪一下）；
+       · bfcache 恢复（pageshow.persisted）⇒ **脚本不重跑**，初始化那次已经过去了，
+         只能在这个事件里补。
+     ★ 判据**不**用 `pRaw`（装置进度）：读者从相册点导航栏回首页时也可能是
+       back_forward，但那次**不该**被弹回顶部 —— 他是从导航来的，不是在链尾。
+       用 `scrollY > 0` 才表示"浏览器确实把滚动恢复到了非顶部"。
+     ★ 复位用 `scrollTo(0,0)` 而不是改装置内部状态：滚动位置是唯一的输入，
+       把输入归零，p / exit / 绿幕 / atTail 全部随之归零（下一帧 render 自己算）。
+     ★ 标记读掉即删 —— 只影响"接下来的那一次主页加载"，不会反复弹。 */
+  let backFromGate = false;
+  const consumeExitMark = () => {
+    if (backFromGate) return true; // 本页已经消费过（下面的 pageshow 还要再用这个事实）
+    try {
+      if (sessionStorage.getItem(EXIT_KEY) === null) return false;
+      sessionStorage.removeItem(EXIT_KEY);
+      backFromGate = true;
+      return true;
+    } catch {
+      return false; // 隐私模式存不进：退化成原行为（停在链尾），不出错
+    }
+  };
+  const rewindToTop = () => {
+    if (!consumeExitMark()) return;
+    if (window.scrollY <= 0) return; // 已经是顶部（读者自己又滚回来了 / 窄屏没滚过）⇒ 不动
+    window.scrollTo(0, 0);
+    /* 复位后自动跳转**重新武装**：读者是主动回主页的，不是被弹回来的 ⇒
+       他再滚到底时应当还能进相册（否则就成了"回主页后装置失灵"的新 bug）。 */
+    navOk = true;
+  };
   let navTimer = 0;
+  /* 首帧就复位（back_forward 的整页重载）：能抢在浏览器恢复滚动之前就抢，
+     读者看不到"一屏绿再被弹上去"那一下闪。抢不到也没关系 —— pageshow 会再兜一次。 */
+  if (navType === 'back_forward') rewindToTop();
+  window.addEventListener('pageshow', (e) => {
+    const persisted = (e as PageTransitionEvent).persisted;
+    /* ★ bfcache 恢复的页面**不会重新执行脚本**（初始化时那次 navType 已经过去了）
+       ⇒ 必须在这里把闸门关掉，否则恢复的一瞬间就会被弹回相册。 */
+    if (persisted) navOk = false;
+    /* ★★ 复位在 pageshow 再做一次，两个原因，缺一不可：
+       ① bfcache 恢复时脚本不重跑 ⇒ 初始化那次 `consumeExitMark` 从没跑过，
+          标记还在，只能在这里认（`backFromGate` 那时还是 false）；
+       ② 整页重载时**浏览器恢复滚动的时机不受我们控制**，可能落在初始化之后
+          （本站开场遮罩还会把滚动重置，属同一类竞态）⇒ 兜底再写一次。
+       ★ 这里**不**重新读 sessionStorage：`backFromGate` 已经记住了事实，
+         重复读会把"读掉即删"的语义搞乱（第二次读必然是 null）。 */
+    if (backFromGate || consumeExitMark()) {
+      if (window.scrollY > 0) {
+        window.scrollTo(0, 0);
+        navOk = true; // 与 rewindToTop 同一口径：读者主动回来的 ⇒ 重新武装
+      }
+    }
+  });
   const beginNav = () => {
     if (navTimer) return;
     navTimer = window.setTimeout(() => {
@@ -297,6 +368,9 @@ function init() {
       if (!navOk) return; // 期间滚回链尾以上 / 被判定成「回来的」⇒ 不跳
       try {
         sessionStorage.setItem(NAV_HANDOFF_KEY, '1'); // 相册页据此播「内容浮上来」
+        /* ★★ 同一刻写下**反向**标记：告诉"回来的那次主页"——上一次是从绿幕
+           满屏跳过去的，别把滚动位置恢复在链尾（那正是站主报的那个 bug）。 */
+        sessionStorage.setItem(EXIT_KEY, '1');
       } catch {
         /* 隐私模式存不进就算了 —— 跳转本身不受影响，只是目标页不播那道入场动画 */
       }

@@ -363,8 +363,14 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
     width: 100%;
     height: 100%;
     aspect-ratio: auto;
-    /* 对焦那一张描一圈绿：整台上唯一一处"你在这里"的标记。 */
-    border: 1px solid transparent;
+    /* ★★ 这里**不许**有边框。2026-10-07 站主：「点击螺旋盘里的照片会有绿色框，直接删了」。
+       原来有两层：`border: 1px solid transparent`（占位，边框宽度会挤占照片内容盒）
+       + `.sp-item.on .sp-frame { border-color: var(--accent) }`（对焦那张描一圈绿）。
+       两层一起删 —— 留着 `transparent` 那层的话，边框宽度仍然吃掉 2px 照片内容，
+       而且"没有绿框"这件事会被下一个人重新实现一遍。
+       ★ 键盘可达性**不受影响**：那一条走的是 `.sp-viewport:focus-visible` 的 outline（容器级、
+           仍然保留），删掉的只是"对焦那张照片"这一处视觉标记。
+       ★ "哪张是焦点"改由**读数**承担：右下角 `.sp-hud` 那一行本来就报 `NN / 82` 与册名。 */
     /* ★★★ 放大/复原的过渡（站主 2026-10-07：「点击照片那张照片要放大，记得做好过渡动画」；
        第四轮追加：「点击一张照片就会缓缓放大到眼前，点击其他地方就会慢慢回到原处」）。
        只过渡 transform —— 3D 螺旋位姿在父级 `.sp-item` 上，一帧只写 rig 一个 transform；
@@ -375,9 +381,6 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
          （与 hover 那两件同一口径：不靠 CSS 兜，真身在 shouldAnimate() 那一行）。 */
     transition: transform calc(var(--dur-enter) * 1.6) var(--ease);
     transform: scale(1);
-  }
-  :global(.sp-on) .sp-item.on .sp-frame {
-    border-color: var(--accent);
   }
   /* ★ 点开的那一张：缓缓放大到"眼前"。★★ 用 `transform: scale()` 而不是 `translateZ(...)`：
      scale 在片的**局部平面**上做，3D 位姿（rotateY + 半径 + 升高）一个字都不动

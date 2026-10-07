@@ -622,6 +622,69 @@ describe('时间切片 · 源码红线', () => {
     expect(SRC).not.toContain('15000');
   });
 
+  it('★★ 从绿幕跳过去之后按返回键 ⇒ 滚回主页顶部（站主第十轮报的那屏纯绿）', () => {
+    /* 症状：绿幕满屏那一刻 assign 走人，浏览器把主页的滚动位置**记在链尾**
+       ⇒ 回来看到「蝴蝶飞到尽头」那一帧：一屏纯绿，滚轮还被 atTail 吞着。 */
+    expect(SRC, '跳转前必须写下"是从绿幕走的"标记，否则回来的那次认不出来').toMatch(
+      /sessionStorage\.setItem\(EXIT_KEY,\s*'1'\)/,
+    );
+    expect(SRC, 'EXIT_KEY 常量不见了').toContain("const EXIT_KEY = 'tsl-exit'");
+    /* ★ 反向：不许把这个标记与给目标页的那个合并 —— 一个给目标页读、
+       一个给来源页读，合起来会让"绿幕交接动画"与"回主页复位"互相触发。 */
+    expect(SRC, '两个标记不许用同一个 key').not.toContain("const EXIT_KEY = 'tsl-nav'");
+    /* 复位本体：滚动位置是装置唯一的输入，归零即整台归零。
+       ★★ 必须**分别**钉两处（rewindToTop 与 pageshow 各一处），不能只钉"文件里有这句"：
+       只钉存在性时，把其中一处删掉，另一处仍然匹配 ⇒ 静默通过。
+       ★★ 切片必须**切到下一个函数边界**：`slice(indexOf('const rewindToTop'))` 会一路
+       切到文件尾、把 pageshow 里那处也包进来 ⇒ 删掉 rewindToTop 的照样绿（实测漏过）。
+       这里用「取到 pageshow 之前」来划界。 */
+    const rewindBlock = SRC.slice(
+      SRC.indexOf('const rewindToTop'),
+      SRC.indexOf("window.addEventListener('pageshow'"),
+    );
+    expect(rewindBlock.length, '没切到 rewindToTop（上下界都没找着？）').toBeGreaterThan(100);
+    expect(rewindBlock, 'rewindToTop 里必须真的滚回顶部').toMatch(/window\.scrollTo\(0, 0\);/);
+    const showBlock = SRC.slice(SRC.indexOf("window.addEventListener('pageshow'"));
+    expect(showBlock, 'pageshow 里必须真的滚回顶部').toMatch(/window\.scrollTo\(0, 0\);/);
+    /* ★ 判据是 scrollY 而不是 pRaw：从相册点导航栏回首页也可能是 back_forward，
+       但那次不该被弹回顶部 —— 他是从导航来的，不是在链尾。 */
+    expect(SRC, '复位条件必须同时要求 scrollY > 0（已在顶部就别动）').toMatch(
+      /window\.scrollY <= 0\) return;/,
+    );
+    expect(SRC, '不许拿装置进度 pRaw 当复位判据').not.toMatch(/rewind[\s\S]{0,300}?pRaw/);
+  });
+
+  it('★★ 复位要在**两处**做：首帧（back_forward 整页重载）+ pageshow（bfcache 与竞态兜底）', () => {
+    /* bfcache 恢复时脚本**不重跑** ⇒ 初始化那次 consumeExitMark 从没执行过，
+       只在初始化里判 ⇒ 恢复路径永远认不出标记 ⇒ bug 原样留着。
+       这是"只钉一条取物路径"那个老坑的又一个实例。 */
+    const initCall = SRC.indexOf("if (navType === 'back_forward') rewindToTop();");
+    const showBlock = SRC.slice(SRC.indexOf("window.addEventListener('pageshow'"));
+    expect(initCall, '首帧那次复位不见了（会先闪一屏绿再被弹上去）').toBeGreaterThan(-1);
+    expect(showBlock, 'pageshow 里没有复位（bfcache 恢复路径就漏了）').toContain('scrollTo(0, 0)');
+    /* pageshow 里必须复用「已经认出来」这个事实，不许重读 sessionStorage：
+       标记是"读掉即删"，第二次读必然是 null ⇒ 会静默退化成不复位。 */
+    expect(showBlock, 'pageshot 里必须复用 backFromGate 事实，不许重读标记').toMatch(
+      /if \(backFromGate \|\| consumeExitMark\(\)\)/,
+    );
+    expect(showBlock, 'pageshow 复位后也要重新武装（否则回主页后装置失灵）').toMatch(
+      /scrollTo\(0, 0\)[\s\S]{0,80}?navOk = true;/,
+    );
+  });
+
+  it('★★ 复位不改变"防回跳死循环"那道闸（两件事各管各的）', () => {
+    /* bfcache 恢复那一刻仍必须 navOk = false —— 那是防"恢复瞬间被弹回相册"；
+       复位解决的是"停在链尾那屏绿"，不是"别再弹"。两件事不许互相顶替。 */
+    const showBlock = SRC.slice(SRC.indexOf("window.addEventListener('pageshow'"));
+    expect(showBlock, 'bfcache 恢复仍必须先关自动跳转的闸').toMatch(
+      /if \(persisted\) navOk = false;/,
+    );
+    /* 标记读掉即删：只影响"接下来的那一次主页加载"，不会反复弹 */
+    expect(SRC, 'EXIT_KEY 必须读掉即删').toMatch(
+      /sessionStorage\.getItem\(EXIT_KEY\) === null\) return false;[\s\S]{0,80}?removeItem\(EXIT_KEY\)/,
+    );
+  });
+
   it('降级四态在脚本侧：reduced-motion / 宽度断点 / 视口停帧都先判再启用', () => {
     expect(SRC).toContain('prefersReducedMotion()');
     expect(SRC).toContain('(min-width: 768px)');
