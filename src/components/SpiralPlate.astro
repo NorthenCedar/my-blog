@@ -226,8 +226,19 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
     aspect-ratio: 1;
     line-height: 0;
     text-decoration: none;
-    background: var(--deco-plate-fine);
-    overflow: hidden;
+    /* ★★ 槽本身**没有底色**（2026-10-07 站主报的那圈"边缘"，与上一轮删掉的绿框无关）。
+       实测（CDP，`_probe/_sp-edge.mjs`）：方槽 `aspect-ratio: 1`，照片按
+       `max-width/height: 100%` **不裁**地放进去 ⇒ 1.5:1 的片只占 66.6%，
+       **露边 24.3%–33.4%（均值 28.7%）**。露出来的正是这块底：
+       `--deco-plate-fine` = `--accent` 6% ⇒ 叠纸白得 rgb(238,243,236)，
+       对纸白差 12/7/11 ⇒ 人眼看得见，就是"照片外面套着一圈灰绿方框"。
+       ★ 为什么不能改成 `object-fit: cover` 把图裁满方槽：本站是**档案不是社交相册**，
+         裁图会切掉构图（`tests/gallery-spiral.test.ts` 有"整块没有 object-fit"那条红线）。
+       ★ 为什么不能靠"槽跟着照片走"：`.sp-item` 是 `var(--sp-tile)` 定宽定高的正方形，
+         82 片的 3D 位姿全按它算（半径 / 步进 / rotateY）⇒ 改成随图变形会毁掉整台的几何。
+       ⇒ 结论：槽只管定位、不管颜色。托底挪到下面的 **img** 上（那是真正会空的一层）。 */
+    background: none;
+    overflow: hidden;   /* 只服务于 hover 那 3% 的放大：放大后多出来的边被框切掉 */
   }
   .sp-frame img {
     max-width: 100%;
@@ -235,6 +246,13 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
     width: auto;
     height: auto;   /* ★ 不裁：本块整**没有** object-fit（有测试守着） */
     display: block;
+    /* ★★ 占位底**在照片盒上，不在槽上**（配套上面那段）。它原来的用途是
+       "图还没到之前，看得出这儿有一张" —— 那个用途要留，但只能落在**真正会空的那一层**：
+       槽一有底色，它就从"加载提示"变成"套在照片外面的边"（点开放大再复原时最刺眼）。
+       放在 img 上：加载中看到的是**照片尺寸**的淡绿块（比方槽更准），
+       图一到就被自身像素盖住 ⇒ 常态零可见底色。
+       ★ 落在 img 上也天然只覆盖照片区，露出来的槽是纸白 ⇒ 与页面无缝。 */
+    background: var(--deco-plate-fine);
   }
   @media (hover: hover) and (prefers-reduced-motion: no-preference) {
     .sp-frame img {

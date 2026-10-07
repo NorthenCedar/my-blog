@@ -682,6 +682,36 @@ describe('螺旋盘 · 红线与预算', () => {
     );
   });
 
+  it('★★ 槽不许有底色（那圈"露边"就是它）—— 托底必须落在**照片盒**上', () => {
+    /* ★ 症状（2026-10-07 站主截图）：照片外面套着一圈灰绿方框。
+       实测（`_probe/_sp-edge.mjs`，CDP）：方槽 aspect-ratio 1、照片 max-*:100% **不裁**
+       ⇒ 1.5:1 的片只占 66.6%，**露边 24.3%–33.4%（均值 28.7%）**；
+       露出来的 `rgba(45,125,70,0.06)` 叠纸白 = rgb(238,243,236)，对纸白差 12/7/11 ⇒ 看得见。
+       ★ 那块底色原本的用途是"图还没到之前的占位提示"，不是"托纸"。
+         一旦图到齐、槽比图大，它就从提示变成"套在照片外面的边"。 */
+    expect(CODE, '方槽又出现底色 ⇒ 照片没铺满时露出来的就是那圈边').toMatch(
+      /\.sp-frame\s*\{[^}]*?background:\s*none/,
+    );
+    /* ★ 反向断言按**块**做，不能用 `/\.sp-frame\s*\{[^}]*?background:\s*(?!none)/` ——
+       惰性量在 `background:` 之前能跨过任意多个非 `}` 字符，负向预查又是**匹配之后**才求值，
+       于是它落到了别处的 `background:` 上（实测第一次写就被这条自己打脸）。
+       正解：先把方槽那一块切出来，再在块内比。 */
+    const slotBlock = CODE.match(/\.sp-frame\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(slotBlock, '切不出方槽那一块（选择器写法变了？）').not.toBe('');
+    const slotBg = slotBlock.match(/background(?:-[a-z]+)?\s*:\s*([^;}]*)/)?.[1]?.trim();
+    expect(slotBg, '方槽那块没有 background 声明 ⇒ 判据失效').toBeDefined();
+    expect(slotBg, `方槽的底色必须是 none，实际是 ${slotBg}`).toBe('none');
+    /* 正对照：占位底仍在，只是搬到了真正会空的那一层（照片盒） */
+    expect(CODE, '占位底丢了（"图还没到之前看得出这儿有一张"是它原本的用途）').toMatch(
+      /\.sp-frame img\s*\{[^}]*?background:\s*var\(--deco-plate-fine\)/,
+    );
+    /* ★ 钉住"只能落在 img 上"这件事：槽与照片盒是两层，钉位置不钉存在性 ——
+       有人把底色加回 .sp-frame 那条 while 保留 img 那条，上面的 not.toMatch 会抓到；
+       反过来删掉 img 那条、只留槽上的，第一条会红。两向都堵死。 */
+    const slot = CODE.slice(CODE.indexOf('.sp-frame {'), CODE.indexOf('.sp-frame img {'));
+    expect(slot, '占位底出现在方槽那一层了').not.toMatch(/background:\s*var\(--deco-plate-fine\)/);
+  });
+
   it('★ 一律不裁图：整块**没有** `object-fit`（与 /gallery 同一条红线）', () => {
     expect(CODE, '出现了 object-fit ⇒ 图会被裁（本站是档案不是社交相册）').not.toMatch(/object-fit/);
     expect(CODE, '图没写 width/height:auto ⇒ 会被方槽拉变形').toMatch(
