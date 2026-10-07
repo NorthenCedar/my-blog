@@ -54,6 +54,13 @@ import { existsSync } from 'node:fs';
 const SRC = readFileSync('src/scripts/develop.ts', 'utf8');
 const CODE = SRC.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, ' ');
 const ASTRO = readFileSync('src/pages/gallery/index.astro', 'utf8');
+/* ★★ 2026-10-07：素材池的**标记**搬去了 `src/components/AlbumRow.astro`（相册入口条）。
+   原因：砖墙离开 `/gallery`（一册一页），这一页的 `<figure>` 只剩入口条里的那些。
+   脚本那一侧的契约因此从 `.wf figure` 换成更中性的 `[data-bath-src] figure`。
+   ★ 这条断言守的是"网格图挂的 width/height 必须是 800 档" ⇒ 它要看的是**产 figure 的那个文件**，
+     也就是这一个 —— 不能继续读 index.astro（那里已经一个 figure 都没有了，
+     换个读法就会变成"断言恒假"或"恒真"的假红/假绿）。 */
+const ROW = readFileSync('src/components/AlbumRow.astro', 'utf8');
 /* ★ 读 CSS 判据要用**去掉注释**的那份：注释里常会写"不要写 width:100vw"这种反面例子，
    不剥掉注释的话，判"没有 100vw"的断言会被注释里的字样自己打脸（本轮就撞上了）。 */
 const ACSS = ASTRO.replace(/\/\*[\s\S]*?\*\//g, ' ');
@@ -425,8 +432,16 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     expect(idle, '停帧判据没带上擦痕 ⇒ 要么没指针还在空转，要么擦痕被冻在最后一帧褪不掉').toBe(true);
   });
 
-  it('与页面互动：划过网格任意一张 ⇒ 板里换成那一张', () => {
-    const binds = /querySelectorAll<HTMLElement>\('\.wf figure'\)/.test(CODE);
+  it('与页面互动：划过素材池里任意一张 ⇒ 板里换成那一张', () => {
+    /* ★★ 2026-10-07：选择器从 `.wf figure`（砖墙）换成 `[data-bath-src] figure`（相册入口条）——
+       砖墙搬去相册页了，本页没有它。判据的**语义没变**：脚本必须订阅页面上的照片，
+       划过就换片。 */
+    const binds = /querySelectorAll<HTMLElement>\('\[data-bath-src\] figure'\)/.test(CODE);
+    /* ★★ 素材池有**两条**取片路：`collect()`（打开时随机抽 / bfcache 重抽）与**悬停换片**。
+       两条都走同一个钩子才算数。2026-10-07 的变异验证抓到过这个漏：
+       只钉悬停那条时，把 `collect()` 改回 `.wf figure` 是**静默通过**的
+       （表现是"打开相册没有底图、划过才出来" —— 一眼看去像"随机没生效"）。 */
+    const collects = /querySelectorAll<HTMLElement>\('\[data-bath-src\] figure:not\(\[hidden\]\)'\)/.test(CODE);
     /* ★ 图源必须走**网格档（800）**：`im.getAttribute('src')`。
        走灯箱档（`a.frame` 的 href，1280）时单张能到 486 KB，线上实测 842 ms 才到、
        更重的要好几秒 ⇒ 那几秒里指针搅不出任何东西（板是纯色，画不出来）。 */
@@ -435,12 +450,14 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     /* ★ 换片的落点：show() 真的把新图挂上（nxt + mix 归零 ⇒ 交叉淡入） */
     const swaps = /const\s+show\s*=\s*\([\s\S]{0,220}?mix\s*=\s*0/.test(CODE);
     console.log(
-      `判据 页面互动 实测: ${binds ? '订阅 .wf figure ✓' : '⚠️ 没订阅'} · `
+      `判据 页面互动 实测: ${binds ? '订阅 [data-bath-src] figure ✓' : '⚠️ 没订阅'} · `
+      + `${collects ? 'collect() 也走同一钩子 ✓' : '⚠️ 只有悬停那条换了，collect() 还在旧钩子上'} · `
       + `${reads ? '取网格档 img 的 src ✓' : '⚠️ 没取图源'} · `
       + `${noBigTier ? '没走灯箱档（1280）✓' : '⚠️ 在拿 a.frame 的 href'} · `
       + `${swaps ? '划过就交叉淡入换片 ✓' : '⚠️ 划过不换片'}`,
     );
-    expect(binds, '没有把网格里的图接进来（站主的核心诉求：底下的影要能和那页互动）').toBe(true);
+    expect(binds, '没有把页面上的照片接进来（站主的核心诉求：底下的影要能和那页互动）').toBe(true);
+    expect(collects, 'collect() 没走同一个素材池钩子 ⇒「每次打开随机一张」会静默失灵').toBe(true);
     expect(reads, '没从 figure 取图片地址').toBe(true);
     expect(noBigTier, '板在拿灯箱档（1280，数百 KB）当图源 ⇒ 图到位前指针擦不出东西').toBe(true);
     expect(swaps, '划过网格照片没有真的换片（互动就只剩"擦"一半）').toBe(true);
@@ -468,8 +485,8 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
        manifest 的 `w` 是"请求宽"不是实际宽（源图窄于目标宽时 withoutEnlargement 生效），
        照 1280 档判会有 6 张横竖判反（实测：「苏州的美」manifest 1280×1184 像横幅，
        实际文件 896×1184 是竖幅）；照 800 档判一张都不反。 */
-    const gridTier = /const\s+g\s*=\s*at\(f,\s*GRID_W\)/.test(ASTRO);
-    const whAttrs = /width=\{g\.w\}\s+height=\{g\.h\}/.test(ASTRO);
+    const gridTier = /const\s+g\s*=\s*at\(f,\s*GRID_W\)/.test(ROW);
+    const whAttrs = /width=\{g\.w\}\s+height=\{g\.h\}/.test(ROW);
     console.log(
       `判据 抽片 实测: ${land ? '只收 w>h ✓' : '⚠️ 没收窄到横幅'} · `
       + `${pick ? '打开时随机抽一张 ✓' : '⚠️ 没有随机抽片'} · `

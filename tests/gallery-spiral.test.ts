@@ -42,18 +42,30 @@ import {
 
 const ROOT = process.cwd();
 const DIST = join(ROOT, 'dist');
+/** 独立页那份产物（mode="page"） */
 const PAGE_PATH = join(DIST, 'gallery', 'spiral', 'index.html');
-const hasDist = existsSync(PAGE_PATH);
+/** 相册页那份产物（mode="embed"）—— 2026-10-07 起装置也住在这里 */
+const GAL_PATH = join(DIST, 'gallery', 'index.html');
+const hasDist = existsSync(PAGE_PATH) && existsSync(GAL_PATH);
 
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
 /** 剥注释：Astro 模板里的 JSX 块注释 + <style> 里的 CSS 块注释。
  *  顺序有讲究：先剥 JSX（它内部若含 CSS 块注释，先剥 CSS 的会把 JSX 那个切碎）。 */
 const strip = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
 
-const SRC = read('src/pages/gallery/spiral.astro');
+/* ★★ 装置本体是**组件**（2026-10-07 站主：「可以把螺旋盘弄成一个小组件」）。
+   两个消费方 —— `/gallery/spiral/`（mode="page"）与 `/gallery/`（mode="embed"）——
+   共用它 ⇒ 契约盯的是**组件**；两个页面只剩页头读数与调用点。
+   ⚠ 别把断言改回读页面：那样"页面里又内联了一份实现"就查不出来了。 */
+const SRC = read('src/components/SpiralPlate.astro');
 const CODE = strip(SRC);
 /** 压平空白：几何那几条 CSS 声明在源码里是**分行的**，不压平匹配不上。 */
 const FLAT = SRC.replace(/\s+/g, ' ');
+/** 组件里那一段 `<script>` 的正文（剥过注释）——
+ *  「点击放大」那几条订的是**行为**，必须读脚本，CSS 里找不到那些判断。
+ *  ⚠ 剥注释：文件头那段设计说明**故意**写着"点一下放大、再点开灯箱"这些字，
+ *    裸查会被自己的注释满足 ⇒ 假绿。 */
+const JS = strip([...SRC.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n'));
 const CORE = read('src/scripts/helix-core.ts');
 
 const MANIFEST = JSON.parse(read('public/gallery/manifest.json')) as {
@@ -72,6 +84,8 @@ const PAGE_CSS = DEO(
     .join('\n'),
 );
 const HTML = hasDist ? readFileSync(PAGE_PATH, 'utf8') : '';
+/** 相册页那份装置的产物（embed 模式）—— 页序与"滚轮归页面"都在这份里验 */
+const GAL_HTML = hasDist ? readFileSync(GAL_PATH, 'utf8') : '';
 
 /* ── 旋钮：全部从源码解析 ───────────────────────────────────────────── */
 const num = (re: RegExp, s: string = CODE, what = '') => {
@@ -467,6 +481,117 @@ describe('螺旋盘 · 降级链（无 JS 与 reduce 走同一个平铺网格）
 /* ══════════════════════════════════════════════════════════════════
  * 四、红线与预算
  * ══════════════════════════════════════════════════════════════════ */
+describe('螺旋盘 · 点击放大（站主 2026-10-07：「点击照片那张照片要放大」）', () => {
+  it('★★★ 两段式：点一下放大，再点放大那张才开灯箱', () => {
+    /* 为什么不是"点一下直接弹灯箱"：那样点错一张就弹错一张，没法先看清楚。
+       `if (zoomAt === i) openLB(i); else setZoom(i);` 这两句是全部机制。 */
+    expect(JS, '指针点击没有走"两段式"（已放大才开灯箱、否则只放大）').toMatch(
+      /zoomAt === i\s*\)\s*openLB\(i\);\s*else\s*\{\s*v = 0;\s*setZoom\(i\);/,
+    );
+    /* 键盘那条路必须同一语义 —— 只改指针不改键盘，键盘访客拿不到"先放大" */
+    expect(JS, '键盘 Enter 没走同一套两段式').toMatch(
+      /if \(zoomAt === i\) openLB\(i\);\s*else setZoom\(i\);/,
+    );
+    /* 键盘那条不能被指针事件重复触发（click 的 detail 恒 0 才算键盘） */
+    expect(JS, '键盘 Enter 那条没有用 detail 区分指针（同一帧会被处理两次）').toMatch(
+      /if \(\(e as MouseEvent\)\.detail\) return;/,
+    );
+  });
+
+  it('★★ 放大态是"同一时刻只有一个"，且搬家/撤掉都要真的动 class', () => {
+    /* setZoom 是唯一的写入口：先摘旧的、再挂新的 ⇒ 不会同时有两张放大。 */
+    expect(JS, 'setZoom 没有先摘掉旧的那张（会同时有两张是大的）').toMatch(
+      /const setZoom = \(i: number\) => \{[\s\S]{0,260}?classList\.remove\('zoom'\)[\s\S]{0,200}?classList\.add\('zoom'\)/,
+    );
+    expect(JS, 'setZoom 没有防自激（同一个下标重复赋值会白摘一次）').toMatch(
+      /const setZoom = \(i: number\) => \{\s*if \(zoomAt === i\) return;/,
+    );
+    /* 初始态必须是"没有放大的"—— 页面刚进来一律等大，不预设哪张重要 */
+    expect(JS, '放大态初始值必须是 −1（默认不放大）').toMatch(/let zoomAt = -1;/);
+  });
+
+  it('★★ 放大态跟随焦点（点过一次之后，拖动换片时放大跟着走）', () => {
+    /* 判据写在 hud() 里 —— 那是对焦标记换人的唯一入口。 */
+    expect(JS, '换焦点时放大态没有跟随（拖动之后放大那张会停在原地不跟）').toMatch(
+      /const hud = \(i: number\) => \{[\s\S]{0,700}?if \(zoomAt >= 0 && zoomAt !== i\) setZoom\(i\);/,
+    );
+    /* 反向：还没点过（zoomAt < 0）时拖动**不许**触发放大 */
+    expect(JS, '未点过时也会放大（默认态就不该预设哪张重要）').not.toMatch(/const hud = \(i: number\) => \{[\s\S]{0,700}?if \(zoomAt >= -1/);
+  });
+
+  it('★★ Esc 先撤放大、灯箱优先（退一步，不是直接关掉全屏）', () => {
+    expect(JS, '没有"Esc 撤放大"这条（点开之后退不出去）').toMatch(
+      /document\.addEventListener\('keydown'[\s\S]{0,320}?e\.key !== 'Escape'[\s\S]{0,160}?setZoom\(-1\)/,
+    );
+    /* 灯箱开着时这条必须让路 —— 否则 Esc 会先撤放大、灯箱留在屏幕上 */
+    expect(JS, 'Esc 撤放大没有给灯箱让路（灯箱开着时会被抢走）').toMatch(
+      /if \(e\.key !== 'Escape'[\s\S]{0,120}?lb\.classList\.contains\('on'\)\) return;/,
+    );
+  });
+
+  it('★★★ 抬手判定必须用"按下时记的落点"，不能用 pointerup 的 target', () => {
+    /* 这条是本轮实测抓到的**真实缺陷**（不是风格问题）：
+       `pointerdown` 里调了 `vp.setPointerCapture(pid)`，而指针捕获会把**后续所有指针事件
+       全部改派给捕获元素**（vp）⇒ `pointerup` 的 `e.target` 恒是 `sp-viewport`，
+       `closest('[data-sp-item]')` 恒为 null ⇒ 点击整段不执行（表现为"点了没反应"）。
+       修法是按下时把落点存进 `downOn`，抬手时用它。 */
+    expect(JS, '按下时没有记下落点所在的片（`downOn`）—— 指针捕获之后 pointerup 拿不到它').toMatch(
+      /let downOn: HTMLElement \| null = null;/,
+    );
+    expect(JS, 'downOn 没有在 pointerdown 里被赋值').toMatch(
+      /pointerdown[\s\S]{0,900}?downOn = \(e\.target as HTMLElement \| null\)\?\.closest<HTMLElement>\('\[data-sp-item\]'\) \?\? null;/,
+    );
+    expect(JS, '抬手判定没有优先用 downOn（⇒ 指针捕获后恒为 null ⇒ 点击全失灵）').toMatch(
+      /const it = downOn \?\? \(\(e\.target as HTMLElement \| null\)\?\.closest<HTMLElement>\('\[data-sp-item\]'\) \?\? null\);/,
+    );
+    /* 用完即弃：否则"上一次按在片上、这次按在空处"会拿旧落点当这次的 */
+    expect(JS, 'downOn 用完没清（下次按在空处会误判成上一次那片）').toMatch(
+      /downOn = null;\s*\/\/ 用完即弃/,
+    );
+  });
+
+  it('★★★ 放大只用 scale()，不许动 3D 位姿（translateZ 会改半径、撞邻片）', () => {
+    expect(CODE, '放大那条没落在 .sp-item.zoom .sp-frame 上').toMatch(
+      /\.sp-item\.zoom \.sp-frame\s*\{[\s\S]{0,200}?transform:\s*scale\(/,
+    );
+    /* 反向：3D 位姿的载体是 .sp-item（rotateY + translateZ(R) + translateY），
+       若把 scale 改用 translateZ 加在 .sp-item 上，半径就变了 ——
+       上面那几条几何契约（R 由弦长反解 / 纵向跨度落在盒内）会一起失效。 */
+    expect(CODE, '放大改用了 translateZ（会改半径、与邻片穿插）').not.toMatch(
+      /\.sp-item\.zoom\s*\{[\s\S]{0,240}?translateZ\(/,
+    );
+    /* 常态那条必须有 `transform: scale(1)`，否则"没放大"与"放大"之间没有可插值的起点，
+       第一次点开会瞬变（transition 从 none 起算）。 */
+    expect(CODE, "常态缺 transform: scale(1)（第一次点开会是瞬变，没有过渡）").toMatch(
+      /\.sp-on\) \.sp-frame\s*\{[\s\S]{0,400}?transform:\s*scale\(1\);/,
+    );
+  });
+
+  it('★★ 放大有过渡，且能算出来"放大后仍装得进装置盒"', () => {
+    expect(CODE, '放大那条没有过渡（站主要求「记得做好过渡动画」）').toMatch(
+      /\.sp-on\) \.sp-frame\s*\{[\s\S]{0,400}?transition:\s*transform var\(--dur-enter\)/,
+    );
+    /* ★ 放大后的边长必须 ≤ 盒高（超了会被 overflow 裁掉半张） */
+    const ZOOM = num(/\.sp-item\.zoom \.sp-frame\s*\{[\s\S]{0,200}?scale\(([\d.]+)\)/, CODE, '放大量');
+    expect(ZOOM, '读不到放大量').toBeGreaterThan(1);
+    expect(ZOOM, '放大量 ≤ 1 就不是放大').toBeGreaterThan(1);
+    expect(
+      TILE_MAX * ZOOM,
+      `放大后 ${TILE_MAX} × ${ZOOM} = ${(TILE_MAX * ZOOM).toFixed(0)}px 超过盒高 ${BOX_H}px ⇒ 会被裁`,
+    ).toBeLessThanOrEqual(BOX_H);
+  });
+
+  it('★★ 指针停在别的片上时，放大那张要退回常态（"点谁放大谁"在动手前就显形）', () => {
+    expect(CODE, '缺"指针离开放大那张就退回"的规则').toMatch(
+      /\.sp-viewport:hover \.sp-item\.zoom:not\(:hover\) \.sp-frame\s*\{[\s\S]{0,200}?transform:\s*scale\(/,
+    );
+    /* 退回也必须用 scale（同一属性才有过渡；改成 opacity 就没有"退回"的动画） */
+    expect(CODE, '退回用的属性不是 transform（那样退回没有过渡）').not.toMatch(
+      /\.sp-viewport:hover \.sp-item\.zoom:not\(:hover\) \.sp-frame\s*\{[\s\S]{0,200}?opacity:/,
+    );
+  });
+});
+
 describe('螺旋盘 · 红线与预算', () => {
   it('零新增运行时依赖 / 零外部资源', () => {
     const pkg = JSON.parse(read('package.json'));
@@ -519,11 +644,70 @@ describe('螺旋盘 · 红线与预算', () => {
     );
   });
 
-  it('★ 两页并存：砖墙（目录层）与螺旋（画廊层）都在，且互相有路', () => {
+  it('★★ 两个消费方共用同一个组件：独立页=page、相册页=embed（不许并存第二份实现）', () => {
     expect(hasDist, '先 npm run build').toBe(true);
-    const wall = join(DIST, 'gallery', 'index.html');
-    expect(existsSync(wall), '/gallery 砖墙不见了 ⇒ 螺旋把它替换了（本轮明确不替换）').toBe(true);
+    expect(GAL_HTML, '/gallery 里没有装置（站主 2026-10-07：显影板之下、砖墙之上）').toMatch(/data-spiral/);
+    expect(GAL_HTML, '/gallery 那份的 mode 必须是 embed').toMatch(/data-sp-mode="embed"/);
+    expect((GAL_HTML.match(/data-sp-rig/g) ?? []).length, '相册页只能有一个装置坐标系').toBe(1);
+    /* 页序：显影板 → 螺旋盘 → 相册入口条 → 页末那个全屏入口。
+       站主原话：「把螺旋盘放到显影板的下面」+（同日下一轮）「下面**不放现在全部铺开的**，
+       放**入口**」⇒ 用产物里的**字节偏移**判，比看类名可靠。 */
+    const iBath = GAL_HTML.indexOf('data-bath');
+    const iSp = GAL_HTML.indexOf('data-spiral');
+    const iRow = GAL_HTML.indexOf('data-album-row');
+    const iEntry = GAL_HTML.indexOf('class="entry"');
+    expect([iBath, iSp, iRow, iEntry].every((i) => i >= 0), '页序四段没找齐').toBe(true);
+    expect(iBath, '显影板必须排在螺旋盘之前').toBeLessThan(iSp);
+    expect(iSp, '螺旋盘必须排在相册入口条之前').toBeLessThan(iRow);
+    expect(iRow, '相册入口条必须排在页末那个全屏入口之前').toBeLessThan(iEntry);
+    /* 独立页那份是 page，且**没有**入口条/砖墙 —— 它仍是"全屏专注视图" */
+    expect(HTML, '独立页的 mode 必须是 page').toMatch(/data-sp-mode="page"/);
+    expect(HTML, '独立页不该出现砖墙').not.toMatch(/class="wf"/);
+    expect(HTML, '独立页不该出现相册入口条').not.toMatch(/data-album-row/);
+    /* 两份产物里的装置标记必须同源（同一组件 ⇒ 同一批 --k） */
+    const ks = (s: string) => [...s.matchAll(/--k:(\d+)/g)].map((m) => Number(m[1]));
+    expect(ks(GAL_HTML), '相册页那份的 --k 序列与独立页不一致（实现分叉了）').toEqual(ks(HTML));
+    /* 组件是**唯一**实现：两个页面文件里不许再内联一份装置样式/脚本 */
+    for (const p of ['src/pages/gallery/spiral.astro', 'src/pages/gallery/index.astro']) {
+      const page = read(p);
+      expect(page, `${p} 里又内联了一份 .sp-viewport 样式`).not.toMatch(/\.sp-viewport\s*\{/);
+      expect(page, `${p} 里又内联了一份装置脚本`).not.toMatch(/radiusOf\(/);
+    }
+  });
+
+  it('★★★ 滚轮归谁：embed 档**完全不监听** wheel（长页里滚轮是页面滚动）', () => {
+    /* 装置在文档流中间 ⇒ 接管滚轮就是把访客扣在装置里（滚不动页面、看不到下面的砖墙）。
+       这是从独立页搬进相册页时**唯一必须动行为**的地方，所以单独钉一条。 */
+    expect(CODE, 'EMBED 必须从 DOM（data-sp-mode）读，不许另抄一个常量').toMatch(
+      /const EMBED = vp\.dataset\.spMode === 'embed'/,
+    );
+    const guard = CODE.indexOf('if (!EMBED) {');
+    const wheel = CODE.match(/vp\.addEventListener\(\s*'wheel'/);
+    expect(guard, '没有 `if (!EMBED)` 这道闸').toBeGreaterThan(-1);
+    expect(wheel, '找不到 wheel 注册').not.toBeNull();
+    expect(guard, 'wheel 必须注册在 `if (!EMBED)` 里面（否则相册页被装置扣住）').toBeLessThan(
+      wheel!.index!,
+    );
+    /* 正对照：page 档**要**有滚轮（独立页没有滚动条，滚轮是它的替代物），且保留端点让路 */
+    expect(CODE, 'page 档丢了端点让路（到头要把事件放回去让页面滚）').toMatch(
+      /if \(\(f <= 0\.001 && d < 0\) \|\| \(f >= N - 1 - 0\.001 && d > 0\)\) return;/,
+    );
+  });
+
+  it('★ 多层并存：入口页（目录层）与螺旋（画廊层）都在，且互相有路', () => {
+    expect(hasDist, '先 npm run build').toBe(true);
+    const dir = join(DIST, 'gallery', 'index.html');
+    expect(existsSync(dir), '/gallery 不见了 ⇒ 螺旋把它替换了（本轮明确不替换）').toBe(true);
     expect(existsSync(PAGE_PATH), '/gallery/spiral/ 不存在').toBe(true);
+    /* ★ 2026-10-07：目录层的落点变了 —— 以前是 /gallery 那一整面砖墙，
+       现在是「入口页 + 每册一页」：入口条点进去才是那一册的砖墙。
+       ⇒ "有几个文件夹就放几个"这句话在产物上必须成立，所以逐册核一遍。 */
+    for (const a of MANIFEST.albums) {
+      expect(
+        existsSync(join(DIST, 'gallery', a.id, 'index.html')),
+        `相册页 /gallery/${a.id}/ 没生成（"有几个文件夹就放几个"）`,
+      ).toBe(true);
+    }
     expect(HTML, '螺旋页缺"回到相册"的回头路').toMatch(/href="\/gallery\/"/);
     /* 图与目标档位与砖墙同一条口径：网格走最窄档、灯箱走最宽档 */
     const gridW = Math.min(...MANIFEST.widths);

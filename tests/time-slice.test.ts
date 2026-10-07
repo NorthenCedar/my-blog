@@ -702,7 +702,10 @@ describe('时间切片 · 相册页的交接（站主第九轮 ③：缓缓浮�
     expect(gal).toContain('@keyframes tsl-rise-in');
     expect(gal).toContain(':global(.tsl-in) .bath-mark');
     expect(gal).toContain(':global(.tsl-in) .pagehead-main');
-    expect(gal).toContain(':global(.tsl-in) .filters');
+    /* ★ 2026-10-07：上浮的第二组元素从「筛选条」换成了「相册入口条」——
+       筛选随"一册一页"一起取消了（页内再筛一个只有一个选项的集合没有意义），
+       现在页头之下最先浮上来的是那几条入口。 */
+    expect(gal).toContain(':global(.tsl-in) .rows');
     // 站规：位移只用 transform、显隐只用 opacity；减少动效的读者整套不播
     expect(gal).toContain('prefers-reduced-motion: no-preference');
     expect(gal).toMatch(/transform:\s*translateY\(1\.1rem\)/);

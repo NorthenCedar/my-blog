@@ -1,0 +1,46 @@
+---
+/**
+ * 页头读数（`.readout`）—— 相册这一族页面页头那行小字（`FRAMES 82 · ALBUMS 3 …`）。
+ *
+ * 为什么要有这个组件：这行样式原来**只写在 `src/pages/gallery/index.astro` 里**
+ * （Astro 的 scoped 样式只作用写它的那个文件）⇒ `/gallery/spiral/` 那页写的是
+ * 同一套 `.pagehead-title` / `.readout`，却**一个样式都没吃到**（等宽字体、颜色、
+ * 间距全丢，掉回正文档）。这是把它抽出来的直接原因 —— 不是"为了整洁"。
+ * 规矩照 `PageTitle.astro` 那条：**五个页面共用同一个页标题样式，别每页各抄一份**。
+ *
+ * 用法：内容走默认插槽，每条一个 `<span>`；数值用 `<em>`（会被染成 accent-ink）。
+ *   <PageReadout>
+ *     <span>FRAMES <em>{n}</em></span>
+ *     <span>ALBUMS <em>{albums.length}</em></span>
+ *   </PageReadout>
+ */
+---
+
+<p class="readout"><slot /></p>
+
+<style>
+  .readout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-5);
+    margin: var(--sp-4) 0 0;
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .readout em {
+    font-style: normal;
+    color: var(--accent-ink);
+  }
+  .readout :global(a) {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid var(--hair);
+  }
+  .readout :global(a:hover),
+  .readout :global(a:focus-visible) {
+    color: var(--accent-ink);
+    border-bottom-color: var(--accent);
+  }
+</style>

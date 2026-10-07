@@ -865,15 +865,18 @@
 
   /* ---------------------------------------------------------------- 内容 */
 
-  /* 每次都重新收集 ⇒ 相册筛选（只改 figure 的 hidden）自动生效，不用跨脚本接线。
+  /* ★★ 取片源是 `[data-bath-src] figure` —— **不再是 `.wf figure`**（2026-10-07）。
+     砖墙从 `/gallery` 搬去了相册页（一册一页），这一页的素材池只剩**相册入口条**
+     （`src/components/AlbumRow.astro` 里那几条手风琴）：它的每个 `<figure>` 挂在
+     `data-bath-src` 底下 ⇒ 契约还在，只是钩子换了个更中性的名字。
+     ⚠ 另一侧门闩在 tests/develop-bath.test.ts，改名字要两边一起改。
+     ★ 每次都重新收集 ⇒ 页面上的增删自动生效，不用跨脚本接线。
      ★ 只收**横幅**（w > h）：整屏是横的，竖幅铺进来只能裁成中间一条，认不出是什么。
-     ★★ 图源用**网格档（800）**那张（`img` 的 src），**不是**灯箱档（1280，`a.frame` 的 href）：
+     ★★ 图源用**网格档（800）**那张（`img` 的 src），**不是**灯箱档（1280）：
         1280 档单张能到 **486 KB**，线上实测某张图 842 ms 才到、更重的要好几秒
-        ⇒ 那几秒里指针**擦不出任何东西**（`drawCover` 看 `complete`，没图就不画）。
-        ★ 整屏了要不要换 1280：**不换** —— 擦出来的只是一条一两百 px 宽的带子，
-          800 档在 dpr 2 下也够，而换回大图就要重新背上那段空窗。 */
+        ⇒ 那几秒里指针**擦不出任何东西**（`drawCover` 看 `complete`，没图就不画）。 */
   const collect = (): Frame[] =>
-    Array.from(document.querySelectorAll<HTMLElement>('.wf figure:not([hidden])'))
+    Array.from(document.querySelectorAll<HTMLElement>('[data-bath-src] figure:not([hidden])'))
       .map((fig) => {
         const im = fig.querySelector<HTMLImageElement>('img');
         return {
@@ -968,8 +971,9 @@
     sync();
   });
 
-  /* 与页面互动：划过网格里任意一张 ⇒ 板里淡入那一张（松耦合 —— 只读 DOM，不引用另一个脚本） */
-  for (const fig of document.querySelectorAll<HTMLElement>('.wf figure')) {
+  /* 与页面互动：划过素材池里任意一张 ⇒ 板里淡入那一张（松耦合 —— 只读 DOM）
+     ★ 同 collect()：走 `[data-bath-src]`（相册入口条），不是 `.wf`（砖墙已经不在本页）。 */
+  for (const fig of document.querySelectorAll<HTMLElement>('[data-bath-src] figure')) {
     fig.addEventListener('pointerenter', () => {
       if (reduce.matches) return;
       const im = fig.querySelector<HTMLImageElement>('img');

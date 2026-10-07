@@ -1,28 +1,41 @@
 ---
 /**
- * 相册页（P5）—— 瀑布流 + 相册筛选 + 自写灯箱。
+ * 相册入口页（P5）—— 整屏显影板 + 螺旋盘 + **按册的入口条**（2026-10-07 改版）。
  *
- * 规范来自冻结原型 prototype/terminal/gallery.html（308 行）。三处刻意偏离原型，理由如下：
- *  ① **不用 `body.no-js` 门控**（原型 L159-160 用两态类来隐藏「放大」按钮）：
- *     改成渐进增强 —— 图片包在 `<a href="1280档">` 里，JS 到位才拦截点击开灯箱。
- *     于是无 JS 时点图直接开大图，页面完整可用，且**不需要第二个门控脚本**
- *     （首页那条「门控只落首页」的静态契约因此不必改，见 tests/b2-motion.test.ts）。
- *  ② **灯箱取图走 manifest 的 1280 档**，不用 `img.currentSrc` —— 网格图是 800 档，
- *     照抄原型那句会把灯箱也钉在 800 档（原型 L232 的写法在真站点是错的）。
- *  ③ **不印 `RULE ≤2MB`**：那条规则的真身在 docs/writing-guide.md:258，没有任何测试守它。
- *     规范禁止"没有验证过的数字"，所以要么量出来再印、要么不印 —— 这里选不印。
+ * ── 这一页现在是什么 ──────────────────────────────────────────────
+ *   显影板（整屏，滚下去才见内容）→ 螺旋盘（一座装置，滚轮让给页面）→
+ *   **一册一条的入口条**（`AlbumRow`）→ 螺旋盘的全屏入口（页末一行）。
  *
- * 数据全部来自 public/gallery/manifest.json（由 scripts/gen-gallery-webp.mjs 从 content/ 生成）：
- * 相册清单、每帧 alt、两档 URL 与尺寸。**相册个数不写死** —— 有几个相册就有几个筛选按钮。
+ * ★★ 为什么"铺开全部照片"的砖墙**不在这里了**（站主 2026-10-07）：
+ *   「**下面不放现在全部铺开的，放入口**，类似这样的，**有几个文件夹就放几个**……
+ *     点击**放大的照片**就**进入这个文件夹**，就像现在本站的照片砖墙一样，
+ *     **不过是单独的一页**」
+ *   ⇒ 砖墙搬去 `/gallery/<册名>/`（`src/components/PhotoWall.astro`，一册一页），
+ *     本页只留"入口"：一条 = 一个相册。
+ *   ⇒ 连带**删掉**的：筛选条（`.filters`）与它那段脚本 —— 一册一页之后，
+ *     "筛到单册"就是"进那一册"，页内再放一组按钮等于让访客去筛一个只有一个选项的集合。
+ *
+ * ── 相册数一律不写死 ──────────────────────────────────────────────
+ *   清单来自 public/gallery/manifest.json（由 scripts/gen-gallery-webp.mjs 从 content/ 生成，
+ *   而 `npm run build` 的第一步就是跑它）⇒ 站主往 content/gallery/ 丢一个新文件夹、推上去，
+ *   本页自动多一条入口、相册页自动多一页。**这里没有一处写着"3"。**
+ *
+ * ── 三处刻意偏离冻结原型 prototype/terminal/gallery.html（理由不变）──────────
+ *  ① **不用 `body.no-js` 门控**：改成渐进增强 —— 图片包在 `<a href="1280档">` 里，
+ *     JS 到位才拦截点击开灯箱（灯箱现在在相册页那一侧）。于是无 JS 时点图直接开大图，
+ *     页面完整可用，且不需要第二个门控脚本。
+ *  ② **灯箱取图走 manifest 的 1280 档**，不用 `img.currentSrc`（网格图是 800 档）。
+ *  ③ **不印 `RULE ≤2MB`**：那条规则没有任何测试守它 ⇒ 要么量出来再印、要么不印，这里选不印。
  */
 import Base from '../../layouts/Base.astro';
+import PageTitle from '../../components/PageTitle.astro';
+import PageReadout from '../../components/PageReadout.astro';
+import SpiralPlate from '../../components/SpiralPlate.astro';
+import AlbumRow from '../../components/AlbumRow.astro';
 import manifest from '../../../public/gallery/manifest.json';
 /* ★ 板里那行手写花体是**站名** ⇒ 必须从 content/site.md 读，不能写死在 src/ 里
    （架构契约：主题不持有正文/站名，有 tests/content-invariants.test.ts 守着）。 */
 import { getSite } from '../../lib/site';
-/* ★ 英文花体用 content/site.md 里的 `wordmark` 字段（不在这里抄一份字面量 ——
-     站名与字号都属于内容层，抄一份就会被 tests/content-invariants.test.ts 判违规）——
-   站名与字号都属于内容层，不写死在 src/ 里（有 tests/content-invariants.test.ts 守着）。 */
 const siteWordmark = (await getSite()).wordmark;
 
 type File = { w: number; h: number; url: string };
@@ -31,25 +44,6 @@ type Album = { id: string; title: string; date: string; total: number; frames: F
 
 const albums = manifest.albums as Album[];
 const total = albums.reduce((n, a) => n + a.total, 0);
-
-// 档位不写死：从 manifest 登记的 widths 里挑网格档（最窄）与灯箱档（最宽）
-const GRID_W = Math.min(...manifest.widths);
-const LIGHT_W = Math.max(...manifest.widths);
-const at = (f: Frame, w: number) => f.files.find((x) => x.w === w) ?? f.files[0];
-
-// 灯箱那只 <img> 服务端就带上第一帧的地址与说明：不留空 src（空 src 会去请求页面自己），
-// 也不留空 alt（既有全局契约「所有图片的 alt 都非空」）。容器 display:none + loading="lazy"
-// ⇒ 打开灯箱之前不会产生这次请求（有探针断言守着）。
-const firstFrame = albums[0].frames[0];
-const firstBig = at(firstFrame, LIGHT_W);
-
-/* ★★ 网格里每张图挂的 width/height **必须是网格档（800）的**，不能用灯箱档（1280）——
-   整屏显影板（src/scripts/develop.ts）读的正是 `<img>` 上这对属性来判横竖与定图源。
-   manifest 里的 `w` 是**请求的目标宽**不是实际宽：源图窄于目标宽时 sharp 的
-   `withoutEnlargement` 生效，文件就停在源宽上（实测 1280 档有 **19/82** 条 w 是假的、
-   800 档有 4 条），**只有 `h` 永远是真的**。照 1280 档判会有 **6 张横竖判反**
-   （例：「苏州的美」manifest 1280×1184 看着是横幅，实际文件 896×1184 是竖幅）；
-   照 800 档判**一张都不反**（逐帧读过真实像素验过）。 */
 ---
 
 <Base title="相册" chrome="page" current="gallery">
@@ -67,14 +61,14 @@ const firstBig = at(firstFrame, LIGHT_W);
          鼠标往下滚的时候才看到相册页的内容」）=====
       ★ 没有指针 = 一块纯色；指针**涂抹**过的地方擦出照片，擦痕停留约 3 s 后褪回纯色。
       ★ 每次打开**随机一张横幅照片**，整屏铺满（cover，会裁）。
+      ★ 素材池 = 下面那些入口条里的 `<figure>`（`data-bath-src`，见 AlbumRow）——
+        砖墙搬去相册页之后，本页的照片只剩那里。
       ★ 整块默认 hidden —— 脚本到位才露面。没有 JS 时它**不存在**（不是藏起来）：
-        板是装饰，内容在下面网格里本来就完整，不需要靠它承载任何东西。
-        aria-hidden：同一批照片在网格里已经读过一遍，不必让读屏再听一回。
-      ★★ 花体字是 canvas **外面**的 DOM ⇒ 擦痕擦不掉它（参考站 lowkeytp.art 里
-         画面文字同样压在显影层之上，不参与显影）。 */}
+        板是装饰，内容在下面本来就完整，不需要靠它承载任何东西。
+      ★★ 花体字是 canvas **外面**的 DOM ⇒ 擦痕擦不掉它。 */}
   <header class="pagehead">
     {/* ★ 板在 DOM 上是页头的**第一个子元素**：
-        桌面 ⇒ 它整屏铺满、把标题顶到首屏之下（往下滚才看到标题与网格）；
+        桌面 ⇒ 它整屏铺满、把标题顶到首屏之下（往下滚才看到标题与入口）；
         手机 ⇒ 用 order 把它排到标题**右边**，变回"页头旁边的小板"。
         同一个 DOM 两副版面 —— 不写两份结构，也不靠脚本搬节点。 */}
     <div class="bath" data-bath hidden aria-hidden="true">
@@ -89,127 +83,51 @@ const firstBig = at(firstFrame, LIGHT_W);
       <span class="bath-hint" aria-hidden="true">往下划 ↓</span>
     </div>
 
+    {/* `.pagehead-main` 同时是**上浮动效的钩子**（见下面 `:global(.tsl-in) .pagehead-main`）——
+        它是从剧场绿幕切过来时那一组"缓缓升起"的元素之一。 */}
     <div class="pagehead-main">
-      <h1 class="pagehead-title">相册</h1>
-      <p class="readout">
+      <PageTitle>相册</PageTitle>
+      {/* 读数：FRAMES / ALBUMS 两个数都从清单算。
+          ★ 原来还有一条 `VIEWING`（跟着筛选条变）—— 筛选没了，它也就没有了。 */}
+      <PageReadout>
         <span>FRAMES <em>{total}</em></span>
         <span>ALBUMS <em>{albums.length}</em></span>
-        <span>VIEWING <em id="viewing">{total}</em></span>
-      </p>
+      </PageReadout>
     </div>
 
   </header>
 
-  <div class="filters" role="group" aria-label="按相册筛选">
-    <button type="button" data-filter="all" aria-pressed="true">全部 <b>{total}</b></button>
-    {albums.map((a) => (
-      <button type="button" data-filter={a.id} aria-pressed="false">{a.title} <b>{a.total}</b></button>
-    ))}
+  {/* ===== 螺旋盘（画廊层）=====
+      站主 2026-10-07：「把螺旋盘放到显影板的下面」。
+      ★ mode="embed" 与独立页的差别只有三处（全在组件里注释着）：**不接管滚轮**
+        （长页里滚轮是页面滚动，装置占了就等于把访客扣在装置里）、不渲染"回到相册"、
+        提示语不写"滚轮"。装置本体与 `/gallery/spiral/` 共用
+        `src/components/SpiralPlate.astro` ⇒ 几何参数只改那一处。 */}
+  <SpiralPlate mode="embed" />
+
+  {/* ===== 相册入口（一册一条）=====
+      一条 = 板头一行编目 + 一条手风琴照片条：默认第一张放大，点别的张它放大、
+      原来那张缩回细条；**点放大那张**进该册的页面（`/gallery/<册名>/` = 砖墙）。
+      ★ `.rows` 是**上浮动效的钩子**（原 `.filters` 那个位置）——
+        从绿幕切过来时它跟着标题一起升起。 */}
+  <div class="rows">
+    {albums.map((a, i) => <AlbumRow album={a} no={i + 1} />)}
   </div>
 
-  {/* ===== 照片陈列 = **按相册分「板」**，板内错缝砖墙（2026-10-07 重做）=====
-     原样是 `column-count:3` 的瀑布流：82 张平铺成一条无限长的流 —— 没有章节、没有承托面、没有编目。
-     现在：每个相册一块**板**（板头一行编目读数），板内是**错缝砖墙**（偶数列整体下沉一档），
-     图一律不裁、框内钉一个编目号。参考实现与取舍写在 docs/site-decisions.md。
-
-     ★★ **`.wf` 这个类名必须保留、且 `figure` 仍是它的后代**：
-       相册页首屏那台整屏显影板（src/scripts/develop.ts）订阅的正是 `.wf figure`
-       与 `.frame` 的 href —— 有 tests/develop-bath.test.ts 盯着这个字符串。
-        于是版面从 `.wf` 挪到 `.plate-body`，`.wf` 退化成纯容器（不写任何版面）。
-     ★ 板号（板 01）用的是**相册在清单里的固定位次**，不是"当前可见的第几块" ——
-       筛选到单册时板号不变，它读起来是编目号，不是序号。 */}
-  <div class="wf">
-    {albums.map((a, ai) => (
-      <section class="plate" data-plate={a.id} aria-labelledby={`plate-${ai + 1}`}>
-        <header class="plate-hd">
-          <p class="plate-no">板 {String(ai + 1).padStart(2, '0')}</p>
-          <h2 class="plate-title" id={`plate-${ai + 1}`}>{a.title}</h2>
-          <p class="plate-meta">
-            <span>{a.total} 帧</span>
-            <span>{a.date}</span>
-          </p>
-        </header>
-        <div class="plate-body">
-          {a.frames.map((f, fi) => {
-            const g = at(f, GRID_W);
-            const big = at(f, LIGHT_W);
-            return (
-              /* ★ data-album-title：灯箱顶部那行相册名从这里读。
-                 原来是抓 `figcaption span` —— 但板已经把相册名提到板头了，
-                 图下再重复 57 遍是噪音，所以图下只留 alt。
-                 （figcaption 里不再有 <span> ⇒ 灯箱必须改值来源，否则相册名会变空串。） */
-              <figure data-album={a.id} data-album-title={a.title} data-cap={f.alt}>
-                {/* data-no-transition（2026-09-27）：这张缩略图的点击是**灯箱自己接管**的（preventDefault 开大图），
-                    不会真的跳转 ⇒ 页面过渡必须放行，否则蒙版会盖在灯箱上、照片就看不到了。
-                    （transition.ts 里还有一道通用防线：微任务里检查 defaultPrevented。这里是显式豁免，双保险。） */}
-                <a class="frame" href={big.url} data-no-transition>
-                  <img src={g.url} width={g.w} height={g.h} alt={f.alt} loading="lazy" decoding="async" />
-                  {/* 编目号：**按册**三位零填充（板内第几张），钉在框内左下角。
-                      aria-hidden —— 它和图下的 alt 指的是同一样东西，读屏不必听两遍。 */}
-                  <span class="no" aria-hidden="true">NO.{String(fi + 1).padStart(3, '0')}</span>
-                  <span class="zoom" aria-hidden="true">放大</span>
-                </a>
-                <figcaption><em>{f.alt}</em></figcaption>
-              </figure>
-            );
-          })}
-        </div>
-      </section>
-    ))}
-  </div>
-
-  {/* ===== 出口：螺旋盘 =====
-     砖墙是**目录层**（82 张一眼扫完、按册分板、有编目号）；
-     螺旋盘 `/gallery/spiral/` 是**画廊层**（一次只交给一张，左右拖动沿着螺旋走）。
-     两者不是新旧关系 ⇒ 这里给一行入口，**不是**把砖墙换成螺旋。
-     ★ 不放 `data-no-transition`：它是真的换页，页面过渡应该照常走
-       （对比 `.frame` 那条 —— 那个点击被灯箱接管，所以才要豁免）。 */}
+  {/* ===== 出口：螺旋盘（**全屏**视图）=====
+      装置本体已经在**上面**（显影板之下）—— 这里给的是它的全屏入口：
+      独立页没有入口条也没有砖墙，滚轮也归装置（页内那台把滚轮让给页面）。
+      ★ 不放 `data-no-transition`：它是真的换页，页面过渡应该照常走。 */}
   <p class="entry">
     <a href="/gallery/spiral/">
       <span>螺旋盘</span>
-      <span class="entry-d">左右拖动，沿螺旋逐张看</span>
+      <span class="entry-d">全屏打开（滚轮翻片）</span>
       <span aria-hidden="true">→</span>
     </a>
   </p>
-
-  <div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="图片查看">
-    <div class="lb-bar">
-      <span class="lb-meta"><b id="lbAlbum"></b> · <span id="lbCap"></span></span>
-      <span class="lb-pos"><span id="lbPos">1</span> / <span id="lbTotal">{total}</span></span>
-      <button type="button" id="lbClose" aria-label="关闭（Esc）">关闭 ✕</button>
-    </div>
-    <div class="lb-stage">
-      <button type="button" id="lbPrev" aria-label="上一张（←）">←</button>
-      <figure><img id="lbImg" src={firstBig.url} alt={firstFrame.alt} loading="lazy" decoding="async" /></figure>
-      <button type="button" id="lbNext" aria-label="下一张（→）">→</button>
-    </div>
-  </div>
 </Base>
 
 <style>
-  /* ===== 页头读数 ===== */
-  .pagehead-title {
-    font-size: var(--fs-title);
-    line-height: var(--lh-title);
-    letter-spacing: var(--ls-title);
-    font-weight: 800;
-    margin: 0 0 var(--sp-4);
-  }
-  .readout {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-5);
-    margin: 0;
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .readout em {
-    font-style: normal;
-    color: var(--accent-ink);
-  }
-
   /* ===== 整屏显影板（2026-10-01 第四轮：从"页头右侧的小板"改成整屏首屏）=====
      板底那层深墨绿是**照搬首页 .band 的同一支色**（含左上角那道极淡绿），
      擦痕由 canvas 画（透明）⇒ 没擦到的地方"没有像素"，露出的就是这块底色。
@@ -335,9 +253,7 @@ const firstBig = at(firstFrame, LIGHT_W);
        ⇒ 擦痕再怎么擦也擦不到它，这条不需要任何脚本配合。
      ★ 字体：站内不许引外部资源（无 CDN / 无自托管字体文件）⇒ 走**系统中文手写体栈**
        —— 行楷优先（最像手写花体），落到楷体，再兜 `cursive`。
-       Windows 上落到 KaiTi（楷体），macOS 落到 STXingkai（行楷）。
        ★★ 中文手写体必须写**中文名**那一档（"楷体"）一起兜：只写英文名的机器不一定有。
-       ★ 探针可验实际渲染字体：_probe/font-probe.mjs。
      ★ 白字 + 极淡投影 ⇒ 在深墨绿底和擦出来的照片上都读得清（不用两套配色）。 */
   .bath-mark {
     position: absolute;
@@ -387,8 +303,7 @@ const firstBig = at(firstFrame, LIGHT_W);
     opacity: 1;
   }
   /* ★★ 左下角滚动提示（站主 2026-10-01：「往下划↓」）。
-     位置语汇延续**首页首屏的左下角横排读数**（那里原来的 SCROLL 提示已于
-     2026-10-07 第五轮 A-2 撤除，但"左下角一行小字"这个位置语汇保留下来了），
+     位置语汇延续**首页首屏的左下角横排读数**，
      但更简 —— 就是一行白字。
      白字压在深墨绿底与擦出来的照片上都读得清（同 .bath-mark 的取值思路），
      给一层极淡投影兜底。z-index 3 = 与白圈同层、压在花体字之上。 */
@@ -411,7 +326,7 @@ const firstBig = at(firstFrame, LIGHT_W);
         （触屏操作不习惯）。手机端改回之前的版本，放在页头右边（就是我之前说的旁边），
         尺寸就用照片的原尺寸（只要横着的照片，不放竖着的）」。
      · 版面：页头变回左右两栏（标题左、板右）—— 板在 DOM 上是页头**第一个**子元素
-        （桌面要它占满第一屏），靠 `order` 把它排到右边 ⇒ 一个 DOM 两副版面。
+       （桌面要它占满第一屏），靠 `order` 把它排到右边 ⇒ 一个 DOM 两副版面。
      · 尺寸：**高走照片原比例**（--bath-ar 由脚本按抽中的照片设 ⇒ 不裁不拉伸），
        宽由版面定（min(46%, 300px)）。★ 这正是"只收横幅"的原因 —— 竖幅会撑成竖条。
      · 笔触在**小板**上是另一档尺寸（参考站那 82/720 的比例是按整屏定的，
@@ -452,344 +367,9 @@ const firstBig = at(firstFrame, LIGHT_W);
     }
   }
 
-  /* ===== 筛选：发丝线标签，不是圆角胶囊（原型 L57-67） ===== */
-  .filters {
-    display: flex;
-    flex-wrap: wrap;
-    margin: var(--sp-5) 0 var(--sp-6);
-    border-bottom: 1px solid var(--hair);
-  }
-  .filters button {
-    background: none;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    border-radius: 0;
-    padding: 0.5rem 0.9rem;
-    color: var(--muted);
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-    font-variant-numeric: tabular-nums;
-    transition: color var(--dur-fast) var(--ease-interact), border-color var(--dur-fast) var(--ease-interact);
-  }
-  .filters button b {
-    font-weight: 400;
-    margin-left: 0.4rem;
-    opacity: 0.7;
-  }
-  .filters button:hover {
-    color: var(--ink);
-  }
-  .filters button[aria-pressed='true'] {
-    color: var(--ink);
-    border-bottom-color: var(--accent-ink);
-  }
-  .filters button[aria-pressed='true'] b {
-    color: var(--accent-ink);
-    opacity: 1;
-  }
-
-  /* ===== 照片陈列：按相册分「板」+ 板内错缝砖墙（2026-10-07 重做，替换原 column-count 瀑布流）=====
-     为什么推倒重来：原样是 3 列瀑布流（`column-count:3`）—— 82 张照片平铺成**一条无限长的流**，
-     它不丑，问题是**没有结构**：没有章节、没有承托面、没有编目，看的人只能"往下滑"。
-     现在的四笔（每一笔都有对照的获奖实现，见 docs/site-decisions.md）：
-       ① **分板**：一个相册一块板，板头一行编目（板号 · 相册名 · 帧数 · 日期）⇒ 有了章节
-       ② **错缝砖墙**：偶数列整体下沉一档 ⇒ 从"一张表"变成"一片"（这一条是"不平铺"的真正来源）
-       ③ **不裁图**：图宽 100%、高按原比例 ⇒ 竖幅 34 张不会被裁成中间一条
-       ④ **框内编目号**：左下角 NO.001，三位零填充、按册编号 ⇒ 用本站的 HUD 语言做"标本标签"
-
-     ★★ 明确**没有**采用的（写在这里免得下次又想到）：
-       · `object-fit:cover` 统一裁成等格 —— 会裁掉构图，本站是档案不是社交相册
-       · 格内视差（指针跟图的 `--translate-*`）—— 要 JS 跟指针，与"照片区该是静的"冲突
-       · 板底染色 / 左右出血 —— 照片留在纸白上与文字同一条栏宽，纸面更干净（理由见决策记录）
-       · 大字号标题压在照片上 —— 纸白底上没有可读的兜底方案，压在照片上必然有看不清的字 */
-
-  /* `.wf` 退化成纯容器（版面在 .plate-body）。
-     ★ 这个类名不能删：整屏显影板订阅的是 `.wf figure`（tests/develop-bath.test.ts 盯着它）。 */
-  .wf {
-    display: block;
-  }
-
-  .plate {
-    border-top: 1px solid var(--ink);   /* 板的上沿 = 一张纸的纸边（承托面靠这条线 + 留白，不靠染色） */
-    padding-top: var(--sp-4);
-    margin-bottom: var(--sp-8);
-  }
-  /* 筛选靠 [hidden]；显式写一条，免得上游给 section 加了 display 后被覆盖 */
-  .plate[hidden] {
-    display: none;
-  }
-
-  .plate-hd {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: var(--sp-2) var(--sp-4);
-    margin-bottom: var(--sp-6);
-  }
-  .plate-no {
-    margin: 0;
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-    letter-spacing: 0.14em;
-    color: var(--accent-ink);
-    font-variant-numeric: tabular-nums;
-  }
-  .plate-title {
-    /* 站上 h2 的默认档（.shell 里那条）会带上外边距 ⇒ 这里显式归零，只受本行 flex 控制 */
-    margin: 0;
-    font-size: var(--fs-h2);
-    line-height: 1.2;
-    font-weight: 700;
-  }
-  .plate-meta {
-    /* 读数靠右：`margin-left:auto` 在 flex 里把它推到行尾（窄屏 wrap 后自然落到下一行左起） */
-    margin: 0 0 0 auto;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-4);
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .plate-body {
-    /* ★ 错缝的档位：**按格宽的百分比**，不是固定长度。
-       为什么用百分比：网格项上的百分比 margin 是**按网格区域的行内尺寸**（= 一格宽）解析的，
-       所以同一句 `margin-top: var(--stagger)` 在 4 列 / 3 列 / 2 列下会**自动等比缩放**，
-       不必为每个断点写一个长度（第一版写死 3rem，实测只有格宽的 16% ⇒ 读成"没对齐"而不是"错缝"）。
-       45% 是目检定下来的：再大半格会显松，再小就读不出砖。 */
-    --stagger: 45%;
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    column-gap: var(--sp-4);
-    row-gap: var(--sp-5);
-    /* ★ `align-items:start` 必须写：默认的 stretch 会把矮的 figure 拉高，
-       图就会跟格子脱开（图是居中 contained，被拉高的格子里会多出一段空白）。 */
-    align-items: start;
-  }
-  /* ★★ 错缝：**偶数列整体下沉半格左右**。
-     这就是"不平铺"的来源 —— 对照 Gregor Collienne 的 `:nth-child(5n+2), :nth-child(5n+4)
-     { transform: translateY(50% + gap/2) }`。
-     ★ 这里用 `margin-top` 而**不是** `transform`：transform 不占位 ⇒ 网格算行高时按没下沉算，
-       下沉那一列会压到下一行上（视觉上"咬"在一起）。margin 占位，行高跟着长，才是真错缝。 */
-  .plate-body > figure:nth-child(4n + 2),
-  .plate-body > figure:nth-child(4n + 4) {
-    margin-top: var(--stagger);
-  }
-
-  .plate-body figure {
-    margin: 0;   /* 归零：figure 的默认外边距会把错缝算歪 */
-  }
-  .plate-body figure[hidden] {
-    display: none;
-  }
-  /* ★★ 统一的**方槽**（这一条是砖墙成不成的关键）。
-     第一版没写方槽、图高按原比例 ⇒ 行高被行内最高的竖图撑开，横图下面留出一大片白
-     —— 白是**横向成带**的，读起来像"这一行没排满"，不像留白。实测 1440 下最宽的白带 >150px。
-     方槽之后：每格都是 1:1 的方形，图**居中、不裁**（`max-width/max-height:100%` 就是 contain），
-     差值变成格内的**托纸边**而不是行与行之间的空档 ⇒ 砖是齐的，错缝才看得出来。
-     · ★ 横图的**尺寸一点没变**（原来也是占满列宽）；只有 34 张竖图从小一档 —— 代价换的是整齐。
-     · ★ 白边收进格内之后整页反而**更短**了（竖图不再撑高行）。
-     · ★ 用 `aspect-ratio` 而不是定高：定高会在窄屏把图挤扁。
-     结构照抄 Gregor Collienne 的 `.fs-media`（110%×120% 的框 + 居中的 img），
-     这里把那个"溢出框"去掉 —— 本站是纸白，图溢出去会和邻格的托纸边打架。 */
-  .plate-body .frame {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    aspect-ratio: 1;
-    line-height: 0;
-    text-decoration: none;
-    /* 图还没到之前，格子里是**极淡绿洗**（--accent-wash 的 6% 版，见 --deco-plate-fine）：
-       只够看出"这儿有个格子"，不改纸面的白。尺寸由 aspect-ratio 定 ⇒ 不会跳版。 */
-    background: var(--deco-plate-fine);
-    overflow: hidden;   /* 只服务于 hover 那 3% 的放大：放大后多出来的边被框切掉 */
-  }
-  .plate-body img {
-    max-width: 100%;
-    max-height: 100%;
-    width: auto;
-    height: auto;       /* ★ 不裁：整块**没有** object-fit —— 有测试守着这条 */
-    display: block;
-  }
-  /* 悬停时图在框内轻轻推近一点（3%，不是"缩放"级别）。
-     ★ 只给能 hover 的设备、且读者没要求减弱动效时才播（站规：动效一律可撤）。 */
-  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-    .plate-body img {
-      transition: transform var(--dur-fast) var(--ease-interact);
-    }
-    .plate-body .frame:hover img,
-    .plate-body .frame:focus-visible img {
-      transform: scale(1.03);
-    }
-  }
-  /* 编目号：钉在框内左下角。
-     ★ 方槽 + 图居中 ⇒ **左下角永远是托纸边、不是照片**（横图的白在上下、竖图的白在左右），
-       所以它天然压在纸上；纸白底只是保底（万一是张方图，它不会糊在照片里）。
-     · 压在照片上的做法（黑字/白字 + 不透明底）会把照片压暗，档案不该这样。 */
-  .plate-body .no {
-    position: absolute;
-    left: 0.4rem;
-    bottom: 0.4rem;
-    padding: 0.1rem 0.4rem;
-    background: var(--paper);
-    color: var(--muted);
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-    line-height: 1.5;
-    letter-spacing: 0.06em;
-    font-variant-numeric: tabular-nums;
-  }
-  .plate-body .zoom {
-    position: absolute;
-    right: 0.5rem;
-    bottom: 0.5rem;
-    padding: 0.15rem 0.5rem;
-    background: var(--ink);
-    color: var(--paper);
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-    line-height: 1.6;
-    opacity: 0;
-    transition: opacity var(--dur-fast) var(--ease-interact);
-  }
-  .plate-body .frame:hover .zoom,
-  .plate-body .frame:focus-visible .zoom {
-    opacity: 1;
-  }
-  /* 图下只留 alt（相册名已经提到板头了，图下再重复 57 遍是噪音）。
-     单行省略号：alt 是站主自己写的短句，正常都放得下，长了也不许撑高格子。 */
-  .plate-body figcaption {
-    margin-top: var(--sp-2);
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-    color: var(--muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    transition: color var(--dur-fast) var(--ease-interact);
-  }
-  .plate-body figcaption em {
-    font-style: normal;
-    color: var(--ink);
-  }
-  .plate-body figure:hover figcaption em {
-    color: var(--accent-ink);
-  }
-
-  /* 窄屏：列数跟着变，**错缝的周期必须跟着换** —— 4 列的 `4n+2` 在 3 列布局里是一组乱序，
-     所以每一档都先把它归零、再按新周期写一条（不归零就会出现"有的列下沉、有的不下沉"）。
-     ★ `--stagger` 是百分比 ⇒ 只改"要不要减半"，不用重算长度。 */
-  @media (max-width: 1180px) {
-    .plate-body {
-      --stagger: 40%;
-      grid-template-columns: repeat(3, 1fr);
-    }
-    .plate-body > figure:nth-child(4n + 2),
-    .plate-body > figure:nth-child(4n + 4) {
-      margin-top: 0;
-    }
-    .plate-body > figure:nth-child(3n + 2) {
-      margin-top: var(--stagger);
-    }
-  }
-  @media (max-width: 680px) {
-    .plate-body {
-      --stagger: 18%;   /* 两列时格宽 ~320px，40% 会是一次半屏的跳动 ⇒ 压到刚好读得出砖 */
-      grid-template-columns: repeat(2, 1fr);
-      row-gap: var(--sp-4);
-    }
-    .plate-hd {
-      margin-bottom: var(--sp-5);
-    }
-    .plate {
-      margin-bottom: var(--sp-7);
-    }
-    .plate-body > figure:nth-child(3n + 2) {
-      margin-top: 0;
-    }
-    .plate-body > figure:nth-child(2n + 2) {
-      margin-top: var(--stagger);
-    }
-  }
-
-  /* ===== 灯箱（原型 L89-112 / JS L223-306） ===== */
-  .lb {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 50;
-    background: rgb(26 26 26 / 92%);
-    flex-direction: column;
-    color: var(--paper);
-  }
-  .lb.on {
-    display: flex;
-  }
-  .lb-bar {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-4);
-    padding: 0.7rem var(--gutter);
-    border-bottom: 1px solid rgb(250 250 247 / 18%);
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-  }
-  .lb-meta {
-    color: rgb(250 250 247 / 72%);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .lb-meta b {
-    color: var(--paper);
-    font-weight: 400;
-  }
-  .lb-pos {
-    margin-left: auto;
-    font-variant-numeric: tabular-nums;
-    color: rgb(250 250 247 / 72%);
-  }
-  .lb button {
-    background: none;
-    border: 1px solid rgb(250 250 247 / 30%);
-    border-radius: 0;
-    color: var(--paper);
-    font: inherit;
-    padding: 0.25rem 0.7rem;
-  }
-  .lb button:hover,
-  .lb button:focus-visible {
-    border-color: var(--accent-bright);
-    color: var(--accent-bright);
-  }
-  .lb-stage {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--sp-4);
-    padding: var(--sp-4) var(--gutter);
-    min-height: 0;
-  }
-  .lb-stage figure {
-    margin: 0;
-    max-width: min(92vw, 1600px);
-    max-height: 100%;
-    line-height: 0;
-  }
-  .lb-stage img {
-    max-width: 100%;
-    max-height: calc(100vh - 8rem);
-    width: auto;
-    height: auto;
-  }
-  .lb-stage > button {
-    font-size: var(--fs-body);
-    padding: 0.5rem 0.9rem;
-    flex-shrink: 0;
+  /* ===== 入口条组：只负责与上面那台装置之间的呼吸（每条自己的版面在 AlbumRow 里） ===== */
+  .rows {
+    margin-top: var(--sp-7);
   }
 
   /* ===== 交接层 + 内容上浮（站主第九轮 ③，2026-10-02）=====
@@ -798,7 +378,7 @@ const firstBig = at(firstFrame, LIGHT_W);
        ① **交接层**：一屏与剧场绿幕**同款**的深绿（同一组 token、同一条 178deg
           梯度 —— 主页 `.tsl-green` 就是照它写的），从满屏淡到透明。它保证
           「从绿幕切过来」这一下的**首帧就是绿**。
-       ② **内容上浮**：板里的花体字 + 板下的标题/读数/筛选，从下方 1.1rem
+       ② **内容上浮**：板里的花体字 + 板下的标题/读数/入口条，从下方 1.1rem
           升起并淡入（板本身不动 —— 它一移动，顶上就会露出纸白）。
      ★ 只在「从剧场绿幕切过来」这一次播：交接标记由主页装置写在跳转前，
        <head> 的同步脚本读掉并挂 `.tsl-in`。点站内链接过来的那条路有墨色浸染
@@ -824,8 +404,6 @@ const firstBig = at(firstFrame, LIGHT_W);
        `.tsl-in[data-astro-cid-wiaw4zal] .tsl-veil[data-astro-cid-wiaw4zal]`，
        而 `.tsl-in` 挂在 `<html>` 上、`<html>` 是 Base 组件渲染的（另一个 cid）
        ⇒ **这条规则永远匹配不上**，交接层与上浮动效双双静默失效。
-       实测（首轮探针）：落点 `<html class="tsl-in …">` 没问题，但
-       `getComputedStyle(.tsl-veil).display === 'none'`、两个 animationName 都是 none。
        ⇒ 前导那段必须 `:global()`，只让最后那段吃作用域。 */
     :global(.tsl-in) .tsl-veil {
       display: block;
@@ -842,14 +420,14 @@ const firstBig = at(firstFrame, LIGHT_W);
     :global(.tsl-in) .bath-mark,
     :global(.tsl-in) .bath-hint,
     :global(.tsl-in) .pagehead-main,
-    :global(.tsl-in) .filters {
+    :global(.tsl-in) .rows {
       animation: tsl-rise-in 820ms var(--ease-glass) both;
     }
   }
 
   /* ===== 出口：螺旋盘 =====
-     ★ 放在灯箱那几段**之后**（本样式块的最后）—— tests/gallery-plate.test.ts 的
-       「颜色只用 token」那条是按 `.plate {` 到 `.lb {` 切片查的，放这儿就不进那片；
+     ★ 放在灯箱那几段**之后**（本样式块的最后）—— 历史上有一条门闩按
+       `.plate {` 到 `.lb {` 切片查"颜色只用 token"，放这儿就不进那片；
        当然它自己也只用 token（--hair / --ink / --accent / --accent-ink）。
      ⚠ 注释里**不许**写出样式块的结束标签原文：HTML 的解析器不认 CSS 注释，
        它看到那几个字符就直接把样式块关掉 ⇒ 后面全被当成标记、构建报
@@ -880,108 +458,7 @@ const firstBig = at(firstFrame, LIGHT_W);
 </style>
 
 <script>
-  // 显影槽（页头装置）。与上面那两个行为（筛选 / 灯箱）刻意分开成独立入口：
-  // 它只读 DOM（.wf figure 的 href / data-cap），不引用它们的任何状态。
+  // 显影槽（页头装置）。与相册页那一侧的砖墙/灯箱刻意分开成独立入口：
+  // 它只读 DOM（`[data-bath-src] figure` 的 img / data-cap），不引用任何别的脚本的状态。
   import '../../scripts/develop';
-</script>
-
-<script>
-  // 相册页的两个行为：筛选 + 灯箱。零依赖，不引任何包。
-  (() => {
-    const figs = Array.from(document.querySelectorAll<HTMLElement>('.wf figure'));
-    // 板（每个相册一块）。筛选时要连板头一起收 —— 见下面 filter 那段。
-    const plates = Array.from(document.querySelectorAll<HTMLElement>('.plate'));
-    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('.filters button'));
-    const lb = document.getElementById('lb')!;
-    const lbImg = document.getElementById('lbImg') as HTMLImageElement;
-    const lbAlbum = document.getElementById('lbAlbum')!;
-    const lbCap = document.getElementById('lbCap')!;
-    const lbPos = document.getElementById('lbPos')!;
-    const lbTotal = document.getElementById('lbTotal')!;
-    const lbClose = document.getElementById('lbClose') as HTMLButtonElement;
-    const lbPrev = document.getElementById('lbPrev') as HTMLButtonElement;
-    const lbNext = document.getElementById('lbNext') as HTMLButtonElement;
-    const viewing = document.getElementById('viewing')!;
-
-    let visible = figs.slice();
-    let cur = 0;
-    let lastFocus: HTMLElement | null = null;
-
-    const paint = () => {
-      const fig = visible[cur];
-      if (!fig) return;
-      const a = fig.querySelector('a.frame') as HTMLAnchorElement;
-      lbImg.src = a.getAttribute('href')!;      // 灯箱用 href 指的大档（不是 currentSrc —— 网格是 800 档）
-      lbImg.alt = fig.dataset.cap ?? '';
-      // ★ 相册名取自 data-album-title：板把它们提到板头了，图下不再重复 ⇒
-      //   figcaption 里已经没有 <span>，照老路子抓会得到空串。
-      lbAlbum.textContent = fig.dataset.albumTitle ?? '';
-      lbCap.textContent = fig.dataset.cap ?? '';
-      lbPos.textContent = String(cur + 1);
-      lbTotal.textContent = String(visible.length);
-    };
-    const step = (d: number) => {
-      if (visible.length === 0) return;
-      cur = (cur + d + visible.length) % visible.length;
-      paint();
-    };
-    const open = (fig: HTMLElement) => {
-      const i = visible.indexOf(fig);
-      if (i < 0) return;
-      cur = i;
-      lastFocus = document.activeElement as HTMLElement;
-      paint();
-      lb.classList.add('on');
-      document.body.style.overflow = 'hidden';
-      lbClose.focus();
-    };
-    const close = () => {
-      lb.classList.remove('on');
-      document.body.style.overflow = '';
-      lbImg.removeAttribute('src');
-      lastFocus?.focus();
-    };
-
-    // 点击开灯箱 —— 只在 JS 到位时拦截；无 JS 时这个链接直接打开大图
-    for (const fig of figs) {
-      (fig.querySelector('a.frame') as HTMLAnchorElement).addEventListener('click', (e) => {
-        e.preventDefault();
-        open(fig);
-      });
-    }
-
-    // 筛选：只动 hidden，不重建 DOM。开着灯箱时切筛选 → 灯箱跟着切到该集合第一张
-    for (const b of buttons) {
-      b.addEventListener('click', () => {
-        const f = b.dataset.filter!;
-        for (const x of buttons) x.setAttribute('aria-pressed', String(x === b));
-        for (const fig of figs) fig.hidden = !(f === 'all' || fig.dataset.album === f);
-        /* ★ 一块板的图被筛光了 ⇒ 板自己（含板头那行编目）也要收起来。
-           不收的话会留下一块"只有板号、没有照片"的空板，比不分组还难看。
-           （判据用 `figure:not([hidden])`，不能只看板号 —— 板号是固定编目位次、不随筛选变。） */
-        for (const p of plates) p.hidden = !p.querySelector('figure:not([hidden])');
-        visible = figs.filter((fig) => !fig.hidden);
-        viewing.textContent = String(visible.length);
-        if (lb.classList.contains('on')) { cur = 0; paint(); }
-      });
-    }
-
-    lbClose.addEventListener('click', close);
-    lbPrev.addEventListener('click', () => step(-1));
-    lbNext.addEventListener('click', () => step(1));
-    lb.addEventListener('click', (e) => { if (e.target === lb) close(); });
-    document.addEventListener('keydown', (e) => {
-      if (!lb.classList.contains('on')) return;
-      if (e.key === 'Escape') { e.preventDefault(); close(); }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
-      else if (e.key === 'Tab') {
-        // 焦点不逃出灯箱：只在 关闭/上一张/下一张 之间循环
-        const f = [lbClose, lbPrev, lbNext];
-        const i = f.indexOf(document.activeElement as HTMLButtonElement);
-        e.preventDefault();
-        f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
-      }
-    });
-  })();
 </script>

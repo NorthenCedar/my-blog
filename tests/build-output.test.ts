@@ -733,8 +733,17 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(lightboxZ, '没找到相册灯箱的 z-index').toBeGreaterThan(0);
     expect(overlayZ, `过渡蒙版(${overlayZ}) 必须低于灯箱(${lightboxZ})，否则会盖住照片`).toBeLessThan(lightboxZ);
 
-    const gallery = readFileSync(join(DIST, 'gallery', 'index.html'), 'utf8');
-    const frames = [...gallery.matchAll(/<a class="frame"[^>]*>/g)].map((m) => m[0]);
+    /* ★ 2026-10-07：缩略图链接（`.frame`）随砖墙搬到了**每册一页** `/gallery/<册名>/` ——
+       `/gallery` 现在是**入口页**，它上面一张 `.frame` 都没有（入口条用的是 `.ar-frame`）。
+       ⇒ 逐册把链接收齐再查。判据的语义没变：**凡是被灯箱接管的缩略图，必须放行页面过渡**。 */
+    const albumDirs = readdirSync(join(DIST, 'gallery'), { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name !== 'spiral')
+      .map((e) => e.name);
+    expect(albumDirs.length, '一个相册页都没生成（/gallery/<册名>/）').toBeGreaterThan(0);
+    const frames = albumDirs.flatMap((d) => {
+      const p = join(DIST, 'gallery', d, 'index.html');
+      return existsSync(p) ? [...readFileSync(p, 'utf8').matchAll(/<a class="frame"[^>]*>/g)].map((m) => m[0]) : [];
+    });
     expect(frames.length, '相册页一张缩略图链接都没有').toBeGreaterThan(0);
     const missing = frames.filter((f) => !f.includes('data-no-transition'));
     expect(missing, `${missing.length} 张缩略图链接缺 data-no-transition（点它会触发过渡、挡住灯箱）`).toEqual([]);
@@ -1360,15 +1369,33 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
   // 实测（2026-09-26）：1971 字节（筛选 + 灯箱，零依赖）。余量 4173。
   // 灯箱刻意走**渐进增强**：图包在 <a href="1280档"> 里，JS 到位才拦截点击开灯箱 ——
   // 所以无 JS 时页面完整可用（点图直接开大图），也不需要第二个 `html.js` 门控脚本。
-  it('相册页内联脚本总量 ≤ 6 KB', () => {
+  it('相册页 JS 总量（内联 + 同源外链闭包）≤ 24 KB', () => {
+    /* ★ 2026-10-07 **原地改口径**（不新开一条）：螺旋盘搬进本页后，装置的脚本是
+       **外链 chunk**（SpiralPlate 5953 + rl-core 1208）—— 只算内联会**整台漏掉**，
+       这条预算就退化成"守着一个空壳"。改成与文章页 / 螺旋盘页同一条口径：
+       内联 + 同源外链 import 闭包。
+       实测（2026-10-07）：内联 4809 + 闭包 16613 = 21422
+       （SpiralPlate 5953 + rl-core 1208 + develop 那支 9452）。
+       上限 24576 留 ~3 KB 余量：加一两处交互不会撞线，
+       而"误把 three 拖进来"（541.9 KB）或"误引外部资源"一定会撞。 */
     const page = join(DIST, 'gallery', 'index.html');
     expect(existsSync(page), 'dist/gallery/index.html 不存在，先跑 npm run build').toBe(true);
     const html = readFileSync(page, 'utf8');
     const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
     const sizes = scripts.map((s) => Buffer.byteLength(s[1], 'utf8'));
-    const total = sizes.reduce((a, b) => a + b, 0);
-    console.log(`相册页内联脚本体积: ${sizes.join(' + ')} = ${total} 字节（预算 6144）`);
-    expect(total, `相册页内联脚本合计 ${total} 字节，超过 6 KB 预算`).toBeLessThan(6144);
+    const inline = sizes.reduce((a, b) => a + b, 0);
+    const BUDGET = 24576;
+    const { code, files } = jsClosure(page);
+    const full = Buffer.byteLength(code, 'utf8');
+    console.log(
+      `相册页 JS: 内联 ${sizes.join(' + ')} = ${inline} · 闭包合计 ${full} 字节（预算 ${BUDGET}）· ` +
+        files.map((f) => `${f.split(/[\\/]/).pop()} ${statSync(f).size}`).join(' + '),
+    );
+    expect(full, `相册页 JS 合计 ${full} 字节，超过 ${BUDGET} 预算`).toBeLessThan(BUDGET);
+    /* 反面正对照：整页不许碰 three（vendored 的 541.9 KB chunk 一旦进来必炸） */
+    expect(files.map((f) => f.replace(/\\/g, '/')).join(' '), '引进了 three 的 chunk').not.toMatch(
+      /three\.module\.min/,
+    );
   });
 });
 

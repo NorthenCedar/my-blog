@@ -1,0 +1,445 @@
+---
+/**
+ * 照片砖墙 PHOTO WALL（2026-10-07）—— **原来住在 /gallery 的那块陈列区，现在只住在相册页里。**
+ *
+ * ★★ 它为什么搬家：站主 2026-10-07 的原话是
+ *   「**下面不放现在全部铺开的，放入口**，类似这样的，有几个文件夹就放几个……
+ *     点击放大的照片就**进入这个文件夹**，就像现在本站的照片砖墙一样，**不过是单独的一页**」
+ *   ⇒ `/gallery` 改成「入口页」（一册一条手风琴条，见 `AlbumRow.astro`），
+ *     砖墙搬到每册自己的页面 `/gallery/<册名>/`。**两边是同一个实现，就是这一个文件。**
+ *
+ * ── 本组件负责什么 ────────────────────────────────────────────────
+ *   `.plate`（承托面：上沿那条纸边）+ 板内**错缝砖墙** + 灯箱 + 它们的样式与脚本。
+ *   它**不负责**板头那行编目（板号 · 相册名 · 帧数 · 日期）——
+ *   相册页的页头已经给了同一组信息，再印一行就是把同一句话说两遍；
+ *   板头现在只出现在 `/gallery` 的入口条上（`AlbumRow.astro`）。
+ *
+ * ── 为什么保留 `.wf` 这个类名（别"顺手清理"）────────────────────────
+ *   它是「砖墙容器」这个语义的钩子，有门闩按它切片
+ *   （tests/gallery-plate.test.ts：产物里所有 figure 必须落在这段里）。
+ *   ★ 2026-10-07 起**整屏显影板的取片源不再是它** —— 显影板留在 `/gallery`，
+ *     而砖墙已经不在那一页了 ⇒ 那边改订阅入口条的 `[data-bath-src] figure`
+ *     （契约在 src/scripts/develop.ts 与 tests/develop-bath.test.ts）。
+ *
+ * ── 数据 ─────────────────────────────────────────────────────────
+ *   props.albums：要陈列的相册（相册页给一册；将来若要"全册一页"，给全部即可）。
+ *   全部来自 public/gallery/manifest.json（由 scripts/gen-gallery-webp.mjs 生成）。
+ */
+import manifest from '../../public/gallery/manifest.json';
+
+interface Props {
+  albums: {
+    id: string;
+    title: string;
+    date: string;
+    total: number;
+    frames: { alt: string; src: string; files: { w: number; h: number; url: string }[] }[];
+  }[];
+}
+const { albums } = Astro.props;
+
+type File = { w: number; h: number; url: string };
+type Frame = { alt: string; src: string; files: File[] };
+
+// 档位不写死：从 manifest 登记的 widths 里挑网格档（最窄）与灯箱档（最宽）
+const GRID_W = Math.min(...manifest.widths);
+const LIGHT_W = Math.max(...manifest.widths);
+const at = (f: Frame, w: number) => f.files.find((x) => x.w === w) ?? f.files[0];
+
+/* 灯箱那只 <img> 服务端就带上第一帧的地址与说明：不留空 src（空 src 会去请求页面自己），
+   也不留空 alt（既有全局契约「所有图片的 alt 都非空」）。容器 display:none + loading="lazy"
+   ⇒ 打开灯箱之前不会产生这次请求（有探针断言守着）。 */
+const first = albums[0].frames[0];
+const firstBig = at(first, LIGHT_W);
+const total = albums.reduce((n, a) => n + a.total, 0);
+---
+
+<div class="wf">
+  {albums.map((a) => (
+    <section class="plate" data-plate={a.id} aria-label={a.title}>
+      <div class="plate-body">
+        {a.frames.map((f, fi) => {
+          const g = at(f, GRID_W);
+          const big = at(f, LIGHT_W);
+          return (
+            /* ★ data-album-title：灯箱顶部那行相册名从这里读（板头已经不在这块里了，
+               所以绝不能去抓 `figcaption span` —— 那个 <span> 现在压根不存在）。
+               data-cap：擦痕/灯箱的说明读数。 */
+            <figure data-album={a.id} data-album-title={a.title} data-cap={f.alt}>
+              {/* data-no-transition（2026-09-27）：这张缩略图的点击是**灯箱自己接管**的
+                  （preventDefault 开大图），不会真的跳转 ⇒ 页面过渡必须放行，
+                  否则墨色蒙版会盖在灯箱上、照片就看不到了。 */}
+              <a class="frame" href={big.url} data-no-transition>
+                <img src={g.url} width={g.w} height={g.h} alt={f.alt} loading="lazy" decoding="async" />
+                {/* 编目号：**按册**三位零填充（板内第几张），钉在框内左下角。
+                    aria-hidden —— 它和图下的 alt 指的是同一样东西，读屏不必听两遍。 */}
+                <span class="no" aria-hidden="true">NO.{String(fi + 1).padStart(3, '0')}</span>
+                <span class="zoom" aria-hidden="true">放大</span>
+              </a>
+              <figcaption><em>{f.alt}</em></figcaption>
+            </figure>
+          );
+        })}
+      </div>
+    </section>
+  ))}
+</div>
+
+<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="图片查看">
+  <div class="lb-bar">
+    <span class="lb-meta"><b id="lbAlbum"></b> · <span id="lbCap"></span></span>
+    <span class="lb-pos"><span id="lbPos">1</span> / <span id="lbTotal">{total}</span></span>
+    <button type="button" id="lbClose" aria-label="关闭（Esc）">关闭 ✕</button>
+  </div>
+  <div class="lb-stage">
+    <button type="button" id="lbPrev" aria-label="上一张（←）">←</button>
+    <figure><img id="lbImg" src={firstBig.url} alt={first.alt} loading="lazy" decoding="async" /></figure>
+    <button type="button" id="lbNext" aria-label="下一张（→）">→</button>
+  </div>
+</div>
+
+<style>
+  /* ===== 照片陈列：按相册分「板」+ 板内错缝砖墙（2026-10-07 重做，替换原 column-count 瀑布流）=====
+     为什么推倒重来：原样是 3 列瀑布流（`column-count:3`）—— 82 张照片平铺成**一条无限长的流**，
+     它不丑，问题是**没有结构**：没有章节、没有承托面、没有编目，看的人只能"往下滑"。
+     现在的四笔（每一笔都有对照的获奖实现，见 docs/site-decisions.md）：
+       ① **分板**：一个相册一块板 ⇒ 有了章节（板头在 `/gallery` 的入口条上）
+       ② **错缝砖墙**：偶数列整体下沉一档 ⇒ 从"一张表"变成"一片"（这一条是"不平铺"的真正来源）
+       ③ **不裁图**：图宽 100%、高按原比例 ⇒ 竖幅不会被裁成中间一条
+       ④ **框内编目号**：左下角 NO.001，三位零填充、按册编号 ⇒ 用本站的 HUD 语言做"标本标签"
+
+     ★★ 明确**没有**采用的（写在这里免得下次又想到）：
+       · `object-fit:cover` 统一裁成等格 —— 会裁掉构图，本站是档案不是社交相册
+       · 格内视差（指针跟图的 `--translate-*`）—— 要 JS 跟指针，与"照片区该是静的"冲突
+       · 板底染色 / 左右出血 —— 照片留在纸白上与文字同一条栏宽，纸面更干净（理由见决策记录）
+       · 大字号标题压在照片上 —— 纸白底上没有可读的兜底方案，压在照片上必然有看不清的字 */
+
+  /* `.wf` 退化成纯容器（版面在 .plate-body）。
+     ★ 这个类名不能删：门闩按它切片核对"所有 figure 都在这段里"。
+     ★ margin-top：墙是整块搬进相册页的，上面直接就是页头那条发丝线（`.pagehead` 的
+       `border-bottom`）—— 不留缝的话，页头那条线会和第一块板的纸边（`.plate` 的
+       `border-top`）**贴着并成一条双线**。这里给整块一个上边距，板与板之间不受影响。 */
+  .wf {
+    display: block;
+    margin-top: var(--sp-6);
+  }
+
+  .plate {
+    border-top: 1px solid var(--ink);   /* 板的上沿 = 一张纸的纸边（承托面靠这条线 + 留白，不靠染色） */
+    padding-top: var(--sp-4);
+    margin-bottom: var(--sp-8);
+  }
+
+  .plate-body {
+    /* ★ 错缝的档位：**按格宽的百分比**，不是固定长度。
+       为什么用百分比：网格项上的百分比 margin 是**按网格区域的行内尺寸**（= 一格宽）解析的，
+       所以同一句 `margin-top: var(--stagger)` 在 4 列 / 3 列 / 2 列下会**自动等比缩放**，
+       不必为每个断点写一个长度（第一版写死 3rem，实测只有格宽的 16% ⇒ 读成"没对齐"而不是"错缝"）。
+       45% 是目检定下来的：再大半格会显松，再小就读不出砖。 */
+    --stagger: 45%;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    column-gap: var(--sp-4);
+    row-gap: var(--sp-5);
+    /* ★ `align-items:start` 必须写：默认的 stretch 会把矮的 figure 拉高，
+       图就会跟格子脱开（图是居中 contained，被拉高的格子里会多出一段空白）。 */
+    align-items: start;
+  }
+  /* ★★ 错缝：**偶数列整体下沉半格左右**。
+     这就是"不平铺"的来源 —— 对照 Gregor Collienne 的 `:nth-child(5n+2), :nth-child(5n+4)
+     { transform: translateY(50% + gap/2) }`。
+     ★ 这里用 `margin-top` 而**不是** `transform`：transform 不占位 ⇒ 网格算行高时按没下沉算，
+       下沉那一列会压到下一行上（视觉上"咬"在一起）。margin 占位，行高跟着长，才是真错缝。 */
+  .plate-body > figure:nth-child(4n + 2),
+  .plate-body > figure:nth-child(4n + 4) {
+    margin-top: var(--stagger);
+  }
+
+  .plate-body figure {
+    margin: 0;   /* 归零：figure 的默认外边距会把错缝算歪 */
+  }
+  /* ★★ 统一的**方槽**（这一条是砖墙成不成的关键）。
+     第一版没写方槽、图高按原比例 ⇒ 行高被行内最高的竖图撑开，横图下面留出一大片白
+     —— 白是**横向成带**的，读起来像"这一行没排满"，不像留白。实测 1440 下最宽的白带 >150px。
+     方槽之后：每格都是 1:1 的方形，图**居中、不裁**（`max-width/max-height:100%` 就是 contain），
+     差值变成格内的**托纸边**而不是行与行之间的空档 ⇒ 砖是齐的，错缝才看得出来。
+     · ★ 用 `aspect-ratio` 而不是定高：定高会在窄屏把图挤扁。
+     结构照抄 Gregor Collienne 的 `.fs-media`（110%×120% 的框 + 居中的 img），
+     这里把那个"溢出框"去掉 —— 本站是纸白，图溢出去会和邻格的托纸边打架。 */
+  .plate-body .frame {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    line-height: 0;
+    text-decoration: none;
+    /* 图还没到之前，格子里是**极淡绿洗**（--accent-wash 的 6% 版，见 --deco-plate-fine）：
+       只够看出"这儿有个格子"，不改纸面的白。尺寸由 aspect-ratio 定 ⇒ 不会跳版。 */
+    background: var(--deco-plate-fine);
+    overflow: hidden;   /* 只服务于 hover 那 3% 的放大：放大后多出来的边被框切掉 */
+  }
+  .plate-body img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;       /* ★ 不裁：整块**没有** object-fit —— 有测试守着这条 */
+    display: block;
+  }
+  /* 悬停时图在框内轻轻推近一点（3%，不是"缩放"级别）。
+     ★ 只给能 hover 的设备、且读者没要求减弱动效时才播（站规：动效一律可撤）。 */
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .plate-body img {
+      transition: transform var(--dur-fast) var(--ease-interact);
+    }
+    .plate-body .frame:hover img,
+    .plate-body .frame:focus-visible img {
+      transform: scale(1.03);
+    }
+  }
+  /* 编目号：钉在框内左下角。
+     ★ 方槽 + 图居中 ⇒ **左下角永远是托纸边、不是照片**（横图的白在上下、竖图的白在左右），
+       所以它天然压在纸上；纸白底只是保底（万一是张方图，它不会糊在照片里）。
+     · 压在照片上的做法（黑字/白字 + 不透明底）会把照片压暗，档案不该这样。 */
+  .plate-body .no {
+    position: absolute;
+    left: 0.4rem;
+    bottom: 0.4rem;
+    padding: 0.1rem 0.4rem;
+    background: var(--paper);
+    color: var(--muted);
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    line-height: 1.5;
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+  }
+  .plate-body .zoom {
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    padding: 0.15rem 0.5rem;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    line-height: 1.6;
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-interact);
+  }
+  .plate-body .frame:hover .zoom,
+  .plate-body .frame:focus-visible .zoom {
+    opacity: 1;
+  }
+  /* 图下只留 alt（相册名在页头，图下再重复几十遍是噪音）。
+     单行省略号：alt 是站主自己写的短句，正常都放得下，长了也不许撑高格子。 */
+  .plate-body figcaption {
+    margin-top: var(--sp-2);
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: color var(--dur-fast) var(--ease-interact);
+  }
+  .plate-body figcaption em {
+    font-style: normal;
+    color: var(--ink);
+  }
+  .plate-body figure:hover figcaption em {
+    color: var(--accent-ink);
+  }
+
+  /* 窄屏：列数跟着变，**错缝的周期必须跟着换** —— 4 列的 `4n+2` 在 3 列布局里是一组乱序，
+     所以每一档都先把它归零、再按新周期写一条（不归零就会出现"有的列下沉、有的不下沉"）。
+     ★ `--stagger` 是百分比 ⇒ 只改"要不要减半"，不用重算长度。 */
+  @media (max-width: 1180px) {
+    .plate-body {
+      --stagger: 40%;
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .plate-body > figure:nth-child(4n + 2),
+    .plate-body > figure:nth-child(4n + 4) {
+      margin-top: 0;
+    }
+    .plate-body > figure:nth-child(3n + 2) {
+      margin-top: var(--stagger);
+    }
+  }
+  @media (max-width: 680px) {
+    .plate-body {
+      --stagger: 18%;   /* 两列时格宽 ~320px，40% 会是一次半屏的跳动 ⇒ 压到刚好读得出砖 */
+      grid-template-columns: repeat(2, 1fr);
+      row-gap: var(--sp-4);
+    }
+    .plate {
+      margin-bottom: var(--sp-7);
+    }
+    .plate-body > figure:nth-child(3n + 2) {
+      margin-top: 0;
+    }
+    .plate-body > figure:nth-child(2n + 2) {
+      margin-top: var(--stagger);
+    }
+  }
+
+  /* ===== 灯箱（原型 L89-112 / JS L223-306） ===== */
+  .lb {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgb(26 26 26 / 92%);
+    flex-direction: column;
+    color: var(--paper);
+  }
+  .lb.on {
+    display: flex;
+  }
+  .lb-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: 0.7rem var(--gutter);
+    border-bottom: 1px solid rgb(250 250 247 / 18%);
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+  }
+  .lb-meta {
+    color: rgb(250 250 247 / 72%);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .lb-meta b {
+    color: var(--paper);
+    font-weight: 400;
+  }
+  .lb-pos {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: rgb(250 250 247 / 72%);
+  }
+  .lb button {
+    background: none;
+    border: 1px solid rgb(250 250 247 / 30%);
+    border-radius: 0;
+    color: var(--paper);
+    font: inherit;
+    padding: 0.25rem 0.7rem;
+  }
+  .lb button:hover,
+  .lb button:focus-visible {
+    border-color: var(--accent-bright);
+    color: var(--accent-bright);
+  }
+  .lb-stage {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-4);
+    padding: var(--sp-4) var(--gutter);
+    min-height: 0;
+  }
+  .lb-stage figure {
+    margin: 0;
+    max-width: min(92vw, 1600px);
+    max-height: 100%;
+    line-height: 0;
+  }
+  .lb-stage img {
+    max-width: 100%;
+    max-height: calc(100vh - 8rem);
+    width: auto;
+    height: auto;
+  }
+  .lb-stage > button {
+    font-size: var(--fs-body);
+    padding: 0.5rem 0.9rem;
+    flex-shrink: 0;
+  }
+</style>
+
+<script>
+  // 砖墙与灯箱。零依赖，不引任何包。
+  // ★ 2026-10-07：**筛选（.filters）那段整体去掉了** —— 一册一页之后，
+  //   "筛到单册"就是"进那一册的页面"，页内再放一组筛选按钮等于让访客筛一个只有一个选项的集合。
+  (() => {
+    const figs = Array.from(document.querySelectorAll<HTMLElement>('.wf figure'));
+    const lb = document.getElementById('lb')!;
+    const lbImg = document.getElementById('lbImg') as HTMLImageElement;
+    const lbAlbum = document.getElementById('lbAlbum')!;
+    const lbCap = document.getElementById('lbCap')!;
+    const lbPos = document.getElementById('lbPos')!;
+    const lbTotal = document.getElementById('lbTotal')!;
+    const lbClose = document.getElementById('lbClose') as HTMLButtonElement;
+    const lbPrev = document.getElementById('lbPrev') as HTMLButtonElement;
+    const lbNext = document.getElementById('lbNext') as HTMLButtonElement;
+
+    let cur = 0;
+    let lastFocus: HTMLElement | null = null;
+
+    const paint = () => {
+      const fig = figs[cur];
+      if (!fig) return;
+      const a = fig.querySelector('a.frame') as HTMLAnchorElement;
+      lbImg.src = a.getAttribute('href')!;      // 灯箱用 href 指的大档（不是 currentSrc —— 网格是 800 档）
+      lbImg.alt = fig.dataset.cap ?? '';
+      // ★ 相册名取自 data-album-title（板头不在本组件里，figcaption 里没有 <span>，
+      //   照老路子抓会静默得到空串）。
+      lbAlbum.textContent = fig.dataset.albumTitle ?? '';
+      lbCap.textContent = fig.dataset.cap ?? '';
+      lbPos.textContent = String(cur + 1);
+      lbTotal.textContent = String(figs.length);
+    };
+    const step = (d: number) => {
+      if (figs.length === 0) return;
+      cur = (cur + d + figs.length) % figs.length;
+      paint();
+    };
+    const open = (fig: HTMLElement) => {
+      const i = figs.indexOf(fig);
+      if (i < 0) return;
+      cur = i;
+      lastFocus = document.activeElement as HTMLElement;
+      paint();
+      lb.classList.add('on');
+      document.body.style.overflow = 'hidden';
+      lbClose.focus();
+    };
+    const close = () => {
+      lb.classList.remove('on');
+      document.body.style.overflow = '';
+      lbImg.removeAttribute('src');
+      lastFocus?.focus();
+    };
+
+    // 点击开灯箱 —— 只在 JS 到位时拦截；无 JS 时这个链接直接打开大图
+    for (const fig of figs) {
+      (fig.querySelector('a.frame') as HTMLAnchorElement).addEventListener('click', (e) => {
+        e.preventDefault();
+        open(fig);
+      });
+    }
+
+    lbClose.addEventListener('click', close);
+    lbPrev.addEventListener('click', () => step(-1));
+    lbNext.addEventListener('click', () => step(1));
+    lb.addEventListener('click', (e) => { if (e.target === lb) close(); });
+    document.addEventListener('keydown', (e) => {
+      if (!lb.classList.contains('on')) return;
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
+      else if (e.key === 'Tab') {
+        // 焦点不逃出灯箱：只在 关闭/上一张/下一张 之间循环
+        const f = [lbClose, lbPrev, lbNext];
+        const i = f.indexOf(document.activeElement as HTMLButtonElement);
+        e.preventDefault();
+        f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+      }
+    });
+  })();
+</script>
