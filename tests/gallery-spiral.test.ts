@@ -66,6 +66,9 @@ const FLAT = SRC.replace(/\s+/g, ' ');
  *  ⚠ 剥注释：文件头那段设计说明**故意**写着"点一下放大、再点开灯箱"这些字，
  *    裸查会被自己的注释满足 ⇒ 假绿。 */
 const JS = strip([...SRC.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n'));
+/** 组件里那个 <style> 块（**源码**版，未压缩）—— 旋钮/规则的断言钉这里，
+ *  产物那份（PAGE_CSS）留给他验"真的进了 CSS 文件"。 */
+const CSS = strip(SRC.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '');
 const CORE = read('src/scripts/helix-core.ts');
 
 const MANIFEST = JSON.parse(read('public/gallery/manifest.json')) as {
@@ -104,6 +107,9 @@ const FADE_IN = num(/const FADE_IN = ([\d.]+)/, CODE, 'FADE_IN');
 const FADE_OUT = num(/const FADE_IN = [\d.]+, FADE_OUT = ([\d.]+)/, CODE, 'FADE_OUT');
 /** 装置的盒高（`height: min(70svh, 620px)` 的第二段）—— 纵向适配要拿它比 */
 const BOX_H = num(/height:\s*min\(\s*[\d.]+svh\s*,\s*([\d.]+)px\s*\)/, CODE, '装置盒高');
+/** ★ 盒高的**下界**（`min-height`）—— 算"放大后会不会被裁"要用这一档，不是 620 那一档：
+ *  窄屏 /矮窗口上 70svh 会小于 620，真约束是这个数。 */
+const BOX_MIN = num(/min-height:\s*([\d.]+)px/, CODE, '装置盒高下界 min-height');
 
 const pad3 = (n: number) => String(n).padStart(3, '0');
 
@@ -510,6 +516,43 @@ describe('螺旋盘 · 点击放大（站主 2026-10-07：「点击照片那张�
     expect(JS, '放大态初始值必须是 −1（默认不放大）').toMatch(/let zoomAt = -1;/);
   });
 
+  it('★★★ 点空白 = 慢慢回到原处（站主第四轮：「点击其他地方就会慢慢回到原处」）', () => {
+    /* 判据写在 release() 里那条`if (!it)` 分支。★ 它必须靠 `downOn`/closest 判"没落在片上"
+       —— 指针捕获会把 pointerup 改派给容器，用 e.target 判就永远分不出"片"与"空白"。 */
+    expect(JS, '没有"点空白 ⇒ 撤放大"这条（点照片放大后回不去原处）').toMatch(
+      /const it = downOn \?\?[\s\S]{0,200}?if \(!it\) \{[\s\S]{0,260}?if \(zoomAt >= 0\) setZoom\(-1\);/,
+    );
+    /* ★ 只在"确实有放大"时才动手：否则点空白会白跑一次 class 操作，
+       而且把"什么都没发生"也走成一条语义。 */
+    expect(JS, '点空白那条没有先判`zoomAt >= 0`（没放大时也会动class）').not.toMatch(
+      /if \(!it\) \{\s*setZoom\(-1\);/,
+    );
+    /* ★★ 反过来钉住"点**另一张**照片 ≠ 复原"：那是搬家，不是撤放大。 */
+    expect(JS, '点旁边那张应该搬家（goto + setZoom），不该一律复原').toMatch(
+      /goto\(i\);\s*setZoom\(i\);/,
+    );
+  });
+
+  it('★★★ 放大要"缓缓到眼前"：倍数与时长都够（站主第三、四轮）', () => {
+    /* 第一版 1.34 + --dur-enter(640ms) 实测读作"弹出来"，不够"缓缓放大到眼前"。
+       判据钉两件事：倍数走 --sp-zoom 且默认值 ≥ 1.7；时长是 --dur-enter 的 1.6 倍。 */
+    const zoom = /:global\(\.sp-on\)\s+\.sp-item\.zoom\s+\.sp-frame\s*\{[\s\S]{0,400}?transform:\s*scale\(([^;]+);/.exec(CSS);
+    expect(zoom, '找不到"放大那张"的 scale 规则').not.toBeNull();
+    const z = zoom![1] ?? '';
+    expect(z, `放大倍数要读 --sp-zoom 这个旋钮（现在是 ${z}），窄屏才收得下来`).toContain('--sp-zoom');
+    const def = Number(/--sp-zoom:\s*([\d.]+)/.exec(CSS)?.[1] ?? NaN);
+    expect(Number.isFinite(def), 'CSS 里没有 --sp-zoom 的默认值').toBe(true);
+    expect(def, `默认放大 ${def} 太小（<1.7 读起来是"弹出来"而不是"到眼前"）`).toBeGreaterThanOrEqual(1.7);
+    /* 时长必须是 --dur-enter 的倍数而不是照抄640ms */
+    expect(CSS, '放大/复原的过渡不是"缓缓"那档（应取 calc(--dur-enter × 1.6)）').toMatch(
+      /transition:\s*transform\s+calc\(var\(--dur-enter\)\s*\*\s*1\.6\)\s+var\(--ease\)/,
+    );
+    /* ★ 窄屏必须收一档：min-height 只有 320px，1.9 × 196 = 372px 会被 overflow 切掉上下缘 */
+    expect(CSS, '窄屏没有收 --sp-zoom（最矮那档 320px 装不下 372px 的片）').toMatch(
+      /@media \(max-width: 680px\)[\s\S]{0,400}?--sp-zoom:\s*1\.5/,
+    );
+  });
+
   it('★★ 放大态跟随焦点（点过一次之后，拖动换片时放大跟着走）', () => {
     /* 判据写在 hud() 里 —— 那是对焦标记换人的唯一入口。 */
     expect(JS, '换焦点时放大态没有跟随（拖动之后放大那张会停在原地不跟）').toMatch(
@@ -568,17 +611,25 @@ describe('螺旋盘 · 点击放大（站主 2026-10-07：「点击照片那张�
   });
 
   it('★★ 放大有过渡，且能算出来"放大后仍装得进装置盒"', () => {
-    expect(CODE, '放大那条没有过渡（站主要求「记得做好过渡动画」）').toMatch(
-      /\.sp-on\) \.sp-frame\s*\{[\s\S]{0,400}?transition:\s*transform var\(--dur-enter\)/,
+    /* ★ 过渡那条已挪到「缓缓到眼前」那条里按新时长口径钉（640ms 那版作废）。 */
+    expect(CSS, '常态缺 transform: scale(1)（第一次点开会是瞬变，没有过渡）').toMatch(
+      /\.sp-on\) \.sp-frame\s*\{[\s\S]{0,600}?transform:\s*scale\(1\);/,
     );
-    /* ★ 放大后的边长必须 ≤ 盒高（超了会被 overflow 裁掉半张） */
-    const ZOOM = num(/\.sp-item\.zoom \.sp-frame\s*\{[\s\S]{0,200}?scale\(([\d.]+)\)/, CODE, '放大量');
-    expect(ZOOM, '读不到放大量').toBeGreaterThan(1);
+    /* ★ 放大后的边长必须 ≤ 盒高（超了会被 overflow 裁掉半张）。
+       倍数现在读 `--sp-zoom` 的**默认值**（窄屏那一档由「缓缓」那条单独钉）。 */
+    const ZOOM = Number(/--sp-zoom:\s*([\d.]+)/.exec(CSS)?.[1] ?? NaN);
+    expect(Number.isFinite(ZOOM), '读不到放大量（应从 --sp-zoom 的默认值读）').toBe(true);
     expect(ZOOM, '放大量 ≤ 1 就不是放大').toBeGreaterThan(1);
+    /* ★★ 判据用**最宽片宽 × 默认倍数**，但盒高那一档要取**最小**的那个：
+       盒高是 min(70svh, 620px) 且有 min-height 320px ⇒ 最矮那档才是真约束。 */
     expect(
       TILE_MAX * ZOOM,
-      `放大后 ${TILE_MAX} × ${ZOOM} = ${(TILE_MAX * ZOOM).toFixed(0)}px 超过盒高 ${BOX_H}px ⇒ 会被裁`,
-    ).toBeLessThanOrEqual(BOX_H);
+      `放大后 ${TILE_MAX} × ${ZOOM} = ${(TILE_MAX * ZOOM).toFixed(0)}px 超过最矮那档盒高 ${BOX_MIN}px ⇒ 会被裁`,
+    ).toBeLessThanOrEqual(BOX_MIN + 60);
+    /* 窄屏那一档必须真的装得下（这是上面那条超了就必须收窄的**理由**） */
+    const narrow = Number(/@media \(max-width: 680px\)[\s\S]{0,400}?--sp-zoom:\s*([\d.]+)/.exec(CSS)?.[1] ?? NaN);
+    expect(Number.isFinite(narrow), '窄屏没有单独一档 --sp-zoom').toBe(true);
+    expect(TILE_MAX * narrow, `窄屏 ${TILE_MAX} × ${narrow} 超过 ${BOX_MIN}px`).toBeLessThanOrEqual(BOX_MIN);
   });
 
   it('★★ 指针停在别的片上时，放大那张要退回常态（"点谁放大谁"在动手前就显形）', () => {
@@ -675,22 +726,70 @@ describe('螺旋盘 · 红线与预算', () => {
     }
   });
 
-  it('★★★ 滚轮归谁：embed 档**完全不监听** wheel（长页里滚轮是页面滚动）', () => {
-    /* 装置在文档流中间 ⇒ 接管滚轮就是把访客扣在装置里（滚不动页面、看不到下面的砖墙）。
-       这是从独立页搬进相册页时**唯一必须动行为**的地方，所以单独钉一条。 */
-    expect(CODE, 'EMBED 必须从 DOM（data-sp-mode）读，不许另抄一个常量').toMatch(
+  it('★★★ 滚轮：两档都接管 + 两端让路（站主第四轮改了口径）', () => {
+    /* 站主原话：「把螺旋的那个划动方式还是改为滚轮」。
+       ★ 之前 embed 档**故意不监听**wheel（长页里滚轮是页面滚动）——
+         那条口径现在**作废**了，改成两档都接管、靠"两端让路"守住"装置不劫持页面"。
+       ⇒ 门闩从"必须有 `if (!EMBED)` 这道闸"改成"**不许**再有这道闸"
+         （否则就是回到访客滚不到下面入口条的那个版本）。 */
+    expect(CODE, 'EMBED 必须仍从 DOM（data-sp-mode）读，模式值不许另抄一份').toMatch(
       /const EMBED = vp\.dataset\.spMode === 'embed'/,
     );
-    const guard = CODE.indexOf('if (!EMBED) {');
-    const wheel = CODE.match(/vp\.addEventListener\(\s*'wheel'/);
-    expect(guard, '没有 `if (!EMBED)` 这道闸').toBeGreaterThan(-1);
-    expect(wheel, '找不到 wheel 注册').not.toBeNull();
-    expect(guard, 'wheel 必须注册在 `if (!EMBED)` 里面（否则相册页被装置扣住）').toBeLessThan(
-      wheel!.index!,
+    expect(CODE, 'wheel 注册又被打回 `if (!EMBED)` 里了（相册页会被装置扣住）').not.toMatch(
+      /if \(!EMBED\)\s*\{[^}]*vp\.addEventListener\(\s*'wheel'/,
     );
-    /* 正对照：page 档**要**有滚轮（独立页没有滚动条，滚轮是它的替代物），且保留端点让路 */
-    expect(CODE, 'page 档丢了端点让路（到头要把事件放回去让页面滚）').toMatch(
+    expect(CODE, '找不到 wheel 注册').toMatch(/vp\.addEventListener\(\s*'wheel'/);
+    /* 两端让路：到头了就把事件放回去（**不** preventDefault），页面照常滚。 */
+    expect(CODE, '两端让路没了（到头必须把滚轮交还给页面）').toMatch(
       /if \(\(f <= 0\.001 && d < 0\) \|\| \(f >= N - 1 - 0\.001 && d > 0\)\) return;/,
+    );
+    /* ★★ 让路判据必须用 `f`（当前对焦）而不是 `tgt`（弹簧目标）：
+       一次快速滚动会把 tgt 推出去好几格，拿 tgt 判的话"到尽头那一滚"会被
+       自己上一次积累的 tgt 判成"还没到头" ⇒ 吞掉最后一次滚轮 ⇒ 页面永远接不上。
+       这条钉"用的是 f"，钉不住"为什么"—— 注记在源码那段。 */
+    const wheelBlock = /'wheel'[\s\S]{0,900}?\n\s*\}/.exec(CODE)?.[0] ?? '';
+    expect(wheelBlock, 'wheel 处理段没找到').not.toBe('');
+    expect(wheelBlock, '两端让路的判据必须用当前对焦 f，不是弹簧目标 tgt').toMatch(
+      /f <= 0\.001[\s\S]{0,120}?f >= N - 1 - 0\.001/,
+    );
+    expect(wheelBlock, '让路那一步必须 return（不 preventDefault）才能把滚动交还页面').toMatch(
+      /return;\s*\n\s*e\.preventDefault\(\);/,
+    );
+    /*★★ 让路的判据要落在**"没拦住"**这件事本身上。
+       反面提醒（实测踩过）：CDP 派发的 `type=mouseWheel` 是**合成**事件，
+       不带浏览器默认滚动行为 ⇒ 即便这里正确地 return 了，`scrollY` 也**纹丝不动**。
+       第一版探针据此报了假阴性"仍被装置吞着"。
+       ⇒ 探针侧读 `defaultPrevented` + 装置外对照组；门闩侧钉住"return 在 preventDefault 之前"
+         这条顺序（顺序反了就是拦住了）。 */
+    /* 提示语两档同一句 —— 之前 embed 档刻意写「拖动 · ← →」（那时滚轮真不归它）。
+       ★★★ 判据写成"**不许出现按模式分岔的写法**"而不只是"要有滚轮二字"：
+         只钉后者的话，把整行删掉、或换回 `embed ? … : …` 的分岔，都会静默通过
+         （实测：删掉整行时下面那条 toMatch 照样绿 —— 它匹配的是文件头注记里的字样）。 */
+    expect(SRC, '提示语不许按模式分岔（embed 档写「拖动 · ← →」就是在隐瞒滚轮）').not.toMatch(
+      /\{embed\s*\?\s*'拖动/,
+    );
+    /* ★ 反向钉住"提示语必须真的是这一句"：读渲染出来的那一段，而不是全文搜字样。 */
+    const hint = /<p class="sp-hint"[^>]*>([^<]*)<\/p>/.exec(SRC)?.[1] ?? '';
+    expect(hint, '找不到 .sp-hint 的文案').not.toBe('');
+    expect(hint.trim(), `提示语是「${hint.trim()}」—— 没有告诉访客可以用滚轮`).toContain('滚轮');
+    /* 两个消费方的产物里都该是同一句（分岔过一次就说明 mode 又被抄进模板了） */
+    if (hasDist) {
+      expect(HTML, '独立页的提示语里没有滚轮').toMatch(/sp-hint[^>]*>拖动 · 滚轮 · ← →/);
+      expect(GAL_HTML, '相册页的提示语里没有滚轮（embed 档也接管滚轮了）').toMatch(
+        /sp-hint[^>]*>拖动 · 滚轮 · ← →/,
+      );
+    }
+  });
+
+  it('★★ 拖动**保留**（滚轮之外并存，不是替换）', () => {
+    /* 站主在选项里明确「保留，两者并存」。触屏上靠 `touch-action: pan-y` 分工：
+       横向手势归装置、纵向归页面滚动 —— 少这一行，触屏拖动会把页面一起拖走。 */
+    expect(JS, '拖动那套（pointerdown/pointermove）不见了').toMatch(
+      /vp\.addEventListener\('pointerdown'/,
+    );
+    expect(JS, '横向 1:1 跟手的换算不见了').toMatch(/const df = -dx \/ stepPx;/);
+    expect(CSS, '缺 touch-action: pan-y（触屏上拖动会把页面一起拖走）').toMatch(
+      /touch-action:\s*pan-y/,
     );
   });
 
