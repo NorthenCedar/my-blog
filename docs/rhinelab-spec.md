@@ -6965,9 +6965,17 @@ CF 注入仍为三项（邮箱混淆 · email-decode · Web Analytics beacon）+
   连页面自己的资源都发不出去（第一次写就踩了）。
 - 另记一条老坑重现：测试模板字符串里嵌反引号 ⇒ oxc 解析报错（`Expected , or ) but found Identifier`）。
 
-#### 6.61.6 线上核对（部署后补记）
+#### 6.61.6 线上核对（部署 `0f0458b7` 之后）
 
-- 图片响应头：`curl -I` 应看到 `Cache-Control: public, max-age=31536000, immutable`
-  （含 `/gallery/<册>/…-800.webp` 这种带中文目录的路径）。
-- 螺旋页/相册页：CSS 里出现 `.sp-side` 两条规则、token `--deco-sp-side` 在。
+- **图片缓存头**（`/gallery/一些风景/01-800.webp`，带中文目录的路径）：
+  `Cache-Control: public, max-age=31536000, immutable` ⇒ **`_headers` 生效**。
+- **HTML 页**（`/log/`）：`Cache-Control: public, max-age=0, must-revalidate` + `cf-cache-status: DYNAMIC`
+  ⇒ **没有被那条 `/*.webp` 误伤**（防呆断言守的那件事，线上实测确认）。
+- **螺旋页外链 CSS**（`/_astro/SpiralPlate.NFKQoiV_.css`，7,404 字节）含两条：
+  `…sp-side .sp-frame[data-astro-cid-…]{background:var(--deco-sp-side)}` 与
+  `…sp-side .sp-frame[…] img[…] {visibility:hidden}`。
+- **日志页**：含 `v2.6`；`[object Object]` 0 次。
+- ⚠ 本轮 CDP 仍不可用（`probeCdpAvailable` → `ok:false`）⇒ 视觉验收走
+  `withServer + shot` 那条通道，时序验证走上面 §6.61.5 的「闸门」。
+
 
