@@ -2320,3 +2320,31 @@ bbox 从满图 1920×1920 收敛到 1915×1058。
 
 **怎么验**：`npm run build` 后跑 `npx vitest run tests/gallery-inf.test.ts`（14 条），
 或本地 `node _probe/_gal-inf-mass.mjs after` 看它和其余两层底纹的浓淡对照。
+
+### 25.7 照片的档位、缓存与「换图必须换文件名」（2026-10-08）
+
+照片只有**两档**（`manifest.json` 的 `widths`）：**800**（网格 / 螺旋里贴的）与 **1280**（灯箱看的）。
+
+| 想问的 | 一句话回答 |
+|---|---|
+| 点开大图慢在哪？ | 大档最大那张 475 KB，且站上没配缓存头 ⇒ CF 默认 `must-revalidate` **每次回源验证**（实测 TTFB 1.1–1.3 s、下载 4.1–6.1 s） |
+| 现在怎么快起来的？ | ① `public/_headers` 给 `/_astro/*` 与 `/*.webp` 上了 1 年 `immutable`；② 开灯箱时**先用已经缓存的 800 档显形**，1280 在后台解码好再无声换上（`src/scripts/big-image.ts`） |
+| 再加一档行不行？ | 行（`gen-gallery-webp.mjs` 加一档 + `manifest.widths` 加一项），但要重跑一次全部图；**本轮没做**，因为 1+2+3 的收益已经够了 |
+
+★★ **一条必须记住的纪律：`public/gallery/**` 里的图不许原地覆盖，换了内容要另存新名。**
+
+原因就是上面那个 `immutable`：文件名不变 ⇒ 读者一年内一直看到旧图（连 `Ctrl+F5` 都不一定管用，
+因为 CDN 那一层也信 immutable）。本站是序号名（`01-800.webp`），所以"换图"= **新增一个序号**，
+旧的删掉即可。这条写在了 `public/_headers` 的注释里。
+
+**想改什么改哪里**
+
+| 想要的 | 改哪儿 |
+|---|---|
+| 缓存时长 / 去掉 immutable | `public/_headers`（⚠ 给 HTML 长缓存是灾难，别写 `/*`） |
+| 「先小后大」的时机、要不要预取下一张 | `src/scripts/big-image.ts`（两套灯箱共用这一个文件） |
+| 灯箱里那只 `<img>` 的 `loading` | **别在 HTML 里去掉 `lazy`** —— 打开那一刻由 `showBig` 改成 eager，否则页面加载时就会去拉 475 KB |
+
+**怎么验**：`npx vitest run tests/gallery-image-load.test.ts`（8 条：缓存头 / 不许给 HTML 长缓存 /
+换图时机 / 竞态防护）；要肉眼看得证据就 `python _probe/_sp-side-lb.py`（拍 4 张，判据直接打在图上）。
+

@@ -113,3 +113,32 @@ export function projX(relDeg: number, perspK: number): number {
 export function radiusOf(tile: number, aDeg: number, seam: number): number {
   return (tile * seam) / (2 * Math.sin((aDeg * Math.PI) / 360));
 }
+
+/**
+ * 「侧壁」判据的角度阈值（度）—— 片的投影已被透视压到只剩一条边。
+ *
+ * ★ 阈值是**按实测反推的**，不是拍的（2026-10-08，`_probe/_sp-dump.py` 逐片量 rect）：
+ *     片 0（Δ=0°）   196×196  —— 焦点片
+ *     片 1（Δ=28°）  149×194  —— 正常邻片
+ *     片 2（Δ=56°）   53×177  —— 站主看到的"碎片"
+ *     片 3（Δ=84°）   28×158  —— 同上
+ *   ⇒ 分界就落在 28° 与 56° 之间。取 **56°**：语义干净（α=28° 时恰好 `|k−f| ≥ 2`），
+ *     而且它把"还看得出是一张照片"的邻片整个留在外面 —— 判据宁可晚一格，不要早一格。
+ *
+ * ★ 为什么按**角度**判、不按投影宽度判：角度是纯算术（`|k−f| × α`），
+ *   不用每帧读 82 次 `getBoundingClientRect`（那是强制同步布局）。
+ *   投影宽随转角单调下降（见 projX），所以拿转角当代理**方向是对的**；
+ *   差的只是"临界点落在哪一帧"，而站主要的是"别看见照片碎片"，不是"精确在 53px 处切换"。
+ */
+export const SIDE_DEG = 56;
+
+/**
+ * 该片此刻算不算「侧壁」（视线上只剩一条边）。
+ *
+ * @param dAbs 与对焦位置的距离，单位**张**（`|k − f|`，f 是连续值）
+ * @param aDeg 每片转角（度）—— 与渲染同源，由组件从 CSS 读回来传进来
+ */
+export function isSideFace(dAbs: number, aDeg: number): boolean {
+  const d = Number.isFinite(dAbs) ? Math.abs(dAbs) : 0;
+  return d * aDeg >= SIDE_DEG;
+}

@@ -410,6 +410,27 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
     transition: transform calc(var(--dur-enter) * 1.6) var(--ease);
     transform: scale(1);
   }
+  /* ★★ 2026-10-08（站主第三轮报同一处，定案 **B**）：螺旋**侧壁**改画「一叠纸的侧面」。
+     症状：竖幅照片按"不裁"放进正方形槽 ⇒ 左右各留一条纸白边；片转到接近 90°、
+     被压成 53×177 / 28×158 的窄条时，露出来的正是**照片边缘那一列像素** ——
+     读起来是"照片旁边多出来的一块碎片"（站主原话：「还是会有这个边缘残留」）。
+     ★ 不是网络问题，也不是"图没加载完"：拦图档里对 `*.webp` 一律返回 404、一张都没到，
+       拍出来的螺旋盘上这几个框里**是空的**（只剩浏览器的破图图标与 alt 字）
+       ⇒ 与加载无关。实测脚本 `_probe/_sp-slow.py`，逐片几何 `_probe/_sp-dump.py`。
+     ★ 为什么不是"把侧壁整个藏起来"（当时的变体 A）：那会把螺旋读成"两张照片"，
+       "一叠照片绕过来"的层次就没了 —— 侧壁是这台装置的物理必然，留着；
+       不许留的是**照片内容被压成一列像素**。
+     ★ "哪个片算侧壁"住在 `helix-core.isSideFace`（纯函数、有单测）；
+       阈值 56° 由上面那组实测反推：Δ=28°（投影 149px）是正常邻片，Δ=56°（53px）才是碎片。 */
+  :global(.sp-on) .sp-item.sp-side .sp-frame {
+    /* 纸的侧面：中性灰。**不是**纸白 —— 纸白会读成"这里什么都没有"，螺旋就断了一节。 */
+    background: var(--deco-sp-side);
+  }
+  :global(.sp-on) .sp-item.sp-side .sp-frame img {
+    /* 藏的是**照片内容**，不是这一片：visibility 保留布局 ⇒ 片框尺寸不变，
+       螺旋的几何（半径 / 步进 / 位姿全按片宽算）一个数都不动。 */
+    visibility: hidden;
+  }
   /* ★ 点开的那一张：缓缓放大到"眼前"。★★ 用 `transform: scale()` 而不是 `translateZ(...)`：
      scale 在片的**局部平面**上做，3D 位姿（rotateY + 半径 + 升高）一个字都不动
      ⇒ 螺旋的几何与"哪张离观者最近"完全不变，只有这一片变大。
@@ -627,7 +648,8 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
      以及 helix-core 的惯性数学（★ 抽出去是为了**可单测** —— 那里出过一个真 bug：
      速度没夹就进积分器，见 helix-core.ts 文件头）。 */
   import { startLoop, createActivityGate, prefersReducedMotion, shouldAnimate } from '../scripts/rl-core';
-  import { clamp, blendV, throwTarget, stepSpring, stepPxOf, radiusOf, DT_MAX } from '../scripts/helix-core';
+  import { clamp, blendV, throwTarget, stepSpring, stepPxOf, radiusOf, isSideFace, DT_MAX } from '../scripts/helix-core';
+  import { showBig, thumbOf } from '../scripts/big-image';
 
   (() => {
     const vp = document.querySelector<HTMLElement>('[data-spiral]');
@@ -772,6 +794,9 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
          —— 它是螺旋侧壁，不是残影）。 */
     const FADE_OFF = 0.2;
     const op = new Float32Array(N).fill(1);
+    /* 上帧的"是不是侧壁"（1/0）。与 op 同一套纪律：**变了才写** ——
+       装置停下来之后，这个循环一次 DOM 写都不做。 */
+    const side = new Uint8Array(N);
 
     const paint = () => {
       /* 唯一的每帧 style 写：rig 的 transform。
@@ -789,6 +814,17 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
         if (Math.abs(o - op[i]) > 0.01) {
           op[i] = o;
           items[i].style.opacity = o.toFixed(3);
+        }
+        /* ★ 侧壁（2026-10-08）：投影压窄到只剩一条边的片，不再显示照片内容 ——
+           改由 CSS 画"一叠纸的侧面"（规则见样式区那段）。判据是纯算术、不读 DOM：
+           `paint` 每 4ms 跑一次，这里若用 getBoundingClientRect 就是每帧 82 次强制同步布局。
+           ★ 只在**还看得见的范围**内判定（`d <= FADE_OUT`）：更远的片 opacity 已经是 0，
+             给它们挂类名没有意义，还会把诊断读数搅浑（全 82 片都挂着，看不出真正是侧壁的
+             是左边几片）。作用域与目的对齐：侧壁只在"看得见"时才是个问题。 */
+        const sd = d <= FADE_OUT && isSideFace(d, A_DEG) ? 1 : 0;
+        if (sd !== side[i]) {
+          side[i] = sd;
+          items[i].classList.toggle('sp-side', sd === 1);
         }
       }
       const near = clamp(Math.round(f), 0, N - 1);
@@ -1017,7 +1053,16 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
     function paintLB(i: number) {
       lbAt = clamp(i, 0, N - 1);
       const it = items[lbAt];
-      lbImg.src = (it.querySelector('a.sp-frame') as HTMLAnchorElement).getAttribute('href')!;
+      /* ★ 2026-10-08：换图走 big-image.ts（与砖墙那一侧同一套）——
+         灯箱档 1280 最大那张 475 KB、实测下载 4–6 s；而这一张的 800 档
+         刚才还贴在螺旋上（一定已经解码）⇒ 先用它显形，大档后台换。
+         ★ 螺旋这一页**尤其**吃这一手：读者是从螺旋上"点开"的，
+           那一张必然刚刚在屏幕上 → `thumbOf` 几乎一定命中。 */
+      showBig(
+        lbImg,
+        (it.querySelector('a.sp-frame') as HTMLAnchorElement).getAttribute('href')!,
+        thumbOf(it),
+      );
       lbImg.alt = it.dataset.cap ?? '';
       lbAlbum.textContent = it.dataset.albumTitle ?? '';
       lbCap.textContent = it.dataset.cap ?? '';

@@ -10,6 +10,8 @@ import {
   stepPxOf,
   radiusOf,
   projX,
+  isSideFace,
+  SIDE_DEG,
   V_MAX,
   V_BLEND,
   LOOKAHEAD,
@@ -270,8 +272,42 @@ describe('螺旋盘 · 几何契约', () => {
  * 二、惯性（纯函数层）
  * ══════════════════════════════════════════════════════════════════ */
 describe('螺旋盘 · 惯性数学（helix-core 纯函数）', () => {
-  it('★★★ 速度必须先夹住再进积分器 —— 这里出过一个真 bug', () => {
-    /* 真身：`tgt = clamp(Math.round(f + clamp(v,−8,8) * LOOKAHEAD), …)` 只夹住了
+  it('★★ 「侧壁」判据：Δ=28° 的正常邻片不算，Δ=56° 的碎片才算（阈值由实测反推）', () => {
+    /* 实测（`_probe/_sp-dump.py` 逐片量 rect，1440 视口）：
+         Δ=0°  → 196×196（焦点）· Δ=28° → 149×194（正常邻片）
+         Δ=56° →  53×177（碎片）· Δ=84° →  28×158（碎片）
+       ⇒ 站主看到的"边缘残留"是后两个。分界落在 28° 与 56° 之间。 */
+    expect(isSideFace(0, 28), '焦点片当然是照片').toBe(false);
+    expect(isSideFace(1, 28), 'Δ=28°（投影 149px）是正常邻片，不该被当成侧壁').toBe(false);
+    expect(isSideFace(2, 28), 'Δ=56°（投影 53px）就是那块碎片，必须算侧壁').toBe(true);
+    expect(isSideFace(3, 28)).toBe(true);
+    /* ★ 单调性：不许出现"远处的不是、近处的才是"这种判据（那样切换会来回跳） */
+    let passed = false;
+    for (let k = 24; k >= 0; k -= 0.05) {
+      const now = isSideFace(k, 28);
+      if (passed) expect(now, `k=${k.toFixed(2)} 又变回侧壁了 ⇒ 判据不单调`).toBe(false);
+      if (!now) passed = true;
+    }
+    expect(passed, '一路扫下来一次都没判成照片 ⇒ 判据恒真').toBe(true);
+    /* ★ 与渲染同源：α 由组件从 CSS 读回（换断点换 α 时判据跟着走，不另抄常数） */
+    expect(CODE, '组件必须走 isSideFace —— 不许内联一份角度比较').toMatch(/isSideFace\(d, A_DEG\)/);
+    /* ★ 不读 DOM：`paint` 每 4ms 跑一次，读了就是每帧 82 次强制同步布局 */
+    expect(CODE, '侧壁判定读了 DOM（片宽要按几何算，不能每帧量 rect）').not.toMatch(
+      /getBoundingClientRect/,
+    );
+    /* ★ 与 opacity 同一条纪律："变了才写" —— 装置停下来之后零 DOM 写 */
+    expect(CODE, '侧壁每帧都写 class（静止时应该一次都不写）').toMatch(/if \(sd !== side\[i\]\)/);
+    /* ★ 判定范围收窄到"还看得见的那些片"（`d <= FADE_OUT`）：更远的片 opacity 已是 0，
+       挂类名只会把诊断读数搅浑（第一版 82 片全挂着 —— 探针读出来是 SIDES=80/82，
+       看不出真正是侧壁的只有那两片）。作用域与目的对齐：侧壁只在"看得见"时是问题。 */
+    expect(CODE, '侧壁判定没收窄到可见范围（不可见的片也被算进去）').toMatch(
+      /d <= FADE_OUT && isSideFace\(d, A_DEG\)/,
+    );
+    expect(SIDE_DEG, '阈值必须落在 28° 与 56° 之间（实测的分界线）').toBeGreaterThan(28);
+    expect(SIDE_DEG, '阈值不许高过 56° —— 那两块碎片就漏过去了').toBeLessThanOrEqual(56);
+  });
+
+  it('★★★ 速度必须先夹住再进积分器 —— 这里出过一个真 bug', () => {    /* 真身：`tgt = clamp(Math.round(f + clamp(v,−8,8) * LOOKAHEAD), …)` 只夹住了
        「用来算目标的那份副本」，**喂给弹簧的 v 本身没夹** ⇒ 输入噪声直接当速度进积分器：
        探针的合成事件 dt ≈ 1ms ⇒ 平滑出 v ≈ 1250 张/秒 ⇒ 松手后第一帧 f += v·dt = +20.8 张。
        真机 1000Hz 鼠标一次 100px 位移（1ms）就能算出 424 张/秒 —— 不是实验室假象。 */
@@ -693,6 +729,39 @@ describe('螺旋盘 · 红线与预算', () => {
     );
   });
 
+  it('★★ 侧壁片不许露出照片内容 —— 改画「一叠纸的侧面」（2026-10-08 站主定案 B）', () => {
+    /* 症状（站主第三轮报同一处）：「还是会有这个边缘残留」。
+       实测：竖幅照片按"不裁"放进正方形槽 ⇒ 左右各留一条纸白边；片转到接近 90°、
+       被压成 53×177 / 28×158 的窄条时，露出来的正是**照片边缘那一列像素**。
+       ★ 不是网络问题：拦图档（`*.webp` 一律 404、一张都没到）拍出来这几个框里是空的
+         —— 只剩浏览器的破图图标（`_probe/_sp-slow.py`）。 */
+    const devCss = CODE.slice(CODE.indexOf('.sp-viewport {'), CODE.indexOf('.splb {'));
+    expect(devCss.length, '没切到装置那一段样式').toBeGreaterThan(800);
+    /* ① 内容必须藏起来 */
+    expect(devCss, '侧壁那片还在显示照片内容（碎片会原样露出来）').toMatch(
+      /\.sp-item\.sp-side \.sp-frame img\s*\{[^}]*?visibility:\s*hidden/,
+    );
+    /* ② 藏起来之后要**有东西可看**，否则螺旋断一节（这就是变体 A 被否掉的原因） */
+    expect(devCss, '侧壁没有改成"纸的侧面"（槽上该有一层中性灰了）').toMatch(
+      /\.sp-item\.sp-side \.sp-frame\s*\{[^}]*?background:\s*var\(--deco-sp-side\)/,
+    );
+    /* ③ 藏的是**内容**、不是这一片：visibility 保留布局 ⇒ 几何一个数都不动。
+       用 display:none 会把片从布局里摘掉（片宽一变小，半径/步进全跟着错）。 */
+    expect(devCss, '对侧壁用了 display:none 或动尺寸 ⇒ 螺旋几何会被带歪').not.toMatch(
+      /\.sp-item\.sp-side[^{]*\{[^}]*?(?:display:\s*none|width:|height:)/,
+    );
+    /* ④ 基础槽那条 `background: none` 必须**原样留着**：它守的是"照片没铺满方槽时
+       不许露边"（2026-10-07 站主报的那圈灰绿）。侧壁那条是**另一个选择器**，两者不叠加。 */
+    const slotBlock = CODE.match(/\.sp-frame\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(slotBlock, '方槽的底色声明被别人动过').toMatch(/background:\s*none/);
+    /* ⑤ 类名两侧要对得上：脚本 toggle 的名字 = 样式里的名字 */
+    expect(CODE, '脚本加的类名与样式里的类名对不上').toMatch(/classList\.toggle\('sp-side'/);
+    expect(devCss, '样式里没有 .sp-side 规则 ⇒ 脚本白加').toContain('.sp-side');
+    /* ⑥ 侧壁是"投影压窄"一个原因的产物，不许挂到别的状态上（.zoom / .on）——
+       那会让"放大那张"或"对焦那张"也跟着变纸色。 */
+    expect(devCss, '侧壁规则挂到了别的状态上').not.toMatch(/\.sp-item\.(?:zoom|on)[^{]*\.sp-side/);
+  });
+
   it('★★ 槽不许有底色（那圈"露边"就是它）—— 托底必须落在**照片盒**上', () => {
     /* ★ 症状（2026-10-07 站主截图）：照片外面套着一圈灰绿方框。
        实测（`_probe/_sp-edge.mjs`，CDP）：方槽 aspect-ratio 1、照片 max-*:100% **不裁**
@@ -748,13 +817,18 @@ describe('螺旋盘 · 红线与预算', () => {
     expect(CODE, '螺旋态丢了 max-height ⇒ 图会溢出片框').toMatch(/\.sp-frame img\s*\{[^}]*max-height:\s*100%/);
   });
 
-  it('★ 页面 JS 预算（实测 9761 字节，上限 11264）', () => {
+  it('★ 页面 JS 预算（实测 10996 字节，上限 12288）', () => {
     /* 口径与 /gallery、文章页那几条一致：**内联 + 同源外链闭包**的实数，不靠少算通过。
-       实测构成（2026-10-07）：内联 2762（Base 的首帧保险 + 过渡 loader）
-       + 本页 chunk 5789 + rl-core 共享块 1208 = 9761。
-       上限 11264 留了 ~1.5 KB 余量：加一两个交互不会撞线，
-       而"误把 three 拖进来"（541.9 KB）或"误引外部资源"一定会撞。 */
-    const BUDGET = 11264;
+       实测构成（2026-10-08）：内联 2762（Base 的首帧保险 + 过渡 loader）
+       + 本页 chunk 6536 + big-image 共享块 487 + rl-core 共享块 1208 = 10996。
+       ★ 上限 11264 → 12288（2026-10-08）：本轮加了两件事 ——
+         螺旋**侧壁**判定（走 `isSideFace`，纯算术；脚本里只多一次 class 切换）
+         与灯箱**换图**（`big-image.showBig`，487 字节的共享模块）。实测 +1235 字节，
+         把原来那句"留了 ~1.5 KB 余量"吃光了 ⇒ 按站上规矩（预算随实事调整、
+         但必须写清为什么）抬到 12288，重新留出 ~1.3 KB。
+       ★ 判据的意图一个字没改：真撞线的仍然是"误把 three 拖进来"（541.9 KB）
+         或"误引外部资源"这种量级的事，不是这类几百字节的交互。 */
+    const BUDGET = 12288;
     expect(hasDist, '先 npm run build').toBe(true);
     const { code, files } = jsClosure(PAGE_PATH);
     const full = Buffer.byteLength(code, 'utf8');
