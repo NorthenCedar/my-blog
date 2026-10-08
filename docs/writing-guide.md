@@ -2346,5 +2346,9 @@ bbox 从满图 1920×1920 收敛到 1915×1058。
 | 灯箱里那只 `<img>` 的 `loading` | **别在 HTML 里去掉 `lazy`** —— 打开那一刻由 `showBig` 改成 eager，否则页面加载时就会去拉 475 KB |
 
 **怎么验**：`npx vitest run tests/gallery-image-load.test.ts`（8 条：缓存头 / 不许给 HTML 长缓存 /
-换图时机 / 竞态防护）；要肉眼看得证据就 `python _probe/_sp-side-lb.py`（拍 4 张，判据直接打在图上）。
+换图时机 / 竞态防护）；要肉眼看得证据就 `python _probe/_sp-side-lb.py`，看**灯箱那两个变体**
+（`spiralthumb` = 拦掉 1280 档，箱里仍有图 ⇒ 秒显成立；`spiralfull` = 放行，最终换成 1280 且画面
+不空白）。判据直接打在图上。
+⚠ 同一个脚本里的 `impl` 变体查的是「螺旋侧壁」，那套改法已按站主要求撤回（spec §6.61.1），
+现在读出来必然 `SIDES=0/82` —— 那个变体已无用。
 
