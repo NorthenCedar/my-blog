@@ -220,6 +220,15 @@ const CHRONO = (() => {
         </p>
       </nav>
     )}
+
+    {/* 滚动轨（站主 2026-10-08：「再加一个拖动的条要不然太长了」）。
+        ★ 与走时仪同一层放在 plate 槽里：`.shell` 之外 ⇒ 免疫页面过渡那层 transform
+          建立的 fixed 包含块（本文件上面那段注释写过这个坑）。
+        ★ 默认挂着 `hidden`，脚本到位才摘 ⇒ 无 JS 时整根不存在。
+          ⇒ CSS 里**不要**给 `.rail` 写 display，写了会盖过 UA 的 [hidden]。 */}
+    <div class="rail" data-rail hidden aria-hidden="true" tabindex="-1">
+      <span class="rail-thumb" data-rail-thumb></span>
+    </div>
   </Fragment>
 
   <header class="pagehead">
@@ -248,6 +257,55 @@ const CHRONO = (() => {
 </Base>
 
 <style>
+  /* ---- 滚动轨 SCROLL RAIL（站主 2026-10-08）-----------------------------------
+     全站原生滚动条 2026-10-02 按站主要求删掉了（base.css 那两行），超长页从此
+     没有「能拖的东西」。这根是补回来的替代控件 —— 不是把原生皮肤还回去，
+     仍走站上的纸白 / 墨绿。
+     ★ 位置避开走时仪：走时仪的右缘落在 `max(--gutter, …)` 外侧，本轨贴视口右边缘
+       0.75rem ⇒ 两者不会叠。
+     ★ 视觉只有 3px，命中区给了 22px：细得好看，又抓得住。
+     ★ 无过渡：滑块位置是滚动量的即时映射，reduced-motion 下天然一致。
+     ★ 窄屏不渲染（手机上触屏滚动更自然，条只会挡内容）。 */
+  .rail {
+    position: fixed;
+    top: 50%;
+    right: 0.75rem;
+    /* 正文与走时仪是 1、抽屉 40、整页过渡蒙版 45 ⇒ 夹在内容之上、蒙版之下 */
+    z-index: 2;
+    width: 22px;
+    height: min(44vh, 360px);
+    transform: translateY(-50%);
+    cursor: pointer;
+    /* 拖动滑块时不要连带触发页面自身的滚动 */
+    touch-action: none;
+  }
+  .rail::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    transform: translateX(-50%);
+    border-radius: 2px;
+    background: var(--hair);
+  }
+  .rail-thumb {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 3px;
+    transform: translateX(-50%);
+    border-radius: 2px;
+    background: var(--accent);
+    /* top 与 height 都由 src/scripts/scroll-rail.ts 按滚动量设 */
+  }
+  @media (max-width: 767px) {
+    .rail {
+      display: none;
+    }
+  }
+
   .lede {
     margin: var(--sp-4) 0 0;
     max-width: var(--measure);
@@ -589,3 +647,9 @@ const CHRONO = (() => {
     }
   }
 </style>
+
+<script>
+  // 滚动轨：右侧那根可拖的进度条。零依赖、无帧循环 —— 只在滚动 / 拖动时按需 rAF 一次。
+  // 与走时仪刻意分成两件事：那根是构建期算好的 SVG（读内容、零 JS），这根只读视口。
+  import '../scripts/scroll-rail';
+</script>

@@ -15,18 +15,27 @@ import { sortLogItems } from '../src/lib/log-order';
  *      ⇒ 降级链是**空集**（无 JS 时日格仍是 `<a href>`，天然可用）。
  *      这条是本台最可贵的性质：它一旦被"顺手加点交互"就没了。
  *   ② **齿长随数据变**（全站唯一）—— 这是它与另外两把尺（卷尺 / 阅读尺）的分野。
- *      硬断言：齿高取值数 ≥ 8 且 max/min ≥ 4。哪天被"优化"成等长齿，它退化成卷尺，当场红。
+ *      硬断言：齿高取值数 ≥ 4 且 max/min ≥ 3。哪天被"优化"成等长齿，它退化成卷尺，当场红。
+ *      ★ 2026-10-08 两处阈值一起收（8→4、4→3）：站主要求把 v1.18 以后的日志精简成
+ *        「只说做了什么」，每版的 changes 条数整体收窄（1–17 → 1–6）⇒ 这条通道的
+ *        **信息量**跟着少了，两条阈值都跟着数据走。装置没坏，是**喂给它的数据变少了**；
+ *        判据的意图（齿高必须是数据的函数、不能是常数）一个字没改 ——
+ *        把 hOf 改成常数时，两个读数都会掉到 1，照样当场红。
  *   ③ **一格一读数、日格是真锚点** —— 不许出现死锚（指向不存在的 id）或重复 id。
  *   ④ 装饰层必须挂 `.shell` **之外**（plate 槽）—— `.shell` 在页面过渡里会被 transform，
  *      被 transform 的祖先会成为 `position: fixed` 的包含块（关于页实测跳 91px）。
  *   ⑤ 底纹取宽守**性质**不守数字：所有 vw 值必须 < 100（出血档在两张素材上不是一件事）。
  *   ⑥ 零新增运行时依赖（红线）。
  *   ⑦ **动效也零 JS**（2026-10-04 追加）—— 「呼吸」（底纹极慢漂移）与「生长」（齿依次
- *      长出、**只播一次**）都由 CSS 表达，本页依然**一个 `<script>` 都没有**。
- *      ★ 零 JS 这条身份没有被推翻：它说的是"本台没有脚本"，不是"这页不许有视觉变化"。
+ *      长出、**只播一次**）都由 CSS 表达；**走时仪本身**到现在也一个 `<script>` 都没有。
+ *      ★ 零 JS 这条身份说的是"**这台装置**没有脚本"，不是"这页不许有视觉变化"：
  *        ① 呼吸走合成器（只动 transform），② 生长是一次性入场 —— 两者都不需要 JS。
- *        若哪天有人要往这页塞 JS（如读现实时钟的 NOW 刻线），那是**契约变更**，
- *        得连同这条一起改，而不是"顺手加个 script"。
+ *      ⚠★ 2026-10-08 **契约变更**（站主发起）：站主要在日志页加一根可拖的滚动条
+ *        （「再加一个拖动的条要不然太长了」），而**拖动必须有脚本** ⇒
+ *        「本页一个 `<script>` 都没有」被推翻，换成更强的那一条：
+ *        **本页只许有一个脚本（滚动轨），且它一个字节都不许碰走时仪**。
+ *        判据在下面「滚动轨」那组。
+ *        ⇒ 这正是原注释预留的那条路："往这页塞 JS 是契约变更，得连同这条一起改"。
  */
 const ROOT = process.cwd();
 const DIST = join(ROOT, 'dist');
@@ -117,13 +126,18 @@ describe.skipIf(!hasDist)('日志页 · 走时仪：齿 = 内容的函数', () =
     expect(cells).toEqual(PER_DAY.map((d) => d.length));
   });
 
-  it('★ 齿长随数据变 —— 取值数 ≥ 8 且 max/min ≥ 4（这一条就是它和卷尺的分野）', () => {
+  it('★ 齿长随数据变 —— 取值数 ≥ 4 且 max/min ≥ 3（这一条就是它和卷尺的分野）', () => {
     const hs = readToothHeights();
     const distinct = new Set(hs).size;
     const max = Math.max(...hs);
     const min = Math.min(...hs);
-    expect(distinct, `齿高只有 ${distinct} 种取值 —— 等长齿就是卷尺，本台的身份证没了`).toBeGreaterThanOrEqual(8);
-    expect(max / min, `最矮齿 ${min} / 最高齿 ${max} 拉不开`).toBeGreaterThanOrEqual(4);
+    /* ⚠ 两个阈值一起收（2026-10-08）：日志精简后每版 changes 条数收窄到 1–6 ⇒
+       齿高取值自然只有 6 种、且**比值**也压下来。比值对数据的**极差**敏感，因为
+       hOf 是线性映射（MIN_H + (MAX_H-MIN_H)·n/maxChanges），理论下限
+       104 /(14 + 90/6) = 3.59。**装置没坏，是喂给它的数据变少了**（见文件头 ②）。
+       意图不变：hOf 被改成常数时两个读数都掉到 1，这里照样红。 */
+    expect(distinct, `齿高只有 ${distinct} 种取值 —— 等长齿就是卷尺，本台的身份证没了`).toBeGreaterThanOrEqual(4);
+    expect(max / min, `最矮齿 ${min} / 最高齿 ${max} 拉不开`).toBeGreaterThanOrEqual(3);
     // 齿高必须真的是"改动项数"的函数：同一项数 ⇒ 同一齿高；不同项数 ⇒ 不同齿高
     /* ⚠ 配对顺序：`hs` 是**产物里齿的出现顺序**（左 = 最早），`ASC` 才是同序的；
        `ITEMS` 是文档顺序（新→旧），拿它配 `hs` 会错位（本轮实测踩到的假失败）。 */
@@ -166,11 +180,17 @@ describe.skipIf(!hasDist)('日志页 · 走时仪：可点、可降级', () => {
     expect(emptyHref, '空格日格挂了 href ⇒ 死锚').toEqual([]);
   });
 
-  it('★ 零 JS：本页没有任何装置脚本（这是它最可贵的性质，别被"顺手加点交互"破掉）', () => {
-    expect(CODE, 'log.astro 里出现了 <script> —— 走时仪本就该零 JS').not.toMatch(/<script/);
-    expect(CODE, '不许引装置脚本（它连 rl-core 都不需要）').not.toMatch(/from '\.\.\/scripts\//);
-    expect(CODE).not.toMatch(/\brl-core\b/);
-    expect(CODE, '不许出现 canvas / rAF —— 那不是本台的机制').not.toMatch(/canvas|requestAnimationFrame/);
+  it('★ 走时仪零 JS：本页唯一的脚本是滚动轨，且它一个字节都不碰走时仪', () => {
+    /* 原契约是「本页一个 `<script>` 都没有」。2026-10-08 站主要求在日志页加一根可拖的
+       滚动条（「再加一个拖动的条要不然太长了」）—— 拖动**必须**有脚本，所以那条被
+       站主自己推翻了。这里换成它真正要守的那件事：**走时仪本身零 JS**
+       （不吃它的数据、不查它的 DOM、不改它的样式）。 */
+    const scripts = [...CODE.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    expect(scripts.length, '脚本入口只该有一个（滚动轨）').toBe(1);
+    expect(scripts[0], '那个脚本必须是滚动轨').toMatch(/import '\.\.\/scripts\/scroll-rail'/);
+    expect(scripts[0], '滚动轨碰了走时仪 —— 那台的身份就是「零 JS」').not.toMatch(/chrono|CHRONO/);
+    expect(CODE, '不许引装置公共层（走时仪连 rl-core 都不需要）').not.toMatch(/\brl-core\b/);
+    expect(CODE, '不许出现 canvas / rAF —— 那不是走时仪的机制').not.toMatch(/canvas|requestAnimationFrame/);
     expect(existsSync(join(ROOT, 'src/scripts/log-chrono.ts')), '不该有走时仪脚本文件').toBe(false);
   });
 
@@ -189,6 +209,41 @@ describe.skipIf(!hasDist)('日志页 · 走时仪：可点、可降级', () => {
     expect(CODE).toMatch(/\.chrono\s*\{[\s\S]*?position:\s*fixed/);
     expect(CODE).toMatch(/\.chrono\s*\{[\s\S]*?pointer-events:\s*none/);
     expect(CODE).toMatch(/\.chrono-day\s*\{[\s\S]*?pointer-events:\s*auto/);
+  });
+});
+
+/* ── 滚动轨（2026-10-08 新增）────────────────────────────────────────────────
+ * 站主：「再加一个拖动的条要不然太长了」。全站原生滚动条 2026-10-02 被站主自己要求删掉
+ * （`src/styles/base.css` 那两行），超长页从此**没有任何能拖的东西** —— 这根把它补回来。
+ * ★ 它**不是装置**：不读 `items`、不吃任何内容数据，是纯视口的函数
+ *   （换到任何长页它照样成立）⇒ 所以上面那组「齿 = 内容的函数」与它无关。
+ * 断言守四件事：无 JS 不出现 / 与走时仪同层（plate 槽）/ 窄屏不渲染 / 不抢无障碍树。
+ */
+describe.skipIf(!hasDist)('日志页 · 滚动轨（右侧可拖的滚动条）', () => {
+  it('无 JS 时不出现：产出的 DOM 带 hidden（脚本到位才摘）', () => {
+    expect(PAGE, 'rail 不带 hidden ⇒ 无 JS 时也会画出一根拉不动的条').toMatch(
+      /<div class="rail"[^>]*\bhidden\b/,
+    );
+  });
+
+  it('与走时仪同一层：放进 plate 槽（`.shell` 的 transform 带不偏它）', () => {
+    const plate = CODE.slice(CODE.indexOf('<Fragment slot="plate">'), CODE.indexOf('</Fragment>'));
+    expect(plate, '滚动轨没放进 plate 槽').toMatch(/class="rail"/);
+  });
+
+  it('窄屏不渲染（手机上触屏滚动更自然，条只会挡内容）', () => {
+    expect(CODE).toMatch(/@media\s*\(max-width:\s*767px\)[\s\S]*?\.rail\s*\{[\s\S]*?display:\s*none/);
+  });
+
+  it('不抢无障碍树与 Tab 序（键盘 / 读屏走原生滚动）', () => {
+    expect(PAGE).toMatch(/class="rail"[^>]*aria-hidden="true"/);
+    expect(PAGE).toMatch(/class="rail"[^>]*tabindex="-1"/);
+  });
+
+  it('主规则里**不许写 display** —— 写了会盖过 UA 的 [hidden]，无 JS 那档就漏了', () => {
+    const rule = CODE.match(/\.rail\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rule.length, '没找到 .rail 主规则').toBeGreaterThan(0);
+    expect(rule, '给 .rail 写了 display ⇒ 盖过 [hidden]').not.toMatch(/display:/);
   });
 });
 
