@@ -6648,3 +6648,27 @@ alpha = clamp(蓝度 3→24) ^ 0.85      // v2 档：笔身实、水的浓淡仍
 - **底纹的浓淡对标的是峰值，不是 mean** —— mean 的分母随"铺满型/线描型"差一个量级，互比会翻车。
 - **凡是"看起来正常的读数"，都要自证它量到了东西**（色带自检 + 层名自报）。
 - **同一件东西出现在多页 ⇒ 组件 + 契约**；内联三份迟早各自腐化，而腐化时构建与截图都不报错。
+
+#### 6.58.13 线上核对（部署 `a309bb3` 之后 · `_probe/_gal-live-check.py`）
+
+| 项 | 结果 |
+|---|---|
+| 三页 `<body>` 带 `chrome-page gallery-inf-plate` | ✔ |
+| 三页正文有 `.gallery-inf` 且引用 `inf-brush` | ✔ |
+| 三页**内联** `<style>` 含 `.gallery-inf` 规则 | ✔ |
+| 三页**内联** `<style>` 含 `body.gallery-inf-plate .page-inf{display:none}` | ✔ |
+| `inf-brush.DUUNrOBK_24aked.webp` 线上/本地逐字节 | ✔ 30956 B · `6e8bf33bafa38f94` |
+| 日志页含 v2.3、无「内层恰为 `[object Object]`」的 li | ✔ |
+
+★★ **本页 HTML 本体首次做到了线上逐字节核验**：把 CF 的注入**还原**回去
+（`mailto` 混淆按 `__cf_email__` 的 key 异或解回、删 beacon 与 email-decode、再去掉 beacon 留下的换行）
+之后，**三页线上 HTML 与本地 `dist` 逐字节相同**。⇒ 站点自己的 HTML 一个字节没被动
+（前一轮只核到 CSS/JS/图片，HTML 本体一直只有片段级抽查 —— 这一条把那半个缺口补上了）。
+
+★ 归一化函数本身**踩了一个坑**：初版用 `<script[^>]*></script>` 兜底删脚本，
+把站点自己的 `<script type="module" src=...></script>`（正是这个形状）也删了、制造出"假差异"
+⇒ 改成**按 `src` 精确匹配**只删 CF 那两个。**归一化工具自己也要先自证**，否则它会造假红
+（与 §6.58.9「读数必须自证」同一课）。
+
+CF 注入仍为三项（邮箱混淆 · email-decode · Web Analytics beacon）+ 1 个换行，与上一轮结论一致
+（见 `docs/site-decisions.md:503`；beacon 是否关闭待站主定夺）。
