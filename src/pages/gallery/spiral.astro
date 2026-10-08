@@ -28,6 +28,7 @@ import Base from '../../layouts/Base.astro';
 import PageTitle from '../../components/PageTitle.astro';
 import PageReadout from '../../components/PageReadout.astro';
 import SpiralPlate from '../../components/SpiralPlate.astro';
+import GalleryInf from '../../components/GalleryInf.astro';
 import manifest from '../../../public/gallery/manifest.json';
 
 const albums = manifest.albums as { total: number }[];
@@ -37,7 +38,12 @@ const N = albums.reduce((n, a) => n + a.total, 0);
 const PAD = String(N).padStart(3, '0');
 ---
 
-<Base title="螺旋盘" current="gallery" chrome="page">
+<Base title="螺旋盘" current="gallery" chrome="page" bodyClass="gallery-inf-plate">
+  {/* 视口底纹 ∞ —— 与 `/gallery/`、`/gallery/<册名>/` 同一份（站主 2026-10-08「三条路都换」）。
+      ★ 螺旋盘自己的底板是**不透明纸白**（`SpiralPlate` 那条 `background: var(--paper)`），
+        所以这层 ∞ 只在装置区之外看得见 —— 这与它替代的百褶 ∞ 完全一致，不是本轮的改动。 */}
+  <Fragment slot="plate"><GalleryInf /></Fragment>
+
   <header class="pagehead">
     <PageTitle>螺旋盘</PageTitle>
     <PageReadout>

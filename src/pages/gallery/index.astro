@@ -32,6 +32,7 @@ import PageTitle from '../../components/PageTitle.astro';
 import PageReadout from '../../components/PageReadout.astro';
 import SpiralPlate from '../../components/SpiralPlate.astro';
 import AlbumRow from '../../components/AlbumRow.astro';
+import GalleryInf from '../../components/GalleryInf.astro';
 import manifest from '../../../public/gallery/manifest.json';
 /* ★ 板里那行手写花体是**站名** ⇒ 必须从 content/site.md 读，不能写死在 src/ 里
    （架构契约：主题不持有正文/站名，有 tests/content-invariants.test.ts 守着）。 */
@@ -46,7 +47,12 @@ const albums = manifest.albums as Album[];
 const total = albums.reduce((n, a) => n + a.total, 0);
 ---
 
-<Base title="相册" chrome="page" current="gallery">
+<Base title="相册" chrome="page" current="gallery" bodyClass="gallery-inf-plate">
+  {/* ① 视口底纹 ∞（站主 2026-10-08：「替换掉整个相册页的百褶无限符号」）。
+      ★ 必须走 `plate` 具名槽：普通 slot 会落进 `.shell` 里，而页面过渡给它加 transform
+        ⇒ 装饰层会跳位。三页共用一份，见 `GalleryInf.astro`。 */}
+  <Fragment slot="plate"><GalleryInf /></Fragment>
+
   {/* ★★ 交接层（站主第九轮 ③：「到绿屏进相册时相册页内容缓缓浮上来，要丝滑点」）。
       它只在**从剧场绿幕切过来**这一次露面：主页装置在跳转前把 `tsl-nav` 写进
       sessionStorage，<head> 里那段同步脚本读掉它并给 <html> 挂 `.tsl-in`

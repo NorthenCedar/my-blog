@@ -2247,3 +2247,32 @@ bbox 从满图 1920×1920 收敛到 1915×1058。
 ⚠ 本轮做错的一件事，记在这里别再犯：给 canvas 加 `hidden` 属性做"脚本到位才露面"——
 **`hidden` 是 `display:none`，装置量不到尺寸（`clientWidth` 恒为 0）**，
 画布永远空着而构建不报错。**canvas 的显隐只能用 opacity 门控**（见 §19.4）。
+
+### 25.6 相册页背景那层 ∞（2026-10-08 换的）
+
+你给的那张**蓝墨手绘 ∞** 抠出来、改成墨绿，**替换掉了相册三页（`/gallery/`、`/gallery/<册名>/`、
+`/gallery/spiral/`）原来那层「百褶 ∞」**。它和日志页那层是同一套做法，只是换了张图。
+
+| 这是哪一层 | `src/components/GalleryInf.astro` → `.gallery-inf` |
+|---|---|
+| 用哪张图 | `src/assets/gallery/plates/inf-brush.webp`（614×208，自动出多档 webp） |
+| 怎么生成的 | `node _probe/_gal-inf-build.mjs`（从 `_probe/_inf/src.jpg` 重抠＋改色） |
+
+**想改什么改哪里**
+
+| 想要的 | 改哪儿 | 默认 |
+|---|---|---|
+| **再淡一点 / 再深一点** | 组件里 `--plate-op` 那个 `var(...)` 的兜底值 | `0.08`（与你已接受的日志页那层**同档**，是对着"要替代的那层"量出来的） |
+| **再大一点 / 再小一点** | `--plate-w` 的兜底值 | `min(51vw, 733px, 250vh)`（墨迹宽度与日志页 ∞ 同档） |
+| **换个颜色** | `_probe/_gal-inf-build.mjs` 里的 `RAMP`（色阶锚点，取自 token）→ 重跑脚本 | 正墨绿（`--accent #2d7d46`） |
+| **重抠一张新图** | 换 `_probe/_inf/src.jpg` → 重跑脚本（流程见 §25.1–25.5） | —— |
+
+**三条别动**
+
+1. **三页的 `bodyClass="gallery-inf-plate"` 一个字都不能少** —— 少一页，那页就会**两层 ∞ 叠着**，
+   而且**构建、测试、截图全都不报错**。`tests/gallery-inf.test.ts` 专门守这条。
+2. **那层要挂在 `plate` 槽**（页面里的 `<Fragment slot="plate">`）—— 放进正文里，页面切换时它会跳位。
+3. **关百褶 ∞ 的那条规则是 `display:none`**，别改成 `opacity:0` —— 后者还占一层满屏的合成层，很贵。
+
+**怎么验**：`npm run build` 后跑 `npx vitest run tests/gallery-inf.test.ts`（14 条），
+或本地 `node _probe/_gal-inf-mass.mjs after` 看它和其余两层底纹的浓淡对照。

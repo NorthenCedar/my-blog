@@ -23,6 +23,7 @@ import Base from '../../layouts/Base.astro';
 import PageTitle from '../../components/PageTitle.astro';
 import PageReadout from '../../components/PageReadout.astro';
 import PhotoWall from '../../components/PhotoWall.astro';
+import GalleryInf from '../../components/GalleryInf.astro';
 import manifest from '../../../public/gallery/manifest.json';
 
 type File = { w: number; h: number; url: string };
@@ -61,7 +62,10 @@ const album = albums.find((a) => a.id === albumId)!;
 const pad2 = (n: number) => String(n).padStart(2, '0');
 ---
 
-<Base title={album.title} current="gallery" chrome="page">
+<Base title={album.title} current="gallery" chrome="page" bodyClass="gallery-inf-plate">
+  {/* 视口底纹 ∞ —— 与 `/gallery/`、`/gallery/spiral/` 同一份（站主 2026-10-08「三条路都换」）。 */}
+  <Fragment slot="plate"><GalleryInf /></Fragment>
+
   <header class="pagehead">
     {/* 回头路：访客是从 /gallery 的入口条点进来的（螺旋盘独立页也有同一行）。 */}
     <p class="back"><a href="/gallery/">← 相册</a></p>
