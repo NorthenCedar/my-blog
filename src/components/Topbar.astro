@@ -112,19 +112,63 @@ const { wordmark, current } = Astro.props;
        加一层玻璃薄片（backdrop-filter）+ 顶部高光，字距收一点。
        ★ 顺序有讲究：**前缀在前、标准在后**（理由见 pages/index.astro 里 .section-head 的注释）。 */
   body.chrome-page .topbar {
+    /* ★★ 2026-10-08：顶栏自己**不再**承担背景 / 模糊 / 描边 —— 全部搬到 ::before。
+       为什么必须这样（手机端「除了主页，其他页点不出导航菜单」的根因）：
+       `backdrop-filter` **同时**做两件要命的事 ——
+         ① 建立 `position:fixed` 后代的**包含块**：抽屉的 `.navshell` 是 `fixed; inset:0`，
+            被收作 `.topbar` 的包含块之后只铺满顶栏那条细带（实测 62px），面板被裁成一条；
+         ② 建立**层叠上下文**：把 `.navshell` 的 `z-index:40` 锁在顶栏内部，
+            而 `body.chrome-page main` 是 `z-index:1` ⇒ 抽屉还会被正文压住。
+       实测（`_probe/_nav-probe.mjs`）：首页 shell 780（=视口，正常）；
+       七个内页 shell 全部 62（=顶栏高，被压扁），"建立包含块的祖先"写着 `div.topbar[backdrop-filter]`。
+       挪到 ::before 之后：模糊的**底色仍然是页面**（不是顶栏自己的装饰），
+       顶栏的字/链接在 ::before 之上 ⇒ 观感逐像素不变
+       （`_probe/_nav/before|after/strip-about-1200.png` 对照 + `_probe/_nav/diff-strip.png`）；
+       而 `.topbar` 退回普通元素 ⇒ 抽屉重新拿到视口、也重新回到根层叠上下文。
+       ⚠ 别再往 `.topbar` 上加 `backdrop-filter` / `filter` / `transform` / `perspective` /
+          `will-change` / `contain` —— 任何一个都会把上面两个问题一起带回来
+          （首页 `index.astro` 早有一条注释专门避开 `transform`，出处相同）。
+          护栏：`tests/nav-drawer-overflow.test.ts` 的「顶栏不得建立 fixed 包含块」。 */
+    position: relative;   /* 只给玻璃层当定位祖先 —— relative 不建立 fixed 的包含块 */
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
     padding: 0.7rem var(--gutter);
+    /* 只占位、不着色：底线改由玻璃层画。留在这儿会被 ::before 的模糊一起吃掉。
+       写 `transparent` 而不是删声明 —— 删了顶栏会矮 1px（"此处刻意不着色"也是给后来人看的）。 */
+    border-bottom: 1px solid transparent;
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+  }
+  /* 顶栏的**视觉层**：玻璃底 + 模糊 + 内高光 + 底线。
+     ★ `z-index: 0`（**不能**写 -1）—— 这是本轮量出来的：
+       写 -1 时它落进根层叠上下文的**负层**，Chrome 合成时**底纹（.page-inf，同为 z-index:-1）
+       不进它的 backdrop** ⇒ 玻璃变成一层近乎纯纸白的白片（实测顶栏 rgb(246,246,243) → rgb(251,251,248)，
+       即 ∞ 底纹不再透过玻璃可见）。写成 0（正常定位层）后与"玻璃挂在 .topbar 自己身上"的
+       原始观感**逐值相同**（`_probe/_nav-var.mjs` 的 base/z0/ctrl 三档对照）。
+       ★ **刻意不加 `isolation`** —— 正是靠"顶栏不是层叠上下文"这一条，抽屉才能回到根层叠上下文
+       去压过 `main`（加了 isolation：抽屉几何恢复了、但层叠命中变成 `div.profile`，仍被正文盖住）。 */
+  body.chrome-page .topbar::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 -1px 0;    /* 多盖 1px：接住原来那条 border-bottom 的位置，顶栏总高不变 */
+    z-index: 0;
+    pointer-events: none;
     border-bottom: 1px solid var(--glass-line);
     background: linear-gradient(180deg, var(--glass-bg), transparent);
     -webkit-backdrop-filter: blur(var(--glass-blur));
     backdrop-filter: blur(var(--glass-blur));
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 40%);
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-    color: var(--muted);
+  }
+  /* 顶栏自己的**文字与图标**抬到玻璃层之上：玻璃层是 z-index:0 的定位元素，
+     而定位元素画在内流内容**之后**，不抬的话站名/导航会被一起模糊掉。
+     ⚠ 必须排除抽屉那两件：`.navshell` 是 `position:fixed`、`.navtog` 小屏下是 `position:absolute`
+     —— 给它们加 `position` 会当场改坏抽屉（`.navbtn` 是静态定位，抬上来是对的）。 */
+  body.chrome-page .topbar > *:not(.navshell):not(.navtog) {
+    position: relative;
+    z-index: 1;
   }
   body.chrome-page .topbar .site {
     color: var(--ink);

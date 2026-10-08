@@ -1399,6 +1399,32 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
   });
 });
 
+describe.skipIf(!hasDist)('日志页 changes：不许有被 YAML 吃成对象的条目（2026-10-08）', () => {
+  /**
+   * 每条 changes 在 content/pages/log.md 里本该是一条**字符串**。若正文里写了裸的
+   * 「ASCII 冒号 + 空格」，YAML 就把那一条读成**映射**而不是字符串 ⇒ Astro 直接把它
+   * stringify 成一个对象：整条文字消失，页面上只剩 `[object Object]`。
+   * v2.1 的第 3 条就这样上线过一次（那句里写的是 `background: none`）—— 当时没有任何
+   * 断言看着日志内容，所以全绿的测试放它过去了。
+   *
+   * 判据取 li 的**原始内层 HTML** 恰好等于 `[object Object]`（不是"文本里出现该字样"）：
+   * 这样不会误伤「在正文里引用这个字样」的条目 —— 那处外面套着 `<code>`，内层 HTML 不止四个字。
+   */
+  it('dist/log/index.html 里没有整条渲染成 [object Object] 的条目', () => {
+    const page = join(DIST, 'log', 'index.html');
+    expect(existsSync(page), '日志页产物不存在').toBe(true);
+    const html = readFileSync(page, 'utf8');
+    const lis = [...html.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1].trim());
+    const bad = lis.filter((inner) => inner === '[object Object]');
+    expect(
+      bad.length,
+      `有 ${bad.length} 条 changes 被 YAML 吃成了对象 —— 去 content/pages/log.md 查那几条里的裸「冒号+空格」`,
+    ).toBe(0);
+    /* 反面正对照：确认本组断言不是空转 */
+    expect(lis.length, '日志页一条条目都没有，本组断言等于空转').toBeGreaterThan(50);
+  });
+});
+
 describe.skipIf(hasDist)('构建产物（未构建）', () => {
   it('dist/ 不存在，先跑 npm run build 再跑测试', () => {
     console.warn('dist/ 不存在：集成断言被跳过。正确顺序是 npm run build && npm test');

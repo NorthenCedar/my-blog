@@ -110,3 +110,64 @@ describe.skipIf(!hasDist)('产物里的抽屉', () => {
     expect(iPanel, '面板不在壳内').toBeGreaterThan(iShell);
   });
 });
+
+/* ★★ 2026-10-08：手机端「**除了主页，其他页**点不出导航菜单」的**根因**契约。
+ *   根因不在抽屉的 CSS，而在**顶栏**：`.topbar` 上的 `backdrop-filter` 会同时做两件事 ——
+ *     ① 建立 `position:fixed` 后代的**包含块** ⇒ 抽屉的 `.navshell`（`fixed; inset:0`）
+ *        被收成顶栏那条细带（实测 62px，面板只剩"导航菜单"四个字）；
+ *     ② 建立**层叠上下文** ⇒ `.navshell` 的 `z-index:40` 被锁在顶栏内部，
+ *        而 `body.chrome-page main` 是 `z-index:1` ⇒ 即使几何修好了，抽屉仍被正文压住。
+ *   实测工具 `_probe/_nav-probe.mjs`（量 shell 盒高 + `elementFromPoint` 判层叠）：
+ *     修前 首页 shell 780（正常）· 七个内页 shell 全部 62（被压扁），
+ *     "建立包含块的祖先"直接报 `div.topbar[backdrop-filter]`。
+ *   ⇒ 玻璃整体搬到 `.topbar::before`，`.topbar` 退回普通元素。
+ *   ★ 两条**踩过才知道**的细节，各配一条断言：
+ *     · 玻璃层的 `z-index` 必须是 **0 不能是 -1** —— 写 -1 时它落进根层叠上下文的负层，
+ *       同层的 ∞ 底纹（`.page-inf`，也是 z-index:-1）**不进它的 backdrop** ⇒ 玻璃变成纯纸白片
+ *       （实测顶栏 `rgb(246,246,243)` → `rgb(251,251,248)`；`_probe/_nav-var.mjs` 的
+ *       base/z0/ctrl 三档对照证明 `z-index:0` 与"玻璃挂在 .topbar 自己身上"**逐值相同**）。
+ *     · 顶栏文字/图标必须抬到玻璃层之上（定位元素画在内流内容之后），
+ *       但**必须排除** `.navshell`（fixed）与 `.navtog`（小屏下 absolute），否则当场改坏抽屉。
+ */
+describe('内页顶栏 · 不得建立 fixed 的包含块（手机端抽屉点不开的根因）', () => {
+  const TOPBAR = readFileSync(join(ROOT, 'src/components/Topbar.astro'), 'utf8');
+  /* ⚠ 负向断言一律先剥注释：顶栏那段说明里**正好**写着 backdrop-filter / transform 这些
+     属性名（AGENTS §5：「别在注释里抄你要禁止的字面量」，本轮是第 N 次同族坑）。 */
+  const TCODE = TOPBAR.replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+  it('★ .topbar 自身不许出现会建立包含块 / 层叠上下文的属性', () => {
+    const block = TCODE.match(/body\.chrome-page \.topbar\s*\{([^}]*)\}/);
+    expect(block, '找不到 body.chrome-page .topbar 的规则块').toBeTruthy();
+    const body = block![1];
+    for (const prop of ['backdrop-filter', 'filter', 'transform', 'perspective', 'will-change', 'contain']) {
+      expect(body, `.topbar 上出现了 ${prop} ⇒ 抽屉会被压扁/盖住（手机端点不出菜单）`).not.toContain(prop);
+    }
+    expect(body, '顶栏要留 position:relative 给玻璃层当定位祖先').toMatch(/position:\s*relative/);
+    expect(body, '顶栏的底线上色归玻璃层，这里只占位').toMatch(/border-bottom:\s*1px solid transparent/);
+  });
+
+  it('★ 玻璃层挂在 ::before 上，且 z-index 必须是 0（写 -1 会丢掉 ∞ 底纹）', () => {
+    const m = TCODE.match(/body\.chrome-page \.topbar::before\s*\{([^}]*)\}/);
+    expect(m, '没找到顶栏玻璃层 ::before').toBeTruthy();
+    const g = m![1];
+    expect(g, '玻璃层必须是定位元素').toMatch(/position:\s*absolute/);
+    expect(g, '玻璃层的 z-index 必须是 0 —— 写 -1 时底纹不进它的 backdrop，玻璃变纯白片').toMatch(/z-index:\s*0\s*;/);
+    expect(g, '玻璃层要自己带模糊').toMatch(/backdrop-filter:\s*blur/);
+    expect(g, '底线要画在玻璃层上（留在 .topbar 会被模糊吃掉）').toMatch(/border-bottom:\s*1px solid var\(--glass-line\)/);
+    expect(g, '玻璃层要放行指针，否则顶栏链接点不动').toMatch(/pointer-events:\s*none/);
+    // 反向：顶栏**自己**不许再带模糊（那正是根因）
+    const top = TCODE.match(/body\.chrome-page \.topbar\s*\{([^}]*)\}/)![1];
+    expect(top, '顶栏自己又带上 backdrop-filter 了 —— 根因回来了').not.toContain('backdrop-filter');
+  });
+
+  it('★ 顶栏文字抬到玻璃层之上，且排除抽屉那两件（.navshell / .navtog）', () => {
+    const m = TCODE.match(/body\.chrome-page \.topbar > \*:not\(\.navshell\):not\(\.navtog\)\s*\{([^}]*)\}/);
+    expect(m, '没找到"抬起顶栏内容"的规则 —— 站名/导航会被玻璃一起模糊掉').toBeTruthy();
+    expect(m![1], '抬升要真的加 z-index').toMatch(/z-index:\s*1/);
+    expect(m![1], '抬升要真的改定位').toMatch(/position:\s*relative/);
+    /* 这两条是"别把抽屉一起抬坏"的护栏：.navshell 是 fixed、.navtog 小屏下是 absolute，
+       一旦被 position:relative 覆盖，抽屉立刻坏掉（一个不再铺满视口、一个挤进 flex 流）。 */
+    expect(TCODE, '抬升规则必须排除 .navshell').toContain(':not(.navshell)');
+    expect(TCODE, '抬升规则必须排除 .navtog').toContain(':not(.navtog)');
+  });
+});

@@ -6344,3 +6344,126 @@ JS 里取色链 `getPropertyValue(\`--ink-motif\`)||getPropertyValue(\`--accent\
 不要写成"必须恰好等于某值"的快照。脚本已改回统一口径。
 
 
+
+---
+
+### 6.56 手机端「除了主页，其他页点不出导航菜单」：顶栏的 `backdrop-filter` 建立了 fixed 包含块（2026-10-08）
+
+站主原话：「**修复手机端除了主页其他页点不出来导航菜单的问题**」（附一张相册页截图：
+抽屉只在顶栏下方露出一条细带，里面只有「导航菜单」四个字）。
+
+#### 6.56.1 症状与根因：不在抽屉，在顶栏
+
+抽屉本身没坏。坏的是**它被放进了一个会建立包含块的祖先里**。
+`.topbar`（`src/components/Topbar.astro`）上有 `backdrop-filter: blur(...)`，而
+`backdrop-filter` **同时**做两件事：
+
+| 它做的事 | 症状 |
+|---|---|
+| 建立 `position:fixed` 后代的**包含块** | 抽屉的 `.navshell` 是 `fixed; inset:0`。被收编后它的包含块变成**顶栏的 padding box** ⇒ 壳只有 **62px 高**（=顶栏高），面板随之被裁成一条，十个链接全部看不见 |
+| 建立**层叠上下文** | `.navshell` 的 `z-index:40` 被锁在顶栏内部；而 `body.chrome-page main { z-index:1 }` ⇒ **即使几何修好，抽屉仍会被正文盖住**（实测层叠命中 `div.profile` / `div.shell` / `input`） |
+
+★ 这两个后果是**同一句话的两半**，只修一半会得到一个"几何正确但看不见"的抽屉 —— 本轮
+先用 `SIM=1`（只摘 blur、补 `isolation` 保住层叠上下文）验到了这一半，才定下完整修法。
+
+> **62 与 63 都是对的，量的是不同的盒子**：`position:fixed` 后代的包含块是祖先的 **padding box**，
+> 修复前实测就是 **62**；修后探针那列 `topbar 63` 读的是 `getBoundingClientRect().height`
+> 即 **border box**（比 padding box 多那 1px 底线）。⇒ 后人若看到这一列是 63，**不要**去"修正"文档里的 62。
+
+#### 6.56.2 为什么首页没事
+
+首页（`chrome='console'`）的抽屉挂在 `.band` 里，而 `.band` 是 `min-height:100svh` 的整屏元素
+（且带 `perspective` / `overflow:hidden`）。它的包含块虽是 `.band` 而不是视口，但**首页停下来时
+`.band` 恰好等于视口** ⇒ 看不出来。内页顶栏只有一条 62px 的细带，同一条机制立刻现形。
+（首页探针里「层叠命中 `div.bi-wash`」是**开场幕布**（`z-index:60`，阶梯在设计上就高于抽屉 40），
+不是回归 —— 无头下幕布不撤，属 §6 第 ④ 条那个已知伪影。）
+
+#### 6.56.3 修法：玻璃整体搬出 `.topbar`（只改一个规则块）
+
+| 项 | 改法 |
+|---|---|
+| `.topbar` | 只留**布局**（`position:relative` + flex + padding + 字体）＋ `border-bottom: 1px solid transparent` **占位**；**不再**有背景 / 模糊 / 内高光 |
+| `.topbar::before` | 承接全部视觉：`position:absolute; inset:0 0 -1px 0; z-index:0; pointer-events:none` + 渐变底 + `backdrop-filter` + `inset` 高光 + `border-bottom` 底线 |
+| `.topbar > *:not(.navshell):not(.navtog)` | `position:relative; z-index:1` —— 把站名/导航/汉堡**抬到玻璃层之上**（定位元素画在内流内容之后，不抬会被一起模糊） |
+
+`position: relative`（而不是 transform/filter）**不会**建立 fixed 的包含块 ⇒ 抽屉重新拿到视口；
+顶栏也不再是层叠上下文 ⇒ `.navshell` 回到根层叠上下文，`z-index:40` 正常压过 `main(1)`
+—— 这恰好也就是站上 `transition.css` 那条 z-index 阶梯（抽屉 40/41 < 蒙版 45 < 灯箱 50 < 开场 60）**本来就要的**。
+
+#### 6.56.4 两条只有量了才知道的细节
+
+1. ★ **玻璃层的 `z-index` 必须是 `0`，不能是 `-1`**。写 `-1` 时它落进根层叠上下文的**负层**，
+   而 ∞ 底纹（`.page-inf`，也是 `z-index:-1`）**不进它的 backdrop** ⇒ 玻璃当场变成一层纯纸白片：
+   顶栏实测 `rgb(246,246,243)` → **`rgb(251,251,248)`**（低 5 级没了）。
+   改成 `0`（正常定位层）后与原始观感逐值相同 —— 见 6.56.6 的三档对照。
+2. ★ **抬升规则必须排除 `.navshell` 与 `.navtog`**。`body.chrome-page .topbar > *` 的
+   特异性（0,2,1）**高过**抽屉自己作用域内的 `.navshell[data-astro-cid-…]`（0,2,0）⇒ 一旦不排除，
+   `position:relative` 会把 `fixed` 的壳和 `absolute` 的 checkbox 一起覆盖，抽屉当场坏
+   （这正是 AGENTS §5「给某节点加包裹层要连带检查所有组合选择器」的同族）。
+
+#### 6.56.5 取证工具：`_probe/_nav-probe.mjs`（新，可复用）
+
+同源 iframe + `--dump-dom`（本机 CDP 回环端口连不上，这条是老通道）。
+它比"量一个盒高"多做三件事：
+
+- 逐页报 `shell 盒高`（判据：应 **=** 视口高）；
+- 向上**逐个祖先查全**「谁建立了 fixed 的包含块」——`transform` / `filter` / `backdrop-filter` /
+  `perspective` / `will-change` / `contain` **一次查全**（AGENTS §5 那条：只查 `transform` 会漏判）；
+- 用 `elementFromPoint(面板正中)` 判**层叠**：命中必须落在面板内，否则就是"几何对了但被盖住"。
+
+修前：9 页里 1 页绿（首页）、8 页红，报告直接写着 `div.topbar[backdrop-filter]`。
+修后：**9 页全绿**（含文章页那条 `Brandline` 外壳，确认没被连带改坏）。
+
+#### 6.56.6 观感逐像素保住（三档对照）
+
+| 档 | 顶栏采样（左/中/中下） | 说明 |
+|---|---|---|
+| `base` 玻璃在负 z 层 | `251,251,248` | 底纹不透 ⇒ 偏亮 |
+| `z0` 玻璃在正常定位层 | `246,246,245 / 246,246,244 / 246,246,243` | **与修前逐值相同** |
+| `ctrl` 玻璃放回 `.topbar`（原写法） | 同上，与 `z0` **完全相同** | 反证 `z0` 等价于原观感 |
+
+定稿后再与"修前"做整条比对（1200×80）：**差 >2 的像素只有 1 个（0.001%），最大通道差 3，平均差 0.00**。
+（工具 `_probe/_nav-var.mjs` 三档 + `_probe/_nav-shots.mjs` before/after。）
+
+#### 6.56.7 护栏（`tests/nav-drawer-overflow.test.ts` 新增 3 条，8 → 11 条）
+
+① `.topbar` 自身不许出现 `backdrop-filter` / `filter` / `transform` / `perspective` /
+`will-change` / `contain`（负向断言**先剥注释** —— 那段说明里正好写着这些属性名）；
+② 玻璃层必须在 `::before` 上且 `z-index: 0`；③ 抬升规则必须在、且带两个 `:not(...)`。
+
+★ **变异验证 3/3 被咬住**（`z-index 0→-1`、把 `backdrop-filter` 放回 `.topbar`、抬升规则漏掉
+`.navtog` 排除），改完回读 grep 确认源码已还原。
+
+#### 6.56.8 本轮探针侧踩的两个坑（都不是站点问题）
+
+| 坑 | 症状 | 绕法 |
+|---|---|---|
+| 给 iframe 重复赋**同一个** `src` | 不触发 load ⇒ 循环静默卡在第一页，输出恒为 `PENDING`（看着像"部署坏了"） | 每次导航拼一个唯一查询串（`?__n=<i>`），并由 `load` 事件驱动 |
+| **Git Bash(MSYS) 会改写看起来像路径的环境变量** | `PAGES="/about/"` 被转成 `D:/…/PortableGit/about/` ⇒ iframe 去加载不存在的 `file://`，同样表现为"DOM 为空" | 传路径型环境变量时加 `MSYS_NO_PATHCONV=1`（探针用法已写进文件头注释） |
+
+#### 6.56.9 一句留给后来人的话
+
+`index.astro` 里早有一条注释：「只动 opacity、不动 transform —— `.topbar` 里有抽屉（NavDrawer），
+给它 transform 会**让它变成 fixed 后代的包含块**，那是另一个坑」。**同一条道理**，
+内页顶栏当年是用 `backdrop-filter` 犯的。⇒ 凡是"要挂在视口上的层"（抽屉、灯箱、跟手光标），
+**它的祖先链上就不该出现** `transform` / `filter`(含 `backdrop-filter`) / `perspective` /
+`will-change` / `contain`；`Base.astro` 的 `plate` 槽与 `Topbar` 的 `.page-inf` 都是为这件事存在的。
+
+---
+
+### 6.57 顺手修掉日志页一处旧缺陷：`changes` 里的裸「冒号+空格」会把整条吃成对象（2026-10-08）
+
+写本轮日志条目时发现的：`dist/log/index.html` 里 **v2.1 的第 3 条渲染成了 `[object Object]`**。
+
+- **根因**：`content/pages/log.md` 是 YAML，而那一行的正文里写了 `` `background: none` `` ——
+  **ASCII 冒号 + 一个空格**正是 YAML 的键值分隔符 ⇒ 这一条不再是一条**字符串**，被读成**映射**；
+  Astro 拿到一个对象、直接字符串化 ⇒ 整条文字消失，页面上只剩 `[object Object]`。
+- **修法**：写 `background:none`（冒号后不留空格）。这一条起，日志正文里写 CSS 值一律不留「冒号+空格」。
+- ★ **它上线时全站测试是全绿的** —— 因为当时**没有任何断言看着日志页的内容**。
+  本轮补一组：`tests/build-output.test.ts` 新增「日志页 changes」，读 `dist/log/index.html`，
+  判据是 **li 的原始内层 HTML 恰好等于 `[object Object]`**。
+  **为什么不用"文本里出现这四个字"**：本轮 v2.2 第 10 条**正文里就正在引用这个字样**
+  （外面套着 `<code>`）—— 按子串判会立刻自伤。这是 AGENTS §4「判据字面量要以当轮产物为准」的
+  一个小例子：判据必须落在**渲染后的结构**上，而不是落在"某个字符串出现过"上。
+- **变异验证**：把那一行改回带空格的写法 → 重建 → 该断言被咬住（`+ 1`）；还原后重建转绿。
+- 面向站主的说明写进了手册 **§20.3**。
