@@ -40,7 +40,9 @@
  *
  *   · **板顶到页面最顶端**（不再让出顶栏那 3.4rem）：顶栏改成 absolute 浮在板上
  *     （它本来就是半透明毛玻璃 ⇒ 浮在深墨绿板上正好）。见 gallery/index.astro。
- *   · **鼠标上去时多一个跟着手的白圈**（参考站的 `.pointer-dot`）—— 见 markDot()。
+ *   · **鼠标上去没有额外的圈**：原来有一个照抄参考站的 16px 白圈（`.pointer-dot`），
+ *     2026-10-08 站主决定**删掉** —— 它和全站的跟手光标（`CursorRing` 的墨盘 + 白点）
+ *     在指针处叠成三层同心；参考站自己没有全站光标，所以它只叠一层。见 §6.63。
  *   · ★★ 顺手纠正三处**照抄错了**的参考站参数（都是扒它 JS 才发现的）：
  *       ① **笔触半径**：我上一版按"旋钮 82 是直径 / 720"推成短边的 0.057；
  *          它的 shader 里其实是 `size*1.35/height` = **画面高度的 0.15375**
@@ -930,44 +932,30 @@
     my = e.clientY - r.top;
   };
 
-  /* ★★ 指针**在板上**时显示那个白圈 —— 照抄参考站的 `.pointer-dot`
-     （站主：「学一下 lowkeytp 是怎么处理鼠标上去的效果，做到和它一样」）。
-     它的原文（_probe/ref/lr-app.js）：
-         if (!n) { …; l.dot.classList.remove("visible"); return; }
-         l.dot.style.left = `${t*100}%`;  l.dot.style.top = `${r*100}%`;
-         l.dot.classList.add("visible");
-     三个必须照抄的细节：
-       ① 用**百分比**定位（不是 px）⇒ resize 后不用重算；
-       ② 指针出界就摘掉 `visible`（不是移到边界上）；
-       ③ **没有 transition** —— 圈是**硬跟手**的。滞后的那个是**笔触**（一阶平滑），
-          不是圈 ⇒ 圈 = "手在哪"、笔触 = "液体到哪了"，两个位置差就是"被拽着走"的读数。 */
-  const dot = host.querySelector<HTMLElement>('[data-bath-dot]');
-  const markDot = () => {
-    if (!dot) return;
-    const inside = mx >= 0 && mx <= W && my >= 0 && my <= H;
-    if (!inside) { dot.classList.remove('on'); return; }
-    dot.style.left = `${(mx / W) * 100}%`;
-    dot.style.top = `${(my / H) * 100}%`;
-    dot.classList.add('on');
-  };
+  /* ★★ 这里原来有一个"指针**在板上**时显示的白圈"（`markDot()`，照抄参考站
+     lowkeytp.art 的 `.pointer-dot` —— 站主 2026-10-01 第五轮：「学一下 lowkeytp 是怎么
+     处理鼠标上去的效果，做到和它一样」）。
+     **2026-10-08 站主决定删掉**：本站**全站本来就有**跟手光标（`CursorRing.astro` 的
+     34px 墨色圆盘 + 8px 白点，由 `Base.astro` 引入），加上这一层就变成**三层同心**
+     （34 / 16 / 8 px，圆心实测完全重合）—— 而参考站自己**没有**全站光标，所以它只叠一层。
+     照抄它的"圈"在本站是重复的，还会把下面这个读数摊薄。
+     ⇒ 现在的口径：**全站光标 = "手在哪"，笔触 = "液体到哪了"**，两个位置差就是
+     "被拽着走"的读数。详见 docs/rhinelab-spec.md §6.63。 */
 
   host.addEventListener('pointerenter', (e) => {
     toLocal(e);
     // 笔触是从"没有"长出来的 ⇒ 中心直接落在指针上（否则会从上一处位置飞过来）
     if (pw <= PW_EPS) { cx = mx; cy = my; }
     if (!reduce.matches) pwT = 1;
-    markDot();
     sync();
   });
   host.addEventListener('pointermove', (e) => {
     toLocal(e);
     if (pwT === 0 && !reduce.matches) pwT = 1;   // 指针已在板内但没触发过 enter（例如刚露面）
-    markDot();
     sync();
   });
   host.addEventListener('pointerleave', () => {
     pwT = 0;      // ⇒ 笔触收回去，收完自动停帧，板回到纯色
-    dot?.classList.remove('on');
     sync();
   });
 

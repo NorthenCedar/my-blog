@@ -80,11 +80,8 @@ const total = albums.reduce((n, a) => n + a.total, 0);
     <div class="bath" data-bath hidden aria-hidden="true">
       <canvas class="bath-cv" data-bath-cv></canvas>
       <span class="bath-mark">{siteWordmark}</span>
-      {/* ★ 跟着鼠标的那个白圈 —— 照抄参考站 lowkeytp.art 的 `.pointer-dot`。
-          脚本只在指针**在板内**时给它加 `.on`（出界就摘掉）。 */}
-      <span class="bath-dot" data-bath-dot aria-hidden="true"></span>
       {/* ★ 左下角滚动提示（站主 2026-10-01：「往下划↓」）——
-          纯装饰 aria-hidden；压在颗粒层与花体字之上（z-index 3，与白圈同层）。
+          纯装饰 aria-hidden；压在颗粒层与花体字之上（z-index 3）。
           手机档显影板变回「页头旁边的小板」，这个提示没有意义 ⇒ 一并隐藏。 */}
       <span class="bath-hint" aria-hidden="true">往下划 ↓</span>
     </div>
@@ -279,40 +276,17 @@ const total = albums.reduce((n, a) => n + a.total, 0);
     user-select: none;
     z-index: 2;             /* ★ 压在颗粒层之上：颗粒可以盖照片，但不能盖花体字 */
   }
-  /* ★★ 跟着鼠标的那个白圈 —— **照抄参考站** `.pointer-dot` 的原文
-     （_probe/ref/lr.css，16px 白圈 + 一圈极淡暗描边）：
-       .pointer-dot{position:absolute;z-index:3;width:16px;height:16px;border:1px solid #fff;
-                    border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);
-                    box-shadow:0 0 0 2px #0002;opacity:0}
-       .pointer-dot.visible{opacity:1}
-     ★ 三个照抄的点别动：
-       ① **没有 transition** —— 圈是硬跟手的（滞后的那个是笔触），加了 transition 就变成
-          "两个都在追"，反而看不出"被拽着走"；
-       ② 定位由脚本写 `left/top` **百分比**（参考站原文就是百分比）⇒ resize 不用重算；
-       ③ `opacity` 默认 0、只由脚本加 `.on` ⇒ 没有 JS 时它压根不出现（不是"藏起来"）。
-     ★ z-index 3 = 参考站在 art-copy(2) 之上那个位置：本站对应"压在花体字之上"。 */
-  .bath-dot {
-    position: absolute;
-    z-index: 3;
-    width: 16px;
-    height: 16px;
-    border: 1px solid #fff;
-    border-radius: 50%;
-    pointer-events: none;
-    transform: translate(-50%, -50%);
-    box-shadow: 0 0 0 2px rgb(0 0 0 / 13%);   /* 参考站 #0002 */
-    opacity: 0;
-    left: 0;
-    top: 0;
-  }
-  .bath-dot.on {
-    opacity: 1;
-  }
+  /* ★★ 这里原来有一个跟着鼠标的 16px 白圈（`.bath-dot`，照抄参考站 `.pointer-dot`，
+     脚本 `develop.ts` 的 `markDot()` 驱动）。**2026-10-08 站主决定删掉。**
+     原因：本站**全站本来就有**跟手光标（`CursorRing.astro` 的 34px 墨色圆盘 + 8px 白点，
+     由 `Base.astro` 引入），两者在指针处**叠成三层同心**（34 / 16 / 8 px）；
+     而参考站 lowkeytp.art 自己**没有**全站光标，所以它只有那一层 —— 照抄到本站就重复了。
+     ⇒ 现在"手在哪"由全站光标表示，"液体到哪了"由笔触表示。详见 docs/rhinelab-spec.md §6.63。 */
   /* ★★ 左下角滚动提示（站主 2026-10-01：「往下划↓」）。
      位置语汇延续**首页首屏的左下角横排读数**，
      但更简 —— 就是一行白字。
      白字压在深墨绿底与擦出来的照片上都读得清（同 .bath-mark 的取值思路），
-     给一层极淡投影兜底。z-index 3 = 与白圈同层、压在花体字之上。 */
+     给一层极淡投影兜底。z-index 3 = 压在花体字之上。 */
   .bath-hint {
     position: absolute;
     left: var(--gutter);

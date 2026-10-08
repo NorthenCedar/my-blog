@@ -23,7 +23,8 @@ import { existsSync } from 'node:fs';
  *   另外学一下 lowkeytp 是怎么处理鼠标上去的效果，做到和它一样」）：
  *
  *   · 板**顶到页面最顶端**：顶栏改 absolute 浮在板上（它本来就是半透明毛玻璃）。
- *   · 鼠标上去时多一个**跟着手的白圈**（照抄它的 `.pointer-dot`）。
+ *   · **板上没有跟手圈**：原来照抄参考站加过一个 16px 白圈（`.pointer-dot`），
+ *     2026-10-08 站主决定**删掉**（它与全站跟手光标叠成三层同心）—— 见 spec §6.63。
  *   · ★★ 扒它的 JS（`_probe/ref/lr-app.js`）才发现**三处上一版照抄错了**：
  *       ① 笔触半径是 `size*1.35/height` = 板高的 **0.15375**，
  *          不是我推的"短边 0.057"（**小了 2.7 倍** —— 旋钮 82 不是像素，还要 ×1.35）；
@@ -569,42 +570,11 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     expect(byHeight, '笔触半径不是按板高算 ⇒ 与参考站 size*1.35/height 的口径不一致').toBe(true);
   });
 
-  it('★ 鼠标上去显示那个跟着手的白圈（照抄参考站 .pointer-dot）', () => {
-    /* ★★ 站主 2026-10-01 第五轮：「学一下 lowkeytp 是怎么处理鼠标上去的效果，做到和它一样」。
-       参考站的原文（_probe/ref/lr.css + lr-app.js）：
-         .pointer-dot{…width:16px;height:16px;border:1px solid #fff;border-radius:50%;
-                      pointer-events:none;transform:translate(-50%,-50%);
-                      box-shadow:0 0 0 2px #0002;opacity:0}
-         .pointer-dot.visible{opacity:1}
-         if(!n){ …; l.dot.classList.remove("visible"); return; }
-         l.dot.style.left=`${t*100}%`; l.dot.style.top=`${r*100}%`;
-         l.dot.classList.add("visible"); */
-    const hasEl = /data-bath-dot/.test(ASTRO);
-    const dotCss = /\.bath-dot\s*\{[^}]*width:\s*16px[^}]*opacity:\s*0/.test(ACSS);
-    const onCss = /\.bath-dot\.on\s*\{[^}]*opacity:\s*1/.test(ACSS);
-    /* ★ 圈必须**硬跟手**：加了 transition 就变成"圈也在追"，
-       跟滞后的笔触混在一起 ⇒ 反而看不出"被拽着走"。 */
-    const noTrans = !/\.bath-dot\s*\{[^}]*transition/.test(ACSS);
-    /* ★ 用**百分比**定位（参考站原文就是百分比）⇒ resize 后不用重算。 */
-    const pct = /dot\.style\.left\s*=\s*`\$\{\(mx\s*\/\s*W\)\s*\*\s*100\}%`/.test(CODE)
-      && /dot\.style\.top\s*=\s*`\$\{\(my\s*\/\s*H\)\s*\*\s*100\}%`/.test(CODE);
-    /* ★ 出界必须摘掉：只在 pointerenter/move 加、从不 remove ⇒ 圈会赖在板上不消失。 */
-    const add = /dot\.classList\.add\('on'\)/.test(CODE);
-    const rmInMark = /dot\.classList\.remove\('on'\)/.test(CODE);
-    const rmOnLeave = /pointerleave[\s\S]{0,200}?dot\?\.classList\.remove\('on'\)/.test(CODE);
-    console.log(
-      `判据 白圈 实测: ${hasEl ? '有 .bath-dot 元素 ✓' : '⚠️ 没有白圈元素'} · `
-      + `${dotCss && onCss ? '默认透明 + .on 才显示 ✓' : '⚠️ 显隐不是 opacity 0/1 两态'} · `
-      + `${noTrans ? '硬跟手（无 transition）✓' : '⚠️ 圈有 transition（会跟笔触混在一起）'} · `
-      + `${pct ? '百分比定位 ✓' : '⚠️ 不是百分比定位'} · `
-      + `${add && rmInMark && rmOnLeave ? '出界/离开会摘掉 ✓' : '⚠️ 圈不会消失'}`,
-    );
-    expect(hasEl, '没有白圈元素 ⇒ 鼠标上去没有任何提示（参考站最显眼的那个特征）').toBe(true);
-    expect(dotCss && onCss, '白圈的显隐不是"默认透明 + 加类才显示"⇒ 没指针时也会有一个圈').toBe(true);
-    expect(noTrans, '白圈加了 transition ⇒ 它也在追，跟滞后的笔触混在一起就看不出"被拽着走"').toBe(true);
-    expect(pct, '白圈不是百分比定位 ⇒ resize 后位置会错（参考站原文就是百分比）').toBe(true);
-    expect(add && rmInMark && rmOnLeave, '白圈不会消失 ⇒ 指针移出板后圈赖在最后位置').toBe(true);
-  });
+  /* ★★ 2026-10-08：这里原有「★ 鼠标上去显示那个跟着手的白圈（照抄参考站 .pointer-dot）」
+     那一条，已**整条删除** —— 站主决定把那个 16px 白圈拿掉（它与全站光标 `CursorRing`
+     在指针处叠成三层同心：34 / 16 / 8 px；参考站自己**没有**全站光标，所以只叠一层）。
+     ⇒ 板上不再有跟手圈，这条契约随之作废，**别再把它加回来**。
+     详见 docs/rhinelab-spec.md §6.63。 */
 
   it('★ 笔触形状照抄参考站：irregular（5瓣+9瓣）+ smoothstep(0.45,1.2) 软边', () => {
     /* ★★ 参考站 sim shader 原文（_probe/ref/lr-app.js）：
