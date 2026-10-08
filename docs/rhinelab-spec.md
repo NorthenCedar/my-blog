@@ -6827,3 +6827,16 @@ CF 注入仍为三项（邮箱混淆 · email-decode · Web Analytics beacon）+
 `npm run build` 27 页通过；全量 **575 passed / 1 skipped / 1 环境失败**（唯一红仍是
 `tests/tokens.test.ts` 的 `spawnSync node EBUSY` 在册坑，直跑 `scripts/assert-tokens.mjs`
 17 项全达标）。`tests/log-chrono.test.ts` 单独跑 32/32 绿。
+
+#### 6.60.9 线上核对（部署 `1b30e660` 之后）
+
+- **文章页**：`datetime="2026-10-08"` 唯一（`datetime="2026-09-30"` 0 次）、「更新于」0 次。
+- **日志页**：含 `v2.5`、不含 `v2.4`、`<div class="rail" … hidden>` 在、`[object Object]` 0 次。
+- **归一化逐字节**（`_probe/_live-diff.py`，本轮新增的通用核对脚本）：两页**与本地 `dist`
+  逐字节相同**（64294 / 37677 字节，归一到 63682 / 37065）。
+- ⚠ 一次「假旧版」：推送后**首抓**文章页仍是旧内容（`datetime=2026-09-30` + 「更新于」在），
+  约半分钟后再抓就是新版 ⇒ 那是**部署尚未完成时的边缘副本**，不是站点问题。
+  ⇒ 判据要落在**归一化后逐字节相同**上，而不是"抓一次，看着对了就算"。
+- ⚠ 又一次「尺子错」（同 §6.58.13 那族）：`_live-diff.py` 抓取时**必须带
+  `Accept: text/html`** —— 不带这个头时 Cloudflare **不注入** beacon，会得到
+  「线上比本地还干净」的**假阴性**。这条是上一轮查 beacon 时踩出来的，本轮把它固化进脚本头注释。
