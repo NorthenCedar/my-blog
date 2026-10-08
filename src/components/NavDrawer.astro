@@ -21,7 +21,27 @@ const id = 'nav-toggle';
 ---
 
 <input type="checkbox" id={id} class="navtog" aria-label="导航菜单" />
-<label for={id} class="navbtn" aria-hidden="true"><span class="bars"></span></label>
+{/* ★★ 2026-10-08：汉堡从「三个 `background: currentColor` 的方块」改成**内联 SVG**。
+    起因：站主发来手机截图「暗色模式看不到主页导航菜单的按钮」。
+    根因是手机 Chrome 的**自动深色**（Auto Dark，系统深色 + 站点没声明 color-scheme 时触发）
+    只反「背景类绘制」、保留「前景（文字 / 图元）」——
+    于是白色背景块被反成近黑、落在深墨绿的首页首屏上，**整枚汉堡凭空消失**；
+    同一行同为白色的站名是**文字**、被保留 ⇒ 截图里"站名在、按钮不在"。
+    （实测见 `_probe/_nav-swatch.js` 的六种画法标定：背景块 / border-top / box-shadow /
+      背景图渐变**全部被反掉**，只有**内联 SVG** 与**文字字符**活下来。
+      判读脚本 `_probe/_nav-check.mjs`，出图 `_probe/_cdp-autodark.mjs`。）
+    ★ 几何逐像素保持：三条线 **13 / 18 / 18 px（上面那条最短）**、中心间距 6px、1px 粗，
+      与原来那套 `::before(top:-6, w13) / 自身(w18) / ::after(top:+6, w18)` 逐个对应
+      （第一版我把短的那条画到了中间，是靠改前/改后的逐像素对照抓回来的）。
+      svg 取 18×14（**高度必须是偶数**）⇒ 它在 40px 的按钮里居中后 top 落在整像素上，
+      线心 y=0.5 / 6.5 / 12.5 换算到屏幕正是 156 / 162 / 168 三行，与改动前逐行相同。
+    ⚠ 别再改回 background / border / box-shadow —— 那三种在自动深色下都会消失。
+      这条有个护栏：`tests/nav-drawer-overflow.test.ts` 的「汉堡必须是 SVG 图元」。 */}
+<label for={id} class="navbtn" aria-hidden="true">
+  <svg class="bars" width="18" height="14" viewBox="0 0 18 14" fill="none" aria-hidden="true">
+    <path d="M0 0.5h13M0 6.5h18M0 12.5h18" stroke="currentColor" stroke-width="1" />
+  </svg>
+</label>
 {/* ★ 2026-10-03 新增这层壳（站主「修 navpanel 溢出」）。
     根因：关闭态的 .navpanel 是 `position:fixed; right:0; transform:translateX(100%)`，
     整块被推到视口右缘之外 304–320px。而**Chrome 会把 fixed 元素超出视口的量
@@ -89,30 +109,13 @@ const id = 'nav-toggle';
       margin-left: auto;
       color: inherit;
     }
-    /* 汉堡：三横线（中间那条稍短，和站上的刻度线气质一致） */
-    .navbtn .bars,
-    .navbtn .bars::before,
-    .navbtn .bars::after {
-      display: block;
-      width: 18px;
-      height: 1px;
-      background: currentColor;
-    }
+    /* 汉堡：三横线（中间那条稍短，和站上的刻度线气质一致）。
+       ★★ 2026-10-08 改成 SVG **图元**（原来是三条 `background: currentColor` 的 1px 方块）。
+       原因见模板里那段注释：手机 Chrome 的自动深色会把「背景类绘制」反掉
+       （背景色 / border / box-shadow 全中），只有 SVG 图元与文字能活下来。
+       形状（18 / 13 / 18，间距 6px，1px 粗）与配色（currentColor ⇒ 跟随顶栏）都没变。 */
     .navbtn .bars {
-      position: relative;
-    }
-    .navbtn .bars::before,
-    .navbtn .bars::after {
-      content: '';
-      position: absolute;
-      left: 0;
-    }
-    .navbtn .bars::before {
-      top: -6px;
-      width: 13px;
-    }
-    .navbtn .bars::after {
-      top: 6px;
+      display: block;
     }
     .navtog:focus-visible + .navbtn {
       outline: 3px solid var(--accent-ink);

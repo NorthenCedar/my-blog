@@ -171,3 +171,72 @@ describe('内页顶栏 · 不得建立 fixed 的包含块（手机端抽屉点�
     expect(TCODE, '抬升规则必须排除 .navtog').toContain(':not(.navtog)');
   });
 });
+
+/* ★★ 2026-10-08：手机端「**暗色模式**看不到主页导航菜单的按钮」的**根因**契约。
+ *
+ *   根因不在抽屉的布局，而在**汉堡的画法**。手机 Chrome 的「自动深色」
+ *   （Auto Dark：系统深色 + 站点未声明 color-scheme 时触发）是**按元素**做的亮度反转，
+ *   规则是：**反「背景类绘制」，留「前景」**（文字与图形要维持对比度）。
+ *   原来那个汉堡是三个 `background: currentColor` 的 1px 方块 ⇒ 白块被反成近黑，
+ *   落在深墨绿的首页首屏上**整枚消失**；而同一行、同为白色的站名是**文字**、被保留
+ *   ⇒ 站主发来的截图里正是"站名在、按钮不在"。
+ *
+ *   六种画法的标定（注入探针 `_probe/_nav-swatch.js` → `_probe/_cdp-run.py` 出图 →
+ *   `_probe/_nav-check.mjs` 判读像素；自动深色用 CDP 的
+ *   `Emulation.setAutoDarkModeOverride`，**不能用** `--blink-settings=forceDarkModeEnabled`
+ *   —— 后者是"强制反色"，会忽略页面的退出声明，拿它验证必得假阴性）：
+ *     背景块 ✗ · border-top ✗ · box-shadow ✗ · 背景图渐变 ✗ · **内联 SVG ✓** · 文字 ✓
+ *   ⇒ 汉堡改成内联 SVG；另在 `<head>` 声明 `color-scheme: only light`（Chrome 官方给出的
+ *     auto-dark 退出方式，见 developer.chrome.com/blog/new-in-chrome-98 "Opting out of
+ *     auto-dark themes"），作为"整页都不被乱改"的那一道。
+ *
+ *   ⚠ 这条契约的意义：这两个写法**在浅色下长得一模一样**，只有在自动深色下才分得出。
+ *     所以不能靠目检，必须钉在测试里。
+ */
+describe('汉堡按钮 · 自动深色下必须可见（2026-10-08）', () => {
+  const NAV = readFileSync(join(ROOT, 'src/components/NavDrawer.astro'), 'utf8');
+  const BASE = readFileSync(join(ROOT, 'src/layouts/Base.astro'), 'utf8');
+
+  it('★ 汉堡是内联 SVG 图元（不是 background / border / box-shadow 画的块）', () => {
+    const svg = NAV.match(/<svg[^>]*class="bars"[^>]*>([\s\S]*?)<\/svg>/);
+    expect(svg, '汉堡必须是 <svg class="bars"> —— 背景块在自动深色下会整条消失').toBeTruthy();
+    const path = svg![1].match(/<path[^>]*d="([^"]+)"[^>]*stroke="currentColor"/);
+    expect(path, '三条线要用 <path stroke="currentColor">（图元才会被自动深色保留）').toBeTruthy();
+    /* 几何：**上短下长**（13 / 18 / 18），中心间距 6px，线心落在半像素 ⇒ 在整像素行上渲染。
+       ⚠ 这三个数字与改动前的 `::before(top:-6, w13) / 自身(w18) / ::after(top:+6, w18)` 逐个对应
+         —— 注意**短的那条在最上面**（第一版 SVG 我把它放到了中间，是靠改前/改后的
+         逐像素对照才发现的：`_probe/_nav-check.mjs` 读到 y=156 的线从 13px 变成了 18px）。
+         动了任何一个数字，汉堡的形状就变了（不是等价改写）。 */
+    expect(path![1], '三条线的几何变了（应为 上13 / 中18 / 下18，间距 6px）')
+      .toBe('M0 0.5h13M0 6.5h18M0 12.5h18');
+    /* svg 高度必须是偶数：40px 按钮里居中后 top 才是整数 ⇒ 1px 线不跨行、不发虚 */
+    const h = NAV.match(/<svg[^>]*class="bars"[^>]*height="(\d+)"/);
+    expect(Number(h?.[1]), 'svg 高度取奇数时居中出现半像素偏移，1px 线会糊成两行').toBe(14);
+    /* 反向：不许再用"背景块"那套画法（漏一条就等于根因还在） */
+    expect(NAV, '汉堡又用 background: currentColor 画了 —— 自动深色下整条消失')
+      .not.toMatch(/\.navbtn\s+\.bars[^{]*\{[^}]*background/);
+    expect(NAV, '汉堡又用 ::before/::after 画线段了 —— 那是旧写法（背景块）').not.toMatch(/\.navbtn\s+\.bars::/);
+  });
+
+  it('★ head 声明 color-scheme: only light（官方退出自动深色的方式）', () => {
+    expect(BASE, '缺这条 ⇒ 手机系统深色时整页会被浏览器按自己的算法反色（按钮消失只是最刺眼的一处）')
+      .toMatch(/<meta\s+name="color-scheme"\s+content="only light"\s*\/?>/);
+    /* 反向：不许声明成 `light dark` —— 那等于承诺"我自己处理深色"，
+       浏览器会把原生控件（滚动条 / 表单）按系统深色渲染，而本站正文是纸白 ⇒ 界面对不上。 */
+    expect(BASE, 'color-scheme 不该写成 light dark（本站没有深色版，原生控件会与纸白割裂）')
+      .not.toMatch(/name="color-scheme"\s+content="light dark"/);
+  });
+
+  it.skipIf(!hasDist)('产物里逐页核对：汉堡是 svg、head 有 color-scheme、且没有 ::before 旧写法', () => {
+    const pages = ['index', 'about', 'archive', 'talks', 'log', 'gallery']
+      .map((p) => join(DIST, p, 'index.html'))
+      .filter((f) => existsSync(f));
+    const bad: string[] = [];
+    for (const f of pages) {
+      const html = readFileSync(f, 'utf8');
+      if (!/<svg[^>]*class="bars"[^>]*>/.test(html)) bad.push(`${f}: 汉堡不是 svg`);
+      if (!html.includes('name="color-scheme" content="only light"')) bad.push(`${f}: 缺 color-scheme`);
+    }
+    expect(bad, bad.join(' | ')).toEqual([]);
+  });
+});

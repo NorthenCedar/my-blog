@@ -7106,3 +7106,105 @@ CF 注入仍为三项（邮箱混淆 · email-decode · Web Analytics beacon）+
 ⇒ 以后凡是抄一个"跟随指针"的元件，先问一句：**本站已经有一个了吗？**
 
 
+
+### 6.64 手机端「暗色模式看不到导航菜单按钮」：浏览器自动深色只反「背景块」、不反「图元」（站主 2026-10-08）
+
+**站主原话**：「修一下手机端暗色模式看不到主页导航菜单的按钮」+ 一张手机截图
+（截图里顶栏那一行**站名可见、按钮不可见**）。
+
+#### 6.64.1 先排除的三件事（都不是原因）
+
+| 假设 | 实测 | 结论 |
+|---|---|---|
+| 网络/加载问题 | 拦图实验（`*.webp` 全 404）下按钮同样不可见 | ✗ |
+| 几何问题（被挤出视口 / `display:none` / 被裁） | 探针实测 `.navbtn` rect=`334,143,40,40`、`display:flex`、`checkVisibility=true`、`overflow/opacity/visibility` 全正常 | ✗ |
+| 本站的"暗色模式" | **本站从来没有暗色模式**（全仓 `prefers-color-scheme` 只在 transition.css 的注释里出现过） | ✗ |
+
+#### 6.64.2 真因：手机 Chrome 的「自动深色」把**背景块**反掉了
+
+用户手机系统开深色时，Chrome 会对**没有声明 `color-scheme` 的浅色页面**套一层
+「自动深色」（Auto Dark / `WebContentsForceDark`）。它是**按元素**做的亮度反转，
+规则一句话：**反「背景类绘制」，留「前景」**（文字要维持对比度）。
+
+于是首页顶栏那枚汉堡（原来是三个 `background: currentColor` 的 1px 白块）——
+白块被反成近黑、落在深墨绿的 `.band` 上 ⇒ **整枚消失**；
+而**同一行、同为白色**的站名是**文字**、被保留 ⇒ 站主截图里正是"站名在、按钮不在"。
+
+★ 决定性证据（`_probe/_nav-check.mjs` 读截图像素，扫顶栏那三行；
+出图 `_probe/_cdp-autodark.mjs` + `_probe/_cdp-run.py`）：
+
+| 页面 | y=156 | y=162 | y=168 | 合计 |
+|---|---|---|---|---|
+| 改前 · 常态 | `345-357` | `345-362` | `345-362` | **49** |
+| 改前 · 自动深色 | 右侧**无** | **无亮像素** | **无亮像素** | **0** |
+| 改后 · 常态 | `345-357` | `345-362` | `345-362` | **49** |
+| 改后 · 自动深色 | `345-357` | `345-362` | `345-362` | **49** |
+
+（"改前"那张是把产物里的 svg 换回旧写法另存的对照页 `dist/__old-burger.html`，
+内联 CSS 加 `!important` 盖过 scoped 样式 —— 这样"消失"能归因到**画法**这一个变量上。）
+
+#### 6.64.3 六种画法的标定（决定改成什么）
+
+注入测试板（`_probe/_nav-swatch.js`：六种"三条 1px 白线"、颜色全是白、只有画法不同）
+→ 自动深色下拍图 → 判读：
+
+| 画法 | 自动深色下 |
+|---|---|
+| `background: currentColor`（旧写法） | ✗ 消失 |
+| `border-top: 1px solid` | ✗ 消失 |
+| `box-shadow: 0 ±6px 0` | ✗ 消失 |
+| `background-image: linear-gradient` | ✗ 消失 |
+| **内联 SVG `<path stroke>`** | **✓ 存活** |
+| **文字字符（≡）** | **✓ 存活** |
+
+⇒ **关键图形一律用图元（SVG / 文字）画，别用色块。**
+
+#### 6.64.4 改动
+
+1. **`src/components/NavDrawer.astro`**：汉堡从 `span.bars` + 三条 `background` 方块
+   改为**内联 SVG**
+   （`<path d="M0 0.5h13M0 6.5h18M0 12.5h18" stroke="currentColor" stroke-width="1"/>`）。
+   ★ 几何逐像素保持：**上 13 / 中 18 / 下 18**、间距 6px、1px 粗
+   —— 与旧写法的 `::before(top:-6,w13) / 自身(w18) / ::after(top:+6,w18)` 逐个对应。
+   ⚠ 第一版我把**短的那条画到了中间**，是靠改前/改后的逐行像素对照抓回来的
+   （`y=156` 的线从 13px 变成 18px）—— 这类"看着一样"的改写必须过像素。
+   ★ svg 高度取 **14（偶数）**：它在 40px 按钮里居中后 `top` 才落在整像素上，
+   线心 y=0.5/6.5/12.5 换算到屏幕正是 156/162/168 三行，与旧写法逐行相同。
+2. **`src/layouts/Base.astro` `<head>`**：加
+   `<meta name="color-scheme" content="only light">`
+   —— Chrome 官方给出的 auto-dark 退出方式（developer.chrome.com/blog/new-in-chrome-98，
+   "Opting out of auto-dark themes"）。这一道管的是**整页都不被乱改**，不只是那枚按钮。
+   ★ 用 `only light` 而不是 `light dark`：后者等于承诺"我自己处理深色"，浏览器会把
+   **原生控件**（滚动条 / 表单 / 日期选择器）按系统深色渲染，而本站正文是纸白 ⇒ 会割裂。
+   ★ 早在本站调研阶段就有过同一个判断：`docs/inspiration.md` §（Flexoki 那节后面）
+   写着「我们不做暗色模式，所以只需要 `color-scheme: light`，**仍然建议显式声明**」
+   —— 当时只写进了文档、没有落地，今天补上。
+3. 护栏：`tests/nav-drawer-overflow.test.ts` 新增 3 条
+   （汉堡必须是 SVG 图元 + 几何三数字 + svg 高度偶数 + head 的 `color-scheme` + 产物逐页核对）。
+
+#### 6.64.5 三条**踩过才知道**的验证方法（比结论更值钱）
+
+1. **`--blink-settings=forceDarkModeEnabled=true` 不能用**：它是**强制反色**，
+   **故意忽略**页面的 `color-scheme` 退出声明 ⇒ 拿它验证"加了 `only light` 之后还反不反"
+   **永远得到"还反"**（我在这一轮白跑了两趟）。等价于手机行为的是 CDP 的
+   `Emulation.setAutoDarkModeOverride`（= DevTools Rendering 面板的 "Emulate auto dark mode"）。
+   本机 CDP **可用**（Chrome 154 实测）：但 **node 起不了 Chrome**（`child_process` 全线 EBUSY），
+   而 Python 起的 Chrome 会**随 Python 进程一起被回收** ⇒ 两者必须包在同一个 Python 进程里
+   （`_probe/_cdp-run.py` 就是这层壳；单独 `python _cdp-launch.py` 然后另起 node 是连不上的）。
+   它同时也是站上**第一个能真复现 auto dark 的通道**，以后验"深色下的样子"都走它。
+2. ★★ **判"可见性"只能看像素，不能读 computed style**：
+   自动深色是在**绘制期**改色，**不改样式表** —— `.bars` 的 `background` 自始至终
+   报 `rgb(255,255,255)`。我第一轮就是靠 `getComputedStyle` 判定"颜色正常"，
+   差点把根因判成"不是颜色问题"。本机没有 PIL / sharp，
+   读像素用自己写的 `_probe/_png-probe.mjs`（zlib 解 PNG + 反滤波）。
+3. **headless 直拍不能设窄视口**：`--window-size=390` 会被最小窗口宽抬大，
+   右对齐的元素（正是那枚汉堡）**被挤出画框** —— 表现是"汉堡不存在"的假阴性。
+   要量手机视口必须走 **iframe（固定 390×844）** 或 CDP 的
+   `Emulation.setDeviceMetricsOverride`。
+
+#### 6.64.6 一条口径
+
+**"只反背景"这条规则是有边界的**：本轮只修了被站主指出的那一枚按钮。
+同族里还有**没被报告、但同样会被自动深色改掉**的东西（例如跟手光标的中心白点
+`.cr-dot` 也是 `background` 画的 8px 白圆）。它们**没有动** ——
+口径是"改站主指出的那一处 + 把规律记下来"，不是"顺手把所有 background 都换成 svg"。

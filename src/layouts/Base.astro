@@ -75,6 +75,32 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {/* ★★ 2026-10-08：**明确告诉浏览器本站只有浅色配色** —— 这是手机端
+        「暗色模式下看不到主页导航菜单按钮」的根因修复。
+        根因（`_probe/_shot-mobile.mjs` 复现，见下）：手机系统开深色时，
+        Chrome/Edge 会对**没声明 color-scheme 的浅色页面**套一层
+        「自动深色」（Auto Dark / WebContentsForceDark）—— 它是*按元素*做的
+        亮度反转：**背景色亮的小块会被反成深色**，而**文字颜色会被保留**
+        （算法要维持文字对比度）。
+        于是首页顶栏那三条 1px 白线（`.navbtn .bars`，画法是 `background: currentColor`）
+        被反成近黑，落在深墨绿的 `.band` 上 ⇒ **整枚汉堡凭空消失**；
+        而同一行、同为白色的 wordmark 是**文字**，被保留 ⇒ 站主看到的就是
+        「站名在、按钮不在」（截图里正是如此）。
+        实测两行像素（390 视口，y=162/168 是汉堡的上下两条横线）：
+          浅色    345-362、345-362（都在）
+          强制深色  （无亮像素）       ← wordmark 那行文字一个没少
+        ⇒ 不是几何问题、不是网络问题、也不是本站的暗色模式（本站从来没有）。
+        `color-scheme: only light` 是 Chrome 官方给出的退出方式（另见
+        https://developer.chrome.com/blog/new-in-chrome-98 的 "Opting out of auto-dark themes"）：
+        声明之后浏览器不再对本页做自动反色。
+        ★ 为什么用 `only light` 而不是 `light dark`：后者等于声明「我会自己处理深色」，
+          浏览器于是把**原生控件**（滚动条 / 表单 / 日期选择器）按系统深色渲染，
+          而本站正文是纸白 —— 会出现「留言板输入框是黑的、页面是白的」这种割裂。
+        ★ 为什么写 meta 而不是 CSS 的 `:root{color-scheme}`：meta 在 head 里
+          **早于样式表**被解析，首帧就已经生效，不给自动反色留下半秒的窗口。
+        ★ 将来真要做暗色模式时，改这一行（去掉 / 换成 `light dark`）+ 自己写
+          `@media (prefers-color-scheme: dark)` 的 token 覆写，而不是删掉它了事。 */}
+    <meta name="color-scheme" content="only light" />
     <!-- 百度搜索资源平台的站点归属验证（公开标识符，不是密钥）。
          用途：在 ziyuan.baidu.com 证明这个站是你的，之后才能提交 sitemap。
          别删 —— 删了以后无法重新验证站点。换域名后需要在百度重新申请一个。 -->
