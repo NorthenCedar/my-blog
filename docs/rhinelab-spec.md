@@ -8247,3 +8247,107 @@ def _settle_ref(get_ref, want, tries=6, delay=1.0) -> str:
 
 **当晚的第二次交付核对**：`_t9.py` 13/13 · `_mutate_t9.py` 4/4；
 `compare()` 报 `synced`，两侧 tree 同为 `19ab4749…`。
+
+### 6.72 启动竞态：别把 pywebview 对象挂到 js_api 上（站主 2026-10-09「刚启动的时候点它有几率卡死」）
+
+症状：双击启动后**趁窗口刚出来点它**，有时候没反应（窗口在、点不动）；
+过一会儿或干脆重启一次又好 ⇒「有几率」。
+
+#### 6.72.1 现场：不是「点」出来的
+
+`%LOCALAPPDATA%\Programs\写作台\运行日志.txt`（脚本 `_diag_startup.py` 可复现）：
+
+| 数| 值 |
+|---|---|
+| 启动次数 | **17** |
+| `maximum recursion depth exceeded` | **16** |
+| `CoreWebView2 can only be accessed from the UI thread` | **69** |
+| 降级到浏览器 | **0**（窗口每次都起来了 ⇒ 卡，不是起不来） |
+
+⇒ **每次启动都在发生**，只是多数时候被pythonnet 吞掉、只留日志。
+「点了才卡」是错觉—— 点只是恰好撞上那个窗口期。
+
+#### 6.72.2 根因：责任在我们的代码，不在 pywebview
+
+pywebview 注入 JS 桥时，在**一个新建的非 UI 线程**里遍历我们传进去的 `js_api` 对象
+（`webview/util.py` 的 `inject_pywebview` → `get_functions`，`util.py:243`起线程）：
+
+```python
+for name in dir(obj):
+    if name.startswith('_'):          # ★ 它自己跳过下划线开头的
+        continue
+    attr = getattr(obj, name)
+    ...
+    elif inspect.isclass(attr) or (isinstance(attr, object)
+                                   and not callable(attr)
+                                   and hasattr(attr, '__module__')):
+        get_functions(attr, ...)       # ★ 递归下去
+```
+
+而我们以前把**pywebview 的 Window 对象**挂在 `self.win`上 ⇒ 它被递归遍历
+⇒ 一路摸到 .NET 的 WebView2 控件：
+
+- `win.native.ActiveControl.CoreWebView2` → **69 次跨线程访问报错**；
+- `win.native.AccessibilityObject.Bounds.Empty.Empty.Empty…` → **递归爆栈 16 次**
+  （`.NET` 属性链被`getattr` 一路取到底，每个`getattr` 又产生一个新的）。
+
+**顺带一条上游事实**（读源码得到，可复用）：`winforms` 后端的
+`evaluate_js`（`platforms/winforms.py:1052`）**整条路没有 `self.Invoke` 保护**，
+而同文件里`maximize`/`minimize`/`restore`/`show`/`hide` **都有**（全文12 处 `self.Invoke(`）
+⇒ 作者知道要保护，只是这条漏了。**不改它**（第三方库 + 本机硬规则），从调用侧规避。
+
+#### 6.72.3 修法：`_win` 的下划线**是判据**
+
+`self.win` → `self._win`。下划线让 pywebview 那一行 `if name.startswith('_')` 直接跳过 ⇒
+它摸不到窗口，也就不会去摸 .NET 控件。`app.py` 的类文档里原样记了这件事，
+并写明「别顺手改回 `win`」。
+
+#### 6.72.4 门闩
+
+护栏 `_t10.py`（**14/14**）·变异 `_mutate_t10.py`（**4/4**）。四组：
+
+1. `DeskApi` 上**没有**任何会被 pywebview 判据递归的属性；
+2. ★ **反向对照**：把窗口挂到无下划线的名字上（`api.win = FakeWindow()`），
+   判据必须立刻炸出 8 条递归路径 —— 否则「我们这个对象本来就不会被遍历」是空的；
+3. ★ **判据必须由生产代码产生**：走真实的 `DeskApi(win=FakeWindow())`，
+   并额外静态检查 `main()` 里的赋值点（`api._win = win` 必须存在、且没有 `api.` 开头的
+   非下划线赋值）。**这两条是踩出来的**（见 6.72.5）；
+4. **功能没被修掉**：七个 JS 可调方法仍在，且 `win_pos()` 真的从窗口读到位置、
+   `win_moveto()` 真的调到了 `move`。
+
+⚠ 判据里的遍历器是**照抄** pywebview `get_functions` 的判据写的，不是自己写个"像的"——
+否则「我们的对象本来就安全」可能是在自己骗自己。
+
+#### 6.72.5 ★★ 两处「夹具缺输入」+ 一个一直存在的洞
+
+**其一**：`_t10.py` 第一版在修法那组里写的是 `api2._win = FakeWindow()`（测试自己赋值），
+于是变异 ①（把 `__init__` 里的 `self._win` 改回 `self.win`）**根本走不到**，
+1/4 → 后改走真实 `__init__` 才4/4。**这是同一族的第三个实例**
+（前两例见 §5 事故表）。⇒ **判据必须由生产代码里那行赋值产生，不能由测试自己造。**
+
+**其二**：改名之后 `_t5.py` 从 26/26 掉到 **16/26**（假窗口仍挂 `api.win`，
+代码读`self._win` 读到 `None`）。这条是好的失败——它证明改名有波及面。
+**但它暴露了纪律**：上一轮就栽在"只跑改到的测试"上，所以这次跑的是**全部**。
+
+**其三（最要紧）**：`_mutate_t5.py` 一直报 4/4，但其中三条**从未真正执行**——
+它把 str 锚点 `encode` 后在**字节**上做 `.count()`，而 `app.py` 存的是 **CRLF** 行尾
+（456 处CRLF、0 处裸 LF），锚点里的 `\n` 是 LF ⇒ 凡是跨行锚点都命中 0 次。
+之前那 4/4 是历史遗留：当时锚点恰好是单行、且不含中文。
+
+⇒ 修法不是把 `app.py` 改回 LF（那会动 456 行、制造巨大 diff），
+而是**让所有变异脚本按目标文件的行尾自动归一化**，并在开头打印用的是哪种：
+
+```
+[变异] 目标文件行尾：CRLF（锚点会按它归一化）
+```
+
+⚠ 加这条守卫时我**自己引入了一次回归**：注入脚本把 `\r\n` 写成了字面反斜杠
+（`nl = b"\\r\\n"`），于是 `nl` 变成 4 字节字面量、行尾替换彻底改坏锚点
+⇒ `_mutate_t9.py` 一度掉到 **0/4**、`_mutate_t7.py` 掉到 5/11。
+**"加个防御性归一化"这件事本身也要变异验证**，不然它自己就是新的洞。
+
+#### 6.72.6 当晚的全量核对
+
+门闩：`_t5` 26/26 · `_t7` 50/50 · `_t8` 29/29 · `_t9` 13/13 · `_t10` 14/14。
+变异：`_mutate_t5` **4/4** · `_mutate_t7` 11/11 · `_mutate_t8` 5/5 ·
+`_mutate_t9` 4/4 · `_mutate_t10` 4/4，全部报「源文件逐字节还原：是」。
