@@ -7485,22 +7485,44 @@ Windows 的默认换行转换把整个文件的 **LF 写成了 CRLF** ——
 本仓库源码是 LF（同目录的 `comments.ts`、`src/**` 都是）⇒ 改成 `read_bytes` / `write_bytes`，
 并把 sha256 比对留在脚本末尾当裁判。（已写进 `AGENTS.md` §4。）
 
-#### 6.67.7 部署与运维（**站主要做的两步**）
+#### 6.67.7 部署与运维（**已落地，附实测读数**）
 
-1. **Cloudflare** → Pages 项目 `personal` → Settings → Environment variables →
-   加一个 `ADMIN_TOKEN`，类型选 **Secret**（加密存储）。值自取，够长够随机（如 `openssl rand -hex 32`）。
-   命令行等价：`npx wrangler pages secret put ADMIN_TOKEN --project-name personal`。
-   ⚠ **环境变量只对"新的一次部署"生效** —— 加完之后要再触发一次部署
-   （面板上最新那条部署旁边的「重试部署 / Retry deployment」，或者干脆从写作台推一次）。
-   少了这一步的现象是：密钥明明配了，线上却还在回「服务端没有配置 ADMIN_TOKEN」。
-2. **写作台** → 「设置 → 留言管理密钥」→ 填**同一个值** → 保存。
+2026-10-09：站主在面板上停在「Settings → Variables and secrets」问"然后呢"，
+剩下两步由助手代做完成。过程与读数记在这里，省得下次再摸一遍。
 
-配完之后线上核对一条就够（这条到现在还没跑过，因为 `ADMIN_TOKEN` 是站主那边的事）：
+1. **站点那侧** —— 值走 Cloudflare **Secret**（不进仓库、不进命令行历史）：
+   ```bash
+   printf '%s\n' '<值>' | npx wrangler pages secret put ADMIN_TOKEN --project-name personal
+   npx wrangler pages secret list --project-name personal   # → ADMIN_TOKEN: Value Encrypted
+   ```
+   ⚠ **环境变量只对"新的一次部署"生效**。实测：写完密钥之后线上**仍然**回
+   `500 {"error":"服务端没有配置 ADMIN_TOKEN，管理接口已关闭"}` —— 必须再部署一次。
+   不点面板也能重试：`wrangler` 的 OAuth 凭据就在
+   `%APPDATA%\xdg.config\.wrangler\config\default.toml`（键 `oauth_token`），拿它调
+   ```
+   POST /accounts/<acc>/pages/projects/personal/deployments/<dep>/retry
+   ```
+   ★ 路径是 **`/retry`（单数）**。写成 `/retries` 会拿到 `405 method_not_allowed`，
+   很容易被误判成"这个功能没有 API"，然后退而去加一个没必要的空提交。
+   本次重试：`6dedb75d…` → 新部署 `54a2bd8e…`，build 约 40 s + deploy 约 10 s，50 s 到 success。
+2. **写作台那侧** —— 「设置 → 留言管理密钥」填**同一个值**（本次已直接写进 `config.json` 的 `admin_token`）。
+   ⚠ 写作台是**启动时**读配置的：在设置页里改会即时生效（`_set_config` 改的就是内存里那份），
+   但**手改 `config.json` 得重启**才认。
 
-```bash
-curl -s -H "Authorization: Bearer <值>" https://northcedar.top/api/admin/comments
-# 期望 200 + {"items":[…],"limit":200}
+配完之后的线上读数（2026-10-09 实测，四条一起构成"关得住 + 进得去"）：
+
 ```
+GET    不带密钥            → 401  {"error":"缺少管理密钥（Authorization: Bearer <密钥>）"}
+GET    带错误密钥          → 401  {"error":"管理密钥不对"}
+GET    带正确密钥          → 200  {"items":[…]}          ← 配好密钥、且重新部署之后
+DELETE 不带密钥            → 401
+```
+
+**还端到端删了一条真的**（不是只看"接口答得对不对"）：往线上 D1 插一条哨兵留言
+（`slug='_desk-selftest'` —— 这个 slug 不对应任何页面，站上不会有人看到），再删：
+**9 条 → 8 条**、哨兵消失、原有留言 id `2..9` 一条不少；**再删一次回 404**
+（"这条留言已经不存在了"），而不是淡定地回"已删除"。同一套流程也**从写作台那条路**
+（`POST 127.0.0.1:8765/api/comment/delete`）完整跑了一遍，读数一致。
 
 **不配也能用**：写作台照常写文章 / 说说 / 日志 / 传图 / 推送，只有「留言」页会说
 "还没配管理密钥"（读接口会回 500 的原话，界面原样显示，不是一句 `HTTP 500`）。
@@ -7512,7 +7534,7 @@ curl -s -H "Authorization: Bearer <值>" https://northcedar.top/api/admin/commen
 | 纯函数 / 契约 | `tests/admin-comments.test.ts` 45 条 | 鉴权分支、参数校验、树形、字段名 | SQL 语法 |
 | 结构 | 同一个文件里的 D1 桩 | 表名 / 列名 / 条件 / 顺序 / 级联范围 / "没碰库" | SQL 语法、D1 的真实行为 |
 | **语法与语义** | `_probe/_d1-sqlite-check.py` 25 项 | **真的**解析并执行每条语句（D1 的引擎就是 SQLite）：`AS n` / `AS r` 别名可用、`LIMIT` 写法、`ORDER BY` 双键、`WHERE parent_id IN (?,?)`、删的 rowcount 语义、级联后不留孤儿 | D1 特有的部分（`batch` 的事务语义、`meta` 的形状） |
-| 线上 | `curl` | 路由真的上线了、fail closed 真的生效 | 带了正确密钥之后的读写（要等 `ADMIN_TOKEN` 配好） |
+| 线上 | `curl` | 路由真的上线了、fail closed 真的生效、**带对密钥的读与删**（含哨兵留言的端到端删除） | 前端渲染出来的样子（那要另开浏览器目检）。**也守不住客户端的请求头** —— 见 6.67.9 |
 
 为什么写这个脚本而不用 `npm run dev:cf`（wrangler 的本地 D1）：本机 Node 的 `child_process`
 全线 EBUSY，miniflare 起不了 workerd，`wrangler d1 execute --local` 直接
@@ -7532,6 +7554,35 @@ HTTP/2 500   {"error":"服务端没有配置 ADMIN_TOKEN，管理接口已关闭
 ```
 
 （推送前同一条 URL 返回的是站点的 **404 页面** ⇒ 这一对读数同时证明了「路由上线了」与「关得住」。）
-最后一步在站主那边：配好 `ADMIN_TOKEN`、并在**新的一次部署**后用**正确**的密钥再打一次，
-应当拿到 200。在那之前，写作台「留言」页会照原话显示上面那句，而不是一句 `HTTP 500`。
+密钥配好、重新部署之后已复测：**带正确密钥拿到 200**（读数见 6.67.7）。
+
+#### 6.67.9 ★ 客户端必须自报 User-Agent（Cloudflare 会拦 `Python-urllib`）
+
+上面四层全绿之后，写作台「留言」页**仍然是坏的** —— 它回
+`{"error":"读线上留言失败：HTTP 403"}`，而同一条命令行的 `curl` 回 200。
+同一个 URL、同一个密钥、同一台机器，差在哪？**差在 User-Agent。**
+
+```
+$ for UA in "curl/8.0" "Python-urllib/3.13" "python-requests/2.31" ""; do
+    curl -s -o/dev/null -w "%{http_code}\n" -H "Authorization: Bearer $T" -H "User-Agent: $UA" …/api/admin/comments; done
+200      ← curl/8.0
+403      ← Python-urllib/3.13     ★ 被 Cloudflare 拦了
+200      ← python-requests/2.31
+200      ← 空 UA
+```
+
+`urllib.request` 的默认头就是 `Python-urllib/3.x` ⇒ 写作台那两条请求（读列表 / 删留言）
+**注定拿 403**。修法只有一句：在请求头上自报一个自己的名字
+（`<写作台目录>\server.py` 里钉成类常量 `Handler.UA = "NorthCedar-Desk/1.0"`）。
+
+这个坑值钱的地方在于**它伪装成别的问题**：
+
+- 报的是 **403 不是 401** ⇒ 第一反应是"密钥配错了"，而密钥其实是对的；
+  于是会去反复查 `ADMIN_TOKEN`，越查越远。
+- 命令行 `curl` **永远是 200** ⇒ 只看命令行的人会认为"接口没问题，是写作台写错了"，
+  而写作台那几行字逐字看也确实没错 —— 错的是一行都没写在代码里的**默认值**。
+- 它落在**四层验证全绿之后**：单测 / D1 桩 / 真 SQLite / 线上 `curl` 都守不住它，
+  因为那四层没有一层在看"客户端到底发了什么头"。
+  ⇒ 补的门闩是 `_t4.py` 第 ① 与 ⑨ 两组里那两条 UA 断言
+  （`_mutate_t4.py` 的 ⑦⑧⑨ 三条变异都能咬住：换回默认值、只删一条路的头、只删另一条路的头）。
 

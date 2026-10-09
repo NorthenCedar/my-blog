@@ -301,6 +301,17 @@
   —— 这个坑一天内踩过四次。
 - 排查"push 了但线上没变"：① `npx wrangler pages deployment list --project-name=personal` 看那次部署是不是
   **Failure**；② `git status` 看文件是否真的进了仓库；③ 本地 `npm run build` 复现。
+- ★ **改了 Pages 的环境变量 / 密钥 ≠ 已生效**（2026-10-09 实测）：它们只作用于**新的一次部署**。
+  不点面板也能重试 —— `wrangler` 的 OAuth 凭据就在
+  `%APPDATA%\xdg.config\.wrangler\config\default.toml`（键 `oauth_token`），拿它调
+  `POST /accounts/<acc>/pages/projects/<proj>/deployments/<dep>/retry` 即可。
+  ⚠ 路径是 **`/retry`（单数）**：写成 `/retries` 会拿到 `405 method_not_allowed`，
+  很容易被误判成"这个功能没有 API"，然后退而去加一个没必要的空提交。
+- ★ **往本域发请求必须自报 User-Agent**（2026-10-09 踩到）：Python `urllib` 的默认头
+  `Python-urllib/3.x` 会被 Cloudflare **直接拦成 403** —— 同一个请求换成 `curl` 或
+  `python-requests` 就是 200。症状是"命令行验通了、本地应用里永远读不到"，
+  而且报 **403 不是 401**，极易误判成"密钥不对"（真实原因与密钥无关）。
+  自报一个自己的名字即可；`<写作台目录>` 里已钉成常量 `Handler.UA` 并加了门闩。
 
 ---
 
@@ -344,6 +355,8 @@ npm run dev:cf   # 用 wrangler 起本地 Pages（含 Functions/评论接口）
 ```bash
 # 线上：给 Pages 项目加一个加密环境变量（值自取，两边必须一样）
 npx wrangler pages secret put ADMIN_TOKEN --project-name personal
-# ⚠ 加完要**再触发一次部署**（面板上最新那条部署旁边的「重试部署」），否则线上仍按"没配"处理
+# ⚠ 加完要**再触发一次部署**，否则线上仍按"没配"处理。
+#   面板：最新那条部署旁边的「重试部署」；等价 API（凭据见 §6 那条「改了环境变量 ≠ 生效」）：
+#   POST /accounts/<acc>/pages/projects/personal/deployments/<dep>/retry     ← 单数 retry
 # 本地 dev:cf：写在 .dev.vars（已在 .gitignore 里），形如 ADMIN_TOKEN=xxxx
 ```
