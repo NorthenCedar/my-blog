@@ -435,6 +435,21 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
       box-shadow: none;
     }
   }
+  /* ★★★ 远侧柔边（2026-10-09，§6.65 —— 站主第三次报"照片边缘残留色块"）。
+     病根：透视把转过 56° / 84° 的片压成 52.7 / 28.0px 宽的窄条，照片里本来就有的
+     硬边彩色竖条被压扁后，读起来就是"贴在照片边上的一块色"。
+     ⇒ 只让**远侧那条硬边**渐隐进纸白：强度 `--sp-edge`（helix-core 的 edgeOf，
+       焦点与 ±1 片恒 0 ⇒ 不挂本类、一个像素不动），方向 `--sp-dir`（脚本按 i − f 的符号写）。
+     ★ 为什么是遮罩、不是别的：
+       · 不改 opacity / 几何 ⇒ 螺旋侧壁仍在，卷回率门闩不动（"藏掉"那条路已被否）；
+       · 不加任何底色 / 侧壁（上一轮"纸侧壁"已撤），遮罩只**减**像素、不**加**像素；
+       · 不用 clip-path：硬切出来的还是一道硬边，问题原样换个位置（有测试守着）。
+     ★ 遮罩只看 alpha：`var(--ink)` 在这里只当"不透明"用，颜色本身不进画面。
+     ★ 转过约 78°（projX 的极值）之后，远侧边在屏幕上会卷到**内侧** —— 那是几何本身，不是反了。 */
+  :global(.sp-on) .sp-item.sp-fade .sp-frame img {
+    -webkit-mask-image: linear-gradient(var(--sp-dir, to right), var(--ink) calc((1 - var(--sp-edge, 0)) * 100%), transparent);
+    mask-image: linear-gradient(var(--sp-dir, to right), var(--ink) calc((1 - var(--sp-edge, 0)) * 100%), transparent);
+  }
   :global(.sp-on) .sp-note {
     display: none;   /* 螺旋态下不需要降级说明 */
   }
@@ -627,7 +642,7 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
      以及 helix-core 的惯性数学（★ 抽出去是为了**可单测** —— 那里出过一个真 bug：
      速度没夹就进积分器，见 helix-core.ts 文件头）。 */
   import { startLoop, createActivityGate, prefersReducedMotion, shouldAnimate } from '../scripts/rl-core';
-  import { clamp, blendV, throwTarget, stepSpring, stepPxOf, radiusOf, DT_MAX } from '../scripts/helix-core';
+  import { clamp, blendV, throwTarget, stepSpring, stepPxOf, radiusOf, edgeOf, DT_MAX } from '../scripts/helix-core';
   import { showBig, thumbOf } from '../scripts/big-image';
 
   (() => {
@@ -773,6 +788,9 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
          —— 它是螺旋侧壁，不是残影）。 */
     const FADE_OFF = 0.2;
     const op = new Float32Array(N).fill(1);
+    /* 远侧柔边（§6.65）：每片上一次写入的强度 / 朝向，与 op 同一套"变了才写"口径。 */
+    const ed = new Float32Array(N);
+    const side = new Int8Array(N);
 
     const paint = () => {
       /* 唯一的每帧 style 写：rig 的 transform。
@@ -790,6 +808,20 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
         if (Math.abs(o - op[i]) > 0.01) {
           op[i] = o;
           items[i].style.opacity = o.toFixed(3);
+        }
+        /* ★ 远侧柔边：只读角度、不读也不改 o（opacity 那条公式与它互不相干）。
+           e 回到 0 时必须**当帧**摘掉类（不走 0.01 阈值）⇒ 焦点与 ±1 片永远没有遮罩。 */
+        const e = o > 0 ? edgeOf((i - f) * A_DEG, A_DEG) : 0;
+        if (e === 0 ? ed[i] !== 0 : ed[i] === 0 || Math.abs(e - ed[i]) > 0.01) {
+          ed[i] = e;
+          items[i].classList.toggle('sp-fade', e > 0);
+          items[i].style.setProperty('--sp-edge', e.toFixed(3));
+        }
+        /* 远侧 = 局部右边（i > f：rotateY(+θ) 把局部 +x 推向 −z），反之局部左边。 */
+        const sd = i > f ? 1 : -1;
+        if (e > 0 && sd !== side[i]) {
+          side[i] = sd;
+          items[i].style.setProperty('--sp-dir', sd > 0 ? 'to right' : 'to left');
         }
       }
       const near = clamp(Math.round(f), 0, N - 1);

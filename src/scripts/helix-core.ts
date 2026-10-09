@@ -113,3 +113,26 @@ export function projX(relDeg: number, perspK: number): number {
 export function radiusOf(tile: number, aDeg: number, seam: number): number {
   return (tile * seam) / (2 * Math.sin((aDeg * Math.PI) / 360));
 }
+
+/** 远侧柔边的最大强度（渐隐段占片宽的比例）。★ 必须 < 1：到 1 就是整片被抹掉 = 退回"藏掉"方案。 */
+export const EDGE_MAX = 0.6;
+
+/**
+ * 远侧柔边强度 e ∈ [0, EDGE_MAX)：片相对焦点转过 relDeg 度时，远侧边渐隐段占片宽的比例。
+ *
+ * ★★ 2026-10-09（§6.65，站主第三次报"照片边缘残留色块"）：病根不是底色、不是残影，
+ *   是**透视把 56° / 84° 的片压成窄条**（投影 52.7 / 28.0px 宽）⇒ 照片里本来就有的
+ *   硬边彩色竖条，被压成一道"贴在照片边上的色块"。修法只动**远侧那条硬边**：
+ *   让它渐隐进纸白，整片仍在（不改 opacity、不改几何 ⇒ 卷回率门闩不受影响）。
+ * ★ 分段（与 `projX` 同一个角度口径）：
+ *   · |rel| ≤ 1·α ⇒ **精确 0**：焦点与正常邻片一个像素不动（停稳后逐像素对照守着）；
+ *   · 1·α → 3·α ⇒ smoothstep 爬到 EDGE_MAX（56° 时 0.30，84° 时 0.60）；
+ *   · 之后饱和。
+ * ★ 纯函数、零 DOM：方向（左/右）不在这里，由调用方按 `i − f` 的符号决定。
+ */
+export function edgeOf(relDeg: number, aDeg: number): number {
+  const rel = Math.abs(relDeg);
+  if (!(aDeg > 0) || !(rel > aDeg)) return 0;
+  const x = clamp((rel - aDeg) / (2 * aDeg), 0, 1);
+  return EDGE_MAX * x * x * (3 - 2 * x);
+}

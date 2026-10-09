@@ -10,6 +10,8 @@ import {
   stepPxOf,
   radiusOf,
   projX,
+  edgeOf,
+  EDGE_MAX,
   V_MAX,
   V_BLEND,
   LOOKAHEAD,
@@ -263,6 +265,58 @@ describe('螺旋盘 · 几何契约', () => {
     expect(fadeOff, '淡出没有死区（或太低）⇒ 极淡的残影会留在装置里').toBeGreaterThan(0.12);
     expect(fadeOff, '死区太高 ⇒ 会切掉"还看得出形状"的那些片（螺旋侧壁）').toBeLessThan(0.35);
     expect(paint, '死区没有真的作用到 opacity 上').toMatch(/raw > FADE_OFF \? raw : 0/);
+  });
+
+  /* ★★★ 2026-10-09（§6.65，站主第三次报"照片边缘残留色块"）：远侧柔边。
+     病根实测：透视把 56° / 84° 的片压成 52.7 / 28.0px 宽的窄条，照片里本来就有的硬边彩色竖条
+     被压扁后读成"照片边上的色块"。修法 M1（站主看过三版预览后选定）：
+     远侧那条硬边渐隐进纸白 —— **不改 opacity、不改几何、不加底色、不硬切**。
+     下面四条分别守：强度曲线 / 与淡出互不相干 / 只挂在该挂的片上且方向对 / 不许拿 clip-path 代替。 */
+  it('★★ 远侧柔边 ①：强度曲线 —— ≤1 片精确为 0，之后单调爬升，最大值 < 1', () => {
+    for (const r of [0, A_DEG * 0.5, A_DEG, -A_DEG]) {
+      expect(edgeOf(r, A_DEG), `柔边在 ${r}° 不为 0 ⇒ 焦点与 ±1 片会被遮罩改掉像素`).toBe(0);
+    }
+    expect(edgeOf(2 * A_DEG, A_DEG), '柔边在 2 片处没有起作用（56° 那片窄条的硬边会原样留着）').toBeGreaterThan(0.1);
+    expect(EDGE_MAX, '柔边最大值必须 < 1（到 1 就是整片抹掉 = 退回已否掉的"藏掉"方案）').toBeLessThan(1);
+    expect(EDGE_MAX, '柔边太弱 ⇒ 84° 那片窄条的硬边还在（预览实测 0.6 才压得下去）').toBeGreaterThanOrEqual(0.4);
+    let prev = 0;
+    for (let r = 0; r <= FADE_OUT * A_DEG; r += 0.5) {
+      const e = edgeOf(r, A_DEG);
+      expect(e, `柔边在 ${r}° 处回落 ⇒ 曲线不单调（远处的片反而更硬）`).toBeGreaterThanOrEqual(prev - 1e-12);
+      expect(e, `柔边在 ${r}° 处超过 EDGE_MAX`).toBeLessThanOrEqual(EDGE_MAX + 1e-12);
+      expect(edgeOf(-r, A_DEG), '柔边对左右两侧不对称').toBe(e);
+      prev = e;
+    }
+    expect(edgeOf(3 * A_DEG, A_DEG), '柔边到 3 片处应已饱和').toBeCloseTo(EDGE_MAX, 9);
+  });
+
+  it('★★ 远侧柔边 ②：与淡出互不相干 —— opacity 公式不读它，它按「角度」喂', () => {
+    const paint = CODE.slice(CODE.indexOf('const paint = () => {'), CODE.indexOf('if (near !== curOn)'));
+    const oLine = paint.match(/const o = ([^;]*);/)?.[1] ?? '';
+    expect(oLine, '没找到 opacity 那一行').not.toBe('');
+    expect(oLine, 'opacity 公式不许读柔边（柔边只减远侧像素，不许借道把整片调淡）').not.toMatch(/\be\b|edge|ed\[/);
+    expect(paint, 'opacity 写入不许掺柔边').toMatch(/items\[i\]\.style\.opacity = o\.toFixed\(3\)/);
+    expect(paint, '柔边没按角度喂（edgeOf 吃的是度数，不是片数）').toMatch(/edgeOf\(\(i - f\) \* A_DEG, A_DEG\)/);
+  });
+
+  it('★★ 远侧柔边 ③：遮罩只挂在 .sp-fade 上、引用 --sp-edge，方向由 i − f 的符号决定', () => {
+    const rules = [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => /mask-image\s*:/.test(m[2]));
+    expect(rules.length, '螺旋态照片上没有 mask-image（柔边没落地）').toBeGreaterThan(0);
+    for (const [, sel, body] of rules) {
+      expect(sel, '遮罩只许挂在 .sp-fade 的片上（焦点与 ±1 片不许有遮罩）').toMatch(/\.sp-fade\b/);
+      expect(sel, '遮罩必须只在螺旋态生效').toContain(':global(.sp-on)');
+      expect(body, '遮罩没引用 --sp-edge（强度不随角度走）').toMatch(/(?:^|[;\s])mask-image:[^;]*var\(--sp-edge/);
+      expect(body, '遮罩没引用 --sp-dir（方向写死 ⇒ 一侧会渐隐到近侧）').toMatch(/(?:^|[;\s])mask-image:[^;]*var\(--sp-dir/);
+      expect(body, '缺 -webkit-mask-image（Safari 仍要前缀）').toMatch(/-webkit-mask-image\s*:/);
+    }
+    const paint = CODE.slice(CODE.indexOf('const paint = () => {'), CODE.indexOf('if (near !== curOn)'));
+    expect(paint, '类必须随 e > 0 挂/摘').toMatch(/classList\.toggle\('sp-fade', e > 0\)/);
+    expect(paint, '方向必须由 i > f 决定（远侧 = 背离焦点的那一边）').toMatch(/\w+ = i > f \? 1 : -1/);
+    expect(paint, '方向映射反了：i > f 的片远侧是局部右边').toMatch(/> 0 \? 'to right' : 'to left'/);
+  });
+
+  it('★ 远侧柔边 ④：不许拿 clip-path 代替（硬切出来的还是一道硬边）', () => {
+    expect(CODE, '出现了 clip-path ⇒ 硬边只是换了个位置').not.toMatch(/clip-?path/i);
   });
 });
 
@@ -748,10 +802,12 @@ describe('螺旋盘 · 红线与预算', () => {
     expect(CODE, '螺旋态丢了 max-height ⇒ 图会溢出片框').toMatch(/\.sp-frame img\s*\{[^}]*max-height:\s*100%/);
   });
 
-  it('★ 页面 JS 预算（实测 10835 字节，上限 12288）', () => {
+  it('★ 页面 JS 预算（实测 11267 字节，上限 12288）', () => {
     /* 口径与 /gallery、文章页那几条一致：**内联 + 同源外链闭包**的实数，不靠少算通过。
-       实测构成（2026-10-08）：内联 2765（Base 的首帧保险 + 过渡 loader）
-       + 本页 chunk 6375 + big-image 共享块 487 + rl-core 共享块 1208 = 10835。
+       实测构成（2026-10-09）：内联 2765（Base 的首帧保险 + 过渡 loader）
+       + 本页 chunk 6807 + big-image 共享块 487 + rl-core 共享块 1208 = 11267。
+       ★ 2026-10-09 +432（10835 → 11267）：§6.65 远侧柔边（helix-core 的 edgeOf
+         + paint 里每片写 --sp-edge / --sp-dir 的那几行）。上限不动，余量 ~1.0 KB。
        ★ 上限 11264 → 12288（2026-10-08）：本轮给灯箱加了「先小后大」换图
          （`big-image.showBig`，487 字节的共享模块 + 调用点），实测 9761 → 10835，
          把原来那句"留了 ~1.5 KB 余量"吃掉大半 ⇒ 按站上规矩（预算随实事调整、
