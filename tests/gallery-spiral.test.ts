@@ -706,6 +706,68 @@ describe('螺旋盘 · 点击放大（站主 2026-10-07：「点击照片那张�
       /\.sp-viewport:hover \.sp-item\.zoom:not\(:hover\) \.sp-frame\s*\{[\s\S]{0,200}?opacity:/,
     );
   });
+
+  /* ★★★ 2026-10-09（§6.66，站主第四次报这一处："缩小时照片边缘残留条纹"）：保护层。
+     病根是 Chrome 合成器在放大片缩回时**偶发**漏擦原来 1.9 倍那一圈（截图接口拍不到，只在屏幕上）
+     ⇒ 这里守的不是"拖影没了"（测不到），而是**修法的几个必要条件**：
+     ① 保护层够大、挂对层、颜色走 token；② 缩回期间仍在；③ 颜色本身看不见。 */
+  it('★★★ 保护层 ①：放大片后面垫一块不随 scale 收缩的底 —— 够大、挂在 .sp-item 上、走 token', () => {
+    const rule = /([^{}]*\.sp-item\.zoom::after[^{}]*)\{([^{}]*)\}/.exec(CSS);
+    expect(rule, '缺 .sp-item.zoom::after 保护层（放大片缩回时会偶发漏擦，留下条纹）').not.toBeNull();
+    const [, sel, body] = rule!;
+    expect(sel, '保护层必须只在螺旋态生效').toContain(':global(.sp-on) .sp-item.zoom::after');
+    expect(sel, '缩回期间没有保护层（缺 .sp-unzoom::after ⇒ "点另一张"那条路径上一缩回保护就没了）').toContain(
+      ':global(.sp-on) .sp-item.sp-unzoom::after',
+    );
+    expect(body, '保护层不是绝对定位').toMatch(/position:\s*absolute/);
+    expect(body, '保护层没有 content ⇒ 伪元素根本不生成').toMatch(/content:\s*''/);
+    expect(body, '保护层会挡点击').toMatch(/pointer-events:\s*none/);
+    expect(body, '保护层颜色必须是 --paper-ghost').toMatch(/background:\s*var\(--paper-ghost\)/);
+    const inset = Number(/inset:\s*-(\d+(?:\.\d+)?)%/.exec(body)?.[1] ?? NaN);
+    const ZOOM = Number(/--sp-zoom:\s*([\d.]+)/.exec(CSS)?.[1] ?? NaN);
+    const need = ((ZOOM - 1) / 2) * 100;
+    expect(inset, `保护层外扩 ${inset}% 盖不住 ${ZOOM} 倍放大（需 ${need}% + 影子余量 10%）`).toBeGreaterThanOrEqual(need + 10);
+    expect(inset, '保护层外扩过大（> 100% ⇒ 白白扩大重绘区）').toBeLessThanOrEqual(100);
+    expect(CSS, '保护层不许挂到 .sp-frame 上（它 overflow: hidden，会把保护层自己切掉）').not.toMatch(
+      /\.sp-frame(?:\s+img)?::?(?:after|before)/,
+    );
+  });
+
+  it('★★★ 保护层 ②：摘掉 .zoom 时先挂 .sp-unzoom，挂够缩回过渡那么久再摘', () => {
+    const ms = Number(/const UNZOOM_MS = (\d+);/.exec(JS)?.[1] ?? NaN);
+    const TOK = read('src/styles/tokens.css');
+    const enter = Number(/--dur-enter:\s*(\d+)ms/.exec(TOK)?.[1] ?? NaN);
+    const k = Number(/\.sp-frame\s*\{[^}]*?transition:\s*transform calc\(var\(--dur-enter\) \* ([\d.]+)\)/.exec(CSS)?.[1] ?? NaN);
+    expect(Number.isFinite(enter * k), '读不到缩回过渡的时长（--dur-enter × 倍数）').toBe(true);
+    expect(ms, `UNZOOM_MS ${ms} 盖不住缩回过渡 ${enter * k}ms（+100ms 余量）`).toBeGreaterThanOrEqual(enter * k + 100);
+    expect(ms, 'UNZOOM_MS 过长（保护层留太久，白白多一层重绘）').toBeLessThanOrEqual(3000);
+    expect(JS, '摘 .zoom 之前没有先挂保护（顺序反了 ⇒ 缩回第一帧没有保护层）').toMatch(
+      /if \(zoomAt >= 0\) guard\(items\[zoomAt\]\);\s*if \(zoomAt >= 0\) items\[zoomAt\]\?\.classList\.remove\('zoom'\);/,
+    );
+    const g = /const guard = [\s\S]{0,400}?\n    \};/.exec(JS)?.[0] ?? '';
+    expect(g, '没找到 guard()').not.toBe('');
+    expect(g, 'guard 没挂 .sp-unzoom').toMatch(/classList\.add\('sp-unzoom'\)/);
+    expect(g, 'guard 没按 UNZOOM_MS 摘掉 .sp-unzoom（一挂就不下来）').toMatch(
+      /setTimeout\(\(\) => el\.classList\.remove\('sp-unzoom'\), UNZOOM_MS\)/,
+    );
+    expect(g, 'guard 没清旧定时器（快速来回点时会提前摘掉）').toMatch(/clearTimeout\(/);
+  });
+
+  it('★★ 保护层 ③：--paper-ghost = 纸色 + 极小的非零 alpha（看不见，但不能全透明）', () => {
+    const TOK = read('src/styles/tokens.css');
+    const paper = /--paper:\s*#([0-9a-f]{6});/i.exec(TOK)?.[1];
+    const ghost = /--paper-ghost:\s*#([0-9a-f]{8});/i.exec(TOK)?.[1];
+    expect(ghost, '--paper-ghost 必须是 8 位 hex').toBeDefined();
+    expect(ghost!.slice(0, 6).toLowerCase(), '--paper-ghost 的颜色必须就是 --paper（叠纸差 0）').toBe(paper!.toLowerCase());
+    const a = parseInt(ghost!.slice(6), 16);
+    expect(a, '--paper-ghost 全透明 ⇒ 合成器会当它不存在，保护失效').toBeGreaterThan(0);
+    expect(a, `--paper-ghost alpha ${a}/255 太大 ⇒ 会在身后邻片上看出一层纱`).toBeLessThanOrEqual(4);
+  });
+
+  it.skipIf(!hasDist)('★★ 保护层 ④：产物里真的有那条规则（作用域化之后没丢）', () => {
+    expect(PAGE_CSS, '产物 CSS 里没有 .sp-unzoom 的伪元素规则').toMatch(/\.sp-unzoom:{1,2}after/);
+    expect(PAGE_CSS, '产物 CSS 里保护层没有引用 --paper-ghost').toMatch(/var\(--paper-ghost\)/);
+  });
 });
 
 describe('螺旋盘 · 红线与预算', () => {
@@ -802,10 +864,11 @@ describe('螺旋盘 · 红线与预算', () => {
     expect(CODE, '螺旋态丢了 max-height ⇒ 图会溢出片框').toMatch(/\.sp-frame img\s*\{[^}]*max-height:\s*100%/);
   });
 
-  it('★ 页面 JS 预算（实测 11267 字节，上限 12288）', () => {
+  it('★ 页面 JS 预算（实测 11429 字节，上限 12288）', () => {
     /* 口径与 /gallery、文章页那几条一致：**内联 + 同源外链闭包**的实数，不靠少算通过。
        实测构成（2026-10-09）：内联 2765（Base 的首帧保险 + 过渡 loader）
-       + 本页 chunk 6807 + big-image 共享块 487 + rl-core 共享块 1208 = 11267。
+       + 本页 chunk 6969 + big-image 共享块 487 + rl-core 共享块 1208 = 11429。
+       ★ 2026-10-09 +162（11267 → 11429）：§6.66 放大片保护层（guard + UNZOOM_MS 定时摘类）。上限不动，余量 ~0.85 KB。
        ★ 2026-10-09 +432（10835 → 11267）：§6.65 远侧柔边（helix-core 的 edgeOf
          + paint 里每片写 --sp-edge / --sp-dir 的那几行）。上限不动，余量 ~1.0 KB。
        ★ 上限 11264 → 12288（2026-10-08）：本轮给灯箱加了「先小后大」换图

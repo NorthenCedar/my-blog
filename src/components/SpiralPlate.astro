@@ -426,6 +426,26 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
        装置这一段的门闩明确禁字面色值（站规：颜色只用 token）。 */
     box-shadow: var(--glass-shadow);
   }
+  /* ★★★ 保护层（2026-10-09，§6.66 —— 站主报"缩小时照片边缘残留条纹"，第四次报这一处）。
+     病根：放大那张从 1.9 倍缩回时，Chrome 合成器**偶发**地漏擦它原来那一圈
+     ⇒ 照片边缘像素被拉成条纹 + 几层细框，停在纸上不走（无痕窗口也有；截图接口拍不到，只在屏幕上）。
+     站主实测（每条多轮）：去掉缩小过渡 ✔ · 垫一块不随缩放变小的近透明底 ✔；
+     单层合成 / 去影子 / 关柔边 / backface ✘。去掉过渡违背「慢慢回到原处」⇒ 取后者。
+     ★ 机制：片后面垫一块比 1.9 倍再大一圈的底（inset −60% > 所需 45% + 影子），
+       放大片占的面积就**不随 scale 收缩** ⇒ 整块每帧都在重绘区里，无从漏擦。
+     ★ 挂的时机：`.zoom` 期间 + 摘掉 `.zoom` 后 `.sp-unzoom` 再挂一段（脚本里 UNZOOM_MS，盖住
+       1.02s 的缩回过渡）—— 不留这一段，"点另一张"那条路径上缩回刚开始保护就没了。
+     ★ 颜色是 --paper-ghost（纸色 @ 2/255）：全透明会被合成器当成"没东西"跳过 ⇒ 不能是 00。
+       叠纸差 0；叠在身后邻片上 ≤2 级。全台同时最多两片挂它。
+     ❌ 不许挂到 .sp-frame 上（它有 overflow: hidden，保护层会被自己切掉）。 */
+  :global(.sp-on) .sp-item.zoom::after,
+  :global(.sp-on) .sp-item.sp-unzoom::after {
+    content: '';
+    position: absolute;
+    inset: -60%;
+    background: var(--paper-ghost);
+    pointer-events: none;
+  }
   /* 鼠标落在别的片上时，**当前放大那张**退回常态（缩一点、影子收掉）——
      这样"点谁放大谁"在动手之前就显形：指针离开那张，它就退回一片。
      （同一条 calc(--dur-enter) × 1.6 ⇒ 退回也是"慢慢回去"，不是瞬变。） */
@@ -716,9 +736,19 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
        站主要的是「点击照片那张照片要放大」（把注意力收到一张上），
        而不是「点一下直接弹灯箱」（那样点错一张就弹错一张，没法先看清楚）。 */
     let zoomAt = -1;
+    /* §6.66 保护层：摘掉 .zoom 之后再挂这么久（> 缩回过渡 ≈1.02s）。见 CSS 那条注释。 */
+    const UNZOOM_MS = 1300;
+    const unzoomT = new Map<Element, number>();
+    const guard = (el: Element | undefined) => {
+      if (!el) return;
+      el.classList.add('sp-unzoom');
+      clearTimeout(unzoomT.get(el));
+      unzoomT.set(el, window.setTimeout(() => el.classList.remove('sp-unzoom'), UNZOOM_MS));
+    };
 
     const setZoom = (i: number) => {
       if (zoomAt === i) return;
+      if (zoomAt >= 0) guard(items[zoomAt]);
       if (zoomAt >= 0) items[zoomAt]?.classList.remove('zoom');
       zoomAt = i;
       if (zoomAt >= 0) items[zoomAt]?.classList.add('zoom');
