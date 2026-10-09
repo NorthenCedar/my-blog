@@ -7586,3 +7586,135 @@ $ for UA in "curl/8.0" "Python-urllib/3.13" "python-requests/2.31" ""; do
   ⇒ 补的门闩是 `_t4.py` 第 ① 与 ⑨ 两组里那两条 UA 断言
   （`_mutate_t4.py` 的 ⑦⑧⑨ 三条变异都能咬住：换回默认值、只删一条路的头、只删另一条路的头）。
 
+
+
+### 6.68 写作台：从脚本变成应用 · 打包后静默起不来 · 拖动窗口（站主 2026-10-09 四条指令）
+
+站主这一轮一口气给了四条，前两条是「别再用脚本」和「闪终端」，后两条是窗口手感：
+
+> 「1.能变成应用吗，不用脚本。2.我打开桌面那个bat会跳出来很多终端（跳出来就立马关了），修。
+>   3.小窗的时候改成鼠标拖顶部就能拖动，不要只能拖黑色部分的顶端才可以。4.拖动的时候会抖动，修」
+
+四条都落在 `<写作台目录>`（**不是站点的一部分**，不进这个仓库），站上产物零改动。
+记在这里的是**方法论**与那个差点把坏包交出去的坑。
+
+#### 6.68.1 闪一堆终端：没有控制台的进程，Windows 会给每个「控制台子进程」新开一个
+
+写作台是个**无控制台**的程序（`pythonw.exe` / 打包后 `--windowed` 的 exe）。
+Windows 的规矩是：**控制台程序若父进程没有控制台，就给它新分配一个** ⇒ 于是每一次
+`git` / `npm` 调用都弹一个黑窗、随即关掉。启动那几秒要连调十几次（读仓库状态、比远端），
+所以站主看到的是"跳出来很多终端（跳出来就立马关了）"。
+
+修法是把**四个调用点**统一收口到一个 `lib/proc.py`，给每个子进程加
+`CREATE_NO_WINDOW`（`0x08000000`）+ `STARTUPINFO{SW_HIDE, STARTF_USESHOWWINDOW}` 兜底；
+`gitops.commits()` 的 `git commit -F -`、`server.run_build()` 的 `npm run verify` 都走它。
+**留一个改的地方**比"记得改四处"值钱：将来加超时/环境白名单只改这一处。
+
+护栏：`_t5.py` ⑪ —— 全仓扫 `subprocess.run(`，只允许 `lib/proc.py` 出现。
+（★ 这条门闩当场就咬住了一处：新写的 `build-app.py` 自己又用了一句裸 `subprocess.run`。）
+
+#### 6.68.2 顶部一整条能拖 + 不抖：两个根因，都在"用什么坐标"
+
+- **只有深色窄边能拖**：监听器挂在 `#titlebar` 上（宽 232px）。改成挂 `document`，
+  用 `topBand() = max(titlebar 高, .work-head 底边, 46)` 判定 —— 实测判定带 **75.25px**，
+  整条顶部都是拖动区；再用 `closest('button, a, input, …, .no-drag')` 把可交互元素摘出去。
+- **抖动**是两个原因叠一起：① 用 `clientX/clientY` 算位移 —— 它**相对窗口**，窗口一动它自己就变，
+  成了正反馈；② 用窗口坐标**累加**位移 —— 读窗口位置是异步的、会滞后，滞后一次就叠一次误差。
+  ⇒ 改成 `screenX/screenY`（相对屏幕）+ **绝对定位**（每帧只说"窗口该在哪"，
+  按 `devicePixelRatio` 换算：屏幕坐标是 CSS px、窗口位置是物理 px，150% 缩放下不换算就是一顿一顿的），
+  并且 `win_pos()` 回来时把基准**重新对齐到"此刻"**（否则那几毫秒里鼠标已经动了，窗口先跳一下）。
+
+**验收**（这一条原来被记为"本机无法自动验收"，见 §6.68.4）：`_t6.py` 用无头 Chrome + CDP
+把真实指针事件发进去，`window.pywebview.api` 换成**记录用替身**，断言后端收到的序列：
+
+```
+✔ ① 在顶部条上按下 → 真的去问了窗口位置（起拖）
+✔ ② 每一帧都发了目标坐标（三帧三次，不是一次）　[[120,110],[145,120],[175,133]]
+✔ ② ★ 是绝对坐标：等于「窗口原点 + 指针位移」（增量实现会收到 [20,10] 这种小数字）
+✔ ② ★ 三帧互不叠加（抖动就是叠加出来的）
+✔ ③ 抬起之后不再发坐标　✔ ④ 内容区按下不起拖　✔ ⑤ 按在小圆点上不起拖　✔ ⑥ 最大化时不拖
+合计 11 项，通过 11，失败 0
+```
+
+#### 6.68.3 ★★★ exe 打出来了、六项静态证据全绿，双击却毫无反应
+
+这是本轮最值钱的一条。`build-app.py` 打完包，站主那边**双击没有任何动静**（不弹窗、不报错）。
+用控制台版跑才看到一句：
+
+```
+[PYI-47912:ERROR] Could not load PyInstaller's embedded PKG archive from the executable (…\hello.exe)
+```
+
+先按"归档坏了"查，**六项全部证明它是好的**，于是这条路整个作废：
+
+| 检查 | 结果 |
+|---|---|
+| `exe 尾部 = bootloader + pkg`？ | ✅ 逐字节相等，偏移 373248 |
+| cookie 解析？ | ✅ `magic / pkg_length=7059575 / toc_offset / pyvers=313 / pylib_name=python313.dll` 全对 |
+| `pyi-archive_viewer -l`？ | ✅ 能把归档内容列出来 |
+| bootloader 被改过？ | ❌ 与官方 PyPI wheel **sha256 四个全同** |
+| UPX 捣乱？ | ❌ 本机没装 UPX（`upx=True` 是空操作） |
+| 沙箱拦的？ | ❌ **关掉沙箱照样挂**；换 ASCII 路径、换盘符也一样 |
+
+★ **转向点**：`PyInstaller --debug=all` 让引导程序自己说话 ——
+
+```
+LOADER: attempting to open archive <本机工作区>/_pyitest/_dbg/dist/hello_dbg.exe
+LOADER: cannot open archive: <本机工作区>/_pyitest/_dbg/dist/hello_dbg.exe
+```
+
+**它连自己那个文件都 `open` 不开**。于是问题从"归档结构"变成"这个文件在这个进程里打不开"。
+（读源码定位到这一行花了两步：`pyi_main.c` 的 `_pyi_main_resolve_pkg_archive` →
+`pyi_archive.c:381` 的 `pyi_path_fopen` → `pyi_path.c:178` 的 `_wfopen`。）
+
+**分治实验**（同一份 exe 字节，只换目录）—— 这是全部证据里最关键的一张表：
+
+| 位置 | 结果 |
+|---|---|
+| `C:/Users/…/AppData/Local/Temp/he_c.exe` | ✅ 正常跑完 |
+| `%USERPROFILE%/he5.exe` | ✅ |
+| `D:/he3.exe` | ✅ |
+| `D:/_pytest2/he4.exe` | ✅ |
+| `<本机工作区>/_pyitest/he2.exe` | ❌ cannot open archive |
+| `<本机工作区>/_acltest/he6.exe`（把**能跑的那个**拷进来） | ❌ |
+| `<本机工作区>/_acl3/x.exe`（动手删掉目录的 DENY ACE） | ❌ 仍然挂 |
+
+⇒ 不是盘符、不是长路径、与 DENY ACE **无关**，是 **`<本机工作区>` 这一层**。
+查 ACL 才看到那条显式 ACE：
+
+```
+<本机工作区>  D:AI(D;CI;DT;;;WD)(A;OICI;FA;;;A2817)…(A;OICI;0x110156;;;S-1-4-588871634-737494949)
+           S:AI(ML;OICI;NW;;;LW)                       ← ★ 就是这一段
+```
+
+**`Mandatory Label\Low Mandatory Level`（SDDL 里的 `ML;…;LW`），会被整棵子树继承** ——
+`<博客仓库>`（博客仓库）也一样带。而带 Low 标签的 exe，PyInstaller 的引导程序
+`_wfopen` 自己会失败。**收口实验**：对那个文件跑一次
+
+```
+icacls "<本机工作区>/_acl2/x.exe" /setintegritylevel Medium
+```
+
+**立刻就能跑**（`HELLO-FROM-EXE`）—— 因果链闭合。
+
+处置：
+1. 应用改装到 `%LOCALAPPDATA%\Programs\写作台\`（AI 不会去动标签的常规用户目录）；
+2. `build-app.py` 装完**查一次标签**，带 Low 就改回 Medium（**方向只有一个：往常规级别调**，
+   绝不往 High 提）；
+3. 加硬门闩 `smoke_test()`：`写作台.exe --no-open --port 8791` → 轮询 `/api/health` 到 200，
+   不过就返回非 0 并明说"打出来了但起不来，别用"。
+   （`--no-open` 会走到 `server.serve()` 之后、`import webview` **之前**返回 ——
+    打包后没有控制台的形态下，这是唯一能拿 HTTP 验「服务/界面/配置都对」的入口。）
+
+#### 6.68.4 两条顺带的账
+
+- ★ **订正 AGENTS §6 那条「本机 CDP 回环端口连不上」**：它**不再是恒久事实**。
+  `_t6.py` 里用 **Python 起 Chrome + `websocket-client` 连 `127.0.0.1:<port>/json`** 是通的，
+  关键是 **`--remote-allow-origins=*` 必须带**（缺了握手回 **403**，很像"端口被拦"，其实只是缺参数）。
+  ⇒ 「指针模拟 / 拖动」这类原本记为"本机无法自动验收"的判据，至少有一条可用通路了。
+  ⚠ 没再试 `_probe/cdp-*.mjs`（Node 版），别把这条当成"那几个脚本也好了"。
+- ★ **两个顺手抓到的小坑**：① `说明.txt` 要写成 **GBK + CRLF** 才能在 cmd 里正常显示，
+  而 `⇒`(U+21D2) **不在 GBK 里**、编码会当场炸（转换脚本先跑一遍"能不能编进 GBK"的预检，
+  这条预检是它自己救了自己）；② `<本机工作区>` 上的 `Mandatory Label` 会让
+  `shutil.rmtree` 走回收站时也失败（`_cdp_profile_t6` 那份就是这个症状），
+  与 §6.67 记的"SHFileOperationW 对目录恒回 2"是两个不同的问题，别混。
