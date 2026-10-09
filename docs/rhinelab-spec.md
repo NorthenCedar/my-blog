@@ -7460,7 +7460,7 @@ SELECT (SELECT COUNT(*) FROM comments WHERE id = ?) AS n,
 - 纯函数层：`secretMatches` / `bearerToken` / `verifyAdmin` / `parseDeleteInput` / `buildCommentTree`。
 - 适配器层：**一个"认不出 SQL 就抛异常"的 D1 桩**（`StubD1`）—— 它不解析 SQL，只认这个接口真正会发出的
   那几条语句的形状，认不出来就炸。这样"接口改了查询而测试照样全绿"不可能发生；
-  代价是它**验证不了 SQL 语法本身**（那要等线上冒烟，见 6.67.7）。
+  代价是它**验证不了 SQL 语法本身** —— 那一层由 `_probe/_d1-sqlite-check.py` 补上（见 6.67.8）。
 
 **`_probe/_mutate-admin-comments.py`** —— 18 条变异，**18/18 咬住**，源文件**逐字节**还原（比对 sha256）：
 环境变量没配就放行 · 比对了但不看结果 · 比对函数恒真 · `<=` 写成 `<` · 放行未知 `kind` ·
@@ -7490,15 +7490,48 @@ Windows 的默认换行转换把整个文件的 **LF 写成了 CRLF** ——
 1. **Cloudflare** → Pages 项目 `personal` → Settings → Environment variables →
    加一个 `ADMIN_TOKEN`，类型选 **Secret**（加密存储）。值自取，够长够随机（如 `openssl rand -hex 32`）。
    命令行等价：`npx wrangler pages secret put ADMIN_TOKEN --project-name personal`。
+   ⚠ **环境变量只对"新的一次部署"生效** —— 加完之后要再触发一次部署
+   （面板上最新那条部署旁边的「重试部署 / Retry deployment」，或者干脆从写作台推一次）。
+   少了这一步的现象是：密钥明明配了，线上却还在回「服务端没有配置 ADMIN_TOKEN」。
 2. **写作台** → 「设置 → 留言管理密钥」→ 填**同一个值** → 保存。
+
+配完之后线上核对一条就够（这条到现在还没跑过，因为 `ADMIN_TOKEN` 是站主那边的事）：
+
+```bash
+curl -s -H "Authorization: Bearer <值>" https://northcedar.top/api/admin/comments
+# 期望 200 + {"items":[…],"limit":200}
+```
 
 **不配也能用**：写作台照常写文章 / 说说 / 日志 / 传图 / 推送，只有「留言」页会说
 "还没配管理密钥"（读接口会回 500 的原话，界面原样显示，不是一句 `HTTP 500`）。
 
-#### 6.67.8 一条如实的口径
+#### 6.67.8 三层验证各守什么（以及各**不**守什么）
 
-D1 桩守的是**结构**（表名 / 列名 / 条件 / 顺序 / 级联范围）与**契约**（两边字段对得上），
-**不是 SQL 语法**，也不是 D1 的真实行为（`batch` 的事务语义、`meta.changes` 的取值）。
-这两样只能在真实环境里验：本地 `npm run dev:cf` 或线上 `curl`。
-所以本条的"完成"标准是：`npm run verify` 绿 + 15/15 与 6/6 变异咬住 + **线上 `curl` 拿到 401**（证明路由真的上线了、且 fail closed）。
+| 层 | 工具 | 守得住 | 守不住 |
+|---|---|---|---|
+| 纯函数 / 契约 | `tests/admin-comments.test.ts` 45 条 | 鉴权分支、参数校验、树形、字段名 | SQL 语法 |
+| 结构 | 同一个文件里的 D1 桩 | 表名 / 列名 / 条件 / 顺序 / 级联范围 / "没碰库" | SQL 语法、D1 的真实行为 |
+| **语法与语义** | `_probe/_d1-sqlite-check.py` 25 项 | **真的**解析并执行每条语句（D1 的引擎就是 SQLite）：`AS n` / `AS r` 别名可用、`LIMIT` 写法、`ORDER BY` 双键、`WHERE parent_id IN (?,?)`、删的 rowcount 语义、级联后不留孤儿 | D1 特有的部分（`batch` 的事务语义、`meta` 的形状） |
+| 线上 | `curl` | 路由真的上线了、fail closed 真的生效 | 带了正确密钥之后的读写（要等 `ADMIN_TOKEN` 配好） |
+
+为什么写这个脚本而不用 `npm run dev:cf`（wrangler 的本地 D1）：本机 Node 的 `child_process`
+全线 EBUSY，miniflare 起不了 workerd，`wrangler d1 execute --local` 直接
+`X [ERROR] write EOF`（日志里是 `WriteWrap.onWriteComplete` —— 管道那头没起来）。
+拿 Python 自带的 `sqlite3` 把**同一批语句**喂给真的 SQLite，能覆盖的就是"语法与语义"这一层，
+而这恰好是前两层永远碰不到的地方。脚本还会把每条 SQL 归一化空白后回到接口源码里核对，
+**接口改了 SQL 而脚本没跟着改时它会当场报错**（不会静默失效）。
+
+**线上实测（2026-10-09，`ADMIN_TOKEN` 还没配时的预期行为）**：
+
+```
+$ curl -i https://northcedar.top/api/admin/comments
+HTTP/2 500
+{"error":"服务端没有配置 ADMIN_TOKEN，管理接口已关闭"}
+$ curl -X DELETE -H 'Authorization: Bearer wrong-token' … /api/admin/comments
+HTTP/2 500   {"error":"服务端没有配置 ADMIN_TOKEN，管理接口已关闭"}
+```
+
+（推送前同一条 URL 返回的是站点的 **404 页面** ⇒ 这一对读数同时证明了「路由上线了」与「关得住」。）
+最后一步在站主那边：配好 `ADMIN_TOKEN`、并在**新的一次部署**后用**正确**的密钥再打一次，
+应当拿到 200。在那之前，写作台「留言」页会照原话显示上面那句，而不是一句 `HTTP 500`。
 

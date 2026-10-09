@@ -344,5 +344,6 @@ npm run dev:cf   # 用 wrangler 起本地 Pages（含 Functions/评论接口）
 ```bash
 # 线上：给 Pages 项目加一个加密环境变量（值自取，两边必须一样）
 npx wrangler pages secret put ADMIN_TOKEN --project-name personal
+# ⚠ 加完要**再触发一次部署**（面板上最新那条部署旁边的「重试部署」），否则线上仍按"没配"处理
 # 本地 dev:cf：写在 .dev.vars（已在 .gitignore 里），形如 ADMIN_TOKEN=xxxx
 ```
