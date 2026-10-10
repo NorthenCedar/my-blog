@@ -8,6 +8,13 @@ pages_build_output_dir = "dist"
 # 它同时服务两个场景：
 #   · 本地：`npm run dev:cf` 用本地 SQLite 模拟（不碰线上数据）
 #   · 线上：Pages 构建时用它把库绑成 env.COMMENTS_DB
+#
+# ★ 2026-10-10 开源时复核过：database_id 是**资源标识符，不是凭据**。
+#   拿到它并不等于能访问那个库 —— D1 的所有操作都要过 Cloudflare API token，
+#   而 token 走 Secret 环境变量配置（`npx wrangler pages secret put ADMIN_TOKEN`），
+#   从来不进仓库。所以这里保留真值。
+#   ⚠ 唯一要留意的是：fork 的人必须改成自己的 database_id，
+#     否则 Cloudflare 会因为"你的账号下没有这个库"而构建失败。
 [[d1_databases]]
 binding = "COMMENTS_DB"
 database_name = "beishan-comments"

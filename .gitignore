@@ -7,6 +7,11 @@ prototype/_shots/
 # wrangler 的本地状态（含本地 D1 数据库文件）—— 绝不能提交
 .wrangler/
 .dev.vars
+# ★ 2026-10-10 开源时补：AI 助手的本地权限配置。
+#   它记录的是"这台机器上允许执行哪些命令"，对别人毫无价值，只会暴露本机路径。
+#   （此前靠 ~/.config/git/ignore 挡着 —— 那是**全局**配置，
+#     换机器 clone 的人没有，文件就会直接进库。仓库的忽略规则不能依赖仓库外的设置。）
+.claude/
 # wrangler types 生成的 Cloudflare 运行时类型（604 KB）。
 # 需要编辑器类型提示时跑 `npx wrangler types` 重新生成；不进仓库，避免每次升级 wrangler 都产生巨型 diff。
 worker-configuration.d.ts
@@ -16,6 +21,13 @@ worker-configuration.d.ts
 # 会话档案：从 DSH 会话日志解出来的原始 JSONL（16 MB，含思考过程与工具原始输出）。
 # 可读版是 docs/session-log-9addf212.md（这个进仓库）；原始档只留本地。
 .session-archive/
+# ★ 2026-10-10 开源前审计：从 DSH 会话日志解出来的**逐字全文**（5462 行 / 530 KB）。
+#   它含本机绝对路径、站主与 AI 的完整私人对话、真实姓名与联系方式。
+#   这些内容**不是站点的一部分**，是当时的工作记录；仓库一转公开就不可撤回，
+#   而它对"读者理解这个项目怎么建起来的"没有任何帮助 —— 那部分由
+#   docs/session-handoff.md 与 docs/rhinelab-spec.md 承担。
+#   ⇒ 移出版本库（文件留在本机，需要时还能读）。
+docs/session-log-*.md
 # 开场动画的生成 CSS（51 KB）。唯一真源 = src/lib/boot-tracks.ts（数据）+ src/lib/boot-css.ts（生成器）；
 # 由 `npm run build` / `npm run dev` 前的 scripts/gen-boot-css.mjs 产出。
 # 不入库的理由与 public/gallery/ 一致：生成物跟着脚本走，改数据不必重提一份大文件。
