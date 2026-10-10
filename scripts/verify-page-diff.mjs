@@ -22,10 +22,16 @@
  * 不会被误判成差异；真正的差异（DOM 结构、类名、链接文本）留下。
  */
 import { readFile, readdir } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { join, relative, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const A = process.argv[2] ?? '<本机工作区>\\_tmp-dist-b2-before';
-const B = process.argv[3] ?? '<博客仓库>\\dist';
+// 默认值从**脚本自身位置**推导，不再硬编码本机绝对路径。
+// 之前写的是 `D:\router\...` 那类绝对路径；开源脱敏时被换成了占位符，
+// 而占位符不是合法路径 —— 这两个默认值会静默指向不存在的目录。
+// `scripts/` 的上一级就是仓库根，所以 dist 也在脚下。
+const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const A = process.argv[2] ?? join(REPO_ROOT, '..', '_tmp-dist-b2-before');
+const B = process.argv[3] ?? join(REPO_ROOT, 'dist');
 const rawExpect = process.argv.slice(4).flatMap((s) => s.split(',')).map((s) => s.trim()).filter(Boolean);
 
 const walk = async (d, o = []) => {

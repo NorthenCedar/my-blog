@@ -1,18 +1,22 @@
 /**
  * 量实 prototype/terminal 草案的横向溢出与分层高度。
- * 自建静态服务（根 = <博客仓库>）+ puppeteer-core 驱动本机 Chrome。
- * 用法: node _tmp-measure.mjs [文件名] [端口]
+ * 自建静态服务（根 = 本文件所在的 prototype/ 目录）+ puppeteer-core 驱动本机 Chrome。
+ * 用法: node measure.mjs [文件名] [端口]
  */
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
+import { extname, join, normalize, dirname } from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = '<博客仓库>';
+// 路径一律从脚本自身位置推导，不硬编码本机绝对路径。
+// 原先写死的是本机的仓库目录与 npx 缓存目录；开源脱敏后变成了占位符，
+// 而占位符不是合法路径。NPX 那个尤其无从推导（它依赖 npx 的哈希目录名），
+// 所以改成「若已存在就直接 require，否则给出可操作的手工安装提示」。
+const ROOT = dirname(fileURLToPath(import.meta.url));
 const FILE = process.argv[2] ?? 'home.html';
 const PORT = Number(process.argv[3] ?? 4331);
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const NPX = '<博客仓库>\\.npm-cache\\_npx\\8003d8991b0d346b\\node_modules\\';
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.woff2': 'font/woff2', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml' };
 const server = http.createServer(async (req, res) => {
@@ -28,8 +32,20 @@ const server = http.createServer(async (req, res) => {
 });
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 
-const require = createRequire(NPX);
-const puppeteer = require('puppeteer-core');
+// puppeteer-core 不是仓库依赖（它只在做原型量测时才用），所以从本仓库的
+// node_modules 里 require；没有就明确告诉人怎么装，而不是指向一个占位路径。
+const require = createRequire(import.meta.url);
+let puppeteer;
+try {
+  puppeteer = require('puppeteer-core');
+} catch {
+  console.error(
+    '缺少 puppeteer-core。这个脚本只在量原型时用，所以没进 package.json ——\n' +
+    '请先装一次：npm i -D puppeteer-core\n' +
+    '（只装 puppeteer-core 即可，浏览器用本机已装的 Chrome，不额外下载 Chromium。）',
+  );
+  process.exit(1);
+}
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox', '--disable-gpu', '--hide-scrollbars'] });
 const page = await browser.newPage();
 
