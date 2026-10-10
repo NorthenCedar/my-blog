@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { TAGS } from '../src/tag-registry';
 
 /* 标签区（`/tags/` + `/tags/[tag]/`）2026-10-06 这一轮的契约。
  *
@@ -372,9 +373,14 @@ describe('标签区 · 准星 CROSSHAIR 装置契约', () => {
 });
 
 describe('标签区 · 构建产物', () => {
-  it('总览页：8 格矩阵 + 底纹 + 准星 + 关掉百褶 ∞', () => {
-    expect(hasDist, '先 npm run build').toBe(true);
-    expect((IDX_HTML.match(/<li class="tag-cell"/g) ?? []).length, '标签总览应是 8 格').toBe(8);
+  it('总览页：矩阵格数与标签注册表一致 + 底纹 + 准星 + 关掉百褶 ∞', () => {
+  expect(hasDist, '先 npm run build').toBe(true);
+    /* ★ 2026-10-10：原来写死 `toBe(8)`，加第9 个标签 `项目` 时当场红了。
+       格子数本来就是 TAGS 的**投影**，写死等于让它跟注册表各说各话 ——
+       改成从注册表派生：注册表加了标签而页面没跟上（或反过来）才会红，
+       而「忘了同步注册表」这类事故另有 post-meta.test.ts 守着。 */
+    expect((IDX_HTML.match(/<li class="tag-cell"/g) ?? []).length,
+      '标签总览的格数必须等于注册表里的标签数').toBe(TAGS.length);
     expect(IDX_HTML, '缺矩阵容器').toMatch(/class="tag-matrix"/);
     expect(IDX_HTML, '缺底纹层').toMatch(/class="tags-inf"/);
     expect(IDX_HTML, '底纹必须走构建期优化管线（srcset）').toMatch(/<img[^>]*srcset="[^"]*"/);
