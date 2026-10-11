@@ -18,8 +18,17 @@ function walkFiles(dir: string, filter: (name: string) => boolean): string[] {
   return out;
 }
 
-function readPostFrontmatter(): { slug: string; tags: string[] }[] {
-  const dir = 'content/posts';
+/** 内容层对「一篇文章」的最小视图。`draft` 必须读 —— 页面渲染走
+ *  `filterVisible`（生产环境过滤掉草稿），判据要与页面同口径就得知道谁是草稿。 */
+export type PostFm = { slug: string; tags: string[]; draft: boolean };
+
+/** 从 content/posts 直接读 frontmatter。
+ *  ★ 2026-10-11 起导出：`tests/tags-crosshair.test.ts` 的「矩阵格子数」断言
+ *    需要拿它当**唯一事实来源**派生篇数（原来写死 `toBe(2)`，删文章就红）。
+ *    提成导出是为了让两处共用一个读者 —— 各抄一份必然漂移。
+ *  ⚠ 这是**内容层**视图（不依赖 dist）：看到的是全部文章，含草稿。
+ *    判定「生产可见」要再过滤一次 draft，见 visiblePosts()。 */
+export function readPostFrontmatter(dir = 'content/posts'): PostFm[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir, { withFileTypes: true })
     .filter((d) => d.isDirectory())
@@ -31,11 +40,15 @@ function readPostFrontmatter(): { slug: string; tags: string[] }[] {
       if (!fm) return [];
       const raw = fm[1].match(/^tags:\s*\[(.*)\]$/m);
       const tags = raw ? raw[1].split(',').map((t) => t.trim()).filter(Boolean) : [];
-      return [{ slug: d.name, tags }];
+      const draft = /^draft:\s*true\s*$/m.test(fm[1]);
+      return [{ slug: d.name, tags, draft }];
     });
 }
 
 const POSTS = readPostFrontmatter();
+
+/** 生产环境真正会渲染的那些 —— 与 src/lib/posts.ts 的 filterVisible 同口径。 */
+export const visiblePosts = (posts: PostFm[] = POSTS) => posts.filter((p) => !p.draft);
 
 describe('内容层不变量：标签注册表', () => {
   it('每个已登记的标签至少被一篇文章使用（否则标签页是空的）', () => {
@@ -44,6 +57,22 @@ describe('内容层不变量：标签注册表', () => {
     const used = new Set(POSTS.flatMap((p) => p.tags));
     const orphan = TAGS.filter((t) => !used.has(t));
     expect(orphan, `这些标签已登记但没有文章用它：${orphan.join(', ')}`).toEqual([]);
+  });
+
+  it('每个已登记的标签在生产环境下至少有一篇可见文章（否则标签页会静默消失）', () => {
+    /* ★ 2026-10-11 新增。原来的缺口：`src/pages/tags/[tag].astro` 的 getStaticPaths
+       用了 `filter(count > 0)` —— 某标签的最后一篇文章被删/改标签时，该标签页
+       **不再生成，而构建照样成功**。站上会悄悄少一个页面，没有任何东西报错。
+       （2026-10-11 实测：某个标签的最后一篇文章被删时，该标签页整页消失。）
+       这条跑内容层、不依赖 dist，所以构建前就能咬住；删草稿不会误伤（草稿本就不出页）。 */
+    const live = visiblePosts();
+    expect(live.length, '一篇可见文章都没有，本组断言等于没跑').toBeGreaterThan(0);
+    const used = new Set(live.flatMap((p) => p.tags));
+    const orphan = TAGS.filter((t) => !used.has(t));
+    expect(
+      orphan,
+      `这些标签已登记但生产环境下没有任何可见文章用它，标签页会静默消失：${orphan.join(', ')}`,
+    ).toEqual([]);
   });
 
   it('每篇文章用的标签都在注册表里，且数量 1–3', () => {

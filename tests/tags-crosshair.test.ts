@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { TAGS } from '../src/tag-registry';
+import { readPostFrontmatter, visiblePosts } from './content-invariants.test';
 
 /* 标签区（`/tags/` + `/tags/[tag]/`）2026-10-06 这一轮的契约。
  *
@@ -57,6 +58,16 @@ const XH_TS_CODE = strip(XH_TS);
 const IDX_HTML = hasDist ? readFileSync(join(DIST, 'tags', 'index.html'), 'utf8') : '';
 const ONE_HTML = hasDist ? readFileSync(join(DIST, 'tags', 'AI', 'index.html'), 'utf8') : '';
 const ARCHIVE_HTML = hasDist ? readFileSync(join(DIST, 'archive', 'index.html'), 'utf8') : '';
+
+/* 本页（/tags/AI/）该有几格 —— 从内容源派生，**不写死**。
+ * ★ 2026-10-11：原来是 `toBe(2)`，删掉 ai-built-this-blog 后当场红。
+ *   格子数本来就是「该标签下生产可见文章数」的**投影**，写死等于让判据跟内容源
+ *   各说各话 —— 与总览页把 `toBe(8)` 改成从 TAGS 派生是同一个路数（见上方注释）。
+ * 口径必须与页面一致：页面走 getPostsByTag → getVisiblePosts，
+ * 生产环境**过滤草稿**，所以这里也用 visiblePosts()（否则加了草稿文章会误红）。 */
+const AI_POST_COUNT = visiblePosts(readPostFrontmatter()).filter((p) =>
+  p.tags.includes('AI'),
+).length;
 
 describe('标签区 · ∞ 底纹素材契约', () => {
   it('素材已进仓、在 plates 子目录、体积可控', () => {
@@ -397,7 +408,13 @@ describe('标签区 · 构建产物', () => {
   });
 
   it('单标签页：文章矩阵 + 同一套底纹与准星；归档页不受影响', () => {
-    expect((ONE_HTML.match(/<li class="post-cell"/g) ?? []).length, 'AI 标签下有 2 篇').toBe(2);
+    /* 判据守**关系**（格子数 = 内容源投影），不守「上一版有几篇」这个数字。
+       内容源本身为空时下面会红 —— 那是「AI 标签下没文章」的真事故，不是假阳性。 */
+    expect(AI_POST_COUNT, '内容源里 AI 标签下没有可见文章，本页本该只有空态').toBeGreaterThan(0);
+    expect(
+      (ONE_HTML.match(/<li class="post-cell"/g) ?? []).length,
+      `AI 标签下的格数必须等于内容源里 AI 标签的可见文章数（${AI_POST_COUNT}）`,
+    ).toBe(AI_POST_COUNT);
     expect(ONE_HTML, '缺文章矩阵容器').toMatch(/class="post-matrix"/);
     expect(ONE_HTML, '缺底纹层').toMatch(/class="tags-inf"/);
     expect(ONE_HTML, '缺准星').toMatch(/data-crosshair/);
