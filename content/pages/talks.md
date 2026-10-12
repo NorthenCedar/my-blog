@@ -15,6 +15,14 @@
 title: 说说
 intro: 短的、没成为文章的东西。碎碎念、随手拍的、看到的一句话，都放这儿。
 items:
+  - date: 2026-10-12
+    text: "calude和codex是真好用啊，但是真的贵:(
+不过我薅了chatgpt学生认证的4个月plus,哈哈哈哈 开始狂蹬"
+    images:
+      - src: e88b0230-39f1-4585-bf95-c9d4ce180f13.jpg
+        alt: 好贵：（
+      - src: ii.jpg
+        alt: 五个月的plus！！！
   - date: 2026-10-09
     text: 我用deepseek-v4.1-flash和最近的匿名模型space-bunny修螺旋盘的bug修了六七轮没修好，今早丢给claude的opus5.5两轮修好了，Claude不愧是当代最强啊（五条悟？）但用Claude花了我快五十块。。。
   - date: 2026-10-09
