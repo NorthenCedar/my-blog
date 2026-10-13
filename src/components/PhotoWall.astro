@@ -38,7 +38,7 @@ interface Props {
 }
 const { albums } = Astro.props;
 
-type File = { w: number; h: number; url: string };
+type File = { w: number; h: number; actualW?: number; url: string };
 type Frame = { alt: string; src: string; files: File[] };
 
 // 档位不写死：从 manifest 登记的 widths 里挑网格档（最窄）与灯箱档（最宽）
@@ -70,7 +70,7 @@ const total = albums.reduce((n, a) => n + a.total, 0);
                   （preventDefault 开大图），不会真的跳转 ⇒ 页面过渡必须放行，
                   否则墨色蒙版会盖在灯箱上、照片就看不到了。 */}
               <a class="frame" href={big.url} data-no-transition>
-                <img src={g.url} width={g.w} height={g.h} alt={f.alt} loading="lazy" decoding="async" />
+                <img src={g.url} width={g.actualW ?? g.w} height={g.h} alt={f.alt} loading="lazy" decoding="async" />
                 {/* 编目号：**按册**三位零填充（板内第几张），钉在框内左下角。
                     aria-hidden —— 它和图下的 alt 指的是同一样东西，读屏不必听两遍。 */}
                 <span class="no" aria-hidden="true">NO.{String(fi + 1).padStart(3, '0')}</span>

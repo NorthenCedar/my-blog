@@ -5,6 +5,7 @@
  * 站主原话：「点击放大的照片就进入这个文件夹，**就像现在本站的照片砖墙一样**，
  *   **不过是单独的一页**」⇒ 这一页就是**原来的砖墙**（`PhotoWall`），
  *   只是从"/gallery 下面那一大段"变成"点进某个文件夹之后才看到的那一页"。
+ *   2026-10-13：AlbumScene 按单册 layout 增强为散片或悬浮切片，砖墙保留作完整索引。
  *
  * ── 地址为什么长这样 ──────────────────────────────────────────────
  *   `/gallery/<册名>/` 与磁盘上的图片目录**同名**：图片就在 `/gallery/<册名>/01-800.webp`。
@@ -20,15 +21,13 @@
  */
 
 import Base from '../../layouts/Base.astro';
-import PageTitle from '../../components/PageTitle.astro';
-import PageReadout from '../../components/PageReadout.astro';
-import PhotoWall from '../../components/PhotoWall.astro';
+import AlbumScene from '../../components/AlbumScene.astro';
 import GalleryInf from '../../components/GalleryInf.astro';
 import manifest from '../../../public/gallery/manifest.json';
 
 type File = { w: number; h: number; url: string };
 type Frame = { alt: string; src: string; files: File[] };
-type Album = { id: string; title: string; date: string; total: number; frames: Frame[] };
+type Album = { id: string; title: string; titleEn?: string; layout?: 'scatter' | 'slices'; date: string; total: number; frames: Frame[] };
 
 /* ★ 一册一页 —— 相册清单从 manifest 读（"有几个文件夹就放几个"）：
    站主往 content/gallery/ 丢一个新文件夹，构建时生成脚本写进 manifest，
@@ -59,47 +58,11 @@ export async function getStaticPaths() {
 const albums = manifest.albums as Album[];
 const { albumId, no } = Astro.props as { albumId: string; no: number };
 const album = albums.find((a) => a.id === albumId)!;
-const pad2 = (n: number) => String(n).padStart(2, '0');
 ---
 
-<Base title={album.title} current="gallery" chrome="page" bodyClass="gallery-inf-plate">
+<Base title={album.title} current="gallery" chrome="page" bodyClass="gallery-inf-plate" fullWidth>
   {/* 视口底纹 ∞ —— 与 `/gallery/`、`/gallery/spiral/` 同一份（站主 2026-10-08「三条路都换」）。 */}
   <Fragment slot="plate"><GalleryInf /></Fragment>
 
-  <header class="pagehead">
-    {/* 回头路：访客是从 /gallery 的入口条点进来的（螺旋盘独立页也有同一行）。 */}
-    <p class="back"><a href="/gallery/">← 相册</a></p>
-    {/* ★ 页标题与读数走共用组件（PageTitle / PageReadout）——
-        不在这里抄一份 `.pagehead-title` / `.readout` 样式：那正是
-        `/gallery/spiral/` 那页读数没有样式的原因（样式只写在写它的那个文件里）。 */}
-    <PageTitle>{album.title}</PageTitle>
-    <PageReadout>
-      <span>FRAMES <em>{album.total}</em></span>
-      <span>PLATE <em>{pad2(no)}</em></span>
-      <span>{album.date}</span>
-    </PageReadout>
-  </header>
-
-  {/* 砖墙本体 + 灯箱。板头（板号 · 相册名 · 帧数 · 日期）不在这里 ——
-      页头已经给了同一组信息，再印一行就是把同一句话说两遍。 */}
-  <PhotoWall albums={[album]} />
+  <AlbumScene album={album} no={no} />
 </Base>
-
-<style>
-  .back {
-    margin: 0 0 var(--sp-4);
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-  }
-  .back a {
-    color: var(--muted);
-    text-decoration: none;
-    border-bottom: 1px solid var(--hair);
-    transition: color var(--dur-fast) var(--ease-interact), border-color var(--dur-fast) var(--ease-interact);
-  }
-  .back a:hover,
-  .back a:focus-visible {
-    color: var(--accent-ink);
-    border-bottom-color: var(--accent);
-  }
-</style>

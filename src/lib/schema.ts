@@ -100,6 +100,8 @@ export type GalleryFrontmatter = z.infer<typeof gallerySchema>;
  */
 export const gallerySchema = z.object({
   title: z.string().min(1),
+  titleEn: z.string().trim().optional(),
+  layout: z.enum(['scatter', 'slices']).default('scatter'),
   date: dateField('date'),
   images: z
     .array(

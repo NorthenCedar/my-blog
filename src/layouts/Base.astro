@@ -21,6 +21,8 @@ import { getSite } from '../lib/site';
 import type { NavKey } from '../lib/nav';
 
 interface Props {
+  /** 单册全屏陈列直接落在 main 内，避免 shell 的栏宽与过渡变换限制视口。 */
+  fullWidth?: boolean;
   /** 页面自己的标题（不含站名）。不传就是首页。 */
   title?: string;
   description?: string;
@@ -57,7 +59,7 @@ interface Props {
    */
   chrome?: 'band' | 'console' | 'page';
 }
-const { title, description, current, noCanonical, chrome, bodyClass } = Astro.props;
+const { title, description, current, noCanonical, chrome, bodyClass, fullWidth = false } = Astro.props;
 // 站名/简介/联系方式来自 content/site.md —— 主题不持有任何文案
 const site = await getSite();
 // 关于「Topbar 静态 import 的成本」：Astro 的样式图按 import 收集（不是按 render），
@@ -169,7 +171,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
       </Band>
     )}
     <main id="main">
-      <div class="shell"><slot /></div>
+      {fullWidth ? <slot /> : <div class="shell"><slot /></div>}
     </main>
     {chrome !== 'console' && <SiteFooter name={site.name} email={site.email} github={site.github} since={site.since ?? '2026-09-25'} />}
     {/* 页面过渡的蒙版（2026-09-30 v3：**原型 v10.6 的墨色浸染**，总长 900ms）。

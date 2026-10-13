@@ -1,5 +1,7 @@
 ---
 title: 直到大地变成一颗酸橙
+titleEn: Until the Earth Turns into a Lime
+layout: scatter
 date: 2026-09-25
 images:
   - src: ./001.jpg

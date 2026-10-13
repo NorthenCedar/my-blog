@@ -2,6 +2,27 @@
    P1（2026-09-25 站主定案）：配色从旧方向（纯白 + 橙）换成莱茵方向（乳白 + 绿）。
    docs/design-spec.md §3/§5 已同步更新 —— 两处应始终一致，不一致就是 bug。 */
 :root {
+  /* 单册场景：只由 AlbumScene 使用，不改变旧砖墙与总入口。 */
+  --scene-hud-paper: #fafaf7e6;
+  --scene-photo-paper: #fdfbf5;
+  --scene-paper-edge: 0.55rem;
+  --scene-paper-shadow: 0 0.25rem 0.65rem #1a1a1a1a;
+  --scene-feather: 1.5px;
+  --scene-mobile-title-top: 5.5rem;
+  --scene-control-size: 2.75rem;
+  --scene-status-width: 4.5rem;
+  --scene-button-radius: 0.25rem;
+  --scene-disabled-opacity: 0.5;
+  --scene-title-width: 41.25rem;
+  --scene-display: 7.5rem;
+  --scene-display-long: 5rem;
+  --scene-tracking: -0.055em;
+  --scene-photo-height: 18.75rem;
+  --scene-caption-indent: 4.5rem;
+  --scene-perspective: 1100px;
+  --scene-slice-center-shift: 3rem;
+  --scene-mobile-photo-height: 14rem;
+  --scene-fade-duration: 260ms;
   /* 颜色（对比度为实测值，见 scripts/assert-tokens.mjs） */
   --paper: #fafaf7;
   --ink: #1a1a1a;          /* 对纸 16.64:1 */

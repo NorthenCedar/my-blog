@@ -15,14 +15,15 @@
  *     指纹 = 版本 + 源图大小 + 源图 mtime + 档位宽 + 质量；命中且产物在 → 不重编码
  *   · 清掉档位变化后遗留的孤儿文件（首页那轮踩过：删了 1600 档，旧文件还留在产物里）
  *
- * 文件命名刻意保持 `NN-<宽>.webp`（NN = 该帧在所属相册里的序号，1 起）——
- * 首页那 3 张正好是最新相册的第 1/2/3 帧，所以**文件名与改造前完全一致**，
- * 首页产物得以逐字节不变（有 L2 判据守着）。
+ * 2026-10-13：文件名改为 `NN-<内容摘要>-<宽>.webp`。内容摘要包含源图字节与
+ * 编码版本/质量，保证中间插图、重排或覆盖源图后 immutable 地址不指向旧照片。
  */
 import { readFile, writeFile, mkdir, stat, readdir, unlink } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { readAlbumOptions } from '../src/lib/album-options.mjs';
+import { galleryFileName } from '../src/lib/album-files.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GALLERY = join(ROOT, 'content', 'gallery');
@@ -62,7 +63,10 @@ for (const name of albums) {
     images.push({ src: s[1], alt: a[1] });
   }
   if (images.length === 0) fail(`相册 ${name} 一张图都没有`);
-  parsed.push({ name, title: title.trim(), date: date.trim(), images });
+  if (new Set(images.map((image) => image.src)).size !== images.length) fail(`相册 ${name} 存在重复图源`);
+  let options;
+  try { options = readAlbumOptions(fm); } catch (error) { fail(`相册 ${name}：${error.message}`); }
+  parsed.push({ name, title: title.trim(), date: date.trim(), images, ...options });
 }
 // 最新相册（与 index.astro 同规则：date 倒序）—— 首页那 3 张从这里取
 parsed.sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -83,7 +87,6 @@ try {
 } catch { /* 没有上一版：全部重编码 */ }
 
 /* 3) 全量生成 */
-const pad = (n) => String(n).padStart(2, '0');
 const result = { albums: [], home: null };
 let encoded = 0, reused = 0, bytes = 0;
 
@@ -99,10 +102,11 @@ for (const album of parsed) {
     const srcPath = join(GALLERY, album.name, rel);
     const st = await stat(srcPath).catch(() => null);
     if (!st) fail(`源图不存在: ${srcPath}`);
+    const sourceBytes = await readFile(srcPath);
     const files = [];
 
     for (const w of WIDTHS) {
-      const name = `${pad(n)}-${w}.webp`;
+      const name = galleryFileName(n, w, sourceBytes, CACHE_VERSION, QUALITY);
       const outPath = join(outDir, name);
       const url = `/gallery/${encodeURIComponent(album.name)}/${name}`;
       expected.add(name);
@@ -111,11 +115,15 @@ for (const album of parsed) {
       const hit = prevFp.get(url);
       if (hit && hit.fp === fp && hit.h) {
         const alive = await stat(outPath).catch(() => null);
-        if (alive) { files.push({ w, h: hit.h, url, fp }); reused++; bytes += alive.size; continue; }
+        if (alive) {
+          // 目标档位 w 不一定是实际像素宽；场景按实际比例摆图，旧缓存补读一次元数据。
+          const actualW = hit.actualW ?? (await sharp(outPath).metadata()).width;
+          files.push({ w, h: hit.h, actualW, url, fp }); reused++; bytes += alive.size; continue;
+        }
       }
       const info = await sharp(srcPath).resize({ width: w, withoutEnlargement: true }).webp({ quality: QUALITY }).toFile(outPath);
       if (!info.size) fail(`生成失败: ${name}`);
-      files.push({ w, h: info.height, url, fp });
+      files.push({ w, h: info.height, actualW: info.width, url, fp });
       encoded++; bytes += info.size;
     }
     frames.push({ alt: img.alt, src: img.src, files });
@@ -127,7 +135,7 @@ for (const album of parsed) {
   }
 
   result.albums.push({
-    id: album.name, title: album.title, date: album.date,
+    id: album.name, title: album.title, titleEn: album.titleEn, layout: album.layout, date: album.date,
     total: album.images.length, frames,
   });
   if (album.name === homeAlbum.name) {

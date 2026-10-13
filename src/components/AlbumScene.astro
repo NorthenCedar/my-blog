@@ -1,0 +1,163 @@
+---
+import PhotoWall from './PhotoWall.astro';
+import { scatterLayout } from '../scripts/album-scene-core';
+
+type File = { w: number; h: number; actualW?: number; url: string };
+type Frame = { alt: string; src: string; files: File[] };
+type Album = { id: string; title: string; titleEn?: string; layout?: 'scatter' | 'slices'; date: string; total: number; frames: Frame[] };
+interface Props { album: Album; no: number }
+const { album, no } = Astro.props;
+const layout = album.layout ?? 'scatter';
+const title = album.titleEn || album.title;
+const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src));
+---
+
+<section class="album-scene" data-album-scene data-layout={layout} data-placements={JSON.stringify(placements)}>
+  <div class="scene-bar">
+    <a class="scene-back" href="/gallery/">← 相册</a>
+    <span class="scene-name">{album.title}</span>
+    <button type="button" data-scene-touch hidden aria-pressed="false">自由拖动</button>
+    <button type="button" data-scene-toggle hidden aria-pressed="false">查看全部</button>
+  </div>
+  <div class="scene-viewport" data-scene-viewport role="group" aria-label={`${album.title}，互动照片陈列`} aria-describedby="scene-help" tabindex="-1">
+      <header class:list={['scene-title', { 'scene-title-long': title.length > 28 }]}>
+        <h1 lang={album.titleEn ? 'en' : undefined}>{title}</h1>
+        <p>{album.title} <span aria-hidden="true">/</span> {album.total} 帧 <span aria-hidden="true">/</span> {album.date}</p>
+        <span class="scene-plate">PLATE {String(no).padStart(2, '0')}</span>
+      </header>
+    <div class="scene-world" data-scene-world></div>
+  </div>
+  {/* 同一组真实链接和灯箱：增强时只把 .wf 放进画布，灯箱始终在变换层之外。 */}
+  <PhotoWall albums={[album]} />
+  <div class="scene-controls" data-scene-controls hidden>
+    <p id="scene-help" data-scene-help></p>
+    <div class="scene-actions">
+      <button type="button" data-scene-prev aria-label={layout === 'slices' ? '上一张' : '向左移动'}>←</button>
+      <span class="scene-status" data-scene-status role="status" aria-live="polite">{album.total} 帧</span>
+      <button type="button" data-scene-next aria-label={layout === 'slices' ? '下一张' : '向右移动'}>→</button>
+      {layout === 'scatter' && <>
+        <button type="button" data-scene-zoom-out aria-label="缩小画布">−</button>
+        <button type="button" data-scene-zoom-in aria-label="放大画布">＋</button>
+      </>}
+      <button type="button" data-scene-home>{layout === 'slices' ? '回到第一张' : '回到中心'}</button>
+    </div>
+  </div>
+</section>
+
+<style>
+  .album-scene { position: relative; max-width: var(--wrap); margin: 0 auto; padding: var(--sp-7) var(--gutter) var(--sp-8); }
+  .scene-bar { display: flex; align-items: center; gap: var(--sp-3); min-height: var(--scene-control-size); }
+  .scene-back { color: var(--muted); text-decoration: none; }
+  .scene-name { flex: 1; color: var(--muted); font-size: var(--fs-sm); }
+  .scene-bar button, .scene-actions button {
+    border: 1px solid var(--hair); border-radius: var(--scene-button-radius);
+    background: var(--paper); color: var(--ink); padding: var(--sp-2) var(--sp-3);
+    min-height: var(--scene-control-size); min-width: var(--scene-control-size);
+    font: inherit; font-size: var(--fs-sm);
+    transition: border-color var(--dur-fast) var(--ease-interact), color var(--dur-fast) var(--ease-interact);
+  }
+  .scene-bar button:hover, .scene-bar button:focus-visible,
+  .scene-actions button:hover, .scene-actions button:focus-visible { color: var(--accent-ink); border-color: var(--accent); }
+  .scene-actions button:disabled { color: var(--muted); opacity: var(--scene-disabled-opacity); }
+  .scene-bar [hidden], .scene-controls[hidden] { display: none; }
+  .scene-title { text-align: center; padding: var(--sp-7) 0; }
+  .scene-title h1 { margin: 0; font-family: Archivo, 'IBM Plex Sans', sans-serif; font-size: var(--fs-title); font-weight: 600; letter-spacing: var(--ls-title); line-height: var(--lh-title); overflow-wrap: anywhere; }
+  .scene-title p { margin: var(--sp-4) 0 var(--sp-2); color: var(--muted); font-size: var(--fs-sm); }
+  .scene-title p span { padding-inline: var(--sp-2); color: var(--hair); }
+  .scene-plate { font-family: 'IBM Plex Mono', monospace; font-size: var(--fs-xs); color: var(--muted); }
+  .scene-controls { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding-block: var(--sp-3); border-top: 1px solid var(--hair); }
+  .scene-controls p { margin: 0; font-size: var(--fs-xs); color: var(--muted); }
+  .scene-actions { display: flex; align-items: center; gap: var(--sp-2); }
+  .scene-status { min-width: var(--scene-status-width); text-align: center; font: var(--fs-xs) 'IBM Plex Mono', monospace; color: var(--muted); }
+
+  :global(body.album-scene-active) { overflow: hidden; }
+  :global(body.album-scene-active > .topbar), :global(body.album-scene-active > footer) { display: none; }
+  .album-scene.scene-on { position: fixed; inset: 0; max-width: none; margin: 0; padding: 0; z-index: 2; }
+  .scene-on .scene-bar { position: absolute; top: var(--sp-4); left: var(--sp-5); right: var(--sp-5); z-index: 4; }
+  .scene-on .scene-back, .scene-on .scene-name { padding: var(--sp-2); background: var(--scene-hud-paper); }
+  .scene-on .scene-name { flex: 0; white-space: nowrap; }
+  .scene-on [data-scene-toggle] { margin-left: auto; }
+  .scene-on .scene-controls {
+    position: absolute; left: var(--sp-5); right: var(--sp-5); bottom: var(--sp-4);
+    z-index: 4; border: 0; padding: 0; pointer-events: none;
+  }
+  .scene-on .scene-controls p, .scene-on .scene-actions { padding: var(--sp-2); background: var(--scene-hud-paper); border-radius: var(--scene-button-radius); }
+  .scene-on .scene-actions { pointer-events: auto; }
+  .scene-on .scene-viewport {
+    position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden;
+    touch-action: pan-y pinch-zoom; user-select: none;
+  }
+  .scene-on.scene-free .scene-viewport { touch-action: none; }
+  .scene-on .scene-world {
+    position: absolute; left: 50%; top: 50%; width: 0; height: 0;
+    transform: translate3d(var(--scene-pan-x, 0px), var(--scene-pan-y, 0px), 0) scale(var(--scene-scale, 1));
+  }
+  .scene-on .scene-title {
+    position: absolute; width: var(--scene-title-width); padding: 0;
+    transform: translate(-50%, -50%); pointer-events: none;
+  }
+  .scene-on .scene-title h1 { font-size: var(--scene-display); font-weight: 500; letter-spacing: var(--scene-tracking); }
+  .scene-on .scene-title-long h1 { font-size: var(--scene-display-long); line-height: var(--lh-heading); }
+  :global(.album-scene.scene-on .wf),
+  :global(.album-scene.scene-on .wf .plate),
+  :global(.album-scene.scene-on .wf .plate-body) { display: contents; transform-style: preserve-3d; }
+  :global(.album-scene.scene-on .wf .plate-body > figure) {
+    position: absolute; width: min(var(--scene-photo-width), calc(var(--scene-photo-height) * var(--scene-photo-ratio) + var(--scene-paper-edge) * 2)); margin: 0;
+    transform: translate(calc(var(--scene-x) + var(--scene-drift-x, 0px) * var(--scene-depth)), calc(var(--scene-y) + var(--scene-drift-y, 0px) * var(--scene-depth))) translate(-50%, -50%) rotate(var(--scene-angle));
+  }
+  /* 定出图像比例才有可靠的 lazy 占位；花边只处理托纸，照片没有裁成统一格。 */
+  :global(.album-scene.scene-on .wf .plate-body .frame) {
+    box-sizing: content-box; aspect-ratio: auto; height: auto;
+    width: min(calc(100% - var(--scene-paper-edge) * 2), calc(var(--scene-photo-height) * var(--scene-photo-ratio)));
+    max-height: none; margin-inline: auto; padding: var(--scene-paper-edge);
+    overflow: visible; background: transparent; filter: drop-shadow(var(--scene-paper-shadow));
+  }
+  :global(.album-scene.scene-on .wf .plate-body .frame::before) {
+    content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background: var(--scene-photo-paper); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%20preserveAspectRatio%3D%22none%22%3E%3Cpath%20d%3D%22M2%201.5%20Q4%200%206%201.5%20T10%201.5%20T14%201.5%20T18%201.5%20T22%201.5%20T26%201.5%20T30%201.5%20T34%201.5%20T38%201.5%20T42%201.5%20T46%201.5%20T50%201.5%20T54%201.5%20T58%201.5%20T62%201.5%20T66%201.5%20T70%201.5%20T74%201.5%20T78%201.5%20T82%201.5%20T86%201.5%20T90%201.5%20T94%201.5%20T98%201.5%20Q100%202%2098.5%204%20Q100%206%2098.5%208%20T98.5%2012%20T98.5%2016%20T98.5%2020%20T98.5%2024%20T98.5%2028%20T98.5%2032%20T98.5%2036%20T98.5%2040%20T98.5%2044%20T98.5%2048%20T98.5%2052%20T98.5%2056%20T98.5%2060%20T98.5%2064%20T98.5%2068%20T98.5%2072%20T98.5%2076%20T98.5%2080%20T98.5%2084%20T98.5%2088%20T98.5%2092%20T98.5%2096%20Q100%20100%2096%2098.5%20Q94%20100%2092%2098.5%20T88%2098.5%20T84%2098.5%20T80%2098.5%20T76%2098.5%20T72%2098.5%20T68%2098.5%20T64%2098.5%20T60%2098.5%20T56%2098.5%20T52%2098.5%20T48%2098.5%20T44%2098.5%20T40%2098.5%20T36%2098.5%20T32%2098.5%20T28%2098.5%20T24%2098.5%20T20%2098.5%20T16%2098.5%20T12%2098.5%20T8%2098.5%20T4%2098.5%20Q0%20100%201.5%2096%20Q0%2094%201.5%2092%20T1.5%2088%20T1.5%2084%20T1.5%2080%20T1.5%2076%20T1.5%2072%20T1.5%2068%20T1.5%2064%20T1.5%2060%20T1.5%2056%20T1.5%2052%20T1.5%2048%20T1.5%2044%20T1.5%2040%20T1.5%2036%20T1.5%2032%20T1.5%2028%20T1.5%2024%20T1.5%2020%20T1.5%2016%20T1.5%2012%20T1.5%208%20T1.5%204%20Q0%200%202%201.5%20Z%22%2F%3E%3C%2Fsvg%3E"); mask-size: 100% 100%;
+  }
+  :global(.album-scene.scene-on .wf .plate-body img) {
+    position: relative; z-index: 1; width: 100%; height: auto; max-height: none; max-width: 100%;
+    aspect-ratio: var(--scene-photo-ratio);
+    mask-image: linear-gradient(90deg, transparent, var(--ink) var(--scene-feather), var(--ink) calc(100% - var(--scene-feather)), transparent),
+      linear-gradient(transparent, var(--ink) var(--scene-feather), var(--ink) calc(100% - var(--scene-feather)), transparent);
+    mask-composite: intersect;
+  }
+  :global(.album-scene.scene-on .wf .plate-body .zoom) { display: none; }
+  :global(.album-scene.scene-on .wf .plate-body .no) { background: transparent; left: 0; bottom: calc(-1 * var(--sp-4)); padding: 0; font-size: var(--fs-xs); }
+  :global(.album-scene.scene-on .wf .plate-body figcaption) { text-align: right; max-width: 100%; margin-top: var(--sp-2); padding-left: var(--scene-caption-indent); }
+  :global(.album-scene.scene-on .wf .plate-body figure:focus-within) { z-index: 2; }
+
+  .scene-on[data-layout='slices'] .scene-viewport { perspective: var(--scene-perspective); }
+  .scene-on[data-layout='slices'] .scene-world { top: calc(50% + var(--scene-slice-center-shift)); transform: none; transform-style: preserve-3d; }
+  .scene-on[data-layout='slices'] .scene-title { top: var(--sp-5); left: 50%; transform: translateX(-50%); width: min(var(--scene-title-width), calc(100vw - var(--gutter) * 2)); }
+  .scene-on[data-layout='slices'] .scene-title h1 { font-size: var(--fs-title); }
+  :global(.album-scene.scene-on[data-layout='slices'] .wf .plate-body > figure) {
+    width: min(var(--scene-slice-width), 74vw, calc(var(--scene-photo-height) * var(--scene-photo-ratio) + var(--scene-paper-edge) * 2));
+    opacity: var(--scene-opacity, 0); transition: opacity var(--scene-fade-duration) var(--ease-interact);
+    transform: translate3d(var(--scene-x), var(--scene-y), var(--scene-z)) translate(-50%, -50%) rotateY(var(--scene-angle));
+  }
+  :global(.album-scene.scene-on[data-layout='slices'] .wf .plate-body > figure[aria-hidden='true']) { pointer-events: none; }
+  :global(.album-scene.scene-on[data-layout='slices'] .wf .plate-body > figure:focus-within) { z-index: auto; }
+  @media (max-width: 680px) {
+    .scene-name { display: none; }
+    .scene-bar { flex-wrap: wrap; }
+    .scene-back { flex: 1; }
+    .scene-controls { flex-direction: column; align-items: stretch; }
+    .scene-actions { justify-content: center; flex-wrap: wrap; }
+    .scene-controls p { text-align: center; }
+    .scene-on .scene-bar { left: var(--sp-3); right: var(--sp-3); top: var(--sp-3); }
+    .scene-on .scene-back { flex: 0; white-space: nowrap; }
+    .scene-on .scene-controls { left: var(--sp-3); right: var(--sp-3); bottom: var(--sp-3); }
+    .scene-on[data-layout='slices'] .scene-title { top: var(--scene-mobile-title-top); }
+    .scene-on[data-layout='slices'] .scene-title p { margin-block: var(--sp-2); }
+    .scene-on[data-layout='slices'] .scene-title .scene-plate { display: none; }
+    :global(.album-scene.scene-on[data-layout='slices'] .wf .plate-body .frame) {
+      width: min(calc(100% - var(--scene-paper-edge) * 2), calc(var(--scene-mobile-photo-height) * var(--scene-photo-ratio)));
+    }
+  }
+</style>
+
+<script>
+  import '../scripts/album-scene';
+</script>

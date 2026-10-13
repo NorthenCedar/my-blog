@@ -1,5 +1,7 @@
 ---
 title: 人像
+titleEn: Portraits
+layout: scatter
 date: 2026-09-25
 images:
   - src: ./068.jpg

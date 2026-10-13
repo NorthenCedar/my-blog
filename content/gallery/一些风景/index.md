@@ -1,5 +1,7 @@
 ---
 title: 一些风景
+titleEn: Passing Landscapes
+layout: slices
 date: 2026-09-25
 images:
   - src: ./011.jpg
