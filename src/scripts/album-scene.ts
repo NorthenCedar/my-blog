@@ -1,4 +1,4 @@
-import { clampCamera, clampFocus, slicePose, zoomAt, focusIntent, coastStep, sliceThrowTarget, sliceWheelImpulse, coastSliceWheel, type Camera, type Placement } from './album-scene-core';
+import { clampCamera, clampFocus, slicePose, zoomAt, focusIntent, coastStep, sliceThrowTarget, sliceWheelImpulse, scatterWheelFactor, coastSliceWheel, type Camera, type Placement } from './album-scene-core';
 
 /** 单册渐进增强：同一批 figure 在陈列与索引间移动，灯箱留在变换层外。 */
 for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]')) {
@@ -186,7 +186,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
     toggle.setAttribute('aria-pressed', String(!on));
   }
 
-  hint.textContent = slices ? '滚轮或左右拖动浏览 · 点击照片放大' : '拖动探索 · ＋ − 缩放 · 点击照片放大';
+  hint.textContent = slices ? '滚轮或左右拖动浏览 · 点击照片放大' : '拖动探索 · 滚轮或 ＋ − 缩放 · 点击照片放大';
   toggle.hidden = reduce.matches;
   if (!reduce.matches) setActive(true);
   document.addEventListener('keydown', (event) => {
@@ -271,7 +271,18 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
     }
   }, true);
   viewport.addEventListener('wheel', (event) => {
-    if (!active || !slices || event.ctrlKey || event.metaKey) return;
+    if (!active || event.ctrlKey || event.metaKey) return;
+    if (!slices) {
+      if (drag) return;
+      const factor = scatterWheelFactor(event.deltaY, event.deltaMode, viewport.clientHeight);
+      if (factor === 1) return;
+      if (event.cancelable) event.preventDefault();
+      stop();
+      const rect = viewport.getBoundingClientRect();
+      camera = zoomAt(camera, { x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2 }, factor);
+      paint();
+      return;
+    }
     const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
     const impulse = sliceWheelImpulse(delta, event.deltaMode, viewport.clientHeight);
     if (!impulse) return;

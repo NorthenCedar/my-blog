@@ -15,6 +15,11 @@ export function sliceWheelImpulse(delta: number, mode: number, viewportHeight: n
   const pixels = finite(delta) * (mode === 1 ? 16 : mode === 2 ? Math.max(1, finite(viewportHeight, 800)) : 1);
   return clamp(pixels / 25, -8, 8);
 }
+/** 散片上滚放大；单次增量封顶，避免页单位或异常设备让倍率突然跳变。 */
+export function scatterWheelFactor(delta: number, mode: number, viewportHeight: number) {
+  const pixels = finite(delta) * (mode === 1 ? 16 : mode === 2 ? Math.max(1, finite(viewportHeight, 800)) : 1);
+  return Math.exp(-clamp(pixels, -200, 200) * 0.0015);
+}
 export function coastSliceWheel(focus: number, velocity: number, dt: number, count: number) {
   const damping = 4;
   const decay = Math.exp(-damping * Math.max(0, dt));
