@@ -96,6 +96,25 @@ if (root) {
         }
       }
       setCount();
+
+      /* ★ 通知留言页的声纹装置（全量，2026-10-14）。这是全站第一个装置↔业务的事件钩子。
+         ★★★ 它派发的是**接口原样两张表**，不在这里做映射 —— 这不是洁癖，是**预算**：
+           本脚本**文章页也在用**（Post.astro 同一个 import），只要在这里 import 一次
+           `voiceprint-core`，那整台装置的核心就会被拖进**每一篇文章**的 JS 包。
+           实测就是那么超的：文章页 13808 > 12800 预算（超 1008 字节）。
+           ⇒ 映射留在留言页的装置里做，本文件连 `import type` 都不留
+             （纯类型虽会被擦除，但"多一个 import"就会有人再加一个真 import 进来）。
+         ★ 装置若监听 DOM 变化就必须读元素几何，而评论一展开会插一大堆 DOM，
+           量几何会与评论列表抢主线程（float.ts 的约定①就是这个）；而且「DOM 变了」
+           不是「留言成功了」的可靠信号（回复、展开回复同样会改 DOM）。
+         ★ 回复传的是 `grouped` 摊平后的结果 —— 接口可能返回「父评论已掉出 LIMIT 200」的
+           孤儿回复，列表那边已经丢掉它们，装置必须用同一套口径，否则波形上的回复数
+           会和访客看到的对不上。 */
+      window.dispatchEvent(
+        new CustomEvent('voiceprint', {
+          detail: { comments: items, replies: [...grouped.values()].flat() },
+        }),
+      );
     })
     .catch(() => showError('留言没能加载出来。刷新页面再试一次。'));
 
@@ -123,22 +142,12 @@ if (root) {
         // 只清空留言框，**不清空名字** —— 同一个人可能想连着说几句
         (form.elements.namedItem('body') as HTMLTextAreaElement).value = '';
 
-        /* 2026-10-06：通知「留言页的墨滴装置」有一滴落下。
-           ★ 为什么用事件而不是让装置去观察 DOM：
-             ① 装置若轮询/监听 DOM 变化，就必须读元素几何（评论一展开会插一大堆 DOM，
-                量几何会与评论列表抢主线程，float.ts 的约定①就是这个）；
-             ② 「DOM 变了」不是「留言成功了」的可靠信号（回复、展开回复同样会改 DOM）。
-           ★ 派发在**成功之后** —— 失败不该有墨滴（那等于给失败做庆祝）。
-           ★ 全站第一个装置↔业务的事件钩子；`window` 上带冒泡，装置用 `window` 收。 */
-        window.dispatchEvent(
-          new CustomEvent('inkdrop', {
-            detail: {
-              // 落点用新评论那一条的位置（"新留言落在列表里"），失败/缺失时装置自己退回常量
-              x: list.firstElementChild?.getBoundingClientRect().left ?? undefined,
-              y: (list.firstElementChild?.getBoundingClientRect().top ?? 0) + 12 || undefined,
-            },
-          }),
-        );
+        /* 2026-10-14：通知「留言页的声纹装置」新来了一条（装置换掉了墨滴，事件名随之换）。
+           ★ 派发在**成功之后** —— 失败不该有波形（那等于给失败做庆祝）。
+           ★ 继续派发在**成功之后** 这条规矩是墨滴那轮定的，一直沿用。 */
+        window.dispatchEvent(new CustomEvent('voiceprint:new', {
+          detail: { note: { id: c.id, createdAt: c.createdAt, body: c.body, isReply: false } },
+        }));
       })
       .catch((err: Error) => {
         // 失败时**保留用户已输入的内容**，绝不重置表单

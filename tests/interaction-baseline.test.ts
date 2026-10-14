@@ -343,12 +343,13 @@ describe('交互基线 · activityGate 不得因IO 未回调而永久停帧（20
   });
 
   it('★ startLoop 的调用方判onScreen 时，不得让「未初始化」等价于停帧', () => {
-    /* 反向核对：装置侧必须显式传 initialOnScreen 或依赖默认 true。
-       若将来有人把默认改回 false，这条会先于上面那条报警。 */
-    const INK = readFileSync(join(ROOT, 'src/scripts/inkdrop.ts'), 'utf8');
-    expect(INK, '墨滴必须显式传 initialOnScreen: true').toMatch(
-      /createActivityGate\(\s*cv\s*,\s*\{[^}]*initialOnScreen:\s*true/,
-    );
+    /* ★ 2026-10-14 改：这条原先拿「墨滴」当例子，检查它显式传 `initialOnScreen: true`。
+       墨滴那台装置整台退场后（§6.78），**全站已没有任何调用方显式传这个参数** ——
+       而 `rl-core` 里那个 `?? true` 的默认值才是这条契约的真正落点。
+       ⇒ 门闩改守 rl-core 本身。★ 教训：拿一个**会退场**的装置当例子，早晚会读崩。 */
+    const CORE = readFileSync(join(ROOT, 'src/scripts/rl-core.ts'), 'utf8');
+    expect(CORE, 'rl-core 的 onScreen 初值必须是 true：默认停帧会让所有装置开机就不动')
+      .toMatch(/initialOnScreen\s*\?\?\s*true/);
   });
 
   it('★ 产物里 onScreen 的初值也是 true（构建没把它优化回 false）', () => {

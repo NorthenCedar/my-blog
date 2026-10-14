@@ -855,6 +855,34 @@ describe('螺旋盘 · 红线与预算', () => {
     );
   });
 
+  it('★★ 装置态视口不刷底色：∞ 底纹要能从螺旋盘底下连着穿过去（2026-10-14）', () => {
+    /* ★ 站主原话：「相册页那个白色的背景挡住了后面背景的无限符号」。
+       装置态视口（`:global(.sp-on) .sp-viewport`）曾经刷一层不透明纸白，把 Base 的 plate 槽
+       那张 GalleryInf（∞）拦腰截断 ⇒ 底纹读成"两张图叠在一起"，装置像贴在纸上的补丁。
+       ★ 这条上一轮被反过来定过（当时的理由是"底纹与照片抢注意力"，只有一张对照图、没量化）。
+         ⇒ 门闩钉的是**性质**——"这块不许有不透明底"，不是钉某个色值；
+           将来若想再刷一层任何底色，它都会红。 */
+    const block = CODE.match(/:global\(\.sp-on\)\s*\.sp-viewport\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(block, '切不出装置态视口那一块（选择器写法变了？）').not.toBe('');
+    /* ★ 取**最后一条** background 声明（CSS 后者胜）——与上面方槽那条同一手法，
+       只看第一条会被"悄悄在后面补一条"绕过。 */
+    const all = [...block.matchAll(/background(?:-[a-z]+)?\s*:\s*([^;}]*)/g)];
+    expect(all.length, '装置态视口那条没有 background 声明 ⇒ 判据失效').toBeGreaterThan(0);
+    const bg = all[all.length - 1][1].trim();
+    /* ★ 必须是**显式**写出来的透明，而不是"删掉这条声明"：
+       删掉是"默认继承"，写出来是"此处刻意不着色"，后者才不会被下一个人当漏写填回去。 */
+    expect(bg, `装置态视口必须显式写透明，实际是 ${bg}`).toBe('transparent');
+  });
+
+  it('★★ 产物侧：装置态视口那段 CSS 里不许再出现纸色（2026-10-14）', () => {
+    /* ★ 产物上的这条**只认语义、不认写法**：CSS 过了 lightningcss 会把透明压成 `0 0`
+       （那是位置，颜色默认透明）—— 拿 `transparent` 去 grep 产物会得到假阴性。
+       ⇒ 判据改成"这块不许引用纸色"，两种压缩形态都拦得住。 */
+    const pageBlock = PAGE_CSS.match(/\.sp-on\s+\.sp-viewport\{([^}]*)\}/)?.[1] ?? '';
+    expect(pageBlock, '切不出产物里的装置态视口规则（选择器写法变了？）').not.toBe('');
+    expect(pageBlock, '产物里装置态视口又刷上纸白了 ⇒ ∞ 底纹会被它截断').not.toContain('--paper');
+  });
+
   it('★ 一律不裁图：整块**没有** `object-fit`（与 /gallery 同一条红线）', () => {
     expect(CODE, '出现了 object-fit ⇒ 图会被裁（本站是档案不是社交相册）').not.toMatch(/object-fit/);
     expect(CODE, '图没写 width/height:auto ⇒ 会被方槽拉变形').toMatch(

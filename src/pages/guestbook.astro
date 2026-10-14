@@ -5,6 +5,7 @@ import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
 import CommentSection from '../components/CommentSection.astro';
+import Voiceprint from '../components/Voiceprint.astro';
 
 /** 留言页（2026-09-26 站主按参考站要求新增）。
  *  参考站那一页是「全站评论汇总 + 本页留言」两块；**汇总那块需要后端聚合**，本站的评论接口
@@ -17,15 +18,10 @@ interface GuestbookData {
 const entry = await getEntry('pages', 'guestbook');
 const d = (entry?.data ?? {}) as unknown as GuestbookData;
 
-/* 底纹母题「墨滴 INK DROP」的第一层（站主 2026-10-06 指定）：钢笔 ∞ 环线 + 星芒，
-   **替代本页的百褶 ∞**。母题与后续的墨滴装置同源，所以叫 inkdrop-*。
-   ★ 2026-10-08 站主：「背景那个**蓝色**的无限符号改为**墨绿色**」⇒ 素材按
-     `_probe/_gb-plate-recolor.mjs` 重出（亮度→墨绿色阶，色阶与日志页底纹同源，
-     所以站上两处 ∞ 是同一个绿）。改色前的蓝版备份在 `_probe/_inkdrop-out/`。
-   ⚠️ 目录必须放在 `guestbook/` 的子目录里 —— 若日后在 `guestbook/` 根下放别的图，
-      记得用非递归 glob 区分开（同 talks 的 talks/plates 约定）。
-   抠底那一步（蓝度抠图 + 反预乘去白边 + 裁到主体框）的脚本已不在仓里，
-     现行可复跑的是上面那支改色脚本。 */
+{/* 底纹母题（站主 2026-10-06 指定）：钢笔 ∞ 环线 + 星芒，**替代本页的百褶 ∞**。
+          ⚠️ 2026-10-14：动态装置从"墨滴"换成了"声纹带"（母题不再是墨/笔迹），
+            但**这张静态底纹按站主要求保留**（"底纹留"）⇒ 文件名与目录仍叫 inkdrop-*，
+            别因为名字去动它。母题与动态装置同源那句话已作废。 */}
 const PLATES = import.meta.glob<{ default: ImageMetadata }>('/src/assets/guestbook/plates/*.webp', { eager: true });
 const plate = PLATES['/src/assets/guestbook/plates/inkdrop-orbit.webp']?.default;
 ---
@@ -57,13 +53,21 @@ const plate = PLATES['/src/assets/guestbook/plates/inkdrop-orbit.webp']?.default
         />
       </div>
     )}
-    <canvas class="inkdrop-bg" data-inkdrop aria-hidden="true"></canvas>
+    {/* ★ 2026-10-14：动态装置的第二层（墨滴 INK DROP）**已整台退场** ——
+        站主报「留言页这个笔迹的装置我不想要了」，母题换成了声纹带 VOICEPRINT
+        （见下面 `<Voiceprint />` 与 docs/rhinelab-spec.md §6.78）。
+        那块整屏 canvas 的浓绿横跨右侧大半版面，把留言正文压在下面 —— 这也是站主不要它的原因之一。
+        ★ DOM 顺序 = 层序：画布在底纹之后 ⇒ 装置画在底纹**之上**、正文之下。 */}
   </Fragment>
   <header class="pagehead">
     <PageTitle>留言</PageTitle>
     {d.intro && <p class="lede">{d.intro}</p>}
     {d.note && <p class="note">{d.note}</p>}
   </header>
+
+  {/* ★ 声纹带 VOICEPRINT（2026-10-14）—— 站内第一台读页面真实内容的装置。
+     放在页头之后、留言列表之前：它是一张**总览图**，不替代也不隐藏列表。 */}
+  <Voiceprint />
 
   <div class="prose">
     <CommentSection slug="guestbook" />
@@ -75,9 +79,8 @@ const plate = PLATES['/src/assets/guestbook/plates/inkdrop-orbit.webp']?.default
     写法与文章页 src/layouts/Post.astro 完全一致。 */}
 <script>
   import '../scripts/comments';
-  // 本页的装置「墨滴 INK DROP」（2026-10-06）：指针留墨痕几秒渗开 + 新留言落下墨滴扩散。
-  // 在同一个 <script> 里 import⇒ Astro 会把两个模块并进同一个产物脚本，不新增标签。
-  import '../scripts/inkdrop';
+  /* 本页的装置是「声纹带 VOICEPRINT」（2026-10-14），脚本在组件自己的 <script> 里。
+     在同一个 <script> 里 import 两个模块 ⇒ Astro 把它们并进同一个产物脚本，不新增标签。 */
 </script>
 
 <style>
@@ -134,26 +137,6 @@ const plate = PLATES['/src/assets/guestbook/plates/inkdrop-orbit.webp']?.default
     height: 100%;
     max-width: none;
     object-fit: contain;
-  }
-
-  /* 装置画布：与底纹同层（同 z-index:-1），DOM 在后 ⇒ 墨滴画在底纹**之上**、正文之下。
-     `inset:0` 满屏 ⇒ 一次对尺寸，滚动时不需要任何重算（fixed 不随文档走）。 */
-  .inkdrop-bg {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: -1;
-    /* ★ 显隐门控照抄友链页星座（首页 DNA 同款）：元素**始终占位**
-       （`fit()` 要量 clientWidth/clientHeight），没就绪时只是不可见。
-       ⚠ **不用 `hidden` 属性** —— 那是 `display:none`，会让 clientWidth 恒为 0
-         ⇒ 装置永远画不出第一帧（AGENTS 2026-10-05 星座那轮的原文教训）。 */
-    opacity: 0;
-    transition: opacity 640ms var(--ease-glass);
-  }
-  .inkdrop-bg.is-ready {
-    opacity: 1;
   }
 
   /* ★★ 必须关掉本页的百褶 ∞（`.page-inf`，Topbar 渲染、全站内页共用）。

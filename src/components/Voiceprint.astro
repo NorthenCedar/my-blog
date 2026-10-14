@@ -1,0 +1,197 @@
+---
+/**
+ * 留言页 · 声纹带 VOICEPRINT 的**静态形态**（2026-10-14）
+ *
+ * 母题：留言就是"有人在这里说过话"。把这一页的每一条留言按它**真正发生的时间**
+ * 铺成一条波形带 —— 横轴是时间，纵轴是那段时间的留言重量。
+ * 这是站内第一台**读页面真实内容**的装置（十一台旧装置全是指针/滚动/时间驱动）。
+ *
+ * ── 为什么基础形态是"静态的"而不是"等脚本画" ──────────────────────────
+ *   留言是**运行时**从接口取的 ⇒ 静态 HTML 里本来就没有留言。
+ *   所以基础形态要能独立说清楚话：没有数据时就是一条**平的线** + 一句"还没有人留言"，
+ *   那不是空，是"这段时间没人来"的诚实读数。
+ *
+ * ── 为什么是 SVG 而不是 canvas ──────────────────────────────────────────
+ *   canvas 的几何要靠 `clientWidth` 量，而 `hidden`/`display:none` 下它恒为 0 ——
+ *   站内踩过这个坑（404 裂痕与 404 那次：给 canvas 加 `hidden` ⇒ 永远画不出第一帧，
+ *   构建通过、测试全绿、截图里一片空白）。
+ *   SVG 的 `viewBox` 让内部坐标与像素宽**解耦**，永不依赖测量；
+ *   `preserveAspectRatio="none"` 负责拉满版心，`vector-effect` 保证描边不随缩放变粗细。
+ *
+ * ── 降级链 ────────────────────────────────────────────────────────────
+ *   无 JS / 减少动效 / 留言为空 / 接口失败 ⇒ 装置**根本不注册**（`.is-ready` 不出现），
+ *   页面留在这份静态形态上。⚠️ 绝不用 `hidden` 做门控（见上）。
+ */
+---
+
+<section class="vp" data-voiceprint aria-labelledby="vp-title">
+  <div class="vp-head">
+    <h2 id="vp-title">留言的声音</h2>
+    <p class="vp-note">这一页每一条留言，按它真正发生的时间铺开。</p>
+  </div>
+
+  <figure class="vp-band">
+    <svg
+      class="vp-svg"
+      data-vp-svg
+      viewBox="0 0 1000 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {/* 静态形态 = 一条平的线。上面这条 `.vp-flat` 是"没有数据"的样子，
+          装置就绪后由脚本按真实数据画 `.vp-wave`；两者不同色，读者能看出有没有数据。 */}
+      <line class="vp-flat" data-vp-flat x1="0" y1="62" x2="1000" y2="62" />
+      <path class="vp-wave" data-vp-wave d="" vector-effect="non-scaling-stroke" />
+      <g class="vp-replies" data-vp-replies></g>
+    </svg>
+    {/* ★ 时间刻度**必须**用 HTML 画，不能放进上面那个 SVG。
+        原因（2026-10-14 目检实测）：波形用 `preserveAspectRatio="none"` 把 100 高的
+        viewBox 压进"一行正文"那么窄 ⇒ SVG 里的 <text> 被**纵向压扁**，而且正好压在
+        波形上（截图 _tmp-vp.png：10月5日/7月10日 那几个标签与波形线互相穿过）。
+        ⇒ 刻度单独一行 HTML，用 left 百分比对位；首尾两个标签改用不同的位移，
+          免得探出版心之外。 */}
+    <div class="vp-axis" data-vp-axis aria-hidden="true"></div>
+    <figcaption class="vp-read" data-vp-read role="status" aria-live="polite">还没有人留言。</figcaption>
+  </figure>
+
+  {/* ===== 玻璃控件：一套两用（2026-10-14 站主：「加点苹果那种玻璃质感的按钮」）=====
+       ① 时间窗：管**声纹带**看哪一段（全部 / 近 90 天 / 近 30 天）
+       ② 排序  ：管**留言列表**的顺序（最新在前 / 最早在前）
+       ★ 上面这条「留言的声音」比下面那条控件窄是故意的：控件浮在纸面上，声纹带是纸上的图。
+
+       ⚠★★ 玻璃那两个坑（§6.56 的真事故，下面每条都对着它）：
+         · `backdrop-filter` **同时**建立 `position:fixed` 的包含块**与**层叠上下文 ——
+           顶栏就因为它把导航抽屉压成 62px 一条。所以这一层是 `position: relative`，**绝不 fixed**。
+         · 玻璃层的 `z-index` 必须是 `0`、**不是 `-1`**：底纹 `.float-plate` 也是 `-1`，
+           写 `-1` 时它就不进 backdrop，玻璃当场变成一块纯纸白片（顶栏实测低 5 级）。
+         · 沿用站上 v10.6 已有的 `--glass-*` token，**不新造色值**。 */}
+  <div class="vp-ctl" data-vp-ctl>
+    <div class="vp-group vp-glass vp-w" role="group" aria-label="声纹带的时间窗" data-vp-window-group>
+      <span class="vp-gt">时间窗</span>
+      <button type="button" data-vp-window="all" aria-pressed="true">全部</button>
+      <button type="button" data-vp-window="90" aria-pressed="false">近 90 天</button>
+      <button type="button" data-vp-window="30" aria-pressed="false">近 30 天</button>
+    </div>
+    <div class="vp-group vp-glass vp-s" role="group" aria-label="留言排序" data-vp-sort-group>
+      <span class="vp-gt">排序</span>
+      <button type="button" data-vp-sort="desc" aria-pressed="true">最新在前</button>
+      <button type="button" data-vp-sort="asc" aria-pressed="false">最早在前</button>
+    </div>
+  </div>
+</section>
+
+<script>
+  /* 装置控制器（声纹带本体在这里）。排布数学在 voiceprint-core，数据来自 comments.ts 的事件。 */
+  import '../scripts/voiceprint';
+</script>
+
+<style>
+  /* ===== 排版 ===== */
+  .vp { margin: var(--sp-8) 0 var(--sp-7); }
+  .vp-head { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; margin-bottom: var(--sp-3); }
+  .vp-head h2 { margin: 0; font-size: var(--fs-h3); font-weight: 600; letter-spacing: var(--ls-h3); }
+  .vp-note { margin: 0; color: var(--muted); font-size: var(--fs-sm); }
+
+  /* ===== 波形带 ===== */
+  .vp-band { margin: 0; }
+  /* ★ 带高 = 一行正文。这不是随手取的数，是"不压正文"这条设计要求的**量化版**：
+     站上正文行高 `--lh-body` × 字号 `--fs-body`，波形带最多占这么高 ⇒ 结构上就压不到任何一行。
+     （对照被否掉的墨滴：整屏 canvas，浓绿横跨右侧大半版面。） */
+  .vp-svg {
+    display: block;
+    width: 100%;
+    height: calc(var(--lh-body) * var(--fs-body));
+    overflow: visible;   /* 让刻度标签可以探出上下缘，不被 SVG 视口切掉 */
+  }
+  /* 平线（没有数据时）与波形用两个不同的 token 档，读者一眼能看出"装置有没有接手"。
+     ⚠️ 别把它们调成同一档 —— 那等于把"有数据/没数据"这个信息抹掉。 */
+  .vp-flat {
+    stroke: var(--deco-plate-coarse);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+  .vp-wave {
+    fill: none;
+    stroke: var(--deco-orbit-strong);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  /* 回复小刻度：一排短竖线，密度 = 有多少人在回应。 */
+  .vp-replies line { stroke: var(--deco-orbit-inner); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .vp-axis { position: relative; height: 1.4em; margin-top: 2px; }
+  /* 时间刻度（HTML 那一行）：首尾两个标签贴边，中间的居中对位。
+   ★★★ `span` 是**脚本运行时创建**的，拿不到 Astro scoped style 的 `data-astro-cid`
+     ⇒ 这一条必须 `:global()`，否则整条规则匹配不到（`position:absolute` 失效 ⇒
+     标签退回文档流横向排列，实测像素间距 65px 而不是应有的 178px；
+     2026-10-14 的目检截图里它们挤成"1月5日2月16日3月30日…"）。
+     同 `src/styles/replies.css` 文件头那条约定：凡 JS 创建的元素，样式都得走全局。 */
+  :global(.vp-axis span) {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: var(--fs-xs);
+  }
+  :global(.vp-axis span:first-child) { transform: none; }
+  :global(.vp-axis span:last-child) { transform: translateX(-100%); }
+  .vp-read { margin-top: var(--sp-2); color: var(--muted); font-size: var(--fs-xs); }
+
+  /* 装置就绪 ⇒ 平线让位给波形。`opacity` 门控而不是 `hidden`（理由见文件头）。 */
+  .vp.is-ready .vp-flat { opacity: 0; }
+  .vp.is-ready .vp-band { opacity: 1; transition: opacity var(--dur-enter) var(--ease); }
+  .vp { opacity: 1; }
+  .vp.is-ready .vp-note { display: none; }
+
+  /* ===== 玻璃控件 ===== */
+  .vp-ctl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    align-items: center;
+    /* ★ `position: relative` + `z-index: 0`（**不是** fixed、**不是** -1）——
+       见 markup 上方那两条注释，这是 §6.56 那次事故的直接修法。 */
+    position: relative;
+    z-index: 0;
+    margin-top: var(--sp-3);
+  }
+  .vp-glass {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-3);
+    border: 1px solid var(--glass-line);
+    border-radius: var(--sp-2);
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-shadow);
+  }
+  .vp-gt {
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: var(--fs-xs);
+    letter-spacing: 0.04em;
+  }
+  .vp-glass button {
+    background: none;
+    border: 0;
+    border-radius: var(--sp-1);
+    padding: var(--sp-1) var(--sp-2);
+    color: var(--muted);
+    font: inherit;
+    font-size: var(--fs-xs);
+    transition: color var(--dur-hover) var(--ease-interact), background var(--dur-hover) var(--ease-interact);
+  }
+  .vp-glass button:hover, .vp-glass button:focus-visible { color: var(--accent-ink); }
+  .vp-glass button[aria-pressed='true'] { color: var(--ink); background: var(--glass-bg-hot); }
+  /* ★ 时间窗那组在 reduce 下没有作用对象（波形压根没画）⇒ 撤掉，
+     但**排序**必须留着 —— 排序不是动效，减少动效的用户一样要能用。 */
+  @media (prefers-reduced-motion: reduce) {
+    .vp-w { display: none; }
+    .vp.is-ready .vp-band { transition: none; }
+  }
+</style>
