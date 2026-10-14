@@ -91,13 +91,30 @@ export function clampFocus(value: number, count: number): number {
 }
 
 export function zoomAt(camera: Camera, point: { x: number; y: number }, factor: number): Camera {
-  const oldScale = clamp(finite(camera.scale, 1), 0.25, 1.6);
-  const scale = clamp(oldScale * finite(factor, 1), 0.25, 1.6);
+  const oldScale = clampZoom(camera.scale);
+  const scale = clampZoom(oldScale * finite(factor, 1));
   const ratio = scale / oldScale;
   return {
     x: point.x - (point.x - finite(camera.x)) * ratio,
     y: point.y - (point.y - finite(camera.y)) * ratio,
     scale,
+  };
+}
+
+export function clampZoom(scale: number) {
+  return clamp(finite(scale, 1), 0.25, 1.6);
+}
+
+/** 散片滚轮缩放逐帧收尾：按真实 dt 指数逼近目标倍率，落定即报完成。 */
+export function scatterZoomStep(camera: Camera, target: { scale: number; point: { x: number; y: number } }, dt: number) {
+  const desired = clampZoom(target.scale);
+  const blend = 1 - Math.exp(-14 * Math.min(0.08, Math.max(0, finite(dt))));
+  const scale = Math.abs(desired - finite(camera.scale, 1)) < 0.0005 ? desired : finite(camera.scale, 1) + (desired - finite(camera.scale, 1)) * blend;
+  const factor = finite(camera.scale, 1) > 0 ? scale / finite(camera.scale, 1) : 1;
+  const point = { x: finite(target.point.x), y: finite(target.point.y) };
+  return {
+    camera: { x: point.x - (point.x - finite(camera.x)) * factor, y: point.y - (point.y - finite(camera.y)) * factor, scale },
+    done: scale === desired,
   };
 }
 

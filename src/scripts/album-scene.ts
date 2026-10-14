@@ -1,4 +1,4 @@
-import { clampCamera, clampFocus, slicePose, zoomAt, focusIntent, coastStep, sliceThrowTarget, sliceWheelImpulse, scatterWheelFactor, coastSliceWheel, type Camera, type Placement } from './album-scene-core';
+import { clampCamera, clampFocus, clampZoom, slicePose, zoomAt, scatterZoomStep, focusIntent, coastStep, sliceThrowTarget, sliceWheelImpulse, scatterWheelFactor, coastSliceWheel, type Camera, type Placement } from './album-scene-core';
 
 /** 单册渐进增强：同一批 figure 在陈列与索引间移动，灯箱留在变换层外。 */
 for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]')) {
@@ -34,6 +34,8 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
   let lastTime = 0;
   let velocity = { x: 0, y: 0 };
   let wheelVelocity = 0;
+  // 散片滚轮缩放的目标倍率与锚点：连续滚轮只更新目标，画面在帧循环里平滑追向它。
+  let zoomTarget: { scale: number; point: { x: number; y: number } } | null = null;
   let drag: { id: number; x: number; y: number; lastX: number; lastY: number; time: number; camera: Camera; focus: number; moved: boolean; touch: boolean } | null = null;
   let suppressClick = false;
   let clickTimer = 0;
@@ -104,6 +106,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
     raf = 0;
     velocity = { x: 0, y: 0 };
     wheelVelocity = 0;
+    zoomTarget = null;
   }
 
   function animate(now: number) {
@@ -127,7 +130,14 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
       const state = coastStep(camera, velocity, dt);
       camera = state.camera;
       velocity = state.velocity;
-      running = Math.abs(velocity.x) + Math.abs(velocity.y) > 8;
+      let settling = false;
+      if (zoomTarget) {
+        const zoom = scatterZoomStep(camera, zoomTarget, dt);
+        camera = zoom.camera;
+        settling = !zoom.done;
+        if (zoom.done) zoomTarget = null;
+      }
+      running = Math.abs(velocity.x) + Math.abs(velocity.y) > 8 || settling;
     }
     paint();
     raf = running ? requestAnimationFrame(animate) : 0;
@@ -208,8 +218,8 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
   prev.addEventListener('click', () => { if (slices) goto(target - 1); else { camera.x += 200; paint(); } });
   next.addEventListener('click', () => { if (slices) goto(target + 1); else { camera.x -= 200; paint(); } });
   if (!slices) {
-    get('zoom-in').addEventListener('click', () => { camera = zoomAt(camera, { x: 0, y: 0 }, 1.2); paint(); });
-    get('zoom-out').addEventListener('click', () => { camera = zoomAt(camera, { x: 0, y: 0 }, 1 / 1.2); paint(); });
+    get('zoom-in').addEventListener('click', () => { stop(); camera = zoomAt(camera, { x: 0, y: 0 }, 1.2); paint(); });
+    get('zoom-out').addEventListener('click', () => { stop(); camera = zoomAt(camera, { x: 0, y: 0 }, 1 / 1.2); paint(); });
   }
 
   viewport.addEventListener('pointerdown', (event) => {
@@ -277,10 +287,15 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
       const factor = scatterWheelFactor(event.deltaY, event.deltaMode, viewport.clientHeight);
       if (factor === 1) return;
       if (event.cancelable) event.preventDefault();
-      stop();
+      // 只累加目标倍率，交给帧循环逐帧逼近；连续滚轮因此读作一段连续缩放而不是逐格跳变。
       const rect = viewport.getBoundingClientRect();
-      camera = zoomAt(camera, { x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2 }, factor);
-      paint();
+      const base = zoomTarget ? zoomTarget.scale : camera.scale;
+      stop();
+      zoomTarget = {
+        scale: clampZoom(base * factor),
+        point: { x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2 },
+      };
+      start();
       return;
     }
     const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;

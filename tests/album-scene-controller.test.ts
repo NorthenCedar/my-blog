@@ -172,17 +172,26 @@ describe('真实相册控制器事件回归', () => {
     const initial = scale();
     const up = s.emit(s.links[0], 'wheel', { deltaX: 0, deltaY: -100, deltaMode: 0, clientX: 820, clientY: 580 });
     expect(up.defaultPrevented).toBe(true);
+    expect(scale()).toBe(initial);
+    s.frame();
     expect(scale()).toBeGreaterThan(initial);
+    expect(scale()).toBeLessThan(initial * Math.exp(0.15));
     expect((200 - Number.parseFloat(s.elements.world.values.get('--scene-pan-x')!)) / scale()).toBeCloseTo(280);
     expect((100 - Number.parseFloat(s.elements.world.values.get('--scene-pan-y')!)) / scale()).toBeCloseTo(140);
+    for (let i = 0; i < 60; i++) s.frame();
     s.emit(s.elements.viewport, 'wheel', { deltaX: 0, deltaY: 100, deltaMode: 0, clientX: 820, clientY: 580 });
+    s.frame();
+    expect(scale()).toBeGreaterThan(initial);
+    for (let i = 0; i < 60; i++) s.frame();
     expect(scale()).toBeCloseTo(initial);
     expect(Number.parseFloat(s.elements.world.values.get('--scene-pan-x')!)).toBeCloseTo(0);
+    expect(s.pendingFrames()).toBe(0);
   });
   it('散片滚轮的像素、行和页单位产生相同缩放，单次异常大输入不突然跳到边界', () => {
     const scales = [[100, 0], [6.25, 1], [0.125, 2]].map(([deltaY, deltaMode]) => {
       const s = setup();
       s.emit(s.elements.viewport, 'wheel', { deltaX: 0, deltaY, deltaMode, clientX: 620, clientY: 480 });
+      for (let i = 0; i < 60; i++) s.frame();
       return Number(s.elements.world.values.get('--scene-scale'));
     });
     expect(scales[0]).toBeLessThan(1000 / 1400);
@@ -190,16 +199,19 @@ describe('真实相册控制器事件回归', () => {
     expect(scales[2]).toBeCloseTo(scales[0]);
     const s = setup();
     s.emit(s.elements.viewport, 'wheel', { deltaX: 0, deltaY: -100000, deltaMode: 0, clientX: 620, clientY: 480 });
+    for (let i = 0; i < 60; i++) s.frame();
     expect(Number(s.elements.world.values.get('--scene-scale'))).toBeGreaterThan(1000 / 1400);
     expect(Number(s.elements.world.values.get('--scene-scale'))).toBeLessThan(1);
   });
   it('散片滚轮与按钮共用 0.25 到 1.6 倍边界，回到中心恢复初始视野', () => {
     const s = setup();
     for (let i = 0; i < 40; i++) s.emit(s.elements.viewport, 'wheel', { deltaX: 0, deltaY: -100, deltaMode: 0, clientX: 620, clientY: 480 });
+    for (let i = 0; i < 60; i++) s.frame();
     expect(Number(s.elements.world.values.get('--scene-scale'))).toBe(1.6);
     s.emit(s.elements['zoom-in'], 'click');
     expect(Number(s.elements.world.values.get('--scene-scale'))).toBe(1.6);
     for (let i = 0; i < 40; i++) s.emit(s.elements.viewport, 'wheel', { deltaX: 0, deltaY: 100, deltaMode: 0, clientX: 620, clientY: 480 });
+    for (let i = 0; i < 60; i++) s.frame();
     expect(Number(s.elements.world.values.get('--scene-scale'))).toBe(0.25);
     s.emit(s.elements['zoom-out'], 'click');
     expect(Number(s.elements.world.values.get('--scene-scale'))).toBe(0.25);
@@ -227,6 +239,7 @@ describe('真实相册控制器事件回归', () => {
   it('索引、减少动效和画布外滚轮不缩放，返回展览保留原倍率', () => {
     const s = setup();
     s.emit(s.elements.viewport, 'wheel', { deltaX: 0, deltaY: -100, deltaMode: 0, clientX: 620, clientY: 480 });
+    for (let i = 0; i < 60; i++) s.frame();
     const before = s.elements.world.values.get('--scene-scale');
     expect(s.emit(s.elements.home, 'wheel', { deltaY: -100, deltaMode: 0 }).defaultPrevented).toBe(false);
     s.emit(s.elements.toggle, 'click');
@@ -245,11 +258,45 @@ describe('真实相册控制器事件回归', () => {
     s.emit(s.elements.viewport, 'pointerup', { timeStamp: 40 });
     s.frame();
     expect(s.pendingFrames()).toBe(1);
+    const scaleBefore = Number(s.elements.world.values.get('--scene-scale')!);
     s.emit(s.elements.viewport, 'wheel', { deltaX: 0, deltaY: -100, deltaMode: 0, clientX: 620, clientY: 480 });
-    const before = new Map(s.elements.world.values);
-    s.frame(80);
-    expect(s.elements.world.values).toEqual(before);
+    for (let i = 0; i < 8; i++) s.frame(80);
+    expect(Number(s.elements.world.values.get('--scene-scale')!)).toBeGreaterThan(scaleBefore);
+    // 滚轮取消拖动惯性：只跑缩放收尾，落定后没有残留的滑行帧。
     expect(s.pendingFrames()).toBe(0);
+  });
+  it('停止输入后散片缩放自行收尾到目标并停下，异常滚动量也按帧缓动', () => {
+    const s = setup();
+    const scale = () => Number(s.elements.world.values.get('--scene-scale'));
+    const initial = scale();
+    s.emit(s.elements.viewport, 'wheel', { deltaX: 0, deltaY: -120, deltaMode: 0, clientX: 620, clientY: 480 });
+    s.frame();
+    expect(scale()).toBeGreaterThan(initial);
+    let previous = scale();
+    let rises = 0;
+    for (let i = 0; i < 60; i++) {
+      s.frame(16);
+      const now = scale();
+      if (now > previous) rises++;
+      previous = now;
+    }
+    expect(rises).toBeGreaterThan(5);
+    expect(s.pendingFrames()).toBe(0);
+    // 缩放按钮立即接管，取消滚轮收尾，不与缓动相互拉扯。
+    s.emit(s.elements.viewport, 'wheel', { deltaX: 0, deltaY: -120, deltaMode: 0, clientX: 620, clientY: 480 });
+    s.frame();
+    s.emit(s.elements['zoom-out'], 'click');
+    const clicked = scale();
+    for (let i = 0; i < 10; i++) s.frame();
+    expect(scale()).toBe(clicked);
+    expect(s.pendingFrames()).toBe(0);
+    const fast = setup();
+    fast.emit(fast.elements.viewport, 'wheel', { deltaX: 0, deltaY: -100000, deltaMode: 0, clientX: 620, clientY: 480 });
+    fast.frame();
+    expect(Number(fast.elements.world.values.get('--scene-scale'))).toBeLessThan(0.9642);
+    for (let i = 0; i < 60; i++) fast.frame();
+    // 单次异常大滚动量只走到封顶后的目标，不会一步冲到 1.6 的边界。
+    expect(Number(fast.elements.world.values.get('--scene-scale'))).toBeCloseTo(0.9642, 3);
   });
   it('切片响应纵向滚轮并持续滑行，上滚反向，边缘照片从透明处进入', () => {
     const s = setup('slices', false, 10);
