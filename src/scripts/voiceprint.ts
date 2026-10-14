@@ -21,7 +21,7 @@
  *   而且"DOM 变了"不是"留言成功了"的可靠信号。
  */
 import { prefersReducedMotion, shouldAnimate } from './rl-core';
-import { bucketize, envelope, ticks, pickUnit, toNotes, type Note } from './voiceprint-core';
+import { bucketize, envelope, ticks, pickUnit, toNotes, bucketAt, fmtAt, type Note, type Bin, type Unit } from './voiceprint-core';
 
 (() => {
   const root = document.querySelector<HTMLElement>('[data-voiceprint]');
@@ -61,6 +61,8 @@ const W = 1000, H = 100, TOP = 18, SPAN = 68, SAMPLES = 240;
   const replies = root?.querySelector<SVGGElement>('[data-vp-replies]');
   const axis = root?.querySelector<HTMLElement>('[data-vp-axis]');
   const read = root?.querySelector<HTMLElement>('[data-vp-read]');
+  const cursor = root?.querySelector<SVGLineElement>('[data-vp-cursor]');
+  const svg = root?.querySelector<SVGSVGElement>('[data-vp-svg]');
   const live = Boolean(root && wave && replies && axis && read && animate);
 
   const day = (t: number) => {
@@ -131,6 +133,7 @@ const W = 1000, H = 100, TOP = 18, SPAN = 68, SAMPLES = 240;
       el.textContent = t.label;
       axis.appendChild(el);
     }
+    binsRef = bins; unitRef = pickUnit(spanDays);
 
     /* ★ 读数必须诚实：接口有 LIMIT 200，所以这里说的是"**最近** N 条"，
        不是全站留言总量。没有留言的日子是一条平的线，而不是被抹掉。 */
@@ -138,7 +141,68 @@ const W = 1000, H = 100, TOP = 18, SPAN = 68, SAMPLES = 240;
     const rep = windowed.length - top;
     read.textContent = `${win} · ${windowed.length} 条 · ${top} 条留言 · ${rep} 条回应 · ${day(lo)} — ${day(hi)}`;
     root?.classList.add('is-ready');
+    /* 游标只在波形范围内有效 ⇒ 换了一屏数据（时间窗/新留言）之后要重新对齐。 */
+    if (!pinned) paintCursor(0);
   };
+
+  /* ===== 悬停游标 + 点一下钉住（2026-10-14 §6.80.2）=====
+     ★ 零 rAF：两个动作都只是「挪一根线 + 改一行字」。
+     ★ **只读**：游标在场时波形路径的 `d` 一个字都不动（门闩逐字比对）。
+     ★ 游标下标用 core 的 `bucketAt` ⇒ 与波形**同一个坐标系**，不会对不上。 */
+  let binsRef: Bin[] = [];
+  let unitRef: Unit = 'day';
+  let pinned = false;      // 钉住态：钉住后指针移开也不动
+  let hoverF = 0;          // 当前游标位置（0..1）
+
+  const paintCursor = (f: number) => {
+    hoverF = f;
+    if (!cursor || !svg) return;
+    cursor.setAttribute('x1', (f * W).toFixed(1));
+    cursor.setAttribute('x2', (f * W).toFixed(1));
+    cursor.setAttribute('opacity', '1');
+  };
+
+  const hideCursor = () => { cursor?.setAttribute('opacity', '0'); };
+
+  /** 按 f 读那附近的留言数，写进读数行。读不到就还原成总览。 */
+  const readAt = (f: number) => {
+    if (!read || binsRef.length === 0) return;
+    const i = bucketAt(f * W, 0, W, binsRef.length);
+    const b = binsRef[i];
+    if (!b) return;
+    const near = b.notes + b.replies;
+    read.textContent = near > 0
+      ? `${fmtAt(b.start, unitRef)} · 附近 ${near} 条（${b.notes} 条留言 · ${b.replies} 条回应）`
+      : `${fmtAt(b.start, unitRef)} · 附近没有人留言`;
+  };
+
+  if (live && svg && cursor) {
+    const box = () => svg.getBoundingClientRect();
+    const onMove = (e: Event) => {
+      if (pinned) return;
+      const ev = e as PointerEvent;
+      const r = box();
+      /* 指针上下离开波形带 ⇒ 收游标、还原读数。
+         ★ 用 `top + height` 而**不是** `r.bottom`：后者在部分实现里不给，
+           于是比较永远与 undefined 进行、这一分支等于死代码（替身一咬住就现形）。 */
+      if (ev.clientY < r.top || ev.clientY > r.top + r.height) { hideCursor(); return; }
+      const f = bucketAt(ev.clientX - r.left, 0, r.width, 1000) / 999;
+      paintCursor(Math.max(0, Math.min(1, f)));
+      readAt(hoverF);
+    };
+    const onClick = (e: Event) => {
+      const ev = e as MouseEvent;
+      if (pinned) { pinned = false; svg.removeAttribute('data-pinned'); hideCursor(); receive(); return; }
+      const r = box();
+      if (ev.clientX < r.left || ev.clientX > r.right) return;
+      pinned = true;
+      svg.setAttribute('data-pinned', '1');
+      onMove(e);
+    };
+    svg.addEventListener('pointermove', onMove);
+    svg.addEventListener('pointerleave', () => { if (!pinned) hideCursor(); });
+    svg.addEventListener('click', onClick);
+  }
 
   const receive = () => { applyWindow(); draw(); };
 

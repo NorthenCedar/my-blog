@@ -161,6 +161,33 @@ export function envelope(bins: Bin[], samples: number): number[] {
   return out;
 }
 
+/**
+ * 指针 x → 桶下标（悬停游标用，§6.80.2）。★ **与波形同一个坐标系**：
+ * 波形按 `i / (SAMPLES-1)` 横铺在整个 viewBox 上，所以这里也按
+ * `(x − 左缘) / 宽 × (桶数 − 1)` 取整 —— 两边共用同一个映射，游标才不会与波形对不上。
+ * ★ 越界**夹住**（指针在版心左右两侧时游标不会跑出波形带），退化输入不除零。
+ */
+export function bucketAt(x: number, left: number, width: number, count: number): number {
+  if (!Number.isFinite(x) || !Number.isFinite(left) || !Number.isFinite(width)) return 0;
+  if (!(count > 1) || !(width > 0)) return 0;
+  const f = (x - left) / width;
+  const i = Math.round(f * (count - 1));
+  return i < 0 ? 0 : i > count - 1 ? count - 1 : i;
+}
+
+/** 某一时刻的标签措辞。★ 刻度与游标读数**必须**共用它：
+ *  两处各写一份格式，早晚会说不同的日期（2026-10-14 那次 UTC/本地不一致就是这么漏的）。
+ *  用**本地时区**（见下面 `ticks` 的注记）。 */
+export function fmtAt(t: number, unit: Unit): string {
+  const d = new Date(t);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const day = `${d.getMonth() + 1}月${d.getDate()}日`;
+  if (unit === 'month') return `${d.getFullYear()}.${pad(d.getMonth() + 1)}`;
+  if (unit === 'hour') return `${day} ${pad(d.getHours())}时`;
+  if (unit === 'minute') return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return day;
+}
+
 /** 轴上的时间刻度。数量按粒度给定，避免窄屏挤成一团年份。
  *  ★ 用**本地时区**读日期 —— 2026-10-14 线上实况：刻度原本用 `getUTCDate()`，
  *    而下面读数那行用本地时间，于是同一条留言在轴上显示成 9月26日、在读数里显示成
@@ -170,17 +197,7 @@ export function ticks(bins: Bin[], unit: Unit): { at: number; label: string }[] 
   if (bins.length === 0) return [];
   const want = unit === 'week' || unit === 'hour' ? 8 : 6;
   const step = Math.max(1, Math.ceil(bins.length / want));
-  const pad = (n: number) => String(n).padStart(2, '0');
   const out: { at: number; label: string }[] = [];
-  for (let i = 0; i < bins.length; i += step) {
-    const d = new Date(bins[i].start);
-    const day = `${d.getMonth() + 1}月${d.getDate()}日`;
-    const label =
-      unit === 'month' ? `${d.getFullYear()}.${pad(d.getMonth() + 1)}`
-      : unit === 'hour' ? `${day} ${pad(d.getHours())}时`
-      : unit === 'minute' ? `${pad(d.getHours())}:${pad(d.getMinutes())}`
-      : day;
-    out.push({ at: bins[i].start, label });
-  }
+  for (let i = 0; i < bins.length; i += step) out.push({ at: bins[i].start, label: fmtAt(bins[i].start, unit) });
   return out;
 }

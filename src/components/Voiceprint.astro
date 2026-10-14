@@ -44,6 +44,9 @@
       <line class="vp-flat" data-vp-flat x1="0" y1="62" x2="1000" y2="62" />
       <path class="vp-wave" data-vp-wave d="" vector-effect="non-scaling-stroke" />
       <g class="vp-replies" data-vp-replies></g>
+      {/* 悬停游标（2026-10-14 §6.80.2）。★ 初始 `opacity="0"`：不是 `hidden`，
+          少动效档下它由脚本完全不注册，这里只是"还没悬停"的常态。 */}
+      <line class="vp-cursor" data-vp-cursor x1="0" y1="0" x2="0" y2="100" opacity="0" vector-effect="non-scaling-stroke" />
     </svg>
     {/* ★ 时间刻度**必须**用 HTML 画，不能放进上面那个 SVG。
         原因（2026-10-14 目检实测）：波形用 `preserveAspectRatio="none"` 把 100 高的
@@ -121,6 +124,12 @@
   /* 回复小刻度：一排短竖线，密度 = 有多少人在回应。 */
   .vp-replies line { stroke: var(--deco-orbit-inner); stroke-width: 1; vector-effect: non-scaling-stroke; }
   .vp-axis { position: relative; height: 1.4em; margin-top: 2px; }
+  /* 悬停游标：一根竖线，跟着指针落在对应的时间桶上。
+     ★ 描边比波形再淡一档 —— 它是"你现在在看哪儿"的提示，不该抢波形的读数。
+     ★ 钉住态（`[data-pinned]`）上同色一档，让"已固定"一眼可辨（纯装饰，不承载信息）。 */
+  .vp-cursor { stroke: var(--deco-plate-coarse); stroke-width: 1; transition: opacity var(--dur-fast) var(--ease-interact); }
+  :global(.vp-svg[data-pinned]) .vp-cursor { stroke: var(--deco-orbit-inner); }
+
   /* 时间刻度（HTML 那一行）：首尾两个标签贴边，中间的居中对位。
    ★★★ `span` 是**脚本运行时创建**的，拿不到 Astro scoped style 的 `data-astro-cid`
      ⇒ 这一条必须 `:global()`，否则整条规则匹配不到（`position:absolute` 失效 ⇒

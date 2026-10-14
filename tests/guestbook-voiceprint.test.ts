@@ -120,6 +120,7 @@ class El {
   style: Record<string, string> = {};
   constructor(tag = 'div') { this.tag = tag; }
   setAttribute(k: string, v: string) { this.attrs[k] = v; }
+  removeAttribute(k: string) { delete this.attrs[k]; }
   getAttribute(k: string) { return this.attrs[k] ?? null; }
   /* ★ appendChild 一个**已在树里**的节点，真实 DOM 是「移动到末尾」，不是「复制一份」。
      替身一开始 push，结果排序后 children 从 3 变 6 —— 这条错恰好证明了
@@ -127,8 +128,11 @@ class El {
   appendChild(n: El) {
     const i = this.children.indexOf(n);
     if (i >= 0) this.children.splice(i, 1);
-    this.children.push(n); return n;
+    this.children.push(n);
+    n.parents.push(this);
+    return n;
   }
+  parents: El[] = [];
   replaceChildren(...n: El[]) { this.children = n; }
   handlers = new Map<string, ((e: any) => void)[]>();
   addEventListener(t: string, fn: (e: any) => void) {
@@ -136,6 +140,8 @@ class El {
     this.handlers.get(t)!.push(fn);
   }
   fire(t: string, e: any = {}) { for (const fn of this.handlers.get(t) ?? []) fn(e); }
+  /* remove()：环播完要把自己摘掉（真实 DOM 语义：把自己从父节点的孩子里去掉） */
+  remove() { for (const p of this.parents) p.children = p.children.filter((c) => c !== this); }
   /* 按 `[data-xx-yy]` 找子节点。选择器是 kebab（vp-wave），dataset 的键是驼峰（vpWave）——
    ★ 两边不转换就是"找不到节点" ⇒ 装置静默提前 return ⇒ 表现成"什么都没画"。 */
   querySelector(sel: string): El | null {
@@ -160,8 +166,13 @@ function run(opts: { reduced?: boolean; noRoot?: boolean; withList?: boolean } =
   const flat = new El('line'); flat.dataset.vpFlat = '';
   const replies = new El('g'); replies.dataset.vpReplies = '';
   const axis = new El('div'); axis.dataset.vpAxis = '';
+  const cursor = new El('line'); cursor.dataset.vpCursor = ''; cursor.attrs = { opacity: '0' };
   const read = new El('figcaption'); read.dataset.vpRead = '';
-  for (const n of [svg, wave, flat, replies, axis, read]) root.children.push(n);
+  for (const n of [svg, wave, flat, replies, axis, cursor, read]) root.children.push(n);
+
+  /* 波形带几何：游标把 clientX 换算成桶下标要用 */
+  svg.left = 0; svg.width = 1000;
+  svg.getBoundingClientRect = () => ({ left: svg.left, top: 0, width: svg.width, height: 30 }) as any;
 
   const list = new El('ol'); list.dataset.list = '';
   for (const id of [30, 10, 20]) {
@@ -206,7 +217,7 @@ function run(opts: { reduced?: boolean; noRoot?: boolean; withList?: boolean } =
   const emit = (type: string, detail: any) => {
     for (const l of listeners) if (l.type === type) l.fn({ type, detail });
   };
-  return { root, wave, read, replies, list, emit, sortBtns: [bDesc, bAsc], winBtns: [bAll, bWin],
+  return { root, wave, read, replies, list, svg, cursor, emit, sortBtns: [bDesc, bAsc], winBtns: [bAll, bWin],
     ready: () => root.classList.contains('is-ready') };
 }
 
@@ -319,6 +330,169 @@ describe('留言页声纹带 · 控制器', () => {
   });
 });
 
+/* ── 背景层：指针声波 POINTER RIPPLE（2026-10-14 §6.80.1）───────────────── */
+const rlcore2 = read('src/scripts/rl-core.ts').replace(/^export /gm, '');
+const rippleSrc = read('src/scripts/ripple.ts').replace(/^import .*\r?\n/gm, '');
+const RIPPLE_CODE = transformSync(`${rlcore2}\n${rippleSrc}`, { loader: 'ts' }).code;
+
+/** 跑一遍背景层。返回生成的环、指针事件的派发器、以及版心范围。
+ *  ⚠ `box` 可调版心宽度：第一版把它写死 100~1100，而「同屏上界」那条按每次 300px
+ *  步长发了 40 次 ⇒ 第 4 次之后全落在版心外被挡掉，**实际只生成 4 个环**，
+ *  `≤ 12` 恒过 —— 一条空跑的门闩比没有门闩更坏（它让人以为上界被守住了）。 */
+function runRipple(opts: { reduced?: boolean; box?: { left: number; right: number } } = {}) {
+  const box = opts.box ?? { left: 100, right: 1100 };
+  const layer = new El('div'); layer.dataset.ripple = '';
+  const shell = new El('div');
+  shell.getBoundingClientRect = () => ({ left: box.left, top: 0, right: box.right, bottom: 900, width: box.right - box.left, height: 900 }) as any;
+  const rings: El[] = [];
+  const document = {
+    querySelector: (s: string) => (s === '[data-ripple]' ? layer : s === '.shell' ? shell : null),
+    createElement: (tag: string) => {
+      const e = new El(tag);
+      e.className = ''; e.style.left = ''; e.style.top = '';
+      rings.push(e); return e;
+    },
+    firstElementChild: null as any,
+  };
+  /* firstElementChild 是 `while (满了) 撤掉最老那个` 那句要用的。 */
+  Object.defineProperty(layer, 'firstElementChild', {
+    get: () => layer.children[0] ?? null,
+  });
+  const mql = { matches: !!opts.reduced, addEventListener() {}, removeEventListener() {} };
+  let fire: ((e: any) => void) | null = null;
+  const win = {
+    matchMedia: () => mql,
+    addEventListener: (t: string, fn: (e: any) => void) => { if (t === 'pointermove') fire = fn; },
+  };
+  runInNewContext(RIPPLE_CODE, { window: win, document, matchMedia: () => mql });
+  return {
+    rings, layer, shell,
+    at: (x: number, y = 400, pointerType = 'mouse') =>
+      fire?.({ clientX: x, clientY: y, pointerType }),
+  };
+}
+
+describe('留言页背景层 · 指针声波', () => {
+  it('少动效档一个环都不生成（降级靠"根本不注册"）', () => {
+    const r = runRipple({ reduced: true });
+    r.at(300); r.at(500); r.at(700);
+    expect(r.rings.length, '减少动效下还在生成波纹').toBe(0);
+  });
+
+  it('划过才生成；距离太近不重复生成（否则一次划屏会拉出上百个环）', () => {
+    const r = runRipple();
+    r.at(500);
+    expect(r.rings.length, '指针进来一次都没生成').toBe(1);
+    r.at(502); r.at(504);            // 太近 ⇒ 跳过
+    expect(r.rings.length, '近距离移动又生成了 ⇒ 间隔阈值没生效').toBe(1);
+    r.at(700);                        // 够远
+    expect(r.rings.length).toBe(2);
+  });
+
+  it('★★ 环要落在指针底下，不许被版心偏移带跑（站主目检报「出现在光标的左上角」）', () => {
+    /* ★ 这条守的是 2026-10-14 站主截图报的那个现象。根因：环的坐标写成了
+       `指针 − 版心左缘/上缘`，**但波纹层是 `position:fixed; inset:0`** ——
+       它的坐标系原点就是视口 (0,0)，不是版心左上角。于是整层环被平移了
+       (shell.left, shell.top)：宽屏上版心左缘 ≈300px、上缘 ≈100px ⇒
+       环整整偏到指针的左上角外，看着像"没跟着鼠标"。
+       ⇒ 版心 rect **只**用来判"在不在版心内"，**不许**拿去平移坐标。 */
+    const r = runRipple();                       // 替身里版心是 left 100 / right 1100
+    r.at(500, 400);
+    const ring = r.rings[0];
+    expect(ring, '没生成环').toBeTruthy();
+    expect(ring.style.left, `环偏了 ${Number(ring.style.left) - 500}px —— 被版心左缘带跑了`).toBe('500px');
+    expect(ring.style.top, `环偏了 ${Number(ring.style.top) - 400}px —— 被版心上缘带跑了`).toBe('400px');
+    /* 版心外的指针仍然不许生成（这条门控还在，只是不再兼职坐标） */
+    r.at(80, 400);
+    expect(r.rings.length, '版心外也生成了').toBe(1);
+  });
+
+  it('★ 触屏划动不生成：手指拖动会划出满屏的环', () => {
+    const r = runRipple();
+    /* ★ 这条必须真的发 touch 事件才作数 —— 早先写成 `at(300, 400)`（第二个参数是 y），
+       于是全程都是 mouse 事件、断言恒过 —— 一条**空跑**的门闩比没有门闩更坏。 */
+    r.at(300, 400, 'touch');
+    r.at(600, 400, 'touch');
+    r.at(900, 400, 'touch');
+    expect(r.rings.length, '触屏拖动也生成了波纹').toBe(0);
+    r.at(600);                          // 鼠标进来才该有
+    expect(r.rings.length, '鼠标也不生成 ⇒ 上一条把门控焊死了').toBe(1);
+  });
+
+  it('★ 版心之外不生成（装饰不铺到版心外的空白）', () => {
+    const r = runRipple();
+    r.at(50);                          // 版心左缘 100 之外
+    expect(r.rings.length, '版心外也生成了').toBe(0);
+    r.at(600);
+    expect(r.rings.length).toBe(1);
+  });
+
+  it('同屏环数有上界；播完（animationend）自己回收', () => {
+    /* ★ 版心放宽到 0~5000，且步长 100px（> STEP_PX=90）—— 必须保证 40 次**都**落在版心内。
+       第一版用 100~1100 的版心配 300px 步长 ⇒ 只生成 4 个环，`≤12` 恒过（空跑）。 */
+    const r = runRipple({ box: { left: 0, right: 5000 } });
+    for (let i = 0; i < 40; i++) r.at(200 + i * 100);
+    expect(r.at(200), '版心放宽后这次也没生成 ⇒ 夹具还是没量到东西').toBeUndefined();
+    /* ★ 上界管的是**同屏存活**（`layer.children`），不是**累计生成**（`rings`）——
+       生成的那些里超额的已经被撤掉了，拿累计数去比上界，第一版就会一直绿。
+       两条一起写：一条卡上界、一条证明这个上界**确实被触发过**（否则又是空跑）。 */
+    expect(r.layer.children.length, '同屏存活的环没有上界 ⇒ 一直划会积出一堆')
+      .toBeLessThanOrEqual(12);
+    expect(r.rings.length, '一共才生成这么少 ⇒ 压根没碰到上界，这条断言是空跑的')
+      .toBeGreaterThan(12);
+    /* 播完的元素要自己摘掉，否则层里会一直堆着死元素。 */
+    const before = r.layer.children.length;
+    expect(before).toBeGreaterThan(0);
+    for (const ring of r.rings) ring.fire('animationend');
+    expect(r.layer.children.length, 'animationend 之后环还留在层里').toBe(0);
+  });
+
+  it('★★ 环的样式必须走全局：它是脚本造出来的，拿不到 Astro 的作用域属性', () => {
+    /* ★★★ 这条守的是 2026-10-14 真踩的那一脚：环由 `ripple.ts` 运行时
+       `document.createElement('i')` 造出来，**没有** Astro scoped style 加的
+       `data-astro-cid` 属性 ⇒ 规则写在作用域块里就一条都匹配不上。
+       症状极具欺骗性：环确实生成了（层里有 6 个 `<i>`），但
+       `getComputedStyle` 出来是 `animation: none` / `border-width: 0px` /
+       `width: auto` —— 元素在、逻辑对、画面上什么都没有。
+       ★ 而且连 `:global()` 也不够：这一块还带 `@keyframes`，`:global()` 罩不住
+       at-rule，所以整块得 `is:global`。 */
+    const raw = read('src/pages/guestbook.astro');
+    /* ★ 判据必须先剥注释（Astro 模板注释 + CSS 注释）：这一页的注释里**反复**提到
+       "全局样式块"和 `.vr-ring`，不剥的话注释本身就能把"存在性"断言喂绿 ——
+       2026-10-14 实测：注释里字面写了 `is:global` 那行标签，正则从注释里就开始匹配，
+       把真正的规则块整个漏掉，报的却是"环不在全局块里"。 */
+    const NCsrc = raw.replace(/<!--[\s\S]*?-->/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+    const blocks = [...NCsrc.matchAll(/<style is:global>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
+    expect(blocks.length, '本页没有全局样式块 ⇒ 环的样式无处安放').toBeGreaterThan(0);
+    const NC = blocks.join('\n');
+    expect(NC, '环的规则不在全局块里 ⇒ 会被作用域前缀挡掉、屏幕上什么都不出现')
+      .toMatch(/\.vr-ring\s*\{/);
+    expect(NC, '关键帧也必须同在全局块（`:global()` 罩不住 at-rule）')
+      .toMatch(/@keyframes\s+vr-ring-out/);
+    expect(NC, '环自己写了字面色值').not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(NC, '环自己写了 rgba()').not.toMatch(/\brgba?\(/);
+    expect(NC, '环的描边应走站上装饰层的标准档 22%').toMatch(/var\(--deco-orbit-strong\)/);
+    /* ★ 浓度不许退回 9% 那档：第一版用 `--deco-orbit-soft`(9%) + `scale(0.2)`，
+       按像素量出来峰值只有 Δ2~3 级 —— 比站上最淡的底纹还轻，等于没画。
+       判据落在 token 名上：它是"这一层落在装饰哪一档"的唯一凭据。 */
+    expect(NC, '环的描边退回了 9% 那档（实测峰值只有 8 级以下，等于看不见）')
+      .not.toMatch(/var\(--deco-orbit-soft\)/);
+    expect(NC, '环必须是圆的').toMatch(/border-radius:\s*50%/);
+    /* 少动效档那条双保险也得在同一块里（作用域外的写法同样匹配不到）。 */
+    expect(NC, '少动效兜底不在全局块里').toMatch(/prefers-reduced-motion/);
+
+    /* ★ 反面：环的规则**不许**留在作用域块里（留了就等于没写，这是本条要守的真事故）。
+       单独提出来写成一条，是因为上面那些是「要有什么」，这条是「不许在哪」——
+       只写前者的话，把规则搬回作用域块仍可能因为别处还有一份而绿。 */
+    const scoped = [...NCsrc.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+    expect(scoped, '环的规则还留在作用域块里 ⇒ 匹配不到，等于没写')
+      .not.toMatch(/\.vr-ring\s*\{/);
+    /* 层本身是模板元素（有 cid），留在作用域块里是对的 —— 别把这条一起改掉。 */
+    expect(scoped, '波纹层是模板元素，样式应当留在作用域块里').toMatch(/\.vr-ripple\s*\{/);
+  });
+});
+
 /* ── 玻璃控件（一套两用）─────────────────────────────────────────────────── */
 describe('留言页声纹带 · 玻璃控件', () => {
   const SRC = read('src/components/Voiceprint.astro');
@@ -371,6 +545,52 @@ describe('留言页声纹带 · 玻璃控件', () => {
        （对照被否掉的墨滴：整屏 canvas。） */
     expect(PAGE_CSS, '波形带没有按 token 算高度').toMatch(/height:\s*calc\(var\(--lh-body\)\s*\*\s*var\(--fs-body\)\)/);
     expect(SRC, '不许写死像素/rem 高度').not.toMatch(/\.vp-svg\s*\{[^}]*height:\s*[\d.]+(?:px|rem)/);
+  });
+
+  it('★★ 悬停游标：跟着指针走，读数换成「那一刻附近 N 条」', () => {
+    const r = run();
+    r.emit('voiceprint', { comments: [note(1, ago(1)), note(2, ago(10)), note(3, ago(20))] });
+    const before = r.read.textContent;
+    r.svg.fire('pointermove', { clientX: r.svg.left + r.svg.width * 0.5, clientY: 10 });
+    expect(r.cursor.getAttribute('opacity'), '游标没露出来').toBe('1');
+    expect(r.read.textContent, '读数没跟着游标换').not.toBe(before);
+    expect(r.read.textContent).toMatch(/附近/);
+    r.svg.fire('pointermove', { clientX: r.svg.left + r.svg.width * 0.5, clientY: 9999 });
+    expect(r.cursor.getAttribute('opacity'), '指针离开波形带后游标没收').toBe('0');
+  });
+
+  it('★★ 悬停期间波形路径一个字都不许变（游标只读不改形）', () => {
+    const r = run();
+    r.emit('voiceprint', { comments: [note(1, ago(1)), note(2, ago(20))] });
+    const d = r.wave.getAttribute('d');
+    for (const f of [0, 0.25, 0.5, 0.75, 1]) {
+      r.svg.fire('pointermove', { clientX: r.svg.left + r.svg.width * f, clientY: 10 });
+    }
+    expect(r.wave.getAttribute('d'), '悬停把波形改了').toBe(d);
+  });
+
+  it('★ 点一下钉住：钉住之后指针移开游标不动，再点一下取消', () => {
+    const r = run();
+    r.emit('voiceprint', { comments: [note(1, ago(1)), note(2, ago(20))] });
+    const svg = r.svg;
+    const at = (f: number) => ({ clientX: svg.left + svg.width * f, clientY: 10 });
+    svg.fire('pointermove', at(0.2));
+    svg.fire('click', at(0.2));
+    const pinned = svg.getAttribute('data-pinned') ?? r.cursor.getAttribute('data-pinned');
+    expect(pinned, '点了一下没有钉住').toBeTruthy();
+    const read = r.read.textContent;
+    svg.fire('pointermove', at(0.9));   // 钉住之后指针移开
+    expect(r.read.textContent, '钉住后指针移开读数就跟着跑了').toBe(read);
+    svg.fire('click', at(0.2));        // 再点一次 ⇒ 取消
+    expect(svg.getAttribute('data-pinned') ?? r.cursor.getAttribute('data-pinned'),
+      '再点一次没取消钉住').toBeFalsy();
+  });
+
+  it('少动效档不提供游标与钉住（它们是动效装置的一部分）', () => {
+    const r = run({ reduced: true });
+    r.emit('voiceprint', { comments: [note(1, ago(1))] });
+    r.svg.fire('pointermove', { clientX: r.svg.left + 10, clientY: 10 });
+    expect(r.cursor.getAttribute('opacity'), '少动效下还出了游标').toBe('0');
   });
 
   it('排序只重排现有节点，不重建列表（否则会丢已展开的回复表单）', () => {

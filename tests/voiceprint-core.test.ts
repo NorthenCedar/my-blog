@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  pickUnit, weightOf, bucketize, normalize, envelope, ticks, toNotes, SHAPE_GAMMA,
+  pickUnit, weightOf, bucketize, normalize, envelope, ticks, toNotes, SHAPE_GAMMA, bucketAt, fmtAt,
   type Note, type Bin,
 } from '../src/scripts/voiceprint-core';
 
@@ -54,6 +54,49 @@ describe('留言页声纹带 · 纯函数核心', () => {
     const v = normalize(bins);
     expect(Math.max(...v), '峰值没有顶到 1').toBe(1);
     expect(Math.min(...v), '全是同一个值 ⇒ 还是一条水平线').toBeLessThan(1);
+  });
+
+it('★★ 游标定位：指针 x → 桶下标，与波形同一个坐标系', () => {
+    /* 悬停游标（2026-10-14 §6.80.2）要靠它。★ 关键性质：**越界要夹住**，
+       指针在版心左右两侧时游标不会跑出波形带 —— 那正是「波形与游标对不上」的成因。 */
+    const L = 100, W = 400;                 // 波形带：左缘 100、宽 400
+    expect(bucketAt(L, L, W, 9), '正左缘 = 第一个桶').toBe(0);
+    expect(bucketAt(L + W, L, W, 9), '正右缘 = 最后一个桶').toBe(8);
+    expect(bucketAt(L + W / 2, L, W, 9), '正中落在中间那一桶').toBe(4);
+    expect(bucketAt(L - 500, L, W, 9), '越到左外侧 ⇒ 夹到第一个，不得返回负数').toBe(0);
+    expect(bucketAt(L + W + 500, L, W, 9), '越到右外侧 ⇒ 夹到最后一个').toBe(8);
+
+    /* ★ 退化输入：一个桶（只有一条留言时）必须是 0，而不是除零出 NaN。
+       站内栽过同族：跨度 0 时公式除零 ⇒ 一条 NaN 路径 ⇒ 什么都画不出来。 */
+    expect(bucketAt(200, L, W, 1), '只有一个桶时恒为 0').toBe(0);
+    expect(bucketAt(200, L, W, 0), '零个桶不得出 NaN').toBe(0);
+    expect(bucketAt(200, L, 0, 9), '带宽 0 不得除零').toBe(0);
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      expect(bucketAt(bad, L, W, 9), `脏输入 ${bad} 出了非有限值`).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(bucketAt(bad, L, W, 9))).toBe(true);
+    }
+  });
+
+  it('★ 时刻标签：刻度与游标读数必须说同一句话', () => {
+    /* ★ 抽出来的原因：2026-10-14 刻度用 UTC、读数用本地，同一条留言在轴上
+       写成「9月26日」、在读数里是「2026.09.27」。两处各写一份格式，早晚会再说岔。 */
+    const t = Date.parse('2026-09-26T17:20:00.000Z');
+    const d = new Date(t);
+    /* 带日期的档：标签里必须能读出本地日期。★ `minute` 档**不带**日期 ——
+       它的跨度 < 1 小时，刻度又密（每档要 6 个），挂上「9月27日 01:20」会挤成一团。
+       跨天那种边角由读数那行的起止日期兜住（它本来就写全了）。 */
+    for (const unit of ['hour', 'day', 'week'] as const) {
+      expect(fmtAt(t, unit), `${unit} 档的标签与本地日期对不上`)
+        .toContain(`${d.getMonth() + 1}月${d.getDate()}日`);
+    }
+    /* `month` 档只到年月（`2026.09`），`minute` 档只到时刻（`01:20`）——
+       两者的"更粗"是刻度密度决定的，各自单独立断言。 */
+    for (const unit of ['minute', 'hour', 'day', 'week', 'month'] as const) {
+      expect(fmtAt(t, unit), `${unit} 档出现了 Invalid/NaN`).not.toMatch(/Invalid|NaN/);
+    }
+    expect(fmtAt(t, 'month')).toMatch(/^\d{4}\.\d{2}$/);
+    expect(fmtAt(t, 'minute')).toMatch(/^\d{2}:\d{2}$/);
+    expect(fmtAt(t, 'hour')).toMatch(/时$/);
   });
 
   it('★ 五档桶数上界 < 200 —— 这是「240 个采样点够用」的依据', () => {
