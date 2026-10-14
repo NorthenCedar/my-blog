@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  pickUnit, weightOf, bucketize, normalize, envelope, ticks, toNotes,
+  pickUnit, weightOf, bucketize, normalize, envelope, ticks, toNotes, SHAPE_GAMMA,
   type Note, type Bin,
 } from '../src/scripts/voiceprint-core';
 
@@ -20,13 +20,60 @@ const bin = (weight: number, start = 0): Bin => ({ start, end: start + 1, weight
 
 describe('留言页声纹带 · 纯函数核心', () => {
   it('分桶粒度按跨度自适应，边界卡死在 90 天与 730 天', () => {
-    expect(pickUnit(0), '跨度 0 也走按天，不许除零').toBe('day');
-    expect(pickUnit(90)).toBe('day');
-    expect(pickUnit(91), '过了 90 天就该升到按周').toBe('week');
-    expect(pickUnit(730)).toBe('week');
-    expect(pickUnit(731), '过了 730 天就该升到按月').toBe('month');
     expect(pickUnit(4000)).toBe('month');
-    expect(pickUnit(-5), '负跨度（脏数据）退回最细的粒度').toBe('day');
+    expect(pickUnit(731), '过了 730 天就该升到按月').toBe('month');
+    expect(pickUnit(730)).toBe('week');
+    expect(pickUnit(91), '过了 90 天就该升到按周').toBe('week');
+    expect(pickUnit(90)).toBe('day');
+    expect(pickUnit(2)).toBe('day');
+  });
+
+  it('★★ 跨度不足一天时按小时/分钟切 —— 同日多条不许被并成一个桶', () => {
+    /* ★★ 2026-10-14 线上实况：留言页当时只有 2 条留言、且是**同一天**（相隔 10.6 小时）。
+       粒度下限原本是"天" ⇒ 两条被并进同一个桶 ⇒ 归一化后每点都是 1
+       ⇒ 屏幕上是一条**水平线**，"有两条留言"这个信息整个丢掉。
+       ⇒ 站的留言稀疏，"同日多条"是常态而不是边角，粒度必须细到分钟/小时。 */
+    expect(pickUnit(1.5), '超过一天半才按天').toBe('day');
+    expect(pickUnit(1), '★ 正好一天也要按小时：00:00 与 24:00 的两条按天分桶仍会并成一个桶').toBe('hour');
+    expect(pickUnit(0.5), '半天 ⇒ 按小时').toBe('hour');
+    expect(pickUnit(10.6 / 24), '10.6 小时 ⇒ 按小时').toBe('hour');
+    expect(pickUnit(1 / 60 / 24), '一小时以内 ⇒ 按分钟').toBe('minute');
+    expect(pickUnit(0), '跨度 0 也得有粒度').toBe('minute');
+    expect(pickUnit(-5), '负跨度（脏数据）退回最细的粒度').toBe('minute');
+
+    /* ★ 真实的两天前那两条：必须落进**两个不同的桶**。 */
+    const sameDay = [
+      note(1, '2026-09-26T17:20:00.000Z', '一'),   // 本地 09-27 01:20
+      note(2, '2026-09-27T03:59:00.000Z', 'x'.repeat(40)),  // 本地 09-27 11:59
+    ];
+    const spanDays = (Date.parse(sameDay[1].createdAt) - Date.parse(sameDay[0].createdAt)) / 86400000;
+    const bins = bucketize(sameDay, spanDays);
+    expect(bins.length, '同日两条被并成一个桶了 ⇒ 波形会退化成一条水平线').toBeGreaterThan(1);
+    expect(bins.filter((b) => b.weight > 0).length, '两条落在了同一个桶里').toBe(2);
+    /* 而且归一化后必须有高低差 —— 否则屏幕上还是一条线。 */
+    const v = normalize(bins);
+    expect(Math.max(...v), '峰值没有顶到 1').toBe(1);
+    expect(Math.min(...v), '全是同一个值 ⇒ 还是一条水平线').toBeLessThan(1);
+  });
+
+  it('★ 五档桶数上界 < 200 —— 这是「240 个采样点够用」的依据', () => {
+    /* ★ 2026-10-14 记一笔反面教材：我一度给 `envelope` 加了"采样数不得少于桶数"的补丁，
+       理由写的是"两条相隔 10 小时的留言会造出 600 个桶"——**那个数是错的**。
+       逐档实测才发现粒度是自适应下界，桶数有硬上界：
+         跨度 ≤1 时⇒分钟桶 ≤ 60 · ≤1 天⇒小时桶 ≤ 25 · ≤90 天⇒天桶 ≤ 91
+         ≤730 天⇒周桶 ≤ 105 · 更长⇒月桶 = 跨度/30
+       ⇒ 补丁是**死分支**，被它"解释"的那个场景压根不存在（AGENTS 那条：
+       以为测试有洞，其实是在补一个不存在的场景）。已撤。
+       ★ 这条断言现在就是那道上界的护栏：哪天有人把粒度改细、桶数越过 200，它先红。 */
+    const DAY = 86400000;
+    for (const days of [0.01, 0.44, 1, 45, 90, 730, 2000, 3650]) {
+      const pair = [
+        note(1, new Date(Date.now() - days * DAY).toISOString(), '一'),
+        note(2, new Date().toISOString(), 'x'.repeat(40)),
+      ];
+      const bins = bucketize(pair, days);
+      expect(bins.length, `跨度 ${days} 天产生了 ${bins.length} 个桶，越过上界`).toBeLessThan(200);
+    }
   });
 
   it('权重 = 顶层留言字数 + 回复 × 200；空输入是 0', () => {
@@ -40,17 +87,21 @@ describe('留言页声纹带 · 纯函数核心', () => {
       .toBe(weightOf([note(2, '2026-01-01T00:00:00Z', 'x'.repeat(200))]));
   });
 
-  it('空册返回空桶；所有留言同一天时落到单桶而不是除零', () => {
+  it('空册返回空桶；跨度为 0 不除零、同日每条各占一个非空桶', () => {
     expect(bucketize([], 30)).toEqual([]);
     const sameDay = [
       note(1, '2026-01-01T10:00:00Z', 'a'),
       note(2, '2026-01-01T20:00:00Z', 'bb'),
     ];
     const bins = bucketize(sameDay, 0);
-    expect(bins, '同一天不该切出一堆空桶').toHaveLength(1);
-    expect(bins[0].notes).toBe(2);
-    expect(bins[0].weight).toBe(3);
-    expect(Number.isFinite(bins[0].start + bins[0].end)).toBe(true);
+    expect(bins.length, '跨度 0 却一个桶都没有').toBeGreaterThan(0);
+    expect(Number.isFinite(bins[0].start + bins[0].end + bins[0].weight)).toBe(true);
+    /* ★ 跨度 0 现在走"按分钟"，桶会很多 —— 但**有留言的桶必须正好两条**，
+       空的桶只是那段没人的时间（它们在波形上是 0，不是被抹掉）。 */
+    const filled = bins.filter((b) => b.weight > 0);
+    expect(filled.length, '同一天的每条留言都该占一个非空桶').toBe(2);
+    expect(filled.reduce((n, b) => n + b.notes, 0)).toBe(2);
+    expect(filled.reduce((n, b) => n + b.weight, 0)).toBe(3);
   });
 
   it('孤儿回复（没有对应的顶层留言）不炸：照样进桶，replies 单独计数', () => {
@@ -98,6 +149,32 @@ describe('留言页声纹带 · 纯函数核心', () => {
     expect(envelope([], 10), '空册不许返回 NaN').toEqual(new Array(10).fill(0));
   });
 
+  it('★★ 小值开个方：短包抬得起来，但仍然是归一化的（站主 2026-10-14 定的观感）', () => {
+    /* 站主的留言页当时只有 2 条：33 字与 4 字，相隔 10.6 小时。
+       线性归一化下 4 字那条只有 0.12 高度（≈3.5px）⇒ 屏幕上几乎看不见 ——
+       那个"峰值恒为 1"是对的，但直接拿去画就丢掉了"那里也有一条留言"这个信息。
+       ⇒ 显示上开一个 0.6 次方。★ 只动**显示**，不动归一化：normalize 仍是线性的、
+       峰值仍恒为 1（上面那条测试钉着），开方发生在包络里。 */
+    expect(SHAPE_GAMMA, 'gamma 必须在 (0,1)：≥1 只会把高包抬得更高').toBeGreaterThan(0);
+    expect(SHAPE_GAMMA, 'gamma ≥1 方向就反了').toBeLessThan(1);
+    expect(Math.abs(SHAPE_GAMMA - 0.6), '站主定的是 0.6；改它要重新目检').toBeLessThan(1e-9);
+
+    const bins: Bin[] = [
+      { start: 0, end: 1, weight: 4, replies: 0, notes: 1 },
+      { start: 1, end: 2, weight: 33, replies: 0, notes: 1 },
+    ];
+    const linear = normalize(bins);          // [0.121, 1]
+    const shaped = envelope(bins, 2);
+    expect(shaped[0], '短包没有比线性更矮（说明没开方）').toBeGreaterThan(linear[0]);
+    expect(shaped[0], '短包仍然可见性不足，0.6 开方约应到 0.28').toBeGreaterThan(0.2);
+    expect(shaped[1], '峰值仍然是 1').toBeCloseTo(1, 6);
+    /* 值域必须仍在 0..1 —— 开方不会越界。 */
+    expect(Math.min(...shaped)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...shaped)).toBeLessThanOrEqual(1);
+    /* 确定性照旧。 */
+    expect(envelope(bins, 2)).toEqual(shaped);
+  });
+
   it('时间刻度随粒度换措辞，且落在桶的时间范围内', () => {
     const notes = [note(1, '2026-01-01T00:00:00Z', 'a'), note(2, '2026-03-01T00:00:00Z', 'b')];
     const dayTicks = ticks(bucketize(notes, 60), 'day');
@@ -112,6 +189,18 @@ describe('留言页声纹带 · 纯函数核心', () => {
     /* 标签不许是 "Invalid Date" 这类脏东西 */
     expect(dayTicks.map((t) => t.label).join('')).not.toMatch(/Invalid|NaN|undefined/);
     expect(ticks([], 'day')).toEqual([]);
+  });
+
+  it('★★ 刻度日期用**本地时区**，与读数那一行说的是同一个日期', () => {
+    /* ★ 2026-10-14 线上实况：刻度原本用 getUTCDate()、读数用本地时间 ——
+       本地 09-27 凌晨的留言（= UTC 09-26 17:20）在轴上被写成「9月26日」，
+       在读数里却是「2026.09.27」。同一个日期说成两个，读者无法对账。
+       ★ 判据不写死某个日期，而是"刻度标签里的日期 == new Date(同一时刻).getMonth()+1月getDate()日"，
+         这样判据与本机时区无关。 */
+    const bins = bucketize([note(1, '2026-09-26T17:20:00.000Z', '一')], 0.01);
+    const [t0] = ticks(bins, 'hour');
+    const d = new Date(bins[0].start);
+    expect(t0.label, '刻度用的不是本地日期').toContain(`${d.getMonth() + 1}月${d.getDate()}日`);
   });
 
   it('toNotes 把接口的两张表摊平成一维：回复带 isReply，顶层不带', () => {

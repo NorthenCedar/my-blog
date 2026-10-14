@@ -32,7 +32,11 @@ import { bucketize, envelope, ticks, pickUnit, toNotes, type Note } from './voic
   const NS = 'http://www.w3.org/2000/svg';
   /* viewBox 是 0 0 1000 100；`preserveAspectRatio="none"` 把它拉满版心。
      这几个常数是 **viewBox 坐标**，不是像素 —— 它们与实际宽高无关，改版心不会走形。 */
-  const W = 1000, H = 100, TOP = 12, SPAN = 76, SAMPLES = 240;
+  /* viewBox 是 0 0 1000 100；`preserveAspectRatio="none"` 把它拉满版心。
+   这几个常数是 **viewBox 坐标**，不是像素 —— 它们与实际宽高无关，改版心不会走形。
+   ★ TOP 是峰值**上方**的留白（站主 2026-10-14：波形顶到带上缘时会贴着上面那行标题，
+   12 改到 18）。SPAN 是波形实际可用的纵向跨度，两者之和 < H。 */
+const W = 1000, H = 100, TOP = 18, SPAN = 68, SAMPLES = 240;
   const DAY = 86400000;
 
   let notes: Note[] = [];

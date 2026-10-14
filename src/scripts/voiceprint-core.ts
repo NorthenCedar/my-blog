@@ -23,25 +23,46 @@
 /** 一条留言或一条回复。`createdAt` 是 ISO 串（客户端字段是驼峰，后端 `created_at` 在 fetch 层转换）。 */
 export type Note = { id: number; createdAt: string; body: string; isReply: boolean };
 
-/** 分桶粒度：跨度越长，桶越宽 —— 这样"上百条"也不会被切成一堆柱子。 */
-export type Unit = 'day' | 'week' | 'month';
+/** 分桶粒度：跨度越长，桶越宽 —— 这样"上百条"也不会被切成一堆柱子。
+ *  ⚠ 2026-10-14（线上实况暴露）：**下限必须是分钟/小时，不是天**。
+ *    留言页当时只有 2 条、且是**同一天**（相隔 10.6 小时）⇒ 粒度落到"按天"
+ *    ⇒ 两条被并进**同一个桶** ⇒ 归一化后每点都是 1 ⇒ 屏幕上是一条**水平线**，
+ *    "有两条留言"这个信息整个丢掉。站的留言稀疏，同日多条是常态，不是边角。 */
+export type Unit = 'minute' | 'hour' | 'day' | 'week' | 'month';
 
 /** 一个时间桶。`weight` 决定波形高度，`replies`/`notes` 只用于读数。 */
 export type Bin = { start: number; end: number; weight: number; replies: number; notes: number };
+
+/** ★ 显示用的伽马（站主 2026-10-14 定的观感）。
+ *  留言页当时只有 2 条：33 字与 4 字。线性归一化下 4 字那条只有 0.12 高度（≈3.5px），
+ *  屏幕上几乎看不见 —— 那个"峰值恒为 1"没错，但直接拿去画就丢掉了
+ *  "那里也有一条留言"这个信息。⇒ 显示上开 0.6 次方：0.12 → 0.28。
+ *  ⚠ **只动显示**：归一化仍然线性、峰值仍恒为 1（门闩钉着那条），
+ *    开方发生在 `envelope` 里。想改观感改这一个数，然后重跑目检。 */
+export const SHAPE_GAMMA = 0.6;
 
 const DAY_MS = 86400000;
 
 /** ★ 三个口径值，与 docs/rhinelab-spec.md §6.78.3 一一对应，改它们要连门闩一起改。 */
 export const REPLY_WEIGHT = 200;   // 一条回复 ≈ 200 字：留言框上限 1000，回复通常一句话
+const HOUR_MS = 3600000;
 const DAY_MAX = 90;                // 跨度 ≤ 90 天按天
 const WEEK_MAX = 730;              // ≤ 730 天按周，再长按月
 
 /** 月用固定 30 天近似。★ 刻意不做日历月：那会让"桶必须连续且不重叠"这条性质依赖月份长度，
  *  而月份长度正是让这类几何在边界上出错的地方（站内栽过同族：显影槽的周期接缝）。 */
-const STEP: Record<Unit, number> = { day: DAY_MS, week: 7 * DAY_MS, month: 30 * DAY_MS };
+const STEP: Record<Unit, number> = {
+  minute: 60000, hour: HOUR_MS, day: DAY_MS, week: 7 * DAY_MS, month: 30 * DAY_MS,
+};
 
+/** ★ 五档、**下限到分钟**。跨度不足一天时按小时/分钟切，否则同日多条会被并成一个桶
+ *  （见上面 Unit 的注记：线上就是这么退化成一条水平线的）。
+ *  负数与 NaN 也落进 `minute`：脏数据退回**最细**粒度，宁可多几个桶也不要并掉。 */
 export function pickUnit(spanDays: number): Unit {
-  if (!(spanDays > DAY_MAX)) return 'day';   // 负数/NaN 也落这儿：脏数据退回最细粒度
+  const ms = spanDays * DAY_MS;
+  if (!(ms > HOUR_MS)) return 'minute';
+  if (!(ms > DAY_MS)) return 'hour';
+  if (!(ms > DAY_MAX * DAY_MS)) return 'day';
   return spanDays > WEEK_MAX ? 'month' : 'week';
 }
 
@@ -111,37 +132,55 @@ export function normalize(bins: Bin[]): number[] {
  * 连续包络：把归一化后的桶线性插值成 `samples` 个点。
  * ★ 用**线性**插值而不是平滑样条：样条会在端点过冲（值越出 0..1），
  *   而这个形状的全部信息就是"相对高低"，过冲会读成不存在的数据。
+ * ★ 为什么调用方给 240 个采样点就够（**别在这里加"采样数不得少于桶数"的补丁** ——
+ *   2026-10-14 加过，又撤了）：粒度是自适应下界，桶数因此有硬上界 ——
+ *     跨度 ≤1 时⇒分钟桶 ≤ 60 · ≤1 天⇒小时桶 ≤ 25 · ≤90 天⇒天桶 ≤ 91
+ *     ≤730 天⇒周桶 ≤ 105 · 更长⇒月桶 = 跨度/30（10 年也只有 122）
+ *   实测五档 11 / 25 / 91 / 105 / 122，**上限 122** ≪ 240。
+ *   ⇒ 桶比采样点稀，每个桶都至少被采到一次，不存在"窄峰被跳过"。
+ *   ⚠ 若将来把粒度改细（出现 >240 桶的档位），这条上界就破了 ——
+ *     `tests/voiceprint-core.test.ts` 的「五档桶数上界」会先红。
  */
 export function envelope(bins: Bin[], samples: number): number[] {
   if (!Number.isFinite(samples) || samples <= 0) return [];
   if (bins.length === 0) return new Array(Math.floor(samples)).fill(0);
-  const n = Math.floor(samples);
   const v = normalize(bins);
+  /* ★ 显示伽马（见 SHAPE_GAMMA）：归一化之后、插值之前。
+     放在这里而不是 normalize 里，是因为"归一化、峰值恒为 1"是**数据契约**（有门闩），
+     而"短包抬起来"是**观感**，两者分开，改观感才不会动到契约。 */
+  const s = SHAPE_GAMMA === 1 ? v : v.map((x) => Math.pow(x, SHAPE_GAMMA));
+  const n = Math.floor(samples);
   const out: number[] = [];
   for (let i = 0; i < n; i++) {
-    const x = v.length === 1 ? 0 : (i / (n - 1)) * (v.length - 1);
+    const x = s.length === 1 ? 0 : (i / (n - 1)) * (s.length - 1);
     const i0 = Math.floor(x);
-    const i1 = Math.min(i0 + 1, v.length - 1);
+    const i1 = Math.min(i0 + 1, s.length - 1);
     const f = x - i0;
-    out.push(v[i0] * (1 - f) + v[i1] * f);
+    out.push(s[i0] * (1 - f) + s[i1] * f);
   }
   return out;
 }
 
-/** 轴上的时间刻度。数量按粒度给定，避免窄屏挤成一团年份。 */
+/** 轴上的时间刻度。数量按粒度给定，避免窄屏挤成一团年份。
+ *  ★ 用**本地时区**读日期 —— 2026-10-14 线上实况：刻度原本用 `getUTCDate()`，
+ *    而下面读数那行用本地时间，于是同一条留言在轴上显示成 9月26日、在读数里显示成
+ *    09.27（本地 09-27 凌晨 = UTC 09-26 17:20）。★ 判据是"两处说的必须是同一个日期"，
+ *    不是某个具体数字 —— 所以门闩要比对 `new Date(...)` 的**本地**读数。 */
 export function ticks(bins: Bin[], unit: Unit): { at: number; label: string }[] {
   if (bins.length === 0) return [];
-  const want = unit === 'week' ? 8 : 6;
+  const want = unit === 'week' || unit === 'hour' ? 8 : 6;
   const step = Math.max(1, Math.ceil(bins.length / want));
+  const pad = (n: number) => String(n).padStart(2, '0');
   const out: { at: number; label: string }[] = [];
   for (let i = 0; i < bins.length; i += step) {
     const d = new Date(bins[i].start);
-    out.push({
-      at: bins[i].start,
-      label: unit === 'month'
-        ? `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, '0')}`
-        : `${d.getUTCMonth() + 1}月${d.getUTCDate()}日`,
-    });
+    const day = `${d.getMonth() + 1}月${d.getDate()}日`;
+    const label =
+      unit === 'month' ? `${d.getFullYear()}.${pad(d.getMonth() + 1)}`
+      : unit === 'hour' ? `${day} ${pad(d.getHours())}时`
+      : unit === 'minute' ? `${pad(d.getHours())}:${pad(d.getMinutes())}`
+      : day;
+    out.push({ at: bins[i].start, label });
   }
   return out;
 }
