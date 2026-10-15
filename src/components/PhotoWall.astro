@@ -356,9 +356,50 @@ const total = albums.reduce((n, a) => n + a.total, 0);
     height: auto;
   }
   .lb-stage > button {
-    font-size: var(--fs-body);
-    padding: 0.5rem 0.9rem;
+    /* 上一张 / 下一张：从纯文字换成**圆形白玻璃**（2026-10-15）。
+       ★ 用的是 `dark-glass-*` 那一组，**不是** `--glass-*` —— 后者是亮底玻璃
+         （白 36% + 暗发丝边），压在灯箱这层暗幕上会糊成一片白。
+       ★ 配方来自 willowxi.site 相册页那个玻璃按钮的「简易版」，按本站 token 重算；
+         那边最终的 WebGL 版**刻意没抄** —— 站内已定：螺旋盘不引 WebGL。
+       ⚠ 尺寸只写 `width`，高度靠 `aspect-ratio: 1` —— 写死 `height` 会在
+         字体回退不同的机器上多出一截（站内「flex 子项被压扁」那族的同源问题）。 */
     flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 3.5rem;
+    aspect-ratio: 1;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    font: 300 1.5rem/1 "IBM Plex Mono", Consolas, "Courier New", monospace;
+    color: var(--paper);
+    background: var(--dark-glass-bg);
+    -webkit-backdrop-filter: blur(var(--dark-glass-blur)) saturate(var(--dark-glass-sat));
+    backdrop-filter: blur(var(--dark-glass-blur)) saturate(var(--dark-glass-sat));
+    box-shadow:
+      inset 0 1px 0 var(--dark-glass-line),
+      inset 0 -1px 0 var(--dark-glass-line-low),
+      inset 0 12px 20px -12px var(--dark-glass-glow),
+      0 2px 10px -4px var(--dark-glass-drop);
+    cursor: pointer;
+    transition: background var(--dur-hover) var(--ease-glass),
+                transform var(--dur-fast) var(--ease-glass);
+  }
+  .lb-stage > button:hover { background: var(--dark-glass-bg-hot); }
+  .lb-stage > button:active { transform: scale(0.94); }
+  /* 玻璃按钮是暗底上的纯文字 ⇒ 焦点圈必须比默认更明确，否则键盘访客看不见自己在哪。
+     用 `outline` 而不是 `outline: none`，`:focus-visible` 保证鼠标点击时不出现。 */
+  .lb-stage > button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+  /* 触屏没有 hover ⇒ 按下时的反馈不能只靠 :hover 撑着（这一条是 no-op 也留着做记录）。 */
+  @media (hover: none) {
+    .lb-stage > button { background: var(--dark-glass-bg-hot); }
+  }
+  /* 窄屏：圆形按钮占掉的是照片的宽度，给舞台留够边距，别把图挤到贴边。 */
+  @media (max-width: 640px) {
+    .lb-stage > button { width: 2.75rem; font-size: var(--fs-body); }
   }
 </style>
 
