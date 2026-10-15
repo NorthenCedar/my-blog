@@ -105,8 +105,93 @@ describe('灯箱换图（big-image）', () => {
     /* 两段式换图（先 src=小、后台 decode 完再 src=大）整套拆掉 —— 只禁函数名不够，
        万一有人把占位换个名字接着用，那还是"先小后大"。 */
     expect(code(BI), '还留着"先设小档、后台再换大档"的两段式').not.toMatch(/pre\.src|pre\.decode/);
-    expect(code(BI), 'showBig 还留着第三个参数（占位地址的入口）')
-      .not.toMatch(/showBig\([^)]*,[^)]*,[^)]*\)/);
+    /* ⚠ 第三个参数现在**合法存在**了，只是语义从"占位地址"变成"就绪回调" ——
+       所以不能像本条早先那样笼统地禁"第三个参数"，要钉住它的**用途**：
+       `img.src` 在 showBig 里**只准**被赋成大档本身。
+       （早先两条按名字/前瞻写的都是弱判据：
+         · `/small\??\s*:\s*string/` —— 参数改名成 onReady 就不响了；
+         · `/img\.src\s*=\s*(?!big\b)/` —— **`\s*` 会回溯到零宽**，负向前瞻看到的
+           是 `=` 后面的那个**空格**而不是 `big` ⇒ 恒红。
+       ⇒ 改成"把每一处赋值的目标抠出来比对集合"，不依赖任何前瞻/回溯。
+       同 AGENTS §5「判据要落在"这条数据是从哪来的"，不是"这个名字出现过"」。 */
+    const assigned = [...code(BI).matchAll(/img\.src\s*=\s*([^;\n]+)/g)].map((m) => m[1].trim());
+    expect(assigned.length, 'showBig 里没找到 img.src 赋值（换图逻辑被改掉了？）').toBeGreaterThan(0);
+    expect(
+      [...new Set(assigned)],
+      'showBig 里 img.src 被赋成了大档以外的东西（那是撤掉的占位那套）',
+    ).toEqual(['big']);
+  });
+
+  it('★★ 说明文字必须等"图可绘制了"再换（站主「翻页照片卡一下但左上角文字已经变了」）', () => {
+    /* 这条是**量出来的**，不是推的：localhost 起 dist，真点开连点 4 次「下一张」，
+       同一 tick 里读 `lbPos/lbCap` 与 `img.complete` ——
+       修之前每一步都是 `pos=7` 而 `complete=false / naturalWidth=0`（错帧，**每次**都发生）。
+       ⇒ 两处调用都必须把说明文字写进 showBig 的第三个参数（就绪回调）里。 */
+    expect(BI, 'showBig 没接第三个参数（就绪回调），说明文字无处安放')
+      .toMatch(/onReady\?:\s*\(\(\)\s*=>\s*void\)\s*\|\s*null/);
+    /* ⚠ 这条也排在上面那条**之前**：第三参数被改回字符串时，
+       先撞上"没接回调"只会说"签名不对"，说不清是"退回占位地址那套"了（变异 #17）。 */
+    for (const [name, src] of [
+      ['PhotoWall', PW],
+      ['SpiralPlate', SP],
+    ] as const) {
+      /* 反面：旧写法是 `showBig(...);` 之后同步写文字 ——
+         判据认的是"**showBig 这通调用还没闭合**就已经在写 lbCap"，
+         那个闭合记号就是 `);`。 */
+      expect(
+        code(src),
+        `${name} 的说明文字写在 showBig(...) 返回之后 ⇒ 又变回同步改文字`,
+      ).not.toMatch(/showBig\([\s\S]{0,400}?\);[\s\S]{0,400}?lbCap\.textContent/);
+      expect(
+        src,
+        `${name} 没把说明文字放进 showBig 的就绪回调（文字会与图错帧）`,
+      ).toMatch(/showBig\([\s\S]*?=>\s*\{[\s\S]*?lbCap\.textContent/);
+    }
+    /* 用 decode() 而不是 load：load 只保证字节到齐，中间还差一次解码 ⇒ 不是"同帧"。 */
+    expect(BI, '换图该走 decode()（load 只保证字节到齐，不是"可绘制"）').toMatch(/\.decode\(\)/);
+    /* 回调里必须再对一次"现在要的还是不是它"：翻页快时上一张的解码会晚回来。 */
+    for (const [name, src] of [
+      ['PhotoWall', PW],
+      ['SpiralPlate', SP],
+    ] as const) {
+      expect(src, `${name} 的就绪回调没有竞态防护`).toMatch(/if\s*\(\s*\w+\s*!==\s*(cur|lbAt)\s*\)\s*return/);
+    }
+  });
+
+  it('★★ 预取要**低优先级**、悬停要有 dwell 延迟（"点开才取"守的是量级，不是字面）', () => {
+    /* 旧守则是"打开灯箱之前不许产生任何大档请求"。现在收窄成：
+       页面加载时不取 · 指向一张并**停够久**才取那一张 · 打开后只多取紧邻的一张。
+       全册 82 帧一次性拖进来（9.3 MB）仍然不做 —— 那才是这条主张要防的。
+       实测（localhost、浏览器读 resource timing）：
+         页面加载完 0 个 · 扫过一张就走 0 个 · 在一张上停 700 ms → 1 个 ·
+         接着快速扫另外三张 → 仍然 1 个。 */
+    expect(BI, '预取必须存在（否则每次翻页都要重新过一次网络：实测单张 269 ms）')
+      .toMatch(/export function prefetch\(/);
+    /* ⚠ 必须 low：给成 high 会出现"下一张先到、当前这张还在等"的倒挂。 */
+    expect(BI, '预取没给 low 优先级 ⇒ 会跟当前要看的那张抢带宽')
+      .toMatch(/fetchPriority\s*=\s*'low'/);
+    /* dwell 是这一条的关键：指针扫过砖墙会一路触发 pointerenter（一次横扫七八张），
+       没有延迟就是"扫一遍全册预取"。 */
+    expect(BI, '悬停预取必须等停够久（不许 pointerenter 就取）').toMatch(
+      /pointerenter[\s\S]{0,200}?setTimeout\(/,
+    );
+    expect(BI, '悬停预取的 dwell 形参不见了').toMatch(/dwell\s*=\s*(\d+)/);
+    /* ★ 必须卡**取值下界**，不是只卡"有这个形参" ——
+       变异验证第 16 条把 `dwell = 250` 改成 `0` 时，
+       早先那条 `/dwell\s*=\s*\d+/` **照样绿**（0 也是数字）⇒ 门闩漏了它。
+       这与 AGENTS §5「装饰性动效的契约只写上界 = 给"越漂越弱"发了许可证」同族：
+       形参"存在"不是它起效的证据，"它是个真实的延迟"才是。
+       250 ms 是站上实际操作里"手停下了 / 手在移动"的量级；给 0 就等于没有 dwell。 */
+    const dwell = Number(BI.match(/dwell\s*=\s*(\d+)/)?.[1] ?? 0);
+    expect(dwell, `悬停预取的 dwell 必须是真实延迟（当前 ${dwell} ms）`).toBeGreaterThanOrEqual(150);
+    /* 两处调用都得预取紧邻的那一张 —— 只加一半等于翻页还是卡。 */
+    for (const [name, src] of [
+      ['PhotoWall', PW],
+      ['SpiralPlate', SP],
+    ] as const) {
+      expect(src, `${name} 没接 prefetch`).toMatch(/prefetch\(\s*\{?\s*import|prefetch\(\s*(bigOf|items\[)/);
+      expect(src, `${name} 没挂悬停预取（点开第一张还是会卡）`).toMatch(/intentPrefetch\(/);
+    }
   });
 
   it('★★ 大档请求只许发生在"打开灯箱那一刻"', () => {

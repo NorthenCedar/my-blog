@@ -704,7 +704,7 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
      速度没夹就进积分器，见 helix-core.ts 文件头）。 */
   import { startLoop, createActivityGate, prefersReducedMotion, shouldAnimate } from '../scripts/rl-core';
   import { clamp, blendV, throwTarget, stepSpring, stepPxOf, radiusOf, edgeOf, DT_MAX } from '../scripts/helix-core';
-  import { showBig } from '../scripts/big-image';
+  import { showBig, prefetch, intentPrefetch } from '../scripts/big-image';
 
   (() => {
     const vp = document.querySelector<HTMLElement>('[data-spiral]');
@@ -1095,13 +1095,18 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
        ★ 键盘走的也是**两段式**（与指针同一语义）：
          第一次按 Enter 放大，第二次才开灯箱。 */
     for (const it of items) {
-      it.querySelector('a.sp-frame')!.addEventListener('click', (e) => {
+      const a = it.querySelector('a.sp-frame')!;
+      a.addEventListener('click', (e) => {
         e.preventDefault();
         if ((e as MouseEvent).detail) return;   // 指针那条已经在 release 里处理过
         const i = Number(it.dataset.spItem);
         if (zoomAt === i) openLB(i);
         else setZoom(i);
       });
+      /* ★ 指向停够久就把那张大图取回来（"点开第一张卡一下"就是这一下）。
+         这一页比砖墙更值得做：螺旋上的片本来就是**指着看**的，
+         悬停停留比横向扫过更常见。有 dwell 延迟，扫过去不会一路预取。 */
+      intentPrefetch(a, () => a.getAttribute('href'));
     }
 
     /* ---------------- 灯箱 ----------------
@@ -1122,17 +1127,27 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
       lbAt = clamp(i, 0, N - 1);
       const it = items[lbAt];
       /* ★ 2026-10-08：换图走 big-image.ts（与砖墙那一侧同一套）；
-         ★ 2026-10-15 按站主「把他换成和大图尺寸一样」改成**直接上大档** ——
+         ★ 2026-10-15 按站主两句话改：①「换成和大图尺寸一样」⇒ **直接上大档**，
+           不再用 800 档顶一下；②「点图片卡一下、翻页照片卡一下但左上角文字已经变了」
+           ⇒ 文字挪到**图可绘制之后**再写（第三个参数）+ 预取紧邻的下一张。
            这一页原先最吃"先小后大"那一手（读者从螺旋上点开，那张 800 档必然刚解码过），
-           但**放大发虚的那一段正是要去掉的**，两侧一起改，别只改砖墙。 */
+           但**放大发虚的那一段正是要去掉的** ⇒ 两侧一起改，别只改砖墙。 */
+      const j = lbAt;
       showBig(
         lbImg,
         (it.querySelector('a.sp-frame') as HTMLAnchorElement).getAttribute('href')!,
+        () => {
+          /* 竞态：翻页快时上一张的解码会晚回来，那时已经翻到别处了。 */
+          if (j !== lbAt) return;
+          lbImg.alt = it.dataset.cap ?? '';
+          lbAlbum.textContent = it.dataset.albumTitle ?? '';
+          lbCap.textContent = it.dataset.cap ?? '';
+          lbNo.textContent = it.dataset.no ?? '';
+        },
       );
-      lbImg.alt = it.dataset.cap ?? '';
-      lbAlbum.textContent = it.dataset.albumTitle ?? '';
-      lbCap.textContent = it.dataset.cap ?? '';
-      lbNo.textContent = it.dataset.no ?? '';
+      prefetch(
+        items[lbAt + 1]?.querySelector('a.sp-frame')?.getAttribute('href'),
+      );
     }
     function goLB(d: number) {
       const j = clamp(lbAt + d, 0, N - 1);

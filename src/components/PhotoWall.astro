@@ -409,7 +409,7 @@ const total = albums.reduce((n, a) => n + a.total, 0);
   //   "筛到单册"就是"进那一册的页面"，页内再放一组筛选按钮等于让访客筛一个只有一个选项的集合。
   // ★ 2026-10-08 起换图走 `big-image.ts`；**2026-10-15 按站主要求改成"直接上大档"** —
   //   原来先用已在缓存里的 800 档顶一下、等大档后台换上，那段"看着是糊的"时间正是要去掉的。
-  import { showBig } from '../scripts/big-image';
+  import { showBig, prefetch, intentPrefetch } from '../scripts/big-image';
 
   (() => {
     const figs = Array.from(document.querySelectorAll<HTMLElement>('.wf figure'));
@@ -418,7 +418,8 @@ const total = albums.reduce((n, a) => n + a.total, 0);
     const lbAlbum = document.getElementById('lbAlbum')!;
     const lbCap = document.getElementById('lbCap')!;
     const lbPos = document.getElementById('lbPos')!;
-    const lbTotal = document.getElementById('lbTotal')!;
+    // ★ `lbTotal` 服务端已经渲染好了（总帧数整个灯箱生命周期不变）——
+    //   不再每帧重写一次，那是白跑。
     const lbClose = document.getElementById('lbClose') as HTMLButtonElement;
     const lbPrev = document.getElementById('lbPrev') as HTMLButtonElement;
     const lbNext = document.getElementById('lbNext') as HTMLButtonElement;
@@ -426,22 +427,37 @@ const total = albums.reduce((n, a) => n + a.total, 0);
     let cur = 0;
     let lastFocus: HTMLElement | null = null;
 
-    const paint = () => {
-      const fig = figs[cur];
+    const bigOf = (fig: HTMLElement | null | undefined) =>
+  (fig?.querySelector('a.frame') as HTMLAnchorElement | null)?.getAttribute('href');
+
+const paint = () => {
+      const i = cur;
+      const fig = figs[i];
       if (!fig) return;
-      const a = fig.querySelector('a.frame') as HTMLAnchorElement;
-      /* ★ 2026-10-15（站主「把他换成和大图尺寸一样」）：灯箱换图走 big-image.ts ——
-         打开就直接上 1280 档（就是 `a[href]`），**不再**先用 800 档顶一下。
-         代价说在 big-image.ts 的文件头：最重的那 4 张（>300 KB）在慢网上会有一段空白，
-         换来的是"点开看到的就是那张图"，不再有放大发虚的那一段。 */
-      showBig(lbImg, a.getAttribute('href')!);
-      lbImg.alt = fig.dataset.cap ?? '';
-      // ★ 相册名取自 data-album-title（板头不在本组件里，figcaption 里没有 <span>，
-      //   照老路子抓会静默得到空串）。
-      lbAlbum.textContent = fig.dataset.albumTitle ?? '';
-      lbCap.textContent = fig.dataset.cap ?? '';
-      lbPos.textContent = String(cur + 1);
-      lbTotal.textContent = String(figs.length);
+      /* ★ 2026-10-15（站主两句话）：
+         「点开大图先用小一点的大图缓存吗，把他换成和大图尺寸一样」
+         ⇒ 打开就直接上 1280 档（就是 `a[href]`），**不再**先用 800 档顶一下。
+         「有时候点图片会卡一下再出来，翻页照片会卡一下再变，但左上角的文字已经变了」
+         ⇒ 撤回占位之后量出来的三个问题，各配一条对策：
+             · 文字改到**图可绘制之后**再写（第三个参数）⇒ 不再与图错帧；
+             · 落到某一张之后后台把**紧邻的下一张**取回来 ⇒ 下一次翻页即时；
+             · 缩略图上**指向停 250 ms** 就取 ⇒ 解决"点开第一张"那一下。
+         三条的量与取舍写在 big-image.ts 的文件头。 */
+      showBig(lbImg, bigOf(fig)!, () => {
+        /* ★ 竞态：翻页快时上一张的解码会晚回来，而那时 cur 已经往前走了
+           —— 对一下"现在要的还是不是这一张"，不是就不许覆盖。
+           （showBig 里也有一道 dataset 判据；这一道管的是"翻回去了"那种情形：
+             绕回同一张时 cur 恰好又相等，文字该跟着当前图重写一次。） */
+        if (i !== cur) return;
+        lbImg.alt = fig.dataset.cap ?? '';
+        // ★ 相册名取自 data-album-title（板头不在本组件里，figcaption 里没有 <span>，
+        //   照老路子抓会静默得到空串）。
+        lbAlbum.textContent = fig.dataset.albumTitle ?? '';
+        lbCap.textContent = fig.dataset.cap ?? '';
+        lbPos.textContent = String(i + 1);
+      });
+      /* 只预取**紧邻的下一张**：翻页是这里最频繁的动作。多取一张就散了。 */
+      prefetch(bigOf(figs[i + 1]));
     };
     const step = (d: number) => {
       if (figs.length === 0) return;
@@ -467,10 +483,14 @@ const total = albums.reduce((n, a) => n + a.total, 0);
 
     // 点击开灯箱 —— 只在 JS 到位时拦截；无 JS 时这个链接直接打开大图
     for (const fig of figs) {
-      (fig.querySelector('a.frame') as HTMLAnchorElement).addEventListener('click', (e) => {
+      const a = fig.querySelector('a.frame') as HTMLAnchorElement;
+      a.addEventListener('click', (e) => {
         e.preventDefault();
         open(fig);
       });
+      /* ★ 指向停够久就把那张大图取回来（"点开第一张卡一下"就是这一下）。
+         有 dwell 延迟，指针扫过砖墙不会一路预取 —— 见 intentPrefetch 的注释。 */
+      intentPrefetch(a, () => a.getAttribute('href'));
     }
 
     lbClose.addEventListener('click', close);
