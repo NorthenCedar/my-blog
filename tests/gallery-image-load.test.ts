@@ -2,15 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-/* 图片加载（2026-10-08）—— 站主两句话：
+/* 图片加载 —— 站主两句话：
  *   「@image#1 … 还是会有这个边缘残留，是网络问题吗？」→ 实测**不是加载问题**（拦图档里那片
  *     是空的），真因是螺旋盘的几何；做过的修法已按站主要求**整体撤回**，见 spec §6.61.1；
- *   「给一个点大图快速加载的方案，现在太慢了」⇒ 站主拍了 1 + 2 + 3。
- * 这个文件守后一件事的三块：
- *   ① `public/_headers`：静态资源长缓存（站上一直没有这个文件 ⇒ 用 CF 默认的
+ *   「给一个点大图快速加载的方案，现在太慢了」⇒ 站主拍了 1 + 2 + 3；
+ *   「把他换成和大图尺寸一样」（2026-10-15）⇒ **把 2 撤回**：灯箱不再拿 800 档占位，
+ *     打开就是那张大档本身。下面 `灯箱换图` 那组守的就是改完之后的新契约，
+ *     1（长缓存）与 3（打开那一刻才请求）两条原样保留。
+ * 这个文件守的三块：
+ *   ① `public/_headers`：静态资源长缓存（站上以前没有这个文件 ⇒ 用 CF 默认的
  *      `max-age=14400, must-revalidate` ⇒ **每次访问都回源验证**；实测最大那张
  *      1280 档 475 KB：TTFB 1.1–1.3 s、下载 4.1–6.1 s）；
- *   ② 灯箱换图：先用**已经在缓存里的 800 档**显形，大档后台换（`src/scripts/big-image.ts`）；
+ *   ② 灯箱换图：打开即大档，没有"先小后大"（`src/scripts/big-image.ts`）；
  *   ③ 时机：大档请求只许发生在**打开灯箱那一刻**，不许在页面加载时抢带宽。
  */
 
@@ -65,6 +68,11 @@ describe('静态资源缓存头（public/_headers）', () => {
 });
 
 describe('灯箱换图（big-image）', () => {
+  /** ★ 负向断言一律在**剥掉注释**的文本上做（本仓老坑，见 AGENTS §6）。
+   *  下面每条禁令的字面量（占位、两段式换图）我都要在文件头的说明里写一遍 ——
+   *  不剥注释的话，那些说明本身就是命中点，断言会恒红成"永远红"或"永远绿"。 */
+  const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, ' ');
+
   it('★ 两套灯箱都走同一个模块（各抄一份必然腐化）', () => {
     const MOD = /import\s*\{[^}]*\bshowBig\b[^}]*\}\s*from\s*'\.\.\/scripts\/big-image'/;
     expect(PW, '砖墙灯箱没接 big-image').toMatch(MOD);
@@ -75,28 +83,34 @@ describe('灯箱换图（big-image）', () => {
       ['PhotoWall', PW],
       ['SpiralPlate', SP],
     ] as const) {
-      /* 老写法 `lbImg.src = href`：直接上 475 KB 大档，读者盯着黑底等 4 秒。
-         （`removeAttribute('src')` 是关灯箱时摘掉的，合法，不在禁止之列。） */
-      expect(src, `${name} 里还留着"直接设 src"那种老写法`).not.toMatch(/lbImg\.src\s*=/);
+      /* 老写法 `lbImg.src = href`：绕过了 showBig，于是拿不到 lazy→eager 的放行与
+         优先级提升。（`removeAttribute('src')` 是关灯箱时摘掉的，合法，不在禁止之列。） */
+      expect(code(src), `${name} 里还留着"直接设 src"那种老写法`).not.toMatch(/lbImg\.src\s*=/);
     }
   });
 
-  it('★ "在缓存里"的判据是**解码完成**，不是猜 URL', () => {
-    expect(BI, 'thumbOf 必须看 complete 且 naturalWidth > 0').toMatch(
-      /complete\s*&&\s*[^;]*naturalWidth\s*>\s*0/,
-    );
-    expect(BI, 'thumbOf 没取 currentSrc（将来加了 srcset，src 就不是当前那张了）').toMatch(
-      /currentSrc\s*\|\|\s*\w+\.src/,
-    );
-    /* 两处调用都得把缩略图传进去 —— 只传大档就退化成"直接上大档"，等于没修 */
-    expect(PW, '砖墙没把缩略图传进去').toMatch(
-      /showBig\(lbImg,\s*a\.getAttribute\('href'\)!,\s*thumbOf\(fig\)\)/,
-    );
-    expect(SP, '螺旋没把缩略图传进去').toMatch(/thumbOf\(it\)/);
+  it('★★ 灯箱直接上大档：不再拿缩略图占位（2026-10-15 站主「换成和大图尺寸一样」）', () => {
+    /* 站主要的是"点开看到的就是那张图本身"。
+       旧行为是先用已在缓存里的 800 档显形、再在后台换 1280 ——
+       代价是有一段"看着是糊的"时间，正是这次要去掉的。
+       实测（本站 82 帧）：1280 档 中位 92.1 KB / 均值 115.7 KB / 最大 475.1 KB，
+       800 档 中位 53.2 KB —— 绝大多数帧差不到一倍，直接上大档通常更快见效。 */
+    for (const [name, src] of [
+      ['PhotoWall', PW],
+      ['SpiralPlate', SP],
+      ['big-image.ts', BI],
+    ] as const) {
+      expect(code(src), `${name} 里还留着"取缓存里的缩略图"那套占位`).not.toMatch(/thumbOf/);
+    }
+    /* 两段式换图（先 src=小、后台 decode 完再 src=大）整套拆掉 —— 只禁函数名不够，
+       万一有人把占位换个名字接着用，那还是"先小后大"。 */
+    expect(code(BI), '还留着"先设小档、后台再换大档"的两段式').not.toMatch(/pre\.src|pre\.decode/);
+    expect(code(BI), 'showBig 还留着第三个参数（占位地址的入口）')
+      .not.toMatch(/showBig\([^)]*,[^)]*,[^)]*\)/);
   });
 
   it('★★ 大档请求只许发生在"打开灯箱那一刻"', () => {
-    /* 页面加载时就去拉 475 KB，正是这次要避免的那件事。
+    /* 页面加载时就去拉大档，正是要避免的那件事。
        ⇒ HTML 里那只 <img> 必须仍是 `loading="lazy"`（容器 display:none ⇒ 打开前不请求），
          由 showBig 在**打开那一刻**改成 eager。 */
     expect(PW, '灯箱 img 的 loading="lazy" 被拿掉了 ⇒ 页面加载时就会拉大档').toMatch(
@@ -109,15 +123,12 @@ describe('灯箱换图（big-image）', () => {
     expect(BI, '大档没提优先级（它就是当前页面的主角）').toMatch(/fetchPriority\s*=\s*'high'/);
   });
 
-  it('★ 换图不许闪：先 decode 再赋值，且防住快速翻页的竞态', () => {
-    expect(BI, '用 onload 换图会在"字节到齐"与"可绘制"之间白一下 —— 要走 decode()').toMatch(
-      /\.decode\(\)/,
-    );
-    expect(BI, '没了竞态防护 ⇒ 翻页快时上一张的 decode 会盖掉下一张').toMatch(
-      /img\.dataset\.big === big/,
-    );
+  it('★ 翻页绕回同一张不许闪一下', () => {
+    /* 判据要连 `src` 一起看 —— 关灯箱时会把它摘掉（"不留空 src"那条规定），
+       只比 dataset 的话，再打开同一张就什么都不显示了。 */
     expect(BI, '同一张重设 src 会再闪一次（翻页绕回来时）⇒ 要连 src 一起判空').toMatch(
       /img\.dataset\.big === big && img\.getAttribute\('src'\)/,
     );
+    expect(BI, '换图压根没记下当前是哪张 ⇒ 绕回来时无从判断').toMatch(/img\.dataset\.big = big/);
   });
 });

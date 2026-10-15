@@ -407,8 +407,9 @@ const total = albums.reduce((n, a) => n + a.total, 0);
   // 砖墙与灯箱。零依赖，不引任何包。
   // ★ 2026-10-07：**筛选（.filters）那段整体去掉了** —— 一册一页之后，
   //   "筛到单册"就是"进那一册的页面"，页内再放一组筛选按钮等于让访客筛一个只有一个选项的集合。
-  // ★ 2026-10-08：换图改走 `big-image.ts`（先用已在缓存里的 800 档显形，大档后台换）。
-  import { showBig, thumbOf } from '../scripts/big-image';
+  // ★ 2026-10-08 起换图走 `big-image.ts`；**2026-10-15 按站主要求改成"直接上大档"** —
+  //   原来先用已在缓存里的 800 档顶一下、等大档后台换上，那段"看着是糊的"时间正是要去掉的。
+  import { showBig } from '../scripts/big-image';
 
   (() => {
     const figs = Array.from(document.querySelectorAll<HTMLElement>('.wf figure'));
@@ -429,11 +430,11 @@ const total = albums.reduce((n, a) => n + a.total, 0);
       const fig = figs[cur];
       if (!fig) return;
       const a = fig.querySelector('a.frame') as HTMLAnchorElement;
-      /* ★ 2026-10-08：灯箱换图走 big-image.ts ——
-         灯箱档是 1280（`href`），但同一张的 800 档**早就在这张缩略图的缓存里**
-         （均 63 KB，打开前业已绘制）⇒ 先用它顶上（本帧就有图），
-         1280（最大那张 475 KB、实测下载 4–6 s）在后台解码好再无声换上。 */
-      showBig(lbImg, a.getAttribute('href')!, thumbOf(fig));
+      /* ★ 2026-10-15（站主「把他换成和大图尺寸一样」）：灯箱换图走 big-image.ts ——
+         打开就直接上 1280 档（就是 `a[href]`），**不再**先用 800 档顶一下。
+         代价说在 big-image.ts 的文件头：最重的那 4 张（>300 KB）在慢网上会有一段空白，
+         换来的是"点开看到的就是那张图"，不再有放大发虚的那一段。 */
+      showBig(lbImg, a.getAttribute('href')!);
       lbImg.alt = fig.dataset.cap ?? '';
       // ★ 相册名取自 data-album-title（板头不在本组件里，figcaption 里没有 <span>，
       //   照老路子抓会静默得到空串）。

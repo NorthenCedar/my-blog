@@ -704,7 +704,7 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
      速度没夹就进积分器，见 helix-core.ts 文件头）。 */
   import { startLoop, createActivityGate, prefersReducedMotion, shouldAnimate } from '../scripts/rl-core';
   import { clamp, blendV, throwTarget, stepSpring, stepPxOf, radiusOf, edgeOf, DT_MAX } from '../scripts/helix-core';
-  import { showBig, thumbOf } from '../scripts/big-image';
+  import { showBig } from '../scripts/big-image';
 
   (() => {
     const vp = document.querySelector<HTMLElement>('[data-spiral]');
@@ -1121,15 +1121,13 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
     function paintLB(i: number) {
       lbAt = clamp(i, 0, N - 1);
       const it = items[lbAt];
-      /* ★ 2026-10-08：换图走 big-image.ts（与砖墙那一侧同一套）——
-         灯箱档 1280 最大那张 475 KB、实测下载 4–6 s；而这一张的 800 档
-         刚才还贴在螺旋上（一定已经解码）⇒ 先用它显形，大档后台换。
-         ★ 螺旋这一页**尤其**吃这一手：读者是从螺旋上"点开"的，
-           那一张必然刚刚在屏幕上 → `thumbOf` 几乎一定命中。 */
+      /* ★ 2026-10-08：换图走 big-image.ts（与砖墙那一侧同一套）；
+         ★ 2026-10-15 按站主「把他换成和大图尺寸一样」改成**直接上大档** ——
+           这一页原先最吃"先小后大"那一手（读者从螺旋上点开，那张 800 档必然刚解码过），
+           但**放大发虚的那一段正是要去掉的**，两侧一起改，别只改砖墙。 */
       showBig(
         lbImg,
         (it.querySelector('a.sp-frame') as HTMLAnchorElement).getAttribute('href')!,
-        thumbOf(it),
       );
       lbImg.alt = it.dataset.cap ?? '';
       lbAlbum.textContent = it.dataset.albumTitle ?? '';
