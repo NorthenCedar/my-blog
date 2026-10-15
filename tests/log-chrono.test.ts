@@ -96,6 +96,22 @@ const PER_DAY = Array.from({ length: SPAN_DAYS }, (_, k) => {
   return ASC.filter((i) => i.date === d).map((i) => i.changes);
 });
 
+/* ── 档位（2026-10-15 站主：「让"一格一天"变成"一格一月"，分档走」）──────────
+ * 阈值与 `src/pages/log.astro` 的 `DAY_TIER_MAX` 同源。
+ * ⚠ 这里**不去源码里读**那个常量（读了就是"把实现抄进判据"）——
+ *   按站上规矩，阈值本身写成判据的一部分：跨过它的那天，下面那几条会**提醒**
+ *   月格档是不是真的接住了，而不是默默按日格跑。 */
+const DAY_TIER_MAX = 45;
+const TIER = SPAN_DAYS <= DAY_TIER_MAX ? 'day' : 'month';
+const MONTH_KEYS = [...new Set(DATES.map((d) => d.slice(0, 7)))];
+/** 格数：日格档 = 跨度天数；月格档 = 跨了几个自然月 */
+const CELLS = TIER === 'day' ? SPAN_DAYS : MONTH_KEYS.length;
+/** 齿高取值集合：日格档 = 每版的项数；月格档 = 每"有更新日"里最高的那一版 */
+const HEIGHT_INPUT = TIER === 'day' ? ASC.map((i) => i.changes) : (
+  DATES.map((d) => ASC.filter((i) => i.date === d).map((i) => i.changes))
+    .filter((a) => a.length).map((a) => Math.max(...a))
+);
+
 /* ------------------------------------------------------------ 产物里读齿 */
 function readTeeth() {
   return [...PAGE.matchAll(/<line class="chrono-tooth"[^>]*y1="([\d.]+)"[^>]*y2="([\d.]+)"/g)].map((m) => ({
@@ -108,22 +124,41 @@ function readToothHeights(): number[] {
 }
 
 describe.skipIf(!hasDist)('日志页 · 走时仪：齿 = 内容的函数', () => {
-  it('齿数 = 条目数（从 content/pages/log.md 数出来，不写死）', () => {
-    expect(ITEMS.length).toBeGreaterThan(0);
-    expect(readToothHeights().length).toBe(ITEMS.length);
+  it(`档位与跨度对得上（当前 ${TIER} 格档 · 跨度 ${SPAN_DAYS} 天 · 阈值 ${DAY_TIER_MAX}）`, () => {
+    const per = [...PAGE.matchAll(/class="chrono-day" data-period="(\w+)"/g)].map((m) => m[1]);
+    expect(new Set(per), `产物里的档位不唯一：${[...new Set(per)].join(',')}`).toEqual(new Set([TIER]));
+    expect((PAGE.match(/class="chrono-day"/g) ?? []).length, '格数与档位对不上').toBe(CELLS);
   });
 
-  it('日格数 = 内容跨度天数；空格（当天 0 版）画成虚线短柱', () => {
-    expect((PAGE.match(/class="chrono-day"/g) ?? []).length).toBe(SPAN_DAYS);
-    expect((PAGE.match(/class="chrono-empty"/g) ?? []).length).toBe(EMPTY_DAYS);
+  it('★ 齿数 = 该档的"内容单位"数（日格=每版一根；月格=每个有更新的日子一根）', () => {
+    /* ★ 这条**随档位改变含义**（2026-10-15）：月格档里一格要排 31 天，
+       同一天的多版只能**共列**（几何逼出来的，不是偷懒）⇒ 齿数不再是条目数。
+       判据跟着档位走，别写成"永远是条目数" —— 那在换档那天会集体假红，
+       而人只会以为装置坏了（同 AGENTS §5「断言绑死产物形态」）。 */
+    expect(HEIGHT_INPUT.length).toBeGreaterThan(0);
+    expect(readToothHeights().length, `当前是 ${TIER} 格档`).toBe(HEIGHT_INPUT.length);
+  });
+
+  it('空格（当期 0 版/0 日）画成虚线短柱，且**不挂 href**', () => {
+    const empties = (PAGE.match(/class="chrono-empty"/g) ?? []).length;
+    if (TIER === 'day') {
+      expect((PAGE.match(/class="chrono-day"/g) ?? []).length).toBe(SPAN_DAYS);
+      expect(empties, '日格档下空格数 = 跨度 − 有条目的天数').toBe(EMPTY_DAYS);
+    } else {
+      /* 月格档的空格 ="这个月一条都没有"；当前数据里不会有这种月。 */
+      expect(empties).toBe(0);
+    }
   });
 
   it('逐格齿数与内容一一对应（顺序：左 = 最早）', () => {
     const cells = [...PAGE.matchAll(/<a class="chrono-day"[^>]*>([\s\S]*?)(?=<a class="chrono-day"|<\/svg>)/g)].map(
       (m) => (m[1].match(/class="chrono-tooth"/g) ?? []).length,
     );
-    expect(cells.length).toBe(SPAN_DAYS);
-    expect(cells).toEqual(PER_DAY.map((d) => d.length));
+    expect(cells.length).toBe(CELLS);
+    const want = TIER === 'day'
+      ? PER_DAY.map((d) => d.length)
+      : MONTH_KEYS.map((mk) => DATES.filter((d) => d.slice(0, 7) === mk).length);
+    expect(cells, `逐格齿数与内容对不上（${TIER} 档）`).toEqual(want);
   });
 
   it('★ 齿长随数据变 —— 取值数 ≥ 4 且 max/min ≥ 3（这一条就是它和卷尺的分野）', () => {
@@ -142,10 +177,10 @@ describe.skipIf(!hasDist)('日志页 · 走时仪：齿 = 内容的函数', () =
     /* ⚠ 配对顺序：`hs` 是**产物里齿的出现顺序**（左 = 最早），`ASC` 才是同序的；
        `ITEMS` 是文档顺序（新→旧），拿它配 `hs` 会错位（本轮实测踩到的假失败）。 */
     const byChanges = new Map<number, Set<number>>();
-    ASC.forEach((it, i) => {
-      const set = byChanges.get(it.changes) ?? new Set<number>();
+    HEIGHT_INPUT.forEach((changes, i) => {
+      const set = byChanges.get(changes) ?? new Set<number>();
       set.add(hs[i]);
-      byChanges.set(it.changes, set);
+      byChanges.set(changes, set);
     });
     for (const [changes, heights] of byChanges) {
       expect(heights.size, `改动 ${changes} 项的那几根齿高不一致 ⇒ 不是数据的函数`).toBe(1);
@@ -156,6 +191,88 @@ describe.skipIf(!hasDist)('日志页 · 走时仪：齿 = 内容的函数', () =
   it('齿位 = 真实日期（基线一致，且越晚的格整体越靠右）', () => {
     const teeth = readTeeth();
     expect(new Set(teeth.map((t) => t.base)).size, '所有齿必须共用同一条基线').toBe(1);
+  });
+});
+
+describe.skipIf(!hasDist)('日志页 · 走时仪：档位与标签带（2026-10-15）', () => {
+  it('★★ 月份必须标出来（站主：「日号会重复，得加月份」）', () => {
+    /* 为什么这不是补丁：跨度一旦超过 31 天，日号**本身就失去唯一性**
+       ——"3" 分不清是几月 3 号。月份是那一档唯一的定位信息。
+       判据：每个**月份交界**处恰有一个月份标记，且月份序列与内容里的月份序列相同。 */
+    const mons = [...PAGE.matchAll(/<text class="chrono-mon"[^>]*>([^<]*)<\/text>/g)].map((m) => m[1]);
+    const want = TIER === 'day'
+      ? [...new Set(DATES.map((d) => Number(d.slice(5, 7)) + '月'))]
+      : /* 月格档：月份写进标签，额外那行只在**年份变化**时出现 */
+        [...new Set(DATES.map((d) => Number(d.slice(5, 7)) + '月'))];
+    if (TIER === 'day') {
+      expect(mons, '月份标记数 = 内容里出现的月份数').toEqual(want);
+    } else {
+      expect(mons.length, '月格档下只在年份变化处标年份').toBeLessThanOrEqual(1);
+    }
+    /* ★ 每个月份标记必须**只出现一次**（重复出现 = 跨月判定写错了）。 */
+    expect(new Set(mons).size, `月份标记有重复：${mons.join(',')}`).toBe(mons.length);
+  });
+
+  it('★★ 月份必须独占一行，不许把日号顶下去', () => {
+    /* 本轮第一版把月份排在上面、日号顺延一行 —— 出图一看"9月"压着"25"、
+       而且同月里只有那一格下沉，看起来像排版歪了一格。⇒ 月份在下面一行。 */
+    const lblY = [...new Set([...PAGE.matchAll(/<text class="chrono-lbl"[^>]*y="([\d.]+)"/g)].map((m) => m[1]))];
+    expect(lblY.length, `日号基线出现了 ${lblY.length} 个高度 ⇒ 有的格被顶下去了`).toBe(1);
+    const monY = [...PAGE.matchAll(/<text class="chrono-mon"[^>]*y="([\d.]+)"/g)].map((m) => Number(m[1]));
+    /* ⚠ viewBox 必须**按 `chrono-svg` 取**：页面上还有别的 SVG（图标），
+ * 裸取第一个会拿到 `0 0 18 14` 那种 —— 本轮第一版就栽在这，
+ * 报出来是"月份基线超出了标签带"，而真相比那离奇得多。 */
+const vbBox = PAGE.match(/<svg class="chrono-svg"[^>]*viewBox="0 0 [\d.]+ ([\d.]+)"/)?.[1];
+    expect(vbBox, '没找到走时仪的 viewBox 高度').toBeTruthy();
+    const base = Number(PAGE.match(/--chrono-base:(\d+(?:\.\d+)?)px/)?.[1] ?? 0);
+    for (const y of monY) {
+      const lblY0 = Number(lblY[0]);
+      expect(y - lblY0, '月份与日号的基线相距太近 ⇒ 整台缩放后两行会贴在一起（本轮实测压住了）')
+        .toBeGreaterThan(12);
+      /* 标签带高度必须装得下第二行，否则会被 viewBox 裁掉。 */
+      expect(y, `月份基线 ${y} 超出了 viewBox 高度（base=${base}）`).toBeLessThan(Number(vbBox));
+    }
+  });
+
+  it('★★ 颜色只从 token 读，alpha 由 8 位 hex 承载（AGENTS §3 第 4 条）', () => {
+    /* ★ 这条是**补上的缺口**：相册 / 灯箱 / 星座 / 404 各有自己的颜色纪律断言，
+       只有走时仪这一页没有 —— 于是本轮新增 `.chrono-mon` 时没人拦着色值。
+       同 AGENTS §5「照抄挂法要逐条问」的反面：**没有守卫的地方就是没有规矩**。
+       口径与其它组件一致：不许 6/8 位 hex、不许 rgb()/rgba()。 */
+    const chronoBlocks = [...CODE.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter((m) => /chrono/.test(m[1]))
+      .map((m) => ({ sel: m[1].trim().replace(/\s+/g, ' '), body: m[2] }));
+    expect(chronoBlocks.length, '没解析到任何 .chrono-* 规则块（判据空转 ⇒ 恒真）').toBeGreaterThan(8);
+    for (const b of chronoBlocks) {
+      expect(b.body, `.chrono 规则「${b.sel}」里写了字面色值`).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+      expect(b.body, `.chrono 规则「${b.sel}」里写了 rgb()/rgba()`).not.toMatch(/\brgba?\(/);
+      /* ★ 必须连**具名颜色**一起拦。早先只拦 `#hex` 与 `rgb()`，而变异注入的
+         `color: red` **完全漏过去** —— `red` 恰恰是最字面的那个写法。
+         （用色属性的值里，除了 `var(--…)` / `none` / `transparent` / `currentColor`
+           剩下的裸标识符一律可疑。列表取常见 CSS 具名色，够用且不会误伤。） */
+      const NAMED = /\b(?:color|fill|stroke|background|background-color|border-color|outline-color)\s*:\s*(?!var\(|none\b|transparent\b|currentColor\b|inherit\b)[a-z]{3,}\b/i;
+      expect(b.body, `.chrono 规则「${b.sel}」里写了具名颜色`).not.toMatch(NAMED);
+    }
+  });
+
+  it('★★ 装置自己的可读性预算：相邻两列渲染后必须还分得开（≥1px）', () => {
+    /* ★ 这条是这轮**新写**的判据，也是唯一会在"数据涨到撑不住"时先红的那条。
+       装置是 `width:100%` + viewBox **等比缩**进 `min(34vw, 520px)`，所以：
+         格数 × 格宽 = viewBox 宽 ⇒ 缩放比 = 520 / viewBox宽
+         格内相邻列的渲染间距 = 列距 × 缩放比
+       实测（本轮，21 格 × 46px = 966px ⇒ 缩放 53.8%）：列距 4 → **2.15px**，还分得开。
+       ★ 这条**只查上界会漏掉真问题**：真正会出事的是"数据涨了 ⇒ 缩放比掉下来"，
+         所以必须从**产物里把 viewBox 读出来**再算，而不是拿源码常量估。 */
+    const vb = PAGE.match(/<svg class="chrono-svg"[^>]*viewBox="0 0 ([\d.]+) ([\d.]+)"/);
+    expect(vb, '没找到走时仪的 viewBox（⚠ 别去取页面上第一支 SVG —— 那是图标）').toBeTruthy();
+    const box = 520;                              // .chrono 的 width 上界
+    const scale = box / Number(vb![1]);
+    const pitch = (TIER === 'day' ? 4 : 2.7) * scale;
+    expect(
+      pitch,
+      `相邻列渲染间距只有 ${pitch.toFixed(2)}px（格数×格宽=${vb![1]}px，缩放 ${(scale * 100).toFixed(1)}%）`
+      + ' ⇒ 齿会连成一片，齿高这条通道就没了',
+    ).toBeGreaterThanOrEqual(1);
   });
 });
 

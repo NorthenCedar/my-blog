@@ -71,24 +71,42 @@ const CHRONO = (() => {
   const DAY_MS = 86_400_000;
   /* 几何全部给**自然像素**，viewBox 与之一致 ⇒ 视口缩放时整台等比缩，
      不会出现「只有齿变粗、间距没跟着变」的错位。 */
-  const CELL = 46;      // 日格宽（n=9 时齿组 33.8px，仍留 12px 余量）
-  const PITCH = 4;      // 同日相邻两齿的中心距
   const TOOTH_W = 1.8;  // 齿宽（= CSS 里的 stroke-width，两处必须同值）
+  const PITCH = 4;      // 日格档：同日相邻两齿的中心距
+  const SLOT_PITCH = 2.7;  // 月格档：格内相邻两**列**的中心距（1.8 齿 + 0.9 空气）
   const MIN_H = 14;     // 最矮的齿（1 项）
   const MAX_H = 104;    // 最高的齿（= 全集里最高的项数）
   const READOUT = 22;   // 齿顶以上的读数带（hover 时才显字）
-  const LABEL = 20;     // 基线以下的日期带
+  /* ★ 2026-10-15 从 20 抬到 38：标签带现在有**两行**（日号 + 月份），
+     20 只够一行 ⇒ 第二行会被 viewBox 裁掉。
+     ★ 这是"改了内容必须改容器"的同族 —— 而且第一版只抬到 34 也不够：
+       两行基线相距 13（字号 11）时它们是**贴着的**（实测图里"9月"压在"25"上）。
+       现在 14 / 29，相距 15 > 字号 ⇒ 两行之间有一整行的空气。 */
+  const LABEL = 38;
   const BASE_Y = READOUT + MAX_H;
+
+  /* ★ 档位（2026-10-15 站主：「让"一格一天"变成"一格一月"，分档走」）。
+     为什么必须分档 —— 量过，不是推的（`.chrono` 是 `width:100%` + viewBox
+     **等比缩到 min(34vw, 520px)** 里）：
+         天数   日格总宽    缩放比    齿宽落到
+          21     966px     53.8%     0.97px   ← 现在
+          90    4140px     12.6%     0.23px
+         365   16790px      3.1%     0.056px
+     ⇒ 一格一天、格宽写死 ⇒ 结局不是"变挤"，是**整台缩小到看不见**。
+     换成月格后总宽不再是问题（一年 12 格），真正的约束变成"一格里放几列"。
+     阈值 45 天：**跨过它的那天装置自己换档**，不靠人记得改。 */
+  const DAY_TIER_MAX = 45;
 
   const asc = [...rows].reverse(); // 时间正序：左 = 最早（文档里是倒序）
   const t0 = Date.parse(`${asc[0].day}T00:00:00Z`);
   const t1 = Date.parse(`${asc[asc.length - 1].day}T00:00:00Z`);
 
-  const days: { date: string; label: string; count: number; total: number; teeth: number[]; anchor: string }[] = [];
+  /* 逐日桶（两档都要：月格里的列就是按它切的） */
+  const dayBuckets: { date: string; label: string; count: number; total: number; teeth: number[]; anchor: string }[] = [];
   for (let t = t0; t <= t1; t += DAY_MS) {
     const date = new Date(t).toISOString().slice(0, 10);
     const inDay = asc.filter((r) => r.day === date);
-    days.push({
+    dayBuckets.push({
       date,
       label: String(Number(date.slice(8, 10))),
       count: inDay.length,
@@ -97,24 +115,133 @@ const CHRONO = (() => {
       anchor: `day-${date}`,
     });
   }
+  const spanDays = dayBuckets.length;
 
-  /* 齿高上限**从数据推**，不写死 12 —— 照抄卷尺那条口径
-     「刻度从内容推导」：明年某项数破纪录时，尺自己长高，不用改代码。 */
-  const maxChanges = Math.max(1, ...days.flatMap((x) => x.teeth));
+  /* 齿高上限**从数据推**，不写死 —— 照抄卷尺那条口径「刻度从内容推导」：
+     哪天某项数破纪录时，尺自己长高，不用改代码。 */
+  const maxChanges = Math.max(1, ...dayBuckets.flatMap((x) => x.teeth));
   const hOf = (n: number) => MIN_H + (MAX_H - MIN_H) * (n / maxChanges);
 
+  /* ── 档一：日格（一格一天，格内该天的几版**并排**）────────────────────
+     ★ 这条路的输出与 2026-10-14 之前**逐字一致**，不是为了省事，是为了让
+       守它的那 6 条断言在改档位的那天仍然有效（"改一处必须改另一处"的反面：
+       换档不该顺手把旧档的契约一起废掉）。 */
+  /* ── 档二：月格（一格一月，格内按**天**分列）──────────────────────────
+     同一天的多版**共列**（叠成一根，取最高的一版）—— 这是几何逼出来的：
+     格宽有限，一格里排 31 天已是极限，再按版排就顶破了。 */
+  const tier = spanDays <= DAY_TIER_MAX ? 'day' : 'month';
+  const daysInMonth = (y: number, m: number) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+
+  type Cell = {
+    kind: 'day' | 'month';
+    key: string;
+    label: string;
+    count: number;
+    total: number;
+    slots: { x: number; h: number; day: string; n: number }[];  // x = 格内相对偏移（px）
+    anchor: string | null;
+    title: string;
+    monthMark: boolean;   // 这一格是该月的第一格 ⇒ 标签带要在这里写月份
+  };
+
+  let cells: Cell[] = [];
+  let CELL = 46;
+
+  if (tier === 'day') {
+    CELL = 46;   // 日格档的格宽是**内容快照**：9 根齿时齿组 32px、格内余量 14px
+    let lastMonth = '';
+    cells = dayBuckets.map((d) => {
+      const monthMark = d.date.slice(0, 7) !== lastMonth;
+      lastMonth = d.date.slice(0, 7);
+      const n = d.teeth.length;
+      /* 同日几版并排、整簇在格内居中（与旧版逐字一致） */
+      const groupW = n ? (n - 1) * PITCH + TOOTH_W : 0;
+      const start = -groupW / 2 + TOOTH_W / 2;
+      return {
+        kind: 'day' as const,
+        key: d.date,
+        label: d.label,
+        count: d.count,
+        total: d.total,
+        slots: d.teeth.map((c, ti) => ({ x: start + ti * PITCH, h: hOf(c), day: d.date, n: c })),
+        anchor: d.count ? d.anchor : null,
+        title: `${d.date} · ${d.count} 版 · ${d.total} 项`,
+        monthMark,
+      };
+    });
+  } else {
+    /* 月格：格内槽位 = 那天有更新的日子，位置按**几号**（真日期，不按序） */
+    const byMonth = new Map<string, typeof dayBuckets>();
+    for (const d of dayBuckets) {
+      const mk = d.date.slice(0, 7);
+      if (!byMonth.has(mk)) byMonth.set(mk, []);
+      byMonth.get(mk)!.push(d);
+    }
+    const groups = [...byMonth.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    /* 格宽**从数据反推**：一格要装得下当月最多的"有更新日"那几天。
+       ★ 不写死 46 —— 写死就是"哪天数据一变就顶破"的老毛病（AGENTS §5
+         「拿同一套办法给流场加东西」那一族的反面：常量迟早被数据顶穿）。 */
+    const maxActive = Math.max(
+      1,
+      ...groups.map(([, ds]) => ds.filter((d) => d.count > 0).length),
+    );
+    CELL = Math.max(46, Math.min(72, maxActive * SLOT_PITCH));
+
+    let lastYear = '';
+    cells = groups.map(([mk, ds]) => {
+      const [y, m] = mk.split('-').map(Number);
+      const dm = daysInMonth(y, m!);
+      const inner = CELL - 6;                 // 格内左右各留 3px
+      const step = inner / dm;
+      const yearMark = String(y) !== lastYear;
+      lastYear = String(y);
+      const slots = ds
+        .filter((d) => d.count > 0)
+        .map((d) => {
+          const dom = Number(d.date.slice(8, 10));
+          /* 一天多版时取**最高的一版**当这列的齿高（同一天只占一列） */
+          const top = Math.max(...d.teeth);
+          return { x: -inner / 2 + (dom - 0.5) * step, h: hOf(top), day: d.date, n: top };
+        });
+      const count = ds.reduce((a, b) => a + b.count, 0);
+      const total = ds.reduce((a, b) => a + b.total, 0);
+      const first = ds.find((d) => d.count > 0);
+      return {
+        kind: 'month' as const,
+        key: mk,
+        label: `${m}月`,
+        count,
+        total,
+        slots,
+        /* 锚点指向该月**第一个有更新的日子**（`day-…` 每天一个，天然存在 ⇒ 不产生死锚） */
+        anchor: first ? first.anchor : null,
+        title: `${mk} · ${count} 版 · ${total} 项`,
+        monthMark: yearMark,
+      };
+    });
+  }
+
   return {
-    days, CELL, PITCH, TOOTH_W, MIN_H, BASE_Y, READOUT, LABEL, maxChanges, hOf,
-    W: days.length * CELL,
+    tier, cells, CELL, PITCH, TOOTH_W, MIN_H, BASE_Y, READOUT, LABEL, maxChanges, hOf,
+    spanDays,
+    W: cells.length * CELL,
     H: BASE_Y + LABEL,
     from: asc[0].day,
     to: asc[asc.length - 1].day,
     versions: items.length,
     // 契约用的可见量（探针与测试读它，避免"看着像"）
-    distinctHeights: new Set(days.flatMap((x) => x.teeth.map(hOf))).size,
-    tallest: Math.max(...days.flatMap((x) => x.teeth.map(hOf)), 0),
-    shortest: Math.min(...days.flatMap((x) => x.teeth.map(hOf)), Number.POSITIVE_INFINITY),
-    emptyDays: days.filter((x) => x.count === 0).length,
+    distinctHeights: new Set(cells.flatMap((c) => c.slots.map((s) => s.h))).size,
+    tallest: Math.max(...cells.flatMap((c) => c.slots.map((s) => s.h)), 0),
+    shortest: Math.min(...cells.flatMap((c) => c.slots.map((s) => s.h)), Number.POSITIVE_INFINITY),
+    emptyCells: cells.filter((c) => c.count === 0).length,
+    /* ★ 装置自己的**可读性预算**：相邻两列渲染后的中心距。
+       它才是"会不会糊成一条"的那个量 —— 低于 ~1px 时相邻的齿连成一片，
+       齿高这条通道就没了。上面几行算的"总宽"只是它的成因。
+       （量法：格内列距 × 缩放比。缩放比 = 盒宽 / viewBox 宽，
+         盒宽取 `.chrono` 的上界 min(34vw, 520px) 的 520 那一档。） */
+    slotPitchRendered:
+      (tier === 'day' ? PITCH : SLOT_PITCH) * (520 / (cells.length * CELL)),
+    boxWidth: 520,
   };
 })();
 ---
@@ -148,7 +275,7 @@ const CHRONO = (() => {
       <nav class="chrono" aria-label="日志时间刻线尺">
         <p class="chrono-legend">
           <span>刻线高度 = 该版改动项数</span>
-          <span>刻线根数 = 当日版本数</span>
+          <span>{CHRONO.tier === 'day' ? '刻线根数 = 当日版本数' : '刻线根数 = 当月有更新的天数'}</span>
         </p>
         {/* 「生长」的缩放轴钉在基线上 ⇒ 把 CHRONO.BASE_Y 传给 CSS。
             不在这里写死、也不在 CSS 里写死：MAX_H 哪天从数据推出来变高，
@@ -161,18 +288,22 @@ const CHRONO = (() => {
           aria-label={`日志时间刻线尺：${CHRONO.from} 至 ${CHRONO.to}，共 ${CHRONO.versions} 个版本`}
         >
           <line class="chrono-base" x1="0" y1={CHRONO.BASE_Y} x2={CHRONO.W} y2={CHRONO.BASE_Y} />
-          {CHRONO.days.map((day, di) => {
+          {CHRONO.cells.map((cell, di) => {
             const left = di * CHRONO.CELL;
             const cx = left + CHRONO.CELL / 2;
-            const n = day.teeth.length;
-            const groupW = n ? (n - 1) * CHRONO.PITCH + CHRONO.TOOTH_W : 0;
-            const x0 = cx - groupW / 2 + CHRONO.TOOTH_W / 2;
+            const n = cell.slots.length;
             return (
-              /* ★ 空格（09-29）**不挂 href**：那天没有任何条目 ⇒ 跳过去是一个死锚。
+              /* ★ 空格（当天 0 版）**不挂 href**：那天没有任何条目 ⇒ 跳过去是一个死锚。
                  不写 href 的 `<a>` 在 HTML 里不是链接（不可点、不进 Tab 序），
-                 刚好是这里要的语义 —— 它仍然可以被 hover 读出「0 版 · 0 项」。 */
-              <a class="chrono-day" href={day.count ? `#${day.anchor}` : undefined}>
-                <title>{`${day.date} · ${day.count} 版 · ${day.total} 项`}</title>
+                 刚好是这里要的语义 —— 它仍然可以被 hover 读出「0 版 · 0 项」。
+                 ★ 月格档的 href 指向该月**第一个有更新的日子**的 `day-…`
+                   （`day-…` 是每天一个、真实存在的 id ⇒ 换档不会造出死锚）。 */
+              <a
+                class="chrono-day"
+                data-period={cell.kind}
+                href={cell.anchor ? `#${cell.anchor}` : undefined}
+              >
+                <title>{cell.title}</title>
                 <rect class="chrono-hit" x={left} y="0" width={CHRONO.CELL} height={CHRONO.BASE_Y} />
                 {n === 0 ? (
                   /* 空格留一根**虚线短柱** ——
@@ -193,23 +324,39 @@ const CHRONO = (() => {
                        否则相邻格会交错（09-30 那格有 9 根齿，跨度 8×ti），
                        一眼看过去就不是"从左往右"而是"逐格来回跳"。
                        这里是 8ms × 8 = 64ms < 90ms ⇒ 严格单增。断言守着这一条。 */
-                  day.teeth.map((c, ti) => (
+                  cell.slots.map((s, ti) => (
                     <line
                       class="chrono-tooth"
                       style={`--tooth-delay:${di * 90 + ti * 8}ms`}
-                      x1={x0 + ti * CHRONO.PITCH}
+                      x1={cx + s.x}
                       y1={CHRONO.BASE_Y}
-                      x2={x0 + ti * CHRONO.PITCH}
-                      y2={CHRONO.BASE_Y - CHRONO.hOf(c)}
+                      x2={cx + s.x}
+                      y2={CHRONO.BASE_Y - s.h}
                     />
                   ))
                 )}
                 <text class="chrono-readout" x={cx} y={CHRONO.READOUT - 10}>
-                  {`${day.count} 版 · ${day.total} 项`}
+                  {`${cell.count} 版 · ${cell.total} 项`}
                 </text>
+                {/* ★ 标签带（2026-10-15 站主：「日号会重复，得加月份」）。
+                   日号档写**日号**，月份标在**每月的第一格**上；月格档直接写月份，
+                   年份变化时多写一行年份。
+                   ⚠ 这不是"补丁式地加个月份"—— 一旦跨过 31 天，日号本身就失去了
+                     唯一性（"3" 分不清是几月 3 号），月份才是那一档唯一的自然标签。
+                   ★★★ **月份排在日号下面，不是把日号顶下去**（本轮第一版踩了）：
+                     顶下去的话，同月里只有那一格下沉，看起来是"排版歪了一格"，
+                     而月与月之间还会因为"有没有月标"而高低不一。
+                     独占一行 ⇒ 日号那一行**一个像素都不动**，与改版前逐字一致。 */}
                 <text class="chrono-lbl" x={cx} y={CHRONO.BASE_Y + 14}>
-                  {day.label}
+                  {cell.label}
                 </text>
+                {cell.monthMark && (
+                  <text class="chrono-mon" x={cx} y={CHRONO.BASE_Y + 29}>
+                    {cell.kind === 'month'
+                      ? cell.key.slice(0, 4) + '年'
+                      : Number(cell.key.slice(5, 7)) + '月'}
+                  </text>
+                )}
               </a>
             );
           })}
@@ -589,6 +736,22 @@ const CHRONO = (() => {
     font-size: 11px;
     text-anchor: middle;
     font-variant-numeric: tabular-nums;
+  }
+  /* 月份标记（2026-10-15）：标在**每月的第一格**上。
+     ★ 为什么必须比日号重一档：日号只是"格子里是几号"，月份是"这是哪一段" ——
+       跨度一旦超过 31 天，日号自己就重复了，"3" 分不清是几月 3 号。
+       ⇒ 月份是那一档唯一的定位信息，比日号更该被看见。
+     ★ 不用更重的字重（同族：`font-weight` 差异在小字号下读不稳），
+       用**不透明度**分档 —— 颜色仍来自 token。 */
+  .chrono-mon {
+    fill: var(--muted);
+    /* 比日号**大一号**：月是"这是哪一段"，日只是"格子里是几号"。
+       整台是等比缩到 ~0.5 的（viewBox 966px → 490px），日号落到 5.6px ——
+       再小就只是灰点了，而它承担的是**定位**。同族：准星线那档「alpha 按角色定」。 */
+    font-size: 13px;
+    text-anchor: middle;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.8;
   }
   .chrono-readout {
     fill: var(--accent-ink);
