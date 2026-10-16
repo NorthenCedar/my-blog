@@ -1,73 +1,102 @@
-/* =============================================================================
- * 留言页 · 指针声波 POINTER RIPPLE（2026-10-14，§6.80.1）
- *
- * 母题：指针掠过纸面，那里泛起一圈极淡的声波纹，几秒后自行淡去。
- *
- * ★★ 这层**占的是墨滴退场空出来的机制位**：「指针移动 → 局部响应 → 自行消退」。
- *   现存十二台里没有任何一台在用它 —— 显影板是「越抹越清楚、永久留痕」，
- *   星座是「指针停留吸引」，准星是「跟随」，三个都是另一回事。
- *
- * ★★★ 为什么是「一个元素一个环」而不是 canvas 像素场：
- *   ① **零累积状态**。每个环自己播完就删，层里不会攒下一张越用越脏的图 ——
- *      墨滴那条路的病根就是像素场：划一下留一片，越划越脏，最后只能整台换掉。
- *   ② **零 rAF**。动画全在 CSS 关键帧里，JS 只做两件事：按**距离**间隔生成一个元素、
- *      `animationend` 时回收。⇒ 不占帧循环、不与声纹带（也是零 rAF）抢主线程。
- *   ③ **不需要量尺寸**。元素是 fixed 容器里的绝对定位，坐标直接用 clientX/Y
- *      减版心左缘 ⇒ 绕开站上那个老坑（canvas 靠 clientWidth，一旦 hidden 就恒为 0）。
- *
- * ⚠ 强度：环的描边借站上底纹那一档（`--deco-orbit-soft` = 绿 9%），不许自己调深。
- *   墨滴就是重到压住了留言正文才被换掉的；本层**必须按像素量**过一遍（§6.80.6）。
- */
-import { prefersReducedMotion, shouldAnimate } from './rl-core';
-
-/** 距离间隔（px）。比这个近就不生成 —— 一次快速划屏不该拉出上百个环。 */
-const STEP_PX = 90;
-/** 同屏环数上界。兜底：极端情况下（用户匀速慢慢划）也不许无限堆。 */
-const MAX_ALIVE = 12;
+/** 留言页浅水：按需绘制连续波面，平静、后台及减少动态效果时停帧。 */
+import { WaterSurface } from './water-core';
+import { prefersReducedMotion } from './rl-core';
 
 (() => {
-  const layer = document.querySelector<HTMLElement>('[data-ripple]');
-  if (!layer) return;
-  if (!shouldAnimate(prefersReducedMotion())) return;   // 少动效档：一个都不生成
-
-  const shell = document.querySelector<HTMLElement>('.shell');
-  if (!shell) return;
-
-  let lx = NaN, ly = NaN;   // 上一次的指针位置
-
-  const spawn = (x: number, y: number) => {
-    /* 同屏上界：满了就把最老的一个撤掉。⚠ 这里动的是"活着的环"，
-       被撤的那个正播着动画，提前撤等于让它半途消失 —— 但它已经淡到很淡了，肉眼看不出。 */
-    while (layer.children.length >= MAX_ALIVE) layer.firstElementChild?.remove();
-    const ring = document.createElement('i');
-    ring.className = 'vr-ring';
-    ring.style.left = `${x}px`;
-    ring.style.top = `${y}px`;
-    /* ★ 播完自己走。不回收的话层里会一直攒着已经透明了的死元素。 */
-    ring.addEventListener('animationend', () => ring.remove());
-    layer.appendChild(ring);
+  const canvas = document.querySelector<HTMLCanvasElement>('[data-ripple]');
+  if (!canvas) return;
+  const reduce = prefersReducedMotion();
+  const desktop = matchMedia('(min-width: 768px) and (hover: hover) and (pointer: fine)');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  let water: WaterSurface;
+  let image: ImageData;
+  let raf = 0, lastTime = 0;
+  let previous: { x: number; y: number; time: number } | undefined;
+  const styles = getComputedStyle(canvas);
+  const color = (name: string) => {
+    let hex = styles.getPropertyValue(name).trim().slice(1);
+    // 构建器会把六位色压成三位，必须先展开再读通道。
+    if (hex.length === 3) hex = [...hex].map((digit) => digit + digit).join('');
+    return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
   };
+  const shadow = color('--water-shadow');
+  const light = color('--water-light');
+  const strength = parseFloat(styles.getPropertyValue('--water-strength'));
+  const enabled = () => !reduce.matches && desktop.matches && document.visibilityState === 'visible';
 
-  window.addEventListener('pointermove', (e) => {
-    const ev = e as PointerEvent;
-    /* 触屏没有「悬停」：手指拖动划过会拉出满屏的环，而且它压着输入。 */
-    if (ev.pointerType === 'touch') return;
-    if (!Number.isFinite(ev.clientX) || !Number.isFinite(ev.clientY)) return;
+  function stop() {
+    cancelAnimationFrame(raf);
+    raf = 0;
+    previous = undefined;
+    water?.clear();
+    ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+  }
 
-    /* 只在版心之内生成（版心之外的空白上不铺装饰）。量一次并缓存 ——
-       `.shell` 在页面过渡里会被 transform，那种情况下 getBoundingClientRect() 不可信，
-       而过渡只跑 900ms，不值得为它每次事件都重量一次。 */
-    const r = shell.getBoundingClientRect();
-    if (ev.clientX < r.left || ev.clientX > r.right) { lx = NaN; return; }
+  function resize() {
+    stop();
+    canvas!.hidden = !enabled();
+    if (!enabled()) return;
+    /* 网格约 4px 一格；大屏控制最长边与总面积，不乘设备像素比。 */
+    const scale = Math.max(4, window.innerWidth / 420, window.innerHeight / 420,
+      Math.sqrt(window.innerWidth * window.innerHeight / 90000));
+    canvas!.width = Math.max(8, Math.ceil(window.innerWidth / scale));
+    canvas!.height = Math.max(8, Math.ceil(window.innerHeight / scale));
+    water = new WaterSurface(canvas!.width, canvas!.height);
+    image = ctx!.createImageData(canvas!.width, canvas!.height);
+  }
 
-    if (Number.isFinite(lx) && Math.hypot(ev.clientX - lx, ev.clientY - ly) < STEP_PX) return;
-    lx = ev.clientX; ly = ev.clientY;
-    /* ★★ 坐标就是 `clientX/clientY` 本身，**不许减版心偏移**。
-       波纹层是 `position:fixed; inset:0` ⇒ 它的坐标系原点就是视口 (0,0)，
-       而 `clientX/clientY` 本来就是视口坐标。减掉 `r.left/r.top` 会把整层环平移
-       (版心左缘, 版心上缘) —— 宽屏上那是 ≈(300, 100) px，看上去就是
-       「环出现在光标的左上角」（2026-10-14 站主目检报的就是这个）。
-       版心 rect 在这里**只**当"在不在版心内"的那道门控，不兼职坐标。 */
-    spawn(ev.clientX, ev.clientY);
+  function paint() {
+    const h = water.values, w = water.width, pixels = image.data;
+    const fade = water.opacity;
+    /* 用水面法线的明暗表现起伏；每帧覆盖像素，重叠不会积成一片墨。 */
+    for (let y = 1; y < water.height - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = y * w + x, p = i * 4;
+        const slope = (h[i - 1] - h[i + 1]) * 0.65 + (h[i - w] - h[i + w]) * 0.76;
+        const shade = slope > 0 ? light : shadow;
+        pixels[p] = shade[0]; pixels[p + 1] = shade[1]; pixels[p + 2] = shade[2];
+        pixels[p + 3] = Math.min(1, Math.abs(slope) * 2.5) * strength * (slope > 0 ? 2.6 : 1) * fade * 255;
+      }
+    }
+    ctx!.putImageData(image, 0, 0);
+  }
+
+  function frame(now: number) {
+    raf = 0;
+    if (!enabled()) { stop(); return; }
+    const active = water.advance(now - lastTime);
+    lastTime = now;
+    if (!active) { stop(); return; }
+    paint();
+    raf = requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('pointermove', (event: PointerEvent) => {
+    if (event.pointerType === 'touch' || !enabled() || !water) return;
+    const { clientX: x, clientY: y } = event;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const now = performance.now();
+    const last = previous;
+    previous = { x, y, time: now };
+    if (!last || now - last.time > 200) return;
+    const distance = Math.hypot(x - last.x, y - last.y);
+    if (distance < 0.2) return;
+    const speed = distance / Math.max(8, now - last.time);
+    const amount = 0.18 + 0.55 * Math.min(1, speed / 1.6);
+    water.disturb(last.x / window.innerWidth * water.width, last.y / window.innerHeight * water.height,
+      x / window.innerWidth * water.width, y / window.innerHeight * water.height, amount);
+    if (!raf) { lastTime = now; raf = requestAnimationFrame(frame); }
   }, { passive: true });
+  window.addEventListener('pointerout', (event: PointerEvent) => { if (!event.relatedTarget) previous = undefined; });
+  window.addEventListener('resize', resize, { passive: true });
+  window.addEventListener('blur', stop);
+  window.addEventListener('pagehide', stop);
+  document.addEventListener('visibilitychange', () => {
+    if (!enabled()) stop();
+    else if (canvas.hidden) resize();
+  });
+  reduce.addEventListener('change', resize);
+  desktop.addEventListener('change', resize);
+  resize();
 })();

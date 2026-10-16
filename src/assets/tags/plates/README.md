@@ -1,4 +1,4 @@
-# 标签页机械环
+# 标签区与留言页共用机械环
 
 `mechanical-ring.webp` 来自 RhinE 项目 `theme/assets/render/ring/ring-day.png`，保留原始 1400 × 900 画布及透明通道，仅转换为 WebP（质量 85）。`ring.json` 是同一模型导出的光槽轨迹，其中第四个分量表示该点是否可见。
 
@@ -9,3 +9,5 @@
 - 轨迹：https://raw.githubusercontent.com/ericzhang12111-cell/RhinE/main/theme/assets/render/ring/ring.json
 
 本站在构建期将可见轨迹输出为 SVG，CSS 以整圈累计长度推动光点。数据不包含浏览器脚本；生产页面只读取本站构建资产，不请求作者服务器，也不加载作者的播放器、主题脚本或字体。
+
+由 `src/components/MechanicalRing.astro` 共用，素材保留在本目录，避免重复文件。标签区的准星由 `TagsPlate.astro` 单独组合。

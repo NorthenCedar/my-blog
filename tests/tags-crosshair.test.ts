@@ -21,19 +21,20 @@ const PLATE = join(PLATE_DIR, 'mechanical-ring.webp');
 
 const IDX = read('src/pages/tags/index.astro');
 const ONE = read('src/pages/tags/[tag].astro');
-const PLATE_ASTRO = read('src/components/TagsPlate.astro');
+const TAGS_PLATE_ASTRO = read('src/components/TagsPlate.astro');
+const PLATE_ASTRO = read('src/components/MechanicalRing.astro');
 const XH_ASTRO = read('src/components/Crosshair.astro');
 const XH_TS = read('src/scripts/crosshair.ts');
 const HOVER = read('src/styles/hover.css');
 
 const IDX_CSS = strip(IDX);
 const ONE_CSS = strip(ONE);
-const PLATE_CSS = strip(PLATE_ASTRO);
+const PLATE_CSS = strip(PLATE_ASTRO + TAGS_PLATE_ASTRO);
 const XH_CSS = strip(XH_ASTRO);
 /* ⚠ 负向断言一律跑"剥过注释"的版本 —— 这几份文件的注释里**故意**写着
    「为什么**不**用 rAF / 为什么**不**复用 PostIndex / 为什么不用 #4caf50」，
    拿原文去 `not.toMatch` 会把"解释自己没做的事"判成"做了那件事"。 */
-const PLATE_NC = strip(PLATE_ASTRO);
+const PLATE_NC = strip(TAGS_PLATE_ASTRO);
 const XH_TS_CODE = strip(XH_TS);
 
 const IDX_HTML = hasDist ? readFileSync(join(DIST, 'tags', 'index.html'), 'utf8') : '';
@@ -71,7 +72,7 @@ describe('标签区 · ∞ 底纹素材契约', () => {
 
   it('图与光槽共享画布，窄屏完整显示，宽屏不超过原生分辨率', () => {
     expect(PLATE_CSS).toMatch(/aspect-ratio:\s*1400 \/ 900/);
-    const rule = PLATE_CSS.match(/\.tags-inf\s*\{([^}]*)\}/)?.[1] ?? '';
+    const rule = PLATE_CSS.match(/\.mechanical-ring\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(rule).toContain('1400px');
     expect(rule).toContain('150vh');
     for (const match of PLATE_CSS.matchAll(/([\d.]+)vw/g)) {
@@ -300,7 +301,7 @@ describe('标签区 · 构建产物', () => {
     expect((IDX_HTML.match(/<li class="tag-cell"/g) ?? []).length,
       '标签总览的格数必须等于注册表里的标签数').toBe(TAGS.length);
     expect(IDX_HTML, '缺矩阵容器').toMatch(/class="tag-matrix"/);
-    expect(IDX_HTML, '缺底纹层').toMatch(/class="tags-inf"/);
+    expect(IDX_HTML, '缺底纹层').toMatch(/class="mechanical-ring"/);
     expect(IDX_HTML, '底纹必须走构建期优化管线（srcset）').toMatch(/<img[^>]*srcset="[^"]*"/);
     expect(IDX_HTML, '缺准星').toMatch(/class="crosshair"[^>]*data-crosshair|data-crosshair[^>]*class="crosshair"/);
     expect(IDX_HTML, '准星三条元素要一起产出').toMatch(/class="ch-dot"/);
@@ -323,7 +324,7 @@ describe('标签区 · 构建产物', () => {
       `AI 标签下的格数必须等于内容源里 AI 标签的可见文章数（${AI_POST_COUNT}）`,
     ).toBe(AI_POST_COUNT);
     expect(ONE_HTML, '缺文章矩阵容器').toMatch(/class="post-matrix"/);
-    expect(ONE_HTML, '缺底纹层').toMatch(/class="tags-inf"/);
+    expect(ONE_HTML, '缺底纹层').toMatch(/class="mechanical-ring"/);
     expect(ONE_HTML, '缺准星').toMatch(/data-crosshair/);
     expect(ONE_HTML, 'body 上没有 tags-plate').toMatch(/<body[^>]*class="[^"]*tags-plate/);
     /* 两页共用同一份实现 ⇒ 准星的**标记结构**必须逐字相同 */

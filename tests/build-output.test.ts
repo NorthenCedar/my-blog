@@ -1398,26 +1398,16 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     );
   });
 
-  it('★ 留言页 JS 总量（内联 + 同源外链闭包）≤ 16 KB（2026-10-14 补上）', () => {
-    /* ★★ 这一页此前**根本没有字节预算** —— 文章页 12800、相册页 24576 都有人守，
-       留言页没有 ⇒ 它可以无限膨胀，而它现在有**两台**装置（声纹带 + 指针声波），
-       正是最需要门闩的一页。spec §6.80.3。
-       口径与上面两页完全一致：内联 + 同源外链 import **闭包**。
-       实测（2026-10-14）：内联 2758 + 闭包 12314 = 15082
-         （Voiceprint 5621 + guestbook 837 + comments 2413 + reply-common 2235 + rl-core 1208）。
-       ★★ **这里记一个我自己犯的错**：定稿前我先拍了个 12288，是**只数了 HTML 里直接引用的
-         script src** 得来的（6458 + 2758 = 9208），**漏掉了整条 import 闭包** ——
-         评论系统（comments 2413 + reply-common 2235）与 rl-core 1208 一直背在这一页上。
-         差 5874 字节，一上线就撞线。⇒ 这正是上面两页为什么用 `jsClosure` 而不是
-         "把 script src 加起来"：**漏掉 import 闭包 = 预算形同虚设**。
-       ⇒ 上限 16384（= 2^14），余量 8.6%，与站上「余量 ~7%」同一档。
-         留言页比文章页贵是因为它背两台装置 —— 那是站主要的效果，不是白付的字节。 */
+  it('★ 留言页 JS 总量（内联 + 同源外链闭包）≤ 20 KB', () => {
+    /* 2026-10-16：站主选择连续浅水波面，替代离散 CSS 圆环。
+       新增网格求解与像素光影，实测闭包约 18 KB；本页预算调整为 20 KiB。
+       仍统计完整 import 闭包，不影响其他页面预算，不引入三维库。 */
     const page = join(DIST, 'guestbook', 'index.html');
     expect(existsSync(page), 'dist/guestbook/index.html 不存在，先跑 npm run build').toBe(true);
     const html = readFileSync(page, 'utf8');
     const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
     const inline = scripts.map((s) => Buffer.byteLength(s[1], 'utf8')).reduce((a, b) => a + b, 0);
-    const BUDGET = 16384;
+    const BUDGET = 20480;
     const { code, files } = jsClosure(page);
     const full = Buffer.byteLength(code, 'utf8');
     console.log(

@@ -1,11 +1,11 @@
 ---
 import { getEntry } from 'astro:content';
-import type { ImageMetadata } from 'astro';
-import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
 import CommentSection from '../components/CommentSection.astro';
 import Voiceprint from '../components/Voiceprint.astro';
+import MechanicalRing from '../components/MechanicalRing.astro';
+import WaterSurface from '../components/WaterSurface.astro';
 
 /** 留言页（2026-09-26 站主按参考站要求新增）。
  *  参考站那一页是「全站评论汇总 + 本页留言」两块；**汇总那块需要后端聚合**，本站的评论接口
@@ -18,51 +18,13 @@ interface GuestbookData {
 const entry = await getEntry('pages', 'guestbook');
 const d = (entry?.data ?? {}) as unknown as GuestbookData;
 
-{/* 底纹母题（站主 2026-10-06 指定）：钢笔 ∞ 环线 + 星芒，**替代本页的百褶 ∞**。
-          ⚠️ 2026-10-14：动态装置从"墨滴"换成了"声纹带"（母题不再是墨/笔迹），
-            但**这张静态底纹按站主要求保留**（"底纹留"）⇒ 文件名与目录仍叫 inkdrop-*，
-            别因为名字去动它。母题与动态装置同源那句话已作废。 */}
-const PLATES = import.meta.glob<{ default: ImageMetadata }>('/src/assets/guestbook/plates/*.webp', { eager: true });
-const plate = PLATES['/src/assets/guestbook/plates/inkdrop-orbit.webp']?.default;
 ---
 
 <Base title="留言" current="guestbook" chrome="page" bodyClass="guestbook-plate">
-  {/* ===================================================================
-   * 视口装饰层（plate 具名槽）—— 墨滴母题的**两层**：
-   *   ① `.float-plate` 静态底纹（墨绿环线 + 星芒）**替代**百褶 ∞
-   *   ② `.inkdrop-bg` 动态装置（指针留墨痕、几秒渗开；新留言落下墨滴扩散）
-   *
-   * ★★ 必须走 `plate` 具名槽，不能塞进普通 slot：`.shell` 在页面过渡里会被
-   *    `transform`，而被 transform 的祖先会成为 `position:fixed` 的包含块
-   *    ⇒ 装饰层会从下往上跳（关于页实测 91px）。百褶 ∞ 一直没事，
-   *    正因为它在 `.shell` 外面（Topbar 渲染）。
-   * ★ DOM 顺序 = 层序：画布在底纹**之后** ⇒ 墨滴画在底纹**之上**、正文之下
-   *    （与 talks 页雨线压墨点同一条规矩）。
-   * =================================================================== */}
+  {/* 装饰挂在 .shell 外，避免页面过渡改变 fixed 的包含块。 */}
   <Fragment slot="plate">
-    {plate && (
-      <div class="float-plate" aria-hidden="true">
-        <Image
-          class="float-img"
-          src={plate}
-          alt=""
-          widths={[590, 1180]}
-          sizes="86vw"
-          loading="eager"
-          decoding="sync"
-        />
-      </div>
-    )}
-    {/* ★ 指针声波 POINTER RIPPLE（2026-10-14，spec §6.80.1）—— 动态装置的**第三层**。
-        DOM 在底纹**之后**、同 z-index ⇒ 压在底纹之上、正文之下（同当年墨滴的层序）。
-        ⚠ `pointer-events: none`：它是装饰，不许挡留言表单的输入。
-        ⚠ 脚本在减少动效档**根本不注册**，所以这里一个环都不会出现。 */}
-    <div class="vr-ripple" data-ripple aria-hidden="true"></div>
-    {/* ★ 2026-10-14：动态装置的第二层（墨滴 INK DROP）**已整台退场** ——
-        站主报「留言页这个笔迹的装置我不想要了」，母题换成了声纹带 VOICEPRINT
-        （见下面 `<Voiceprint />` 与 docs/rhinelab-spec.md §6.78）。
-        那块整屏 canvas 的浓绿横跨右侧大半版面，把留言正文压在下面 —— 这也是站主不要它的原因之一。
-        ★ DOM 顺序 = 层序：画布在底纹之后 ⇒ 装置画在底纹**之上**、正文之下。 */}
+    <MechanicalRing />
+    <WaterSurface />
   </Fragment>
   <header class="pagehead">
     <PageTitle>留言</PageTitle>
@@ -84,9 +46,6 @@ const plate = PLATES['/src/assets/guestbook/plates/inkdrop-orbit.webp']?.default
     写法与文章页 src/layouts/Post.astro 完全一致。 */}
 <script>
   import '../scripts/comments';
-  /* 本页的装置是「声纹带 VOICEPRINT」（2026-10-14），脚本在组件自己的 <script> 里。
-     在同一个 <script> 里 import 两个模块 ⇒ Astro 把它们并进同一个产物脚本，不新增标签。 */
-  import '../scripts/ripple';
 </script>
 
 <style>
@@ -102,71 +61,6 @@ const plate = PLATES['/src/assets/guestbook/plates/inkdrop-orbit.webp']?.default
     color: var(--muted);
   }
 
-  /* ===================================================================
-   * 底纹层（PAGE PLATE）—— 墨滴环线 **替代** 百褶 ∞（站主 2026-10-06）
-   *
-   * 挂法照抄 Topbar 的 `body.chrome-page .page-inf`（百褶 ∞ 那一层）：
-   *   fixed 挂视口居中 / `contain` / `z-index:-1` / 不拦指针
-   *   —— 全站纸白区只有一套纹理语言，本页换**母题**不换**角色**。
-   * ★ 比例与取宽**不照抄**百褶 ∞（唯一不能照抄的是素材本身）：
-   *   ∞ 是 1572/878，本图抠完主体框是 923/464。
-   * ★ `--plate-w` / `--plate-op` 留着"再调分量"用（可以只在 HTML 上内联覆盖，
-   *   不必改样式表）；默认值就是校准后的定稿。
-   * =================================================================== */
-  .float-plate {
-    position: fixed;
-    left: 50%;
-    top: 50%;
-    /* 取宽同 talks 墨点档 `min(86vw, 1180px, 200vh)`，三个上限各管一件事：
-       · 86vw —— 任何视口宽下都留 ≥7% 余量
-       · 1180px —— 超宽屏不让它无限长（仍是版心的两倍多，"大尺度氛围"没丢）
-       · 200vh —— 兜住"又宽又扁"的窗：图高 ≤ 85.5vh，上下永远留得下。
-       ★ 不用 128vw 出血档：那会把环线左右两端切掉半截，读起来像"图被裁坏了"。 */
-    width: var(--plate-w, min(86vw, 1180px, 200vh));
-    aspect-ratio: 923 / 464;
-    transform: translate(-50%, -50%);
-    /* 透明度取 8% —— 站上**自己**的装饰底纹定稿档
-       （`--deco-plate-coarse` = `#2d7d4614` = 20/255 ≈ 7.8%）。
-       同一把尺子量所有底纹，比"抄一个只对旧素材成立的数字"更忠实于原意。
-       ★ 2026-10-08 由蓝改墨绿之后，本图与 talks 的近黑墨点**同族**了
-         （原先"高饱和蓝比墨点更跳"那条顾虑不再成立）。
-         若目检仍觉得压过正文，第一个该拧的是 --plate-op，不是这个档位本身。 */
-    opacity: var(--plate-op, 0.08);
-    pointer-events: none;
-    z-index: -1;
-  }
-  /* `max-width: none` 必需：base.css 给 `img` 定了 `max-width:100%`，
-     而这一层刻意比版心宽 —— 不解除限制它会缩到父盒宽度，跟着版心走。 */
-  .float-plate img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    max-width: none;
-    object-fit: contain;
-  }
-
-  /* ===== 指针声波 POINTER RIPPLE（2026-10-14，spec §6.80.1）=====
-     与 `.float-plate` 同层（同 `z-index:-1`），DOM 在它之后 ⇒ 压底纹、压不到正文。
-     ⚠ `inset: 0` 而不是 `100vw`：Windows Chrome 会把超出视口的 fixed 元素计入
-       文档滚动宽度，手机上整站能横向拖出空白（AGENTS §5 那条，见 nav-drawer-overflow 契约）。 */
-  .vr-ripple {
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    overflow: hidden;
-    pointer-events: none;
-    /* 环的尺寸与寿命是两个旋钮：想更小/更慢就动这两处。 */
-    --vr-size: 200px;
-    --vr-life: 1200ms;
-  }
-  /* ⚠ `.vr-ring` 与它的 `@keyframes` **不在这个作用域块里**，在页面末尾那个
-     全局样式块里 —— 因为环是脚本运行时 `createElement` 造出来的，
-     拿不到 Astro scoped style 的 `data-astro-cid` 属性 ⇒ 写在这里整条规则匹配不到。
-     （2026-10-14 实测：环生成了 6 个，`getComputedStyle` 却是 `animation: none`、
-     `border-width: 0px`、`width: auto` —— 一条规则都没吃到。Voiceprint 的刻度 `span`
-     栽过同一个坑，那边靠 `:global()`；这里连 `@keyframes` 都在，`:global()` 罩不住
-     at-rule，所以整个块走 `is:global`。同 `src/styles/replies.css` 文件头的约定。）
-
   /* ★★ 必须关掉本页的百褶 ∞（`.page-inf`，Topbar 渲染、全站内页共用）。
      不关的话两套母题会叠在一起（关于页「切片档案」的教训）。
      ⚠ 用 `:global(...)`：`.page-inf` 是 Topbar 的元素、带的是**别的**作用域属性；
@@ -174,54 +68,5 @@ const plate = PLATES['/src/assets/guestbook/plates/inkdrop-orbit.webp']?.default
      关法用 `display:none` 而不是 `opacity:0`：后者仍占一层满屏合成层，很贵。 */
   :global(body.guestbook-plate .page-inf) {
     display: none;
-  }
-</style>
-
-<!-- ★★ 指针声波「环」的样式必须走全局（2026-10-14）。
-     环由 `src/scripts/ripple.ts` 在运行时 `document.createElement('i')` 造出来，
-     拿不到 Astro scoped style 加的 `data-astro-cid` 属性 ⇒ 留在上面的作用域块里
-     的话整条规则匹配不到。加 `@keyframes` 之后连 `:global()` 也不够用
-     （它罩不住 at-rule），所以整块 `is:global`。
-     ⚠ 这两个名字是全站唯一的（全仓只有这一处 `vr-ring`），不会漏到别的页。 -->
-<style is:global>
-  /* 一个环 = 一条圆环描边，自己放大并淡出。
-     ★ 描边借站上装饰层的**标准档 22%**（`--deco-orbit-strong`，tokens.css 里写明
-       「装饰层同地同日只用一档，标准档是 22%」）。
-     ★★ 别再用 `--deco-orbit-soft`(9%) + `scale(0.2)`：那版**量出来峰值只有 Δ2~3 级**，
-       比站上最淡的底纹还轻，等于没画 —— 因为 `scale(0.2)` 把 1px 描边压成了 0.2px
-       亚像素，再乘 0.09 的 alpha 就被量化没了。起始 scale 抬到 0.45、描边加到 1.5px，
-       才落在装饰那一档（spec §6.80.6 的实测表）。
-     ★★ 浓度是**量出来的**，不是拍的（2026-10-14，`_tmp-rp-fixture.mjs`：从构建产物里
-       逐字抽 `.vr-ring` 那条规则、放在真纸白上、有环/无环两遍相减逐像素量，
-       量前先自证噪声底：同一档跑两遍，最暗像素必须逐字相同）：
-         1px 描边 → 峰值比纸白低 12.6 级   ← 第一版（写 1.5px，实测同 1px），太淡
-         2px 描边 → 峰值比纸白低 25.6 级
-         3px 描边 → 峰值比纸白低 35.6 级   ← 定稿（站主："加到 3px"）
-       ★★ **写 1.5px 是骗自己**：Chrome 把 `border-width` 吸附到整像素，
-          探针读回 `bw=1px` —— 源码里的 1.5 根本不存在。这里因此写整数。
-       ★ 档位按**角色**定，不按"都是站上的绿"（AGENTS：静态装饰 / 交互反馈是两档）：
-         静态装饰底纹 = 十几级，交互反馈（准星十字线 40%）实测 ≈59 级。
-         指针划过泛起一圈波纹是**响应**，按静态底纹那一档定就太淡
-         （站主目检："有点看不到"）。35.6 级仍明显低于准星那一档。
-       ★ 峰值不在 t=0 而在 **120ms** 那一格：那时环已放大、描边够粗，
-         而 opacity 才落到一半 —— 起手那一刻环还小、描边被摊薄，反而最淡。 */
-  .vr-ring {
-    position: absolute;
-    width: var(--vr-size, 200px);
-    height: var(--vr-size, 200px);
-    margin-left: calc(var(--vr-size, 200px) / -2);
-    margin-top: calc(var(--vr-size, 200px) / -2);
-    border: 3px solid var(--deco-orbit-strong);
-    border-radius: 50%;
-    animation: vr-ring-out var(--vr-life, 1200ms) var(--ease-interact) forwards;
-  }
-  @keyframes vr-ring-out {
-    from { transform: scale(0.45); opacity: var(--vr-peak, 1); }
-    to { transform: scale(1.1); opacity: 0; }
-  }
-  /* 少动效：脚本那道门控已经保证一个环都不生成，这条是双保险
-     （万一有人改了脚本，这里兜住"动画还播"这一半）。 */
-  @media (prefers-reduced-motion: reduce) {
-    .vr-ring { animation: none; display: none; }
   }
 </style>

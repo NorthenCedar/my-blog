@@ -1,0 +1,23 @@
+---
+/** 留言页浅水光影：放在底纹之上、正文之下，始终不拦截操作。 */
+---
+
+<canvas class="water-surface" data-ripple aria-hidden="true" hidden></canvas>
+
+<script>
+  import '../scripts/ripple';
+</script>
+
+<style>
+  .water-surface {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+  }
+  @media (prefers-reduced-motion: reduce), (max-width: 767px), (hover: none) {
+    .water-surface { display: none; }
+  }
+</style>
