@@ -580,6 +580,28 @@ describe.skipIf(!hasDist)('日志页 · 动效（站主 2026-10-04：「加一�
   });
 });
 
+describe('日志页 · log.md 的 frontmatter 卫生', () => {
+  /* ★ 这条不是洁癖：2026-10-16 实测踩到 —— 在 changes 里写
+     「- **然后按你说的退回了 0.75**：……」构建直接挂在
+     `unidentified alias "*然后按你说的退回了"` 上（`log.md:21`）。
+     原因：YAML 把**标量开头的 `*` 读成 alias**，而 `**加粗**` 在正文里完全合法
+     ⇒ 只在 frontmatter 里炸，且报错指向一个完全看不出原因的位置。
+     而 log.md 是**由 AI 代笔**的 ⇒ 这个写法迟早还会出现 ⇒ 门闩直接点名行号。
+     ⚠ 只查 frontmatter：正文里 `- **` 完全合法（那 15 处就是），别把规则写宽了。 */
+  const fm = LOG_MD.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  it('frontmatter 里没有「列表项以 * 开头」（YAML 会读成 alias）', () => {
+    expect(fm, 'log.md 没有 frontmatter').toBeTruthy();
+    const offenders = fm![1]
+      .split(/\r?\n/)
+      .map((l, i) => [i + 2, l] as const)          // +2 = 跳过 `---\n`
+      .filter(([, l]) => /^\s*-\s*\*/.test(l));
+    expect(
+      offenders.map(([n, l]) => `第 ${n} 行「${l.trim().slice(0, 40)}」`),
+      '这几行会被 YAML 读成 alias ⇒ 构建挂在 unidentified alias 上',
+    ).toEqual([]);
+  });
+});
+
 describe('日志页 · 墨绿 ∞ 素材', () => {
   const PLATE = join(ROOT, 'src/assets/log/plates/main.webp');
 

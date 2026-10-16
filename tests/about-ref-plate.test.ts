@@ -58,6 +58,13 @@ describe('关于页 · 纸白与交互百褶环', () => {
     expect(wave, `波纹不透明度 ${wave} 弱于底纹 ${base} ⇒ 点击时反而变淡`).toBeGreaterThanOrEqual(base);
     expect(base, `--pleat-opacity=${base} 不是 0..1 之间的数`).toBeLessThanOrEqual(1);
     expect(wave, '--pleat-wave-opacity 越界').toBeLessThanOrEqual(1);
+    /* ★ 波纹的**上界**：底纹可以往上调（那是浓淡取舍），
+       但波纹是**点击时**才出现的 —— 它调高等于"点一下就把整片刷深一次"，
+       而那一瞬间没有挑浓淡的机会。实测正文压在最深波纹上：
+         波纹 0.75 → 4.26:1   0.90 → 3.61:1   1.00 → 2.32:1
+       ⇒ 上界 0.8。站主 2026-10-16 看过满档的对比度后退回 0.75，
+       波纹跟着取**同档**（合法区间的下界），靠色相 + 疏密振动表现。 */
+    expect(wave, `波纹不透明度 ${wave} 偏高 ⇒ 点击瞬间正文对比度跌破 AA`).toBeLessThanOrEqual(0.8);
   });
 
   it('★★★ 底纹的**渲染浓度**必须有下限（这一条才是防"退回太淡"的那条）', async () => {
@@ -73,8 +80,11 @@ describe('关于页 · 纸白与交互百褶环', () => {
          alpha 0.75 → 最深 113 级  ← 最后一个正文仍过 WCAG AA 的档
          alpha 1.00 → 最深 151 级  ← 站主要的就是这一档
 
-       下限取 100：站主说「再到参考图那个浓度」，低于这一档就又回到"线上太淡"；
-       往上调仍然自由（要更浓就改 token，断言不拦）。 */
+       下限取 100：站主 2026-10-16 看过对比度之后定的档是 0.75（最深 113 级），
+       低于 100 就又回到"线上太淡"那个状态；往上调仍然自由（要更浓就改 token，
+       断言不拦）。
+       ★ 这条下界**不是** 0.75 本身 —— 钉死具体数值的话，将来有人合理地微调半档
+         就会假红（同 AGENTS §5「断言绑死产物形态」）。它守的是"别退回看不见"这件事。 */
     const sharp = (await import('sharp')).default;
     const alpha = pleat('pleat-opacity');
     expect(Number.isFinite(alpha), '读不到 --pleat-opacity').toBe(true);
