@@ -581,24 +581,52 @@ describe.skipIf(!hasDist)('日志页 · 动效（站主 2026-10-04：「加一�
 });
 
 describe('日志页 · log.md 的 frontmatter 卫生', () => {
-  /* ★ 这条不是洁癖：2026-10-16 实测踩到 —— 在 changes 里写
-     「- **然后按你说的退回了 0.75**：……」构建直接挂在
-     `unidentified alias "*然后按你说的退回了"` 上（`log.md:21`）。
-     原因：YAML 把**标量开头的 `*` 读成 alias**，而 `**加粗**` 在正文里完全合法
-     ⇒ 只在 frontmatter 里炸，且报错指向一个完全看不出原因的位置。
-     而 log.md 是**由 AI 代笔**的 ⇒ 这个写法迟早还会出现 ⇒ 门闩直接点名行号。
-     ⚠ 只查 frontmatter：正文里 `- **` 完全合法（那 15 处就是），别把规则写宽了。 */
+  /* ★ 这条不是洁癖，是连着两次真实构建失败：
+       2026-10-16 ① `- **然后按你说的退回了 0.75**：……`
+                 ② `- "怎么量动态环"做成了探针：……`
+     两次的报错都指向一个完全看不出原因的位置：
+       ① `unidentified alias "*然后按你说的退回了"`（`*` 开头被读成 alias）
+       ② `bad indentation of a sequence entry`（`"` 开头被读成引用开始，后面又跟了字）
+     ⇒ **YAML 标量的开头不能是任何指示符**，而不只是 `*`。
+       而 log.md 是**由 AI 代笔**的 ⇒ 这些写法迟早还会出现 ⇒ 门闩直接点名行号。
+     ⚠ 只查 frontmatter：正文里同样的写法完全合法（全仓正文有 15 处 `- **`），规则不能写宽。
+     ⚠ 指示符清单**不能写全**：`-`/`?`/`:` 开头在本文里是合法序列项，漏掉它们会恒红。 */
   const fm = LOG_MD.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  it('frontmatter 里没有「列表项以 * 开头」（YAML 会读成 alias）', () => {
+  const BAD = ['*', '&', '!', '|', '>', "'", '"', '%', '@', '`', '{', '['];
+
+  it('frontmatter 本身在', () => {
     expect(fm, 'log.md 没有 frontmatter').toBeTruthy();
+  });
+
+  it('列表项不以 YAML 指示符开头（会被读成 alias / 引用 / 标签）', () => {
     const offenders = fm![1]
       .split(/\r?\n/)
-      .map((l, i) => [i + 2, l] as const)          // +2 = 跳过 `---\n`
-      .filter(([, l]) => /^\s*-\s*\*/.test(l));
+      .map((l, i) => [i + 2, l] as const)              // +2 = 跳过 `---\n`
+      .filter(([, l]) => /^\s*-\s+\S/.test(l))
+      .filter(([, l]) => BAD.includes(l.replace(/^\s*-\s+/, '')[0]!));
     expect(
       offenders.map(([n, l]) => `第 ${n} 行「${l.trim().slice(0, 40)}」`),
-      '这几行会被 YAML 读成 alias ⇒ 构建挂在 unidentified alias 上',
+      '这几行的标量以 YAML 指示符开头 ⇒ 构建会挂在 unidentified alias / bad indentation 上',
     ).toEqual([]);
+  });
+
+  it('每个日志条目的键缩进一致（- date / version / changes 对齐）', () => {
+    /* ★ 第二类失败：`- date:` 那一行丢了缩进 ⇒ 也是 bad indentation，
+       而且报错指到的是**后面**那一行。⇒ 同一段里所有 `- date:` 必须同一缩进，
+         且它们的 `version:` 必须是「缩进 + 2」—— 两个数都比"看起来对不对"可靠。
+       ⚠ 回查 `version:` 那一行必须用**整段里的行号**，不能用「过滤后数组的下标」——
+       我第一版写成 `k+1`，因为过滤掉了所有非日期行，索引整体错位。 */
+    const lines = fm![1].split(/\r?\n/);
+    const dates = lines
+      .map((l, i) => [i, l] as const)
+      .filter(([, l]) => /^\s*-\s+date:/.test(l));
+    expect(dates.length, '一条都没找到，日志是不是空了').toBeGreaterThan(0);
+    const indents = [...new Set(dates.map(([, l]) => l.match(/^\s*/)![0].length))];
+    expect(indents, '各条目的缩进不一致').toHaveLength(1);
+    const bad = dates
+      .filter(([i]) => !new RegExp('^\\s{' + (indents[0]! + 2) + '}version:').test(lines[i + 1] ?? ''))
+      .map(([i]) => `frontmatter 第 ${i + 2} 行后面那条 version 缩进不对`);
+    expect(bad, 'version 必须比 - date 深 2 格').toEqual([]);
   });
 });
 

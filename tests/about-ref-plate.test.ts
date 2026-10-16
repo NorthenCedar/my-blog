@@ -58,13 +58,20 @@ describe('关于页 · 纸白与交互百褶环', () => {
     expect(wave, `波纹不透明度 ${wave} 弱于底纹 ${base} ⇒ 点击时反而变淡`).toBeGreaterThanOrEqual(base);
     expect(base, `--pleat-opacity=${base} 不是 0..1 之间的数`).toBeLessThanOrEqual(1);
     expect(wave, '--pleat-wave-opacity 越界').toBeLessThanOrEqual(1);
-    /* ★ 波纹的**上界**：底纹可以往上调（那是浓淡取舍），
-       但波纹是**点击时**才出现的 —— 它调高等于"点一下就把整片刷深一次"，
-       而那一瞬间没有挑浓淡的机会。实测正文压在最深波纹上：
-         波纹 0.75 → 4.26:1   0.90 → 3.61:1   1.00 → 2.32:1
-       ⇒ 上界 0.8。站主 2026-10-16 看过满档的对比度后退回 0.75，
-       波纹跟着取**同档**（合法区间的下界），靠色相 + 疏密振动表现。 */
-    expect(wave, `波纹不透明度 ${wave} 偏高 ⇒ 点击瞬间正文对比度跌破 AA`).toBeLessThanOrEqual(0.8);
+    /* ★ 波纹的**上界是相对的**，不是绝对值。
+       ★ 第一版写的是 `wave <= 0.8`（绝对值）—— 那个数是从"底纹 0.75 时正文 4.97:1"
+         推出来的，换了底纹档位它立刻变成死锁：底纹 0.89 ⇒ wave 既要 ≥ 0.89 又要 ≤ 0.8，
+         **恒红**（门闩把自己锁死了，而它自己不会发现）。
+         ⇒ 真正要守的是**"波纹不得比底纹深太多"**这个关系：
+           波纹是**点击时**才出现的，深一档等于"点一下把整片刷深一次"，
+           而读者在那一刻没有挑浓淡的机会。实测（底纹 0.89 一档）：
+             wave = base     → 正文 3.72:1（与静止时相同）
+             wave = base+0.05 → 正文 3.58:1
+             wave = 1.0       → 正文 2.91:1
+           ⇒ 上界取「比底纹深 0.05」这一个台阶；反馈仍由色相 + 疏密振动承担。 */
+    expect(wave - base,
+      `波纹比底纹深 ${(wave - base).toFixed(2)}（${wave} vs ${base}）`
+      + ' ⇒ 点击瞬间会把整片刷深一档，而那是没有挑浓淡机会的一瞬').toBeLessThanOrEqual(0.05);
   });
 
   it('★★★ 底纹的**渲染浓度**必须有下限（这一条才是防"退回太淡"的那条）', async () => {
@@ -74,17 +81,24 @@ describe('关于页 · 纸白与交互百褶环', () => {
        ⇒ 钉住**渲染色**（AGENTS §5「α 不是可移植的量，渲染浓度才是」）：
          把后备图按 token 合成到纸白 #fafaf7 上，量最深的那道褶比纸白低几级。
 
-       读数对照（本站纸白亮度 249.7）：
-         alpha 0.30 → 最深 45 级   ← 这一轮之前的值，太淡
-         alpha 0.60 → 最深 91 级
-         alpha 0.75 → 最深 113 级  ← 最后一个正文仍过 WCAG AA 的档
-         alpha 1.00 → 最深 151 级  ← 站主要的就是这一档
+       ⚠⚠ 刻度：**WCAG 相对亮度**，不是 0.299/0.587/0.114 线性灰度。
+       这一轮两套刻度混用过 —— 同一个像素在两套刻度下差 60 级，报出去的数字
+       自相矛盾（"比 α 的理论上限还深"）。⇒ 全站统一到 WCAG，
+       它也是无障碍那条线真正用的刻度。
 
-       下限取 100：站主 2026-10-16 看过对比度之后定的档是 0.75（最深 113 级），
-       低于 100 就又回到"线上太淡"那个状态；往上调仍然自由（要更浓就改 token，
-       断言不拦）。
-       ★ 这条下界**不是** 0.75 本身 —— 钉死具体数值的话，将来有人合理地微调半档
-         就会假红（同 AGENTS §5「断言绑死产物形态」）。它守的是"别退回看不见"这件事。 */
+       读数（本站纸白 #fafaf7；量的是**兜底图**，canvas 比它再深约 11%，见下一条）：
+         alpha 0.30 → 最深  63 级   ← 太淡，站主报过的那个状态
+         alpha 0.60 → 最深 127 级
+         alpha 0.75 → 最深 159 级   ← 最后一个正文仍过 WCAG AA 的档
+         alpha 0.89 → 最深 188 级   ← 定稿（站主要的是预览那个感觉）
+
+       下限取 120：站主 2026-10-16 看过对比度之后定的档是 0.89（最深 188 级），
+       留一档微调余地；低于 120（≈ α 0.57）就又回到"线上太淡"。
+       ★ 这条下界**不是** 0.89 本身 —— 钉死具体数值的话，将来有人合理地微调半档
+         就会假红（同 AGENTS §5「断言绑死产物形态」）。它守的是"别退回看不见"。
+       ⚠ 反方向**不设上界**：0.89 这一档正文压在最深褶上是 3.72:1（低于 AA 4.5），
+         那是站主看过数字之后明确要的取舍、不是疏忽。要退回可读性改 token 即可，
+         断言不拦（免得把"站主的决定"变成"每改一次就得改门闩"）。 */
     const sharp = (await import('sharp')).default;
     const alpha = pleat('pleat-opacity');
     expect(Number.isFinite(alpha), '读不到 --pleat-opacity').toBe(true);
@@ -92,29 +106,41 @@ describe('关于页 · 纸白与交互百褶环', () => {
     const { data, info } = await sharp('src/assets/about/plates/pleated-infinity.webp')
       .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     const PAPER = [250, 250, 247];
-    const paperLum = 0.299 * PAPER[0] + 0.587 * PAPER[1] + 0.114 * PAPER[2];
+    const chan = (r: number, g: number, b: number) => {
+      const f = (v: number) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const paperLum = chan(...PAPER);
     let deepest = 0;
     for (let i = 0; i < info.width * info.height; i++) {
       const sa = (data[i * info.channels + 3] / 255) * alpha;
       if (sa <= 0.02) continue;
       const [r, g, b] = [0, 1, 2].map((k) =>
         Math.round(data[i * info.channels + k] * sa + PAPER[k] * (1 - sa)));
-      const drop = paperLum - (0.299 * r + 0.587 * g + 0.114 * b);
+      const drop = paperLum - chan(r, g, b);
       if (drop > deepest) deepest = drop;
     }
     expect(
-      deepest,
-      `--pleat-opacity=${alpha} 下最深的一道褶只比纸白低 ${deepest.toFixed(0)} 级`
+      deepest * 255,
+      `--pleat-opacity=${alpha} 下最深的一道褶只比纸白低 ${(deepest * 255).toFixed(0)} 级`
       + ' ⇒ 已经退回"线上太淡"那个状态（站主 2026-10-15 报的就是它）',
-    ).toBeGreaterThanOrEqual(100);
+    ).toBeGreaterThanOrEqual(120);
   });
 
   it('★★ canvas 与静态后备图共用同一个浓淡来源（不许各调各的）', () => {
-    /* 这轮踩过：一度怀疑"本机走兜底图、线上走 canvas，所以深浅不同"。
-       实测两边的**着色公式逐字相同**（renderer.ts:36 ↔ gen-pleated-fallback.mjs:20），
-       唯一的浓淡来源就是 `--pleat-opacity` 一个 ⇒ 结构上不可能分裂。
-       这条把"兜底图用 CSS opacity、canvas 用 uniform、两者都读同一个 token"
-       三件事钉住，免得哪天有人在其中一侧又加一个独立的浓淡旋钮。 */
+    /* 这一条把"为什么两侧天生不一样"钉住，免得哪天有人为了"对齐"去动其中一侧。
+       实测（两次独立 α，都用 WCAG 刻度；canvas 由 `_probe/_cdp-canvas-ink.py` 抠出）：
+         α=0.75  canvas 墨区均低 105 / 最深 177    兜底图  90 / 180
+         α=0.89  canvas 墨区均低 119 / 最深 196    兜底图 110 / 199
+       ⇒ **均深峰浅**：均低高约 9%，最深反而浅约 2%。
+       ⚠⚠ 第一版把它写成"canvas 比兜底图深 11%"—— 那是拿**均低**的差顺手**外推**到最深，
+         **方向推反了**（AGENTS §5「把一次观测顺手推广成一句结论」）。
+         两个量必须分开报，不能用一个推另一个。
+       真因：兜底图是 SVG 光栅化，里面 `normal[2] <= 0` **直接跳过背面**；
+       canvas 不开面剔除，背面片元照画，只是着色器里 `if(!gl_FrontFacing)n=-n;`
+       把法线翻了、于是按正面着色 ⇒ 背面那一片的浓淡在两侧不一样。
+       ⇒ 这条断言守的是**浓淡的来源只有一个**（结构上不可能分裂），
+         **不是**"两侧像素相同"—— 那是推出来的（AGENTS §5「写没量过的相同」）。 */
     expect(component, '兜底图没走 --pleat-opacity').toMatch(
       /\.pleated-infinity :global\(img\)\s*\{\s*opacity:\s*var\(--pleat-opacity\)/,
     );
@@ -126,7 +152,14 @@ describe('关于页 · 纸白与交互百褶环', () => {
     expect(renderer, '着色器没有把 uOpacity 接到片元 alpha 上').toMatch(
       /gl_FragColor\s*=\s*vec4\(color,\s*mix\(uOpacity,\s*uWaveOpacity,\s*vWave\)\)/,
     );
+    /* 均深峰浅的来源，两侧各钉一条 */
+    expect(renderer, 'canvas 侧少了背面法线翻转 ⇒ 会与兜底图分家').toMatch(
+      /if\(!gl_FrontFacing\)\s*n\s*=\s*-n;/,
+    );
     const gen = readFileSync('scripts/gen-pleated-fallback.mjs', 'utf8');
+    expect(gen, '兜底图生成器没有跳过背面 ⇒ 与 canvas 的关系变了').toMatch(
+      /if\s*\(normal\[2\]\s*<=\s*0\)\s*continue;/,
+    );
     /* 后备图的**几何**必须复用同一份核心，否则兜底与动态会画成两个形状 */
     expect(gen, '后备图生成器没有复用 pleated-core').toMatch(/pleated-core/);
     expect(gen, '后备图生成器没有复用同一个镜头投影').toMatch(/projectPleatPoint/);
