@@ -1,0 +1,40 @@
+---
+import { Image } from 'astro:assets';
+import fallback from '../assets/about/plates/pleated-infinity.webp';
+---
+
+<div class="pleated-infinity" data-pleated-infinity aria-hidden="true">
+  <Image class="pleat-fallback" src={fallback} alt="" widths={[600, 1200]} sizes="(max-width: 767px) 96vw, min(94vw, 1400px)" loading="eager" />
+  <canvas hidden></canvas>
+</div>
+
+<script>
+  import '../scripts/pleated-infinity';
+</script>
+
+<style>
+  .pleated-infinity {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    width: min(94vw, 1400px, 150vh);
+    aspect-ratio: 1.65;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: -1;
+  }
+  .pleated-infinity canvas,
+  .pleated-infinity :global(img) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    object-fit: contain;
+  }
+  .pleated-infinity :global(img) { opacity: var(--pleat-opacity); }
+  .pleated-infinity[data-ready] :global(img),
+  .pleated-infinity canvas[hidden] { display: none; }
+  @media (max-width: 767px) {
+    .pleated-infinity { width: min(96vw, 800px, 150vh); }
+  }
+</style>

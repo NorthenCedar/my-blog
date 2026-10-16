@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { TAGS } from '../src/tag-registry';
 import { readPostFrontmatter, visiblePosts } from './content-invariants.test';
 
-/* 标签区共用装置契约：2026-10-16 按站主新选择换成机械环。
- * 保留准星、矩阵、槽位隔离与内容验证；旧墨绿图的颜色/467px 尺寸不再适用。
+/* 标签区共用装置契约：2026-10-16 按站主选择换成陶瓷金属无限符号。
+ * 保留准星、矩阵、槽位隔离与内容验证；留言页独立保留机械环。
  */
 const ROOT = process.cwd();
 const DIST = join(ROOT, 'dist');
@@ -17,19 +17,19 @@ const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
 const strip = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
 
 const PLATE_DIR = join(ROOT, 'src/assets/tags/plates');
-const PLATE = join(PLATE_DIR, 'mechanical-ring.webp');
+const PLATE = join(PLATE_DIR, 'ceramic-infinity.webp');
 
 const IDX = read('src/pages/tags/index.astro');
 const ONE = read('src/pages/tags/[tag].astro');
 const TAGS_PLATE_ASTRO = read('src/components/TagsPlate.astro');
-const PLATE_ASTRO = read('src/components/MechanicalRing.astro');
+const PLATE_ASTRO = TAGS_PLATE_ASTRO;
 const XH_ASTRO = read('src/components/Crosshair.astro');
 const XH_TS = read('src/scripts/crosshair.ts');
 const HOVER = read('src/styles/hover.css');
 
 const IDX_CSS = strip(IDX);
 const ONE_CSS = strip(ONE);
-const PLATE_CSS = strip(PLATE_ASTRO + TAGS_PLATE_ASTRO);
+const PLATE_CSS = strip(PLATE_ASTRO);
 const XH_CSS = strip(XH_ASTRO);
 /* ⚠ 负向断言一律跑"剥过注释"的版本 —— 这几份文件的注释里**故意**写着
    「为什么**不**用 rAF / 为什么**不**复用 PostIndex / 为什么不用 #4caf50」，
@@ -52,41 +52,38 @@ const AI_POST_COUNT = visiblePosts(readPostFrontmatter()).filter((p) =>
 ).length;
 
 describe('标签区 · ∞ 底纹素材契约', () => {
-  it('机械环透明图进入构建管线，原始细节与体积均有边界', async () => {
+  it('陶瓷金属透明图进入构建管线，原始细节与体积均有边界', async () => {
     expect(existsSync(PLATE)).toBe(true);
-    expect(readdirSync(PLATE_DIR).filter((f) => f.endsWith('.webp'))).toHaveLength(1);
     expect(statSync(PLATE).size).toBeLessThan(200 * 1024);
     const { default: sharp } = await import('sharp');
     const meta = await sharp(PLATE).metadata();
-    expect(meta.width).toBe(1400);
-    expect(meta.height).toBe(900);
+    expect(meta.width).toBe(1600);
+    expect(meta.height).toBe(800);
     expect(meta.hasAlpha).toBe(true);
     const { data, info } = await sharp(PLATE).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     const alpha = (x: number, y: number) => data[(y * info.width + x) * info.channels + 3];
-    for (const [x, y] of [[0, 0], [1399, 0], [0, 899], [1399, 899], [450, 450], [950, 450]]) {
+    for (const [x, y] of [[0, 0], [1599, 0], [0, 799], [1599, 799], [400, 400], [1200, 400]]) {
       expect(alpha(x, y), '背景和双环内部必须透明，不能带黑色矩形').toBeLessThanOrEqual(8);
     }
     expect(data.some((value, i) => i % 4 === 3 && value > 200), '主体不能被清空').toBe(true);
-    expect(read('public/licenses/rhine-mechanical-ring.txt')).toContain('MIT License');
   });
 
-  it('图与光槽共享画布，窄屏完整显示，宽屏不超过原生分辨率', () => {
-    expect(PLATE_CSS).toMatch(/aspect-ratio:\s*1400 \/ 900/);
-    const rule = PLATE_CSS.match(/\.mechanical-ring\s*\{([^}]*)\}/)?.[1] ?? '';
+  it('图按原比例显示，窄屏完整，宽屏不超过原生分辨率', () => {
+    expect(PLATE_CSS).toMatch(/aspect-ratio:\s*2 \/ 1/);
+    const rule = PLATE_CSS.match(/\.tags-infinity\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(rule).toContain('1400px');
     expect(rule).toContain('150vh');
     for (const match of PLATE_CSS.matchAll(/([\d.]+)vw/g)) {
       expect(Number(match[1])).toBeLessThan(100);
     }
-    expect(PLATE_ASTRO).toContain("ring.resolution.join(' ')");
+    expect(PLATE_CSS).toContain('object-fit: contain');
   });
 
-  it('减少动态效果时停止光带，颜色与浓度可统一调节', () => {
-    expect(PLATE_CSS).toMatch(/prefers-reduced-motion:\s*reduce/);
-    expect(PLATE_CSS).toMatch(/animation:\s*none/);
-    expect(PLATE_CSS).toContain('var(--ring-plate-opacity)');
+  it('静态底纹不叠加原机械环光带，浓度独立可调', () => {
+    expect(PLATE_CSS).not.toMatch(/animation:|MechanicalRing|ring-light/);
+    expect(PLATE_CSS).toContain('var(--tags-plate-opacity)');
     const tokens = read('src/styles/tokens.css');
-    const opacity = Number(tokens.match(/--ring-plate-opacity:\s*([\d.]+)/)?.[1]);
+    const opacity = Number(tokens.match(/--tags-plate-opacity:\s*([\d.]+)/)?.[1]);
     expect(opacity).toBeGreaterThanOrEqual(0.15);
     expect(opacity).toBeLessThanOrEqual(0.4);
     expect(PLATE_CSS).not.toMatch(/#[\da-fA-F]{3,8}\b|rgba?\(/);
@@ -100,7 +97,7 @@ describe('标签区 · ∞ 底纹素材契约', () => {
     expect(PLATE_CSS).toMatch(/z-index:\s*-1/);
     expect(PLATE_CSS).toMatch(/pointer-events:\s*none/);
     expect(PLATE_ASTRO).toMatch(/aria-hidden="true"/);
-    expect(PLATE_ASTRO).toMatch(/<Image[\s\S]*?widths=\{\[700, 1400\]\}/);
+    expect(PLATE_ASTRO).toMatch(/<Image[\s\S]*?widths=\{\[800, 1600\]\}/);
     expect(PLATE_ASTRO).toMatch(/<Image[\s\S]*?sizes="[^"]*96vw[^"]*"/);
 
     /* 百褶 ∞（`.page-inf`，Topbar 渲染、全站内页共用）必须在本区两页关掉，
@@ -301,7 +298,7 @@ describe('标签区 · 构建产物', () => {
     expect((IDX_HTML.match(/<li class="tag-cell"/g) ?? []).length,
       '标签总览的格数必须等于注册表里的标签数').toBe(TAGS.length);
     expect(IDX_HTML, '缺矩阵容器').toMatch(/class="tag-matrix"/);
-    expect(IDX_HTML, '缺底纹层').toMatch(/class="mechanical-ring"/);
+    expect(IDX_HTML, '缺底纹层').toMatch(/class="tags-infinity"/);
     expect(IDX_HTML, '底纹必须走构建期优化管线（srcset）').toMatch(/<img[^>]*srcset="[^"]*"/);
     expect(IDX_HTML, '缺准星').toMatch(/class="crosshair"[^>]*data-crosshair|data-crosshair[^>]*class="crosshair"/);
     expect(IDX_HTML, '准星三条元素要一起产出').toMatch(/class="ch-dot"/);
@@ -324,7 +321,7 @@ describe('标签区 · 构建产物', () => {
       `AI 标签下的格数必须等于内容源里 AI 标签的可见文章数（${AI_POST_COUNT}）`,
     ).toBe(AI_POST_COUNT);
     expect(ONE_HTML, '缺文章矩阵容器').toMatch(/class="post-matrix"/);
-    expect(ONE_HTML, '缺底纹层').toMatch(/class="mechanical-ring"/);
+    expect(ONE_HTML, '缺底纹层').toMatch(/class="tags-infinity"/);
     expect(ONE_HTML, '缺准星').toMatch(/data-crosshair/);
     expect(ONE_HTML, 'body 上没有 tags-plate').toMatch(/<body[^>]*class="[^"]*tags-plate/);
     /* 两页共用同一份实现 ⇒ 准星的**标记结构**必须逐字相同 */

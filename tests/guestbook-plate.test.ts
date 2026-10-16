@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-/* 留言页与标签区共用机械环，交互装置各自保留。 */
+/* 留言页保留机械环，与标签区的陶瓷金属底纹及准星隔离。 */
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
 const strip = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
 const ASTRO = read('src/pages/guestbook.astro');
@@ -13,14 +13,15 @@ const TAGS = read('src/components/TagsPlate.astro');
 const GUEST = read('dist/guestbook/index.html');
 const TAGS_HTML = read('dist/tags/index.html');
 
-describe('留言页 · 共用机械环底纹', () => {
-  it('与标签区使用同一组件，图片和光槽只有一份实现', () => {
+describe('留言页 · 机械环底纹', () => {
+  it('留言页保留机械环与光槽，标签区使用独立素材', () => {
     expect(ASTRO).toContain("import MechanicalRing from '../components/MechanicalRing.astro'");
-    expect(TAGS).toContain("import MechanicalRing from './MechanicalRing.astro'");
-    expect(TAGS).toContain('<MechanicalRing />');
+    expect(TAGS).not.toContain('<MechanicalRing />');
+    expect(TAGS).toContain("from '../assets/tags/plates/ceramic-infinity.webp'");
     expect(RING).toContain("from '../assets/tags/plates/mechanical-ring.webp'");
     expect(RING).toContain("from '../assets/tags/plates/ring.json'");
     expect(RING).toContain('projectRingLight(ring.fiber)');
+    expect(read('public/licenses/rhine-mechanical-ring.txt')).toContain('MIT License');
   });
 
   it('底纹挂在 shell 外，不挡点击，也不与通用底纹叠加', () => {
@@ -35,7 +36,7 @@ describe('留言页 · 共用机械环底纹', () => {
     expect(ACSS).toMatch(/body\.guestbook-plate \.page-inf\)\s*\{[^}]*display:\s*none/);
   });
 
-  it('只共享底纹，标签准星不会进入留言页', () => {
+  it('标签准星不会进入留言页', () => {
     expect(TAGS).toContain('<Crosshair />');
     expect(RCSS).not.toContain('Crosshair');
     expect(GUEST).not.toContain('data-crosshair');
@@ -60,13 +61,17 @@ describe('留言页 · 共用机械环底纹', () => {
     expect(read('src/components/WaterSurface.astro')).toContain("import '../scripts/ripple'");
   });
 
-  it('产物只渲染一份底纹，与标签页共用优化图片', () => {
+  it('两页各自只渲染指定底纹，留言页流光保留', () => {
     expect(GUEST.match(/class="mechanical-ring"/g)).toHaveLength(1);
     const image = (html: string) => html.match(/<img[^>]*src="([^"]*mechanical-ring[^"]*)"[^>]*>/)?.[0] ?? '';
     const guestImage = image(GUEST);
     const tagsImage = image(TAGS_HTML);
     expect(guestImage).not.toBe('');
-    expect(guestImage).toBe(tagsImage);
+    expect(tagsImage).toBe('');
+    expect(TAGS_HTML.match(/class="tags-infinity"/g)).toHaveLength(1);
+    expect(TAGS_HTML).toContain('ceramic-infinity');
+    expect(TAGS_HTML).not.toContain('class="ring-light"');
+    expect(GUEST).not.toContain('ceramic-infinity');
     expect(guestImage).toMatch(/srcset="[^"]+"/);
     expect(GUEST).toContain('class="ring-light"');
     expect(GUEST).toContain('留言');

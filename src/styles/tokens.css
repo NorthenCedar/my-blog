@@ -2,11 +2,18 @@
    P1（2026-09-25 站主定案）：配色从旧方向（纯白 + 橙）换成莱茵方向（乳白 + 绿）。
    docs/design-spec.md §3/§5 已同步更新 —— 两处应始终一致，不一致就是 bug。 */
 :root {
+  /* 关于页百褶环：波包经过时沿切线疏密振动，并局部染成淡绿。 */
+  --pleat-base: #f2f0e6;
+  --pleat-wave: #a4cfad;
+  --pleat-opacity: 0.3;
+  --pleat-wave-opacity: 0.58;
   /* 留言页浅水：灰绿阴影与中性反光，强度控制整张波面的峰值。 */
   --water-shadow: #53645a;
   --water-light: #ffffff;
   --water-strength: 0.17;
-  /* 标签区与留言页共用机械环：浅色金属保留铜色光槽。 */
+  /* 标签区陶瓷金属无限符号：降低阴影浓度，保持矩阵文字清楚。 */
+  --tags-plate-opacity: 0.24;
+  /* 留言页机械环：浅色金属保留铜色光槽。 */
   --ring-plate-opacity: 0.38;
   --ring-light-halo: #d8893f80;
   --ring-light-core: #fff9eb;

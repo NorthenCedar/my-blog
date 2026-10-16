@@ -2,6 +2,7 @@
 import { getEntry, render } from 'astro:content';
 import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
+import PleatedInfinity from '../components/PleatedInfinity.astro';
 import PageTitle from '../components/PageTitle.astro';
 import SocialIcon from '../components/SocialIcon.astro';
 
@@ -86,17 +87,6 @@ const assets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/about/*
 const avatar = d.avatar ? assets[`/src/assets/about/${d.avatar}`]?.default : undefined;
 /* ★ 2026-10-03 删：const signature = …（签名整体移除，见 AboutData 注记）*/
 
-/* 参考图底纹（第2 步，2026-10-03）—— **构建期已裁成小图**，不是 CSS 取景。
-   ★ 为什么必须裁文件：CSS 的 overflow:hidden + 偏移能在浏览器里「取景」，
-     但**浏览器仍会下载整张原图**。原图 1080×1791~2355、3–4 MB 三张 ⇒ 关于页 10 MB+。
-   ★ 裁切用的是 sharp —— **astro 自带的依赖**（astro 的 package.json 有 "sharp": "^0.35.4"），
-     不是新增运行时依赖，不违反「只允许 astro / @astrojs/rss / @astrojs/sitemap」。
-   ★ 元素全部取自站主给的参考图，**不自己画**（手绘 SVG 雕像实测砸过三次：蘑菇→emoji→火柴人）。
-     月相序列 + 维纳斯雕像取自同一段（风格一致，且都是白底）；
-     d 图虽有罗马雕像但**底是蓝色**，蓝底转绿会与「白底 + 墨绿」的整体调子打架 ⇒ 没用它。
-   裁切参数（段内百分比、白点分位数等）见 `_probe/_ref-plate.mjs`，可复算、可改。 */
-const PLATE_SRCS = import.meta.glob<{ default: ImageMetadata }>('/src/assets/about/plates/*.webp', { eager: true });
-const plate = (name: string) => PLATE_SRCS[`/src/assets/about/plates/${name}.webp`]?.default;
 const social = d.social ?? [];
 // 空组不渲染（内容层写错分组时不至于留一个空卡片）
 const stack = (d.stack ?? []).filter((g) => (g?.items ?? []).length > 0);
@@ -119,64 +109,8 @@ const isExternal = (h: string) => /^https?:/i.test(h);
            `position: fixed` 的**包含块** ⇒ 头像按"相对 .shell"定位；动画结束、类被摘掉后 transform 变 none，
            包含块又换回视口 ⇒ **位置突变，视觉上就是"加载后跳一下"**（实测从 y=246 跳到 y=198，48px）。
       改成布局定位后这两个问题一起消失：位置由排版决定（不会变），元素在正文流里（自然跟着滚）。 */}
-  {/* ===================================================================
-   * 底纹层（PAGE PLATE）—— 2026-10-03 站主第三轮口径
-   *
-   * 站主原话：「只保留排版，其他什么背景签名全部恢复原样，
-   *   背景恢复后把月相和蓝条替代背景上本来的百褶无限符号」
-   *
-   * 拆成两句话来执行，缺一不可：
-   *   ① 「其他什么背景签名全部恢复原样」
-   *      ⇒ **只保留排版**（页头 / 两栏 / 细线列表 / 刻度尺这些版式语言），
-   *        签名（FIG.01 HAND）整块删除、揭幕动画与素材一起删；
-   *        背景**不是**回到站主指定的那张「铺满视口大图」——
-   *        而是回到**百褶 ∞ 那一层的位置与角色**（下一条）。
-   *   ② 「把月相和蓝条替代百褶无限符号」
-   *      ⇒ 仍然用站主指定的那张图（`moon-main.webp`，月相 + 纯蓝横带 +
-   *        蓝色轨道线都是原图自带的），但**挂法对齐百褶 ∞**：
-   *        fixed 挂视口居中、`min(128vw, 1600px)`、`contain`、`opacity .2`、
-   *        `z-index` 退到正文之下。
-   *      ⇒ 效果：关于页的纸白区纹理从「深绿大图」换回「淡墨纹」，
-   *        母题从 ∞ 换成月相，**纸白阅读底一字不改**（口径 #1）。
-   *
-   * ★ 为什么必须**覆盖**而不是「叠在百褶 ∞ 上面」：
-   *   百褶 ∞ 那层是 `body.chrome-page .page-inf`（`z-index:-1`），
-   *   由 Topbar 渲染、全站内页共用。若只加一层不覆盖它，两层纹理会叠在一起 ——
-   *   两套母题叠一次脏（Topbar 注释里已记过这个教训：「切片档案」四层
-   *   换 ∞ 底纹时就是因为叠着才整体删掉）。
-   *   ⇒ 本页把 `.page-inf` 显式关掉（见样式段 `body.about-plate .page-inf`），
-   *     自己也用 `z-index:-1` 站在同一个层级上。
-   *
-   * ★ 图**不重新处理**：构建期已把纯黑底转成alpha（`_probe/_deep-plate.mjs`，
-   *   灰阶按「越暗染得越多」混向深绿并给暗部 alpha，白月亮与星芒保持白，
-   *   彩色像素一格不动）⇒ 矩形底在数学上不存在。
-   *
-   * ★★ 这一层走 Base 的 **`plate` 具名槽**，不是普通 slot —— 2026-10-03 修。
-   *   症状：打开关于页时背景**从下面跳回上面**（站主报的）。
-   *   根因：普通 slot 落进 `.shell` 内部，而页面过渡 `html.pt-play .shell`
-   *   会给 `.shell` 加 transform ⇒ **被 transform 的祖先成为 fixed 的包含块**
-   *   ⇒ `top:50%` 从「视口 50%」变成「.shell 盒 50%」。
-   *   实测跳位 **91px**（常态 plateY=266 → 过渡中 357 → 摘类后 266，
-   *   算式：62 + 1463×0.5 − 871/2 = 357）。
-   *   ⇒ 挂到 `plate` 槽（`.shell` 之外，与 Topbar 的 `.page-inf` 同级），
-   *     那个百褶 ∞ 层一直没事正是因为它也在 `.shell` 外面。
-   *   ★ 这与「头像用 fixed 会跳一下」是**同一个坑的两种表现**（记忆里已记过一次）。
-   * =================================================================== */}
-  <div slot="plate" class="ref-plate" aria-hidden="true">
-    {plate('moon-main') && (
-      <div class="ref-main">
-        <Image
-          class="ref-img"
-          src={plate('moon-main')!}
-          alt=""
-          widths={[960, 1920]}
-          sizes="128vw"
-          loading="eager"
-          decoding="sync"
-        />
-      </div>
-    )}
-  </div>
+  {/* 固定底纹走 plate 槽，避开正文过渡的 transform。 */}
+  <Fragment slot="plate"><PleatedInfinity /></Fragment>
 
   {/* ===================================================================
    * 两栏容器（站主 2026-10-03：「右半部分太空，重新排版」）
@@ -304,9 +238,7 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   </div><!-- /.about-grid -->
 </Base>
 
-<!-- ★ 2026-10-03 删：签名落笔的 <script>import '../scripts/hand-sign'</script>
-     （连同 src/scripts/hand-sign.ts 与 src/assets/about/sign.png 一起删除）。
-     关于页现在**零 JS**—— 版式与底纹都是纯 CSS，与「只保留排版」的口径一致。 -->
+
 
 <style>
   /* 拍板 D：页头版心收成 --measure，与正文列左对齐（与文章页同一条）。 */
@@ -318,7 +250,7 @@ const isExternal = (h: string) => /^https?:/i.test(h);
    *   ① 纸白底（口径 #1「纸白阅读底一行不改」）；
    *   ② 标本编号（FIG.00 / 01 / 02…）用等宽小字 + 大字距，排在区块左上；
    *   ③ 细线分隔的列表（**不做卡片** —— 站主 2026-10-03「直接放背景里，不要单独做卡片」）；
-   *   ④ 参考图底纹层（.ref-plate，见结构处注释），元素是原图里的月相 / 雕像 / 飞鸟 / 星芒。
+   *   ④ 纸白底上的立体百褶环，点击触发单向纵波。
    * 落在这四样上的改动只有版式（页头 / 列表项 / 刻度），**正文 .prose 一行没动**
    * —— 口径 #3 明确「正文排版不动」。
    * =================================================================== */
@@ -406,85 +338,8 @@ const isExternal = (h: string) => /^https?:/i.test(h);
        —— 签名整块已删，这条是它专属的宽屏宽度约束。 */
   }
 
-  /* ===================================================================
-   * 底纹层（PAGE PLATE）—— 月相 + 蓝条**替代**百褶 ∞（2026-10-03 第三轮口径）
-   *
-   * 站主原话：「只保留排版，其他什么背景签名全部恢复原样，
-   *   背景恢复后把月相和蓝条替代背景上本来的百褶无限符号」
-   *
-   * ⇒ 这一段的参数**逐条照抄** Topbar 里 `body.chrome-page .page-inf`
-   *   （百褶 ∞ 那一层），只有两处不同：素材换成月相图、本页关掉 .page-inf。
-   *   照抄是有意的：全站纸白区只有**一套**纹理语言（Topbar 注释原话
-   *   「保持全站只有一套纸白区语言」），本页换母题但不换**挂法**。
-   *
-   * ★ 三个关键参数各自的作用（都是从上一版踩出来的）：
-   *   · `position: fixed` + `translate(-50%,-50%)`
-   *     ⇒ 挂**视口**而不是文档 ⇒ 滚动时纹理始终居中，与百褶 ∞ 观感一致。
-   *   · `width: min(128vw, 1600px)` + `aspect-ratio`
-   *     ⇒ 纹理比版心宽、大尺度；`aspect-ratio` 锁住比例，
-   *       `contain` 才不会把图拉变形（这张是 1920×1045 ⇒ 1.837:1）。
-   *   · `opacity: .2` + `z-index: -1`
-   *     ⇒ 退到正文**之下**、压成极淡的墨纹 —— 这正是「纸白阅读底一字不改」
-   *       （口径 #1）的前提：纹理只做氛围，不承载任何信息。
-   *
-   * ⚠ `opacity: .2` 是**照抄百褶 ∞**，与上一版「不加 opacity」相反 ——
-   *   那条是针对「铺满视口的深绿大图」说的（那时要的是冲击力）；
-   *   现在回到「纸白区纹理」这个角色，淡墨纹才是对的。
-   *   代价：月相与纯蓝强调色都会被压到 20% 不透明度
-   *   ⇒ 这是站主要求的必然结果（他说的是「替代百褶∞ 那个位置」），
-   *     不是实现偷工。若嫌太淡，唯一该动的是这个数值（0.2 → 0.3 之类），
-   *     改这里一处即可，别去动图本身。
-   * =================================================================== */
-  /* ===================================================================
-   * 底纹层挂法 —— 与百褶 ∞ 同位（2026-10-03 第三轮口径）
-   *
-   * 站主原话：「只保留排版，其他什么背景签名全部恢复原样，
-   *   背景恢复后把月相和蓝条替代背景上本来的百褶无限符号」
-   *
-   * ★ **同位**：挂法逐条照抄 Topbar 的 `body.chrome-page .page-inf`
-   *   （fixed 挂视口居中、`min(128vw,1600px)`、`aspect-ratio`、
-   *     `object-fit:contain`、`opacity:.2`、`z-index:-1`、不拦指针）
-   *   —— 全站纸白区只有一套纹理语言，本页换的是**母题**（∞ → 月相），不是角色。
-   *
-   * ★★ 唯一不能照抄的是素材本身，这一条是**目检逼出来的**（踩了两轮）：
-   *   百褶 ∞ 那张 `inf-orig.webp` 是**白底**图 ⇒ 矩形底与纸白底同色 ⇒ 看不出边界。
-   *   月相这张是**纯黑底**图 ⇒ 即使 `opacity:.2`，矩形内也是
-   *   0.2×黑 + 0.8×纸白 = 一片灰，与矩形外的纸白**有色差**
-   *   ⇒ 截图上一眼能看见一条矩形下边界（实测 x=60：y≤300 是 rgb(250,250,247)、
-   *     y=700~1100 是 rgb(203,204,201)，差 47/255）。
-   *   第一轮试 `mix-blend-mode: multiply` —— **压不住**：
-   *   multiply 只改色、不裁形状，而图本身是个**不透明矩形**；
-   *   把 z-index 提到 0 让它与 body 纸白底同层之后，矩形边依然在（实测截图复验）。
-   *   ⇒ 正解在**素材侧**（`_probe/_deep-plate.mjs`）：把纯黑底转成 **alpha**，
-   *     图只剩月亮 / 星芒 / 蓝带 / 山脊的形状 ⇒ 矩形在数学上不存在。
-   *     素材处理完，这一层就与百褶 ∞ **完全同参数**，不需要任何额外花招。
-   * ★ 所以这里刻意**不写** mix-blend-mode、也**不写** opacity 之外的 blend 相关属性：
-   *   那些是为「不透明矩形底」打的补丁，素材修好后就该撤掉。
-   * =================================================================== */
-  .ref-plate {
-    position: fixed;
-    left: 50%;
-    top: 50%;
-    width: min(128vw, 1600px);
-    aspect-ratio: 1920 / 1045;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    z-index: -1;
-    opacity: 0.2;
-  }
-  .ref-main {
-    width: 100%;
-    height: 100%;
-    line-height: 0;
-  }
-  .ref-main > picture,
-  .ref-main > img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    max-width: none;
-  }
+  /* 本页只保留纸白与交互百褶环。 */
+  :global(body.about-plate) { background: var(--paper); }
 
   /* ★★ 必须**关掉**本页的百褶 ∞（`.page-inf`，由 Topbar 渲染，全站内页共用）。
      不关的话两套母题会叠在一起 —— Topbar 注释里已记过这个教训
@@ -498,22 +353,6 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   :global(body.about-plate .page-inf) {
     display: none;
   }
-
-  /* ★★ body 的不透明纸白底**必须留着**（与上一版相反）。
-     上一版为了让「深绿大图」透出来，把 `body.about-plate` 改成 `background: transparent`
-     并给每个内容块加纸托底（`.prose::before` / `.fig-block::before` / `.page-paper`）。
-     现在底纹回到「z-index:-1 的淡墨纹」⇒ 它在 body 背景**之下**才正常
-     （-1 的元素画在 body 背景之下，这是 z-index:-1 的定义），
-     ⇒ body 保持 `var(--paper)` 不透明即可，**所有纸托底一并删除**。
-
-     为什么必须是这样，而不是「body 透明 + 逐块垫纸」：
-       · 逐块垫纸是 2026-10-03 踩了**四轮**才做对的东西（两次被月亮劈开、
-         一次纸把月亮吃掉、一次纸与内容错位），根因是「深色大图必须被不透明纸压住」。
-       · 而现在纹理是淡墨纹，**不需要**任何东西压它
-         （实测百褶 ∞ 就是裸挂在 body 纸白底上的）。
-       · 少一层纸 = 正文的对比度由 body 一次性保证，不必逐块维护。
-     红线「正文排版不动」也因此更稳：删掉 `::before` 之后
-     `.prose` 的内容盒回到最干净的状态（此前 `::before` 一直挂在它身上）。 */
 
   /* ===================================================================
    * 纸托底 —— **整段已删**（2026-10-03 站主第三轮口径）

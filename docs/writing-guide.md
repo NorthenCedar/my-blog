@@ -27,14 +27,14 @@
 | **加/换友链** | `content/pages/links.md` —— 见 §19 | 不用 |
 | **写日志** | `content/pages/log.md` —— 见 §20 | 不用 |
 | **看/删留言** | `content/pages/guestbook.md` 是页面文案；留言本身在数据库 —— 见 §21 | 不用 |
-| 留言页机械环底纹 | `src/components/MechanicalRing.astro`；与标签区共用素材，浓度与光带速度在 `tokens.css` 的 `--ring-plate-opacity` / `--dur-ring-flow` | 写留言不用管它 |
+| 留言页机械环底纹 | `src/components/MechanicalRing.astro`；浓度与光带速度在 `tokens.css` 的 `--ring-plate-opacity` / `--dur-ring-flow` | 写留言不用管它 |
 | 加相册、加照片 | `content/gallery/<相册名>/` —— 见 §17 | 不用 |
 | **归档页搜索/年月筛选** | 自动的，不用配 —— 见 §23 | 不用 |
 | **关于页头像 / 名字 / 社交账号 / 技术栈** | `content/pages/about.md` 的 frontmatter —— 见 §24 | 不用 |
 | **说说的点赞与评论** | 自动的，不用配 —— 见 §25 | 不用 |
 | **页脚统计（运行时长 / PV / UV）** | 时长起点在 `content/site.md` 的 `since` —— 见 §26 | 不用 |
 | 标签清单 | `src/tag-registry.ts` | 会改一行数组就行 |
-| 标签页机械环底纹 | `src/components/TagsPlate.astro`；浓度与光带速度在 `tokens.css` 的 `--ring-plate-opacity` / `--dur-ring-flow` | 换内容不用管它 |
+| 标签页陶瓷金属底纹 | `src/components/TagsPlate.astro`；浓度在 `tokens.css` 的 `--tags-plate-opacity` | 换内容不用管它 |
 | **导航菜单（右上角那排）** | `src/lib/nav.ts` —— 见 §22 | 会改一行数组就行 |
 | 配色 / 字号 / 间距 / 字体 | `src/styles/tokens.css` | 要认一点代码 |
 | 域名 | `astro.config.mjs` 一行 | 要认一点代码 |
@@ -406,15 +406,17 @@ export const TAGS = ['AI', '建站', '摄影', '成长', '随笔', '钢琴', '�
 **加/删标签会自动改变格数**（格号是位置派生的，不用手写）：4 列时 8 个标签正好两行；
 再加一个就变成"最后一行差三格"（格纸的正常样子，不是显示错误）。
 
-**背景那层 ∞** 与留言页共用 `src/components/MechanicalRing.astro`，素材和光槽数据在
-`src/assets/tags/plates/`。1400 × 900 的机械环采用固定视口居中布局，光带沿可见光槽缓慢流动；
-系统开启“减少动态效果”时显示静态环。标签区的准星由 `TagsPlate.astro` 单独组合，不会带入留言页。
+**背景那层 ∞** 由 `src/components/TagsPlate.astro` 渲染，采用新设计的暖白陶瓷与拉丝金属图，
+素材为 `src/assets/tags/plates/ceramic-infinity.webp`（1600 × 800，透明背景）。
+底纹固定在视口中央、按原比例完整显示，标签总览和具体标签页共用；本图保持静止，准星交互继续保留。
+留言页独立使用 `MechanicalRing.astro`，仍有沿光槽流动的微光。
 
-想调整两处底纹，在 `tokens.css` 修改下面两个值：
+想调整底纹，在 `tokens.css` 修改对应值：
 
 ```css
---ring-plate-opacity: 0.38; /* 底纹浓度 */
---dur-ring-flow: 24s;      /* 光带绕行一圈的时间 */
+--tags-plate-opacity: 0.24; /* 标签区陶瓷金属底纹浓度 */
+--ring-plate-opacity: 0.38; /* 留言页机械环浓度 */
+--dur-ring-flow: 24s;      /* 留言页光带绕行一圈的时间 */
 ```
 
 **「准星」**（示波器十字光标）：鼠标移到页面上，会有两条淡绿细线贯穿整页、跟着鼠标走，
@@ -2088,46 +2090,24 @@ stack:                    # 技术栈：group 是分组小标题，items 是该�
 
 ---
 
-## 24.3 关于页的参考图底纹（`/about` 的背景层）
+## 24.3 关于页的交互百褶环（`/about` 的背景层）
 
-> 2026-10-03 站主要求：「直接用参考图里的素材，雕像月相各种图案都在那了，不要自己画」
-> +「直接放到背景里，不要单独做一个卡片」+「背景最好用白色」。
+2026-10-16：关于页使用纸白底与动态百褶无限环，月相和蓝条不再渲染。正文、头像和两栏布局保持。环向左微转摆正，保留纵深视角；动态镜头与静态后备图、命中检测保持一致。
 
-### 是什么
-
-`.ref-plate` 是 `position:fixed; inset:0` 的装饰层（`aria-hidden` + 空 alt + `pointer-events:none`），
-里面四块**从站主参考图里取景**的元素，全部是**构建期裁好的小图**：
-
-| 块 | 内容 | 摆位 |
-|---|---|---|
-| `ref-moon` | **月相序列环**（站主点名）| 右上角，大半滑出视口 |
-| `ref-statue` | **维纳斯雕像**（站主点名）| 左下，贴左缘 |
-| `ref-birds` | 飞鸟 + 同心圆线 | 右上偏下 |
-| `ref-dial` | 圆盘 + 星芒 + 直尺 | 右下角 |
-
-窄屏（≤767px）只留月相与雕像（站主点名的那两个）并再压淡一档。
-
-### ★ 三条别动的约定
-
-1. **必须裁文件，不能只用 CSS 取景。**
-   CSS 的 `overflow:hidden` + 偏移能在浏览器里"取景"，但**浏览器仍会下载整张原图** ——
-   原图 3–4 MB，三张就是 10 MB+。现在四张共 **482 KB**（进仓的源图），
-   产物按视口出多档 srcset，`about/index.html` 引用的 webp 合计 < 2.5 MB。
-2. **底纹的灰度与墨绿是构建期做好的**（`_probe/_ref-plate.mjs`，用 sharp），
-   运行时**不需要任何 `filter`** —— 那是第一版「原图 + 现场染色」的历史遗留。
-3. **四块都必须用负偏移贴边**（滑出视口），不许压在版心上。
-   目检踩过两轮：月相按"右上角"放 ⇒ 盖住右栏社交清单；飞鸟放左侧中段 ⇒ 压住头像与正文。
-
-### 想改什么改哪个
+- 薄片平时缓慢扭转；点中环的可见薄片后，一束疏密波沿环的同一个方向传播一圈，波经过的位置泛淡绿色后复原。
+- 不提供拖动和镜头旋转；拖选正文、滑动页面、长按和点击链接不会触发波。沿用全站圆形光标。
+- 底纹挂在 `Base` 的 `plate` 槽中，固定于视口，避免正文过渡改变它的位置；组件不拦截指针，页面监听只观察短点击。
+- 减少动态效果时保留静止环；没有 JavaScript、WebGL 不可用或上下文丢失时显示本地静态后备图。切到后台或离页停止绘制。
 
 | 想改 | 改哪儿 |
 |---|---|
-| 取哪几段、改裁切位置 | `_probe/_ref-plate.mjs` 的 `PLATES`（**段内**百分比）|
-| 底纹浓淡 / 曲线 | 同上的 `white`（白点分位数）与 `gamma` |
-| 摆位与大小 | `about.astro` 的 `.ref-moon` / `.ref-statue` / `.ref-birds` / `.ref-dial` |
-| 窄屏留哪几块 | `about.astro` 最后的 `@media (max-width: 767px)` |
+| 暖白 / 淡绿色、默认 / 波动浓度 | `tokens.css` 的 `--pleat-base`、`--pleat-wave`、`--pleat-opacity`、`--pleat-wave-opacity` |
+| 波速、宽度、振幅 | `src/scripts/pleated-core.ts` 的 `SPEED`、`WIDTH`、`AMPLITUDE`，沿归一化弧长计算 |
+| 轮廓、片数、扭转 | 同文件的 `createPleats` 与 `updatePleats` |
+| 屏幕大小与位置 | `src/components/PleatedInfinity.astro` |
+| 点击过滤和停帧 | `src/scripts/pleated-infinity.ts` |
 
-**改完裁切参数要重跑**：`node _probe/_ref-plate.mjs`（需先把参考图切成四段，见脚本头注释）。
+修改几何或基础颜色后运行 `node scripts/gen-pleated-fallback.mjs`，同步静态后备图；然后运行 `npm run verify`。渲染使用原生 WebGL，无额外库或第三方资源请求。
 
 ---
 
