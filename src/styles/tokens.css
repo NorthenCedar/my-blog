@@ -5,7 +5,7 @@
   /* 留言页浅水：灰绿阴影与中性反光，强度控制整张波面的峰值。 */
   --water-shadow: #53645a;
   --water-light: #ffffff;
-  --water-strength: 0.22;
+  --water-strength: 0.17;
   /* 标签区与留言页共用机械环：浅色金属保留铜色光槽。 */
   --ring-plate-opacity: 0.38;
   --ring-light-halo: #d8893f80;

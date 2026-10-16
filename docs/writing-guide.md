@@ -1770,7 +1770,8 @@ items:
 波纹会传播、叠加，停下后约 4 秒恢复平静；整个视口都可响应。
 
 - 颜色与浓度在 `src/styles/tokens.css`：`--water-shadow`（灰绿阴影）、
-  `--water-light`（白色反光）、`--water-strength`（峰值浓度，默认 0.22）。
+  `--water-light`（白色反光）、`--water-strength`（峰值浓度，默认 0.17）。
+  波头宽度由 `water-core.ts` 中的 `radius` 调节，当前为 5 格；加宽时同步摊薄注入量。
 - `src/components/WaterSurface.astro` 负责背景画布；`src/scripts/ripple.ts` 负责指针、光影与停帧；
   `src/scripts/water-core.ts` 负责连续波面。机械环、正文和声纹带不做折射变形。
 - 波面采用约 4px 一格的网格，大屏进一步限制分辨率；按固定时间步求解，轨迹按距离补齐。

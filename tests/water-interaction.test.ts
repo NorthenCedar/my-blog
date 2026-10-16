@@ -32,7 +32,7 @@ function run(opts: { reduced?: boolean; mobile?: boolean; context?: boolean; hid
       queries.push(query);
       return Object.assign(query, { addEventListener: (_: string, fn: () => void) => { query.change = fn; } });
     },
-    getComputedStyle: () => ({ getPropertyValue: (name: string) => ({ '--water-shadow': '#53645a', '--water-light': '#fff', '--water-strength': '0.22' })[name] ?? '' }),
+    getComputedStyle: () => ({ getPropertyValue: (name: string) => ({ '--water-shadow': '#53645a', '--water-light': '#fff', '--water-strength': '0.17' })[name] ?? '' }),
   });
   return {
     canvas, frames, document,

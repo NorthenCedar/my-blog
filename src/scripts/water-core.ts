@@ -25,7 +25,8 @@ export class WaterSurface {
     if (!distance) return;
     const count = Math.min(512, Math.ceil(distance));
     const dose = Math.min(1, Math.max(0, amount)) * Math.min(distance / count, 1);
-    const radius = 3.5;
+    // 扩大触水面积，让前端更宽圆；同时摊薄注入量，避免加宽后反而变浓。
+    const radius = 5;
     for (let n = 1; n <= count; n++) {
       const cx = x0 + (x1 - x0) * n / count;
       const cy = y0 + (y1 - y0) * n / count;
@@ -34,7 +35,7 @@ export class WaterSurface {
           const r2 = ((x - cx) ** 2 + (y - cy) ** 2) / radius ** 2;
           if (r2 >= 1) continue;
           const i = y * this.width + x;
-          const push = dose * (1 - r2) ** 2 * 0.35;
+          const push = dose * (1 - r2) ** 2 * 0.35 * (3.5 / radius);
           this.values[i] = Math.max(-3, this.values[i] - push);
           this.previous[i] = Math.max(-3, this.previous[i] - push);
         }
