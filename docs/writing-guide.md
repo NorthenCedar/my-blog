@@ -2102,10 +2102,29 @@ stack:                    # 技术栈：group 是分组小标题，items 是该�
 | 想改 | 改哪儿 |
 |---|---|
 | 暖白 / 淡绿色、默认 / 波动浓度 | `tokens.css` 的 `--pleat-base`、`--pleat-wave`、`--pleat-opacity`、`--pleat-wave-opacity` |
+| 屏上尺寸（**别改回满屏**） | `PleatedInfinity.astro` 的 `width: min(94vw, 620px, 150vh)` |
 | 波速、宽度、振幅 | `src/scripts/pleated-core.ts` 的 `SPEED`、`WIDTH`、`AMPLITUDE`，沿归一化弧长计算 |
-| 轮廓、片数、扭转 | 同文件的 `createPleats` 与 `updatePleats` |
+| 轮廓、片数、扭转 | 同文件的 `createPleats` 与 `updatePleats`（改片数要**同步改厚度**，见下） |
 | 屏幕大小与位置 | `src/components/PleatedInfinity.astro` |
 | 点击过滤和停帧 | `src/scripts/pleated-infinity.ts` |
+
+#### 环的大小：为什么上限是 620px，别改回 1400px
+
+同一个旋钮放大 3.9 倍，薄的片就变成宽的楔子 —— 读起来从「细密的扇面」变成「粗的锯齿扇」，
+**看着像两个东西**。实测：
+
+| ∞ 的屏上宽度 | 每道褶在屏上 | 读起来 |
+|---|---|---|
+| 360 px | 2~4 px | 细密的扇面（站主要的预览） |
+| 1400 px | 6~10 px | 粗的锯齿扇 |
+
+而两边的**渲染浓度只差 2%、色度只差 0.1** —— 也就是说浓淡怎么调都不是这件事的原因。
+
+契约在 `tests/about-ref-plate.test.ts`「薄片在屏上必须够细」：`上限 ÷ 片数 ≤ 4.5 px`。
+
+⚠ **改片数必须同步改厚度**：`pleated-core.ts` 里薄片沿切线的半厚写死为 `0.0125`，
+片数一多、**间距小于厚度 ⇒ 互相重叠、间隙消失**，细密的扇面糊成一条光滑的光带。
+要保持覆盖率就得让厚度随片数**成比例**缩小（720 片 → `0.0125 × 216/720 = 0.00375`）。
 
 修改几何或基础颜色后运行 `node scripts/gen-pleated-fallback.mjs`，同步静态后备图；然后运行 `npm run verify`。渲染使用原生 WebGL，无额外库或第三方资源请求。
 

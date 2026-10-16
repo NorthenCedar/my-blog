@@ -127,6 +127,36 @@ describe('关于页 · 纸白与交互百褶环', () => {
     ).toBeGreaterThanOrEqual(120);
   });
 
+  it('★★★ 薄片在**屏上**必须够细（这条才是防"读起来像锯齿"的那条）', () => {
+    /* ★★★ 为什么浓淡的门闩拦不住这个问题：
+       2026-10-16 这一轮，浓淡调了三个来回（0.3 → 1 → 0.75 → 0.89），
+       而站主三次都说"还是没有预览那个感觉"。实测把三个"看着像"的原因排掉之后，
+       真因是**显示尺寸**：环在宽屏上是 1400px、在站主给的预览里只有 360px ——
+       **同一个旋钮放大 3.9 倍，薄的片就变成宽的楔子**。
+       而浓淡与色度两边本来就几乎相同：
+         墨区均低 119 级 vs 参考 121 级（差 2%）
+         色度     6.8    vs 参考  6.7
+       ⇒ 这条断言守的是「每道褶在屏上不超过几像素」，**不是**浓淡。
+       ⚠★ 我自己前三轮的判据都栽在同一件事上：**每次比都把两张图归一到同一宽度**，
+         归一恰好把尺寸这个变量消掉 ⇒ 于是每次都量出"一样"，
+         而每次那个"一样"都不是问题所在。判据设计错了，不是源错了。 */
+    const core = readFileSync('src/scripts/pleated-core.ts', 'utf8');
+    const count = Number(core.match(/createPleats\(count\s*=\s*(\d+)\)/)?.[1] ?? NaN);
+    expect(Number.isFinite(count), '读不到 createPleats 的默认片数').toBe(true);
+    /* 桌面上限（px）· 取 min(94vw, Npx, 150vh) 里那个 N */
+    const cap = Number(component.match(/width:\s*min\(\s*94vw,\s*(\d+)px/)?.[1] ?? NaN);
+    expect(Number.isFinite(cap), '组件里读不到桌面档的 px 上限').toBe(true);
+    /* 实测：1400px / 216 片 ⇒ 每片约 6~10px（读作粗锯齿）；620px ⇒ 约 2~4px（细密扇面）。
+       4.5px 是"还读作细密"的上界，留一点余量但离 1400px 那档足够远。 */
+    const perPleat = cap / count;
+    expect(
+      perPleat,
+      `桌面上限 ${cap}px ÷ ${count} 片 = 每道褶 ${perPleat.toFixed(1)}px 宽`
+      + ' ⇒ 读起来是粗的锯齿扇，不是站主要的那张预览里的细密扇面'
+      + '（浓淡调多少次都没用：实测浓淡两边只差 2%，差的是尺寸）',
+    ).toBeLessThanOrEqual(4.5);
+  });
+
   it('★★ canvas 与静态后备图共用同一个浓淡来源（不许各调各的）', () => {
     /* 这一条把"为什么两侧天生不一样"钉住，免得哪天有人为了"对齐"去动其中一侧。
        实测（两次独立 α，都用 WCAG 刻度；canvas 由 `_probe/_cdp-canvas-ink.py` 抠出）：

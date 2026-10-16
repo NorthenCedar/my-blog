@@ -4,7 +4,7 @@ import fallback from '../assets/about/plates/pleated-infinity.webp';
 ---
 
 <div class="pleated-infinity" data-pleated-infinity aria-hidden="true">
-  <Image class="pleat-fallback" src={fallback} alt="" widths={[600, 1200]} sizes="(max-width: 767px) 96vw, min(94vw, 1400px)" loading="eager" />
+  <Image class="pleat-fallback" src={fallback} alt="" widths={[600, 1200]} sizes="(max-width: 767px) 96vw, min(94vw, 620px)" loading="eager" />
   <canvas hidden></canvas>
 </div>
 
@@ -17,7 +17,18 @@ import fallback from '../assets/about/plates/pleated-infinity.webp';
     position: fixed;
     left: 50%;
     top: 50%;
-    width: min(94vw, 1400px, 150vh);
+    /* ★★★ 上限 620px，不是 1400px —— 这条是三轮目检换来的，别改回去。
+       原因：**浓淡不是"粗细"的原因，显示尺寸才是。**
+       实测（`_probe/_pleat-ink.mjs` + `_probe/_pleat-size-vs-ink.mjs`）：
+         环 1400px / 216 片 → 每道褶在屏上约 6~10 px 宽 ⇒ 读作**粗的锯齿扇**
+         环  360px / 216 片 → 每道褶约 2~4 px 宽  ⇒ 读作**细密的扇面**（站主要的预览）
+         而两边的**渲染浓度几乎相同**（墨区均低 119 级 vs 参考 121 级，差 2%）、
+         **色度也相同**（6.7 vs 6.8）—— 透明度调了三个来回都不是原因。
+       ⇒ 同一个旋钮放大 3.9 倍，薄的片就变成宽的楔子，看着像两个东西。
+       窄屏档（≤767px）本来就是 `min(96vw, 800px, …)`，在手机上约 374px，
+       已经落在细腻那一档，所以**只改桌面这条**。
+       契约：`tests/about-ref-plate.test.ts` 的「薄片在屏上必须够细」。 */
+    width: min(94vw, 620px, 150vh);
     aspect-ratio: 1.65;
     transform: translate(-50%, -50%);
     pointer-events: none;
