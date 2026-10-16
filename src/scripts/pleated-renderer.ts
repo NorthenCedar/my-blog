@@ -1,6 +1,6 @@
 import type { Pleats } from './pleated-core';
 
-export type PleatPalette = { base: number[]; wave: number[]; opacity: number; waveOpacity: number };
+export type PleatPalette = { base: number[]; wave: number[]; opacity: number; waveOpacity: number; contrast: number };
 
 /** 原生 WebGL 绘制；失败时由组件保留同几何的静态后备图。 */
 export function createPleatedRenderer(canvas: HTMLCanvasElement, palette: PleatPalette) {
@@ -23,7 +23,7 @@ export function createPleatedRenderer(canvas: HTMLCanvasElement, palette: PleatP
   const fragmentSource = `
     precision mediump float;
     uniform vec3 uBase,uWave;
-    uniform float uOpacity,uWaveOpacity;
+    uniform float uOpacity,uWaveOpacity,uContrast;
     varying vec3 vNormal;
     varying float vWave;
     void main(){
@@ -34,7 +34,16 @@ export function createPleatedRenderer(canvas: HTMLCanvasElement, palette: PleatP
       float fill=max(dot(n,normalize(vec3(0.6,-0.1,0.2))),0.);
       float highlight=pow(max(dot(n,normalize(light+vec3(0.,0.,1.))),0.),36.);
       float shade=0.43+0.53*diffuse+0.10*fill;
-      vec3 color=mix(uBase,uWave,vWave)*shade+vec3(0.08)*highlight;
+      /* ★★ 明暗对比。站主 2026-10-16：「图二那个没有那么大的明暗对比」。
+         ⚠⚠ 压缩必须**朝区间中点**，不能朝白色：
+            朝白色只抬暗部、亮部仍顶在纯白 ⇒ 那不是"降对比"，那是"整体变淡"
+            （实测 k=0.5 时墨区均低从 110 级掉到 69 级 —— 墨量被顺带削了三成）。
+            朝中点则是亮部一起下来 ⇒ 明暗跨度真的收窄。
+            MID = (0.43 + 1.06)/2 = 0.745，是现有着色区间的算术中点（结构性常量，
+            不是设计旋钮；要改着色区间时才动它）。
+            k=1 原样，k=0 全平。⚠ 只改**明暗跨度**，整体浓淡由 --pleat-opacity 决定。 */
+      shade=0.745+(shade-0.745)*uContrast;
+      vec3 color=mix(uBase,uWave,vWave)*shade+vec3(0.08*uContrast)*highlight;
       gl_FragColor=vec4(color,mix(uOpacity,uWaveOpacity,vWave));
     }`;
   const shaders: WebGLShader[] = [];
@@ -63,6 +72,7 @@ export function createPleatedRenderer(canvas: HTMLCanvasElement, palette: PleatP
     gl.uniform3fv(gl.getUniformLocation(program, 'uWave'), palette.wave);
     gl.uniform1f(gl.getUniformLocation(program, 'uOpacity'), palette.opacity);
     gl.uniform1f(gl.getUniformLocation(program, 'uWaveOpacity'), palette.waveOpacity);
+    gl.uniform1f(gl.getUniformLocation(program, 'uContrast'), palette.contrast);
     const aspect = gl.getUniformLocation(program, 'uAspect');
     gl.enable(gl.DEPTH_TEST); gl.clearColor(0, 0, 0, 0);
     return {

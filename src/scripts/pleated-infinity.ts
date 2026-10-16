@@ -15,6 +15,8 @@ import { createPleatedRenderer } from './pleated-renderer';
     base: color('--pleat-base'), wave: color('--pleat-wave'),
     opacity: parseFloat(styles.getPropertyValue('--pleat-opacity')),
     waveOpacity: parseFloat(styles.getPropertyValue('--pleat-wave-opacity')),
+    /* ★ 明暗对比（只压暗部跨度，不动整体浓淡）；1 = 原样，0 = 全平 */
+    contrast: parseFloat(styles.getPropertyValue('--pleat-contrast')),
   };
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const pleats = createPleats(), waves = new PleatWaves();
