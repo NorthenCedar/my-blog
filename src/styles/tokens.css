@@ -2,6 +2,11 @@
    P1（2026-09-25 站主定案）：配色从旧方向（纯白 + 橙）换成莱茵方向（乳白 + 绿）。
    docs/design-spec.md §3/§5 已同步更新 —— 两处应始终一致，不一致就是 bug。 */
 :root {
+  /* 标签区机械环：浅色金属保留铜色光槽；数值只作用于 TagsPlate。 */
+  --ring-plate-opacity: 0.38;
+  --ring-light-halo: #d8893f80;
+  --ring-light-core: #fff9eb;
+  --dur-ring-flow: 24s;
   /* 单册场景：只由 AlbumScene 使用，不改变旧砖墙与总入口。 */
   --scene-hud-paper: #fafaf7e6;
   --scene-photo-paper: #fdfbf5;

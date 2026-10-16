@@ -4,27 +4,8 @@ import { join } from 'node:path';
 import { TAGS } from '../src/tag-registry';
 import { readPostFrontmatter, visiblePosts } from './content-invariants.test';
 
-/* 标签区（`/tags/` + `/tags/[tag]/`）2026-10-06 这一轮的契约。
- *
- * 站主原话：
- *   「标签总览 CROSSHAIR 准星：鼠标所在行列亮淡绿准星（示波器十字光标）；
- *     键盘 Tab 有同样效果。矩阵本身，单标签 CROSSHAIR 准星与标签总览共用一套实现。」
- *   「标签页背景的百褶无限符号换成这个无限符号，记得把他扣下来（里面的月牙也要，
- *     下面的字母不要）。」
- * 三处拍板：**乙·全屏十字线** / **甲·染墨绿** / **甲·两页都是矩阵**。
- *
- * 这里守的是「不可退让的性质」，不是「上一版的实现形态」：
- *   ① 素材自带 alpha、且**已染成墨绿**（站主拍板甲）、**裁到主体框**、体积可控。
- *   ② 底纹**不许放大超过 2×** —— 源图里这个 ∞ 只有 467px 宽，超过就是插值糊图
- *      （实验室 `_probe/_tags-inf-lab.mjs` 出过 1:1 对比图）。这条把"别糊"变成断言。
- *   ③ 底纹必须挂 `.shell` 之外（plate 槽）；两页都必须关掉百褶 ∞，否则两套母题叠着。
- *   ④ 准星：**DOM CSS 变量 + 零 rAF + 无 transform 过渡**（示波器光标必须"就在这里"）。
- *   ⑤ 准星两种输入源（指针绝对坐标 / 键盘焦点）汇到**同一对变量**。
- *   ⑥ 降级：触摸 / reduced-motion ⇒ 整个装置不做（CSS + 脚本两层都做）。
- *   ⑦ 颜色只从 token 读，组件/脚本里不许出现字面色值。
- *   ⑧ 两页共用**同一个** `TagsPlate`（站主原话就是"共用一套实现"）。
- *   ⑨ 单标签页**不再复用 `PostIndex`** —— 归档页按 `.index li` 取行，改它会连带改归档。
- *   ⑩ 零新增运行时依赖（红线）。
+/* 标签区共用装置契约：2026-10-16 按站主新选择换成机械环。
+ * 保留准星、矩阵、槽位隔离与内容验证；旧墨绿图的颜色/467px 尺寸不再适用。
  */
 const ROOT = process.cwd();
 const DIST = join(ROOT, 'dist');
@@ -36,7 +17,7 @@ const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
 const strip = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
 
 const PLATE_DIR = join(ROOT, 'src/assets/tags/plates');
-const PLATE = join(PLATE_DIR, 'inf-art.webp');
+const PLATE = join(PLATE_DIR, 'mechanical-ring.webp');
 
 const IDX = read('src/pages/tags/index.astro');
 const ONE = read('src/pages/tags/[tag].astro');
@@ -70,118 +51,44 @@ const AI_POST_COUNT = visiblePosts(readPostFrontmatter()).filter((p) =>
 ).length;
 
 describe('标签区 · ∞ 底纹素材契约', () => {
-  it('素材已进仓、在 plates 子目录、体积可控', () => {
-    expect(existsSync(PLATE), '缺 src/assets/tags/plates/inf-art.webp').toBe(true);
-    const plates = readdirSync(PLATE_DIR).filter((f) => f.endsWith('.webp'));
-    expect(plates.length, 'plates 目录下只该有一张底纹').toBe(1);
-    const kb = statSync(PLATE).size / 1024;
-    expect(kb, `底纹 ${kb.toFixed(0)} KB 太大（这层是 8% 的淡纹）`).toBeLessThan(200);
-    expect(PLATE.replace(/\\/g, '/'), '素材必须放在 plates 子目录里').toContain('/tags/plates/');
-  });
-
-  it('★ 素材自带 alpha，且**已染墨绿**（站主拍板「甲·染墨绿」）', async () => {
-    const sharpMod = await import('sharp');
-    const sharp = sharpMod.default;
+  it('机械环透明图进入构建管线，原始细节与体积均有边界', async () => {
+    expect(existsSync(PLATE)).toBe(true);
+    expect(readdirSync(PLATE_DIR).filter((f) => f.endsWith('.webp'))).toHaveLength(1);
+    expect(statSync(PLATE).size).toBeLessThan(200 * 1024);
+    const { default: sharp } = await import('sharp');
     const meta = await sharp(PLATE).metadata();
-    expect(meta.hasAlpha, '素材没有 alpha ⇒ 8% 不透明度会在纸白上压出一块可见矩形').toBe(true);
-
+    expect(meta.width).toBe(1400);
+    expect(meta.height).toBe(900);
+    expect(meta.hasAlpha).toBe(true);
     const { data, info } = await sharp(PLATE).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-    const at = (x: number, y: number) => data[(y * info.width + x) * info.channels + 3];
-    for (const [x, y, where] of [
-      [0, 0, '左上'], [info.width - 1, 0, '右上'],
-      [0, info.height - 1, '左下'], [info.width - 1, info.height - 1, '右下'],
-    ] as const) {
-      expect(at(x, y), `${where}角不透明 ⇒ 纸白没抠干净`).toBeLessThanOrEqual(8);
+    const alpha = (x: number, y: number) => data[(y * info.width + x) * info.channels + 3];
+    for (const [x, y] of [[0, 0], [1399, 0], [0, 899], [1399, 899], [450, 450], [950, 450]]) {
+      expect(alpha(x, y), '背景和双环内部必须透明，不能带黑色矩形').toBeLessThanOrEqual(8);
     }
-    let maxA = 0, n = 0, sumR = 0, sumG = 0, sumB = 0, blueCast = 0;
-    for (let i = 0; i < data.length; i += info.channels) {
-      const a = data[i + 3];
-      if (a > maxA) maxA = a;
-      if (a > 200) {
-        n++; sumR += data[i]; sumG += data[i + 1]; sumB += data[i + 2];
-        /* 「残留偏蓝」的判据：蓝通道反超绿通道。源图是**蓝灰**的 ∞（`_probe/_tags-src.jpg`），
-           染墨绿若只做整体去饱和，蓝会留下来 —— 那就不再是站上那族绿了。
-           ★ 留 8 级容差：实测只有 **1 个**像素越线、且只差 2 级
-             （rgb(11,25,27)，色带最暗那一档的取整误差，肉眼是黑绿）。
-             真·蓝残留不是这个量级（源图里 B−G 有 40 级左右）⇒ 8 级既挡得住真问题、
-             也不会被一次取整绊倒。 */
-        if (data[i + 2] - data[i + 1] > 8) blueCast++;
-      }
-    }
-    expect(maxA, '最大 alpha 为 0 ⇒ 图案被整体清掉了').toBeGreaterThanOrEqual(200);
-    expect(n, '没有不透明像素 ⇒ 图案没了').toBeGreaterThan(1000);
-    const avgR = sumR / n, avgG = sumG / n, avgB = sumB / n;
-    expect(avgG - avgR, `平均色 rgb(${avgR.toFixed(0)},${avgG.toFixed(0)},${avgB.toFixed(0)}) 不是绿的`).toBeGreaterThan(20);
-    expect(avgG - avgB, '没染成墨绿（绿通道没压过蓝通道）').toBeGreaterThan(20);
-    expect(blueCast, `${blueCast} 个像素蓝通道反超绿通道 8 级以上 ⇒ 源图的蓝没染干净`).toBe(0);
+    expect(data.some((value, i) => i % 4 === 3 && value > 200), '主体不能被清空').toBe(true);
+    expect(read('public/licenses/rhine-mechanical-ring.txt')).toContain('MIT License');
   });
 
-  it('★ 已裁到主体框（不含源图上方的大片纸白），且与 CSS 的 aspect-ratio 一致', async () => {
-    const sharpMod = await import('sharp');
-    const sharp = sharpMod.default;
-    const meta = await sharp(PLATE).metadata();
-    /* 源图 1080×1392 里 ∞ 只占中间一条（上面是大片纸白 + 云、下面有 "ich1 tattoo" 字母）；
-       裁到主体框后实测 467×185。站主明确说「下面的字母不要」⇒ 字母必须已被裁/擦掉。 */
-    expect(meta.width, '宽度应为主体框 467').toBe(467);
-    expect(meta.height, '高度应为主体框 185').toBe(185);
-    const ratio = meta.width! / meta.height!;
-    expect(ratio, `主体框比例 ${ratio.toFixed(3)} 与 CSS 的 aspect-ratio 对不上`).toBeCloseTo(467 / 185, 2);
-    expect(PLATE_CSS, 'CSS 的 aspect-ratio 必须与素材一致（否则 contain 会在四周留空）').toMatch(
-      /aspect-ratio:\s*467 \/ 185/,
-    );
-
-    /* 裁后仍要贴到左右边缘 —— 不贴就是裁过头（∞ 的环被切了） */
-    const { data, info } = await sharp(PLATE).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-    let x0 = meta.width!, x1 = -1;
-    for (let y = 0; y < info.height; y++) {
-      for (let x = 0; x < info.width; x++) {
-        if (data[(y * info.width + x) * info.channels + 3] <= 64) continue;
-        if (x < x0) x0 = x;
-        if (x > x1) x1 = x;
-      }
-    }
-    expect(x0, `内容贴不到左边缘（x0=${x0}）⇒ 裁过头了`).toBeLessThanOrEqual(3);
-    expect(x1, `内容贴不到右边缘（x1=${x1}）⇒ 裁过头了`).toBeGreaterThanOrEqual(meta.width! - 5);
-  });
-
-  it('★ 底纹不许放大超过 2×（源图原生只有 467px 宽）', () => {
-    /* 这条把"别糊"变成断言。取宽上界必须 ≤ 934（= 467 × 2）。
-       ⚠ 站上其它底纹从来没放大过（百褶 ∞ 1.02×、友链墨 ∞ 0.73×）——
-         本图 1.97× 已是全站最激进的一个，所以钉死在这里。 */
+  it('图与光槽共享画布，窄屏完整显示，宽屏不超过原生分辨率', () => {
+    expect(PLATE_CSS).toMatch(/aspect-ratio:\s*1400 \/ 900/);
     const rule = PLATE_CSS.match(/\.tags-inf\s*\{([^}]*)\}/)?.[1] ?? '';
-    expect(rule, '没读到 .tags-inf 的样式块').toBeTruthy();
-    const pxCaps = [...rule.matchAll(/([\d.]+)px/g)].map((m) => Number(m[1]));
-    expect(pxCaps.length, '取宽里一个 px 上界都没有？').toBeGreaterThan(0);
-    for (const v of pxCaps) {
-      expect(v, `取宽上界 ${v}px > 934（原生 467 × 2）⇒ 靠插值放大，会糊`).toBeLessThanOrEqual(934);
+    expect(rule).toContain('1400px');
+    expect(rule).toContain('150vh');
+    for (const match of PLATE_CSS.matchAll(/([\d.]+)vw/g)) {
+      expect(Number(match[1])).toBeLessThan(100);
     }
-    /* 站上通用的守卫（比单看某个数字耐老化）：任何 ≥100vw 都意味着"图案会出画"。 */
-    const vwValues = [...rule.matchAll(/([\d.]+)vw/g)].map((m) => Number(m[1]));
-    expect(vwValues.length, '取宽里一个 vw 都没有？').toBeGreaterThan(0);
-    for (const v of vwValues) {
-      expect(v, '取宽不许 ≥100vw —— 站主 2026-10-04：不要出去了').toBeLessThan(100);
-    }
-    expect(rule, '挡"又宽又扁"的窗，必须有 vh 上界').toMatch(/170vh/);
-    /* 两档旋钮留着，便于只改一行就调分量 */
-    expect(rule, '旋钮 --plate-w 要留着').toMatch(/--plate-w/);
-    expect(rule, '旋钮 --plate-op 要留着').toMatch(/--plate-op/);
+    expect(PLATE_ASTRO).toContain("ring.resolution.join(' ')");
   });
 
-  it('★ 不透明度取站上装饰底纹那一档（实测校准，不是感觉）', () => {
-    const rule = PLATE_CSS.match(/\.tags-inf\s*\{([^}]*)\}/)?.[1] ?? '';
-    /* 实测（_probe/_tags-inf-lab.mjs）：既有底纹最深只比纸白低十几级
-       （友链墨 ∞ @0.09 → 纸白 250 / 最深 233，低 17 级）。本图是"深色线画"，同样的 α 会明显更黑
-       ⇒ 取 8%（站上装饰底纹定稿档 --deco-plate-coarse 也正是 8%）。
-       ★ 第二轮实测把 0.08 **夹在中间**（同一 α 下最深只由 α 决定、与取宽无关）：
-         0.07→233 · **0.08→231（低 19 级）** · 0.10→225 · 0.12→221
-         ⇒ 与参照只差 2 级，落在既有底纹那一档里。
-       ⚠ 0.18 那版实测最深低 41 级（是既有底纹的 2.4 倍浓）—— 这条断言就是防它回来。 */
-    const op = Number(rule.match(/--plate-op,\s*([\d.]+)\)/)?.[1]);
-    expect(Number.isFinite(op), '读不到 --plate-op 的默认值').toBe(true);
-    expect(op, `不透明度 ${op} 超出装饰底纹档（应 ≤0.10）⇒ 会压过正文`).toBeLessThanOrEqual(0.1);
-    expect(op, `不透明度 ${op} 太低 ⇒ 等于没有底纹`).toBeGreaterThanOrEqual(0.05);
+  it('减少动态效果时停止光带，颜色与浓度可统一调节', () => {
+    expect(PLATE_CSS).toMatch(/prefers-reduced-motion:\s*reduce/);
+    expect(PLATE_CSS).toMatch(/animation:\s*none/);
+    expect(PLATE_CSS).toContain('var(--ring-plate-opacity)');
     const tokens = read('src/styles/tokens.css');
-    expect(tokens, '站上装饰底纹档变了 ⇒ 8% 这个数要重新对').toMatch(/--deco-plate-coarse:\s*#2d7d4614/);
+    const opacity = Number(tokens.match(/--ring-plate-opacity:\s*([\d.]+)/)?.[1]);
+    expect(opacity).toBeGreaterThanOrEqual(0.15);
+    expect(opacity).toBeLessThanOrEqual(0.4);
+    expect(PLATE_CSS).not.toMatch(/#[\da-fA-F]{3,8}\b|rgba?\(/);
   });
 
   it('★ 挂法：plate 具名槽（`.shell` 之外）+ 关掉本页百褶 ∞', () => {
@@ -192,8 +99,8 @@ describe('标签区 · ∞ 底纹素材契约', () => {
     expect(PLATE_CSS).toMatch(/z-index:\s*-1/);
     expect(PLATE_CSS).toMatch(/pointer-events:\s*none/);
     expect(PLATE_ASTRO).toMatch(/aria-hidden="true"/);
-    expect(PLATE_ASTRO).toMatch(/<Image[\s\S]*?widths=\{\[234, 467\]\}/);
-    expect(PLATE_ASTRO).toMatch(/<Image[\s\S]*?sizes="64vw"/);
+    expect(PLATE_ASTRO).toMatch(/<Image[\s\S]*?widths=\{\[700, 1400\]\}/);
+    expect(PLATE_ASTRO).toMatch(/<Image[\s\S]*?sizes="[^"]*96vw[^"]*"/);
 
     /* 百褶 ∞（`.page-inf`，Topbar 渲染、全站内页共用）必须在本区两页关掉，
        不关就是两套母题叠着（关于页「切片档案」的教训）。

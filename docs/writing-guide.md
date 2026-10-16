@@ -33,6 +33,7 @@
 | **说说的点赞与评论** | 自动的，不用配 —— 见 §25 | 不用 |
 | **页脚统计（运行时长 / PV / UV）** | 时长起点在 `content/site.md` 的 `since` —— 见 §26 | 不用 |
 | 标签清单 | `src/tag-registry.ts` | 会改一行数组就行 |
+| 标签页机械环底纹 | `src/components/TagsPlate.astro`；浓度与光带速度在 `tokens.css` 的 `--ring-plate-opacity` / `--dur-ring-flow` | 换内容不用管它 |
 | **导航菜单（右上角那排）** | `src/lib/nav.ts` —— 见 §22 | 会改一行数组就行 |
 | 配色 / 字号 / 间距 / 字体 | `src/styles/tokens.css` | 要认一点代码 |
 | 域名 | `astro.config.mjs` 一行 | 要认一点代码 |
