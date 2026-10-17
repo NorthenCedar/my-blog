@@ -30,6 +30,7 @@ import { getEntry } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import BootIntro from '../components/BootIntro.astro';
 import NavDrawer from '../components/NavDrawer.astro';
+import ThemeToggle from '../components/ThemeToggle.astro';
 import { NAV_LINKS } from '../lib/nav';
 import { getVisiblePosts } from '../lib/posts';
 import { getSite } from '../lib/site';
@@ -212,6 +213,8 @@ const titleLines: { ch: string; i: number }[][] = (() => {
           ))}
           <a href="/rss.xml">RSS</a>
         </nav>
+        {/* ★ 2026-10-17：Jelly Slider 主题切换（亮/暗）。flex 子项，落在导航右侧。 */}
+        <ThemeToggle />
         <NavDrawer current="index" />
       </div>
 
