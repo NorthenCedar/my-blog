@@ -102,7 +102,22 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
           **早于样式表**被解析，首帧就已经生效，不给自动反色留下半秒的窗口。
         ★ 将来真要做暗色模式时，改这一行（去掉 / 换成 `light dark`）+ 自己写
           `@media (prefers-color-scheme: dark)` 的 token 覆写，而不是删掉它了事。 */}
-    <meta name="color-scheme" content="only light" />
+    <meta name="color-scheme" content="light dark" />
+    {/* ★★ 2026-10-17：深色模式落地（Jelly Slider 主题切换按钮）—— 上面 2026-10-08
+        那条注释写明的改法："将来真要做暗色模式时，改这一行（换成 `light dark`）"。
+        深色 token 初版见 src/styles/tokens.css 末尾 `html.dark`。 */}
+    {/* ★★ 2026-10-17：深色模式**首帧防闪**。规则与 src/scripts/theme.ts 的
+        getTheme() 逐字对应：localStorage.theme > prefers-color-scheme。
+        必须是内联 + 同步（classic）脚本：在首次绘制前把 `dark` 类挂上，
+        否则选了深色的访客每次进站都先闪一下纸白（与下面 pt/tsl-nav 同一手法）。 */}
+    <script is:inline>
+      try {
+        var __th = localStorage.getItem('theme');
+        if (__th === 'dark' || (!__th && matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {}
+    </script>
     <!-- 百度搜索资源平台的站点归属验证（公开标识符，不是密钥）。
          用途：在 ziyuan.baidu.com 证明这个站是你的，之后才能提交 sitemap。
          别删 —— 删了以后无法重新验证站点。换域名后需要在百度重新申请一个。 -->

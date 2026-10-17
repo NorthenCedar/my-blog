@@ -493,3 +493,36 @@ html.boot-mini {
   --bi-ch-step: 4ms;
   --bi-k: 0.02;
 }
+
+/* ===== 深色模式 · 初版（2026-10-17，随 Jelly Slider 主题切换按钮落地）=====
+   ★ 状态：**初版、待站主细化** —— 按钮的机械部分（`dark` 类 + localStorage +
+     首帧防闪）先行，深色视觉只给了第一版能看的映射。站主做正式深色设计时，
+     逐条替换这里的值即可，契约（类名 / 键名）不变。
+   ★ 取值策略：**只复用本站已有的深场 token**（--dusk-* / --on-* / --dark-glass-*），
+     不发明新色相 —— 深色底的"纸"就是 --dusk-2（首页深墨绿场的主体），
+     深色底的"墨"就是 --on-ink。数值后都标了在 #131b17 上的实测对比度
+     （公式与 scripts/assert-tokens.mjs 同源）。
+   ★ 故意没动的：--on-band*（深色带本来就是深的）、--code-bg/fg（代码块本来就是深的）、
+     --dusk-*（深场在深色模式里还是深场）、动效/字号/间距（与明暗无关）。
+   ★ 已知待办（站主做正式版时处理）：百褶 ∞ 底纹（/art/inf-orig.webp）是按纸白出的，
+     深底上会显脏 —— 届时要么重出一张深底版、要么在 html.dark 里降它的 opacity。 */
+html.dark {
+  --paper: #131b17;       /* = --dusk-2：纸翻成深墨绿场 */
+  --ink: #f2f4f1;         /* = --on-ink：深底前景字（15.86:1） */
+  --muted: #a9b4ac;       /* 深底次级字（8.2:1） */
+  --hair: #2b352e;        /* 深底发丝线（纯装饰，1.38:1 —— 与浅色版 --hair 同性质） */
+  --accent: #4caf50;      /* = --accent-bright：深底专用绿（6.31:1） */
+  --accent-ink: #8fe0b0;  /* = --logo-glow：深底上的浅绿字（11.24:1） */
+  --accent-wash: #1c2822; /* 深底绿洗（≈ --dusk-3 再压一档，悬停底色） */
+  --panel: #1c2822;       /* 抬升面：深底上的面板 */
+  --glass-bg: #ffffff12;      /* = --dark-glass-bg：深底玻璃 */
+  --glass-bg-hot: #ffffff21;  /* = --dark-glass-bg-hot */
+  --glass-line: #ffffff1f;    /* = --dglass-line：深底玻璃边框 */
+  --glass-shadow:
+    0 1px 2px #00000040,
+    0 8px 28px -12px #00000080;
+  --code-inline-bg: #242424;  /* 行内代码底：深底上仍能辨出 */
+  --signal-text: #eba55f;     /* HUD 橙字：浅色版 #b45309 在深底上只剩 ~2:1，换浅橙（8.42:1） */
+  --ink-motif: #8fe0b0;       /* 墨滴母题墨色：深底上原 #2f7741 太沉，换浅绿（同族） */
+  --deco-identity-ink: #f2f4f108; /* 身份舱水印：深底上用浅字 @ 3%（原 --ink @ 6%） */
+}

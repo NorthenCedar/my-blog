@@ -1,0 +1,66 @@
+---
+/**
+ * Jelly Slider 主题切换按钮 —— 原版 WebGPU 实现（Software Mansion / TypeGPU，MIT）。
+ * 原版代码在 src/vendor/jelly-slider/（三处本站改动见各文件 ★ 标注），
+ * 接入逻辑在 src/scripts/theme-toggle.ts，主题契约见 src/scripts/theme.ts。
+ *
+ * 无 WebGPU 的浏览器降级为普通文字开关（主题照样切）。
+ * 无障碍：role=switch + aria-checked + 键盘可操作；canvas 纯装饰 aria-hidden。
+ */
+---
+<div
+  class="theme-toggle"
+  data-theme-toggle
+  role="switch"
+  aria-checked="false"
+  aria-label="切换深色模式"
+  title="切换深色 / 浅色"
+  tabindex="0"
+>
+  <canvas aria-hidden="true" width="168" height="76"></canvas>
+</div>
+<script>
+  import { initJellyThemeToggle } from '../scripts/theme-toggle';
+  document.querySelectorAll<HTMLElement>('[data-theme-toggle]').forEach((el) => {
+    if (el.dataset.ttInit) return;
+    el.dataset.ttInit = '1';
+    void initJellyThemeToggle(el).catch(() => {
+      /* 初始化失败保持空白画布，不抛到控制台吓唬人 —— 降级逻辑在脚本内部已处理 */
+    });
+  });
+</script>
+<style>
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    border-radius: 12px;
+    outline-offset: 3px;
+  }
+  .theme-toggle canvas {
+    display: block;
+    width: 168px;
+    height: 76px;
+    cursor: grab;
+    touch-action: none;
+  }
+  .theme-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+  }
+  /* 无 WebGPU 降级开关：极简 pill，不伪装成果冻 */
+  .theme-toggle .tt-fallback {
+    min-width: 3.2rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid var(--hair);
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .theme-toggle canvas {
+      cursor: pointer;
+    }
+  }
+</style>
