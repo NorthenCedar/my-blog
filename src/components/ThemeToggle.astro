@@ -1,0 +1,51 @@
+---
+/**
+ * Jelly Slider 主题切换按钮。
+ *
+ * 出处：Software Mansion / TypeGPU "Jelly Slider"（MIT），本站用 2D canvas 复刻
+ * （物理照搬原版 Verlet 绳，渲染用渐变近似果冻质感 —— 不需要 WebGPU）。
+ * 逻辑在 src/scripts/theme-toggle.ts，主题契约见 src/scripts/theme.ts。
+ *
+ * 无障碍：role=switch + aria-checked + 键盘可操作；canvas 纯装饰 aria-hidden。
+ * 减少动态效果（prefers-reduced-motion）下不跑物理动画，直接切换。
+ */
+---
+<div
+  class="theme-toggle"
+  data-theme-toggle
+  role="switch"
+  aria-checked="false"
+  aria-label="切换深色模式"
+  title="切换深色 / 浅色"
+  tabindex="0"
+>
+  <canvas aria-hidden="true" width="140" height="64"></canvas>
+</div>
+<script>
+  import { initThemeToggle } from '../scripts/theme-toggle';
+  document.querySelectorAll<HTMLElement>('[data-theme-toggle]').forEach(initThemeToggle);
+</script>
+<style>
+  /* 组件自带尺寸：果冻需要纵向拱起的空间，高度别压 */
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    border-radius: 999px;
+    outline-offset: 3px;
+  }
+  .theme-toggle canvas {
+    display: block;
+    cursor: grab;
+    /* 触摸拖拽时不许页面跟着滚 */
+    touch-action: none;
+  }
+  .theme-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .theme-toggle canvas {
+      cursor: pointer;
+    }
+  }
+</style>
