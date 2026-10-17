@@ -34,6 +34,7 @@
  */
 import { NAV_LINKS, type NavKey } from '../lib/nav';
 import NavDrawer from './NavDrawer.astro';
+import ThemeToggle from './ThemeToggle.astro';
 
 interface Props {
   wordmark: string;
@@ -55,6 +56,9 @@ const { wordmark, current } = Astro.props;
     ))}
     <a href="/rss.xml">RSS</a>
   </nav>
+  {/* ★ 2026-10-17：Jelly Slider 主题切换。顶栏直接子节点会被上面那条
+      `> *:not(.navshell):not(.navtog)` 规则抬到玻璃层之上，无需额外样式。 */}
+  <ThemeToggle />
   {/* 移动端抽屉（零 JS）；桌面隐藏 —— 见组件内注释 */}
   <NavDrawer current={current} />
 </div>

@@ -1,6 +1,7 @@
 ---
 import { NAV_LINKS, type NavKey } from '../lib/nav';
 import NavDrawer from './NavDrawer.astro';
+import ThemeToggle from './ThemeToggle.astro';
 
 interface Props {
   current?: NavKey;
@@ -20,6 +21,8 @@ const links = NAV_LINKS;
     ))}
     <a href="/rss.xml">RSS</a>
   </nav>
+  {/* ★ 2026-10-17：Jelly Slider 主题切换（亮/暗）。flex 子项，落在导航右侧。 */}
+  <ThemeToggle />
   {/* 移动端抽屉（零 JS）；桌面隐藏 */}
   <NavDrawer current={current} />
 </div>
