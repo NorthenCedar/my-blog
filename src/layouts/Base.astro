@@ -77,8 +77,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    {/* ★★ 2026-10-08：**明确告诉浏览器本站只有浅色配色** —— 这是手机端
-        「暗色模式下看不到主页导航菜单按钮」的根因修复。
+    {/* ★★ 2026-10-08 起，这一行的用途是**退出手机 Chrome 的「自动深色」**；这条至今没变。
         根因（`_probe/_shot-mobile.mjs` 复现，见下）：手机系统开深色时，
         Chrome/Edge 会对**没声明 color-scheme 的浅色页面**套一层
         「自动深色」（Auto Dark / WebContentsForceDark）—— 它是*按元素*做的
@@ -91,33 +90,28 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
         实测两行像素（390 视口，y=162/168 是汉堡的上下两条横线）：
           浅色    345-362、345-362（都在）
           强制深色  （无亮像素）       ← wordmark 那行文字一个没少
-        ⇒ 不是几何问题、不是网络问题、也不是本站的暗色模式（本站从来没有）。
-        `color-scheme: only light` 是 Chrome 官方给出的退出方式（另见
-        https://developer.chrome.com/blog/new-in-chrome-98 的 "Opting out of auto-dark themes"）：
-        声明之后浏览器不再对本页做自动反色。
-        ★ 为什么用 `only light` 而不是 `light dark`：后者等于声明「我会自己处理深色」，
-          浏览器于是把**原生控件**（滚动条 / 表单 / 日期选择器）按系统深色渲染，
-          而本站正文是纸白 —— 会出现「留言板输入框是黑的、页面是白的」这种割裂。
+        ⇒ 不是几何问题、不是网络问题。退出的办法就是**在 head 里声明 color-scheme**
+        （Chrome 官方口径，另见 developer.chrome.com/blog/new-in-chrome-98 的
+        "Opting out of auto-dark themes"）。
+        ★ 同一次改动里汉堡也从"背景块"改成了内联 SVG 图元（双保险），
+          那条契约在 tests/nav-drawer-overflow.test.ts —— 与配色模式无关，**别一起动**。
+
+        ★★ 2026-10-17：深色模式落地（Jelly Slider 主题开关），这一行由
+          `content="only light"` 改成 `content="light dark"` —— 正是上面这条注释当初
+          预告的改法（站主口径：「不看以前立的只要 light，现在就做暗色模式」）。
+          · 为什么不是继续 `only light`：站上现在真有 `html.dark` 的 token（tokens.css 末尾）
+            ⇒ 再声明"只有浅色"就是一句**假话**，会误导下一个读到这里的人；
+          · 为什么 `light dark` 也挡得住自动深色：官方口径是"页面声明自己支持深色"
+            ⇒ 浏览器不再代劳反色。两种写法都能挡，取与事实相符的那个；
+          · 它还顺带让**原生控件**（滚动条 / 表单 / 日期选择器）跟着模式走。
+          ⚠ 已知残余（记在这里，别再当成新 bug 查一遍）：原生控件跟的是**系统**偏好，
+            不是站内那个开关 —— 系统浅色 + 站内选深色时滚动条仍是浅色。
+            要彻底对齐得在 CSS 里按 `html.dark` 覆写 `color-scheme`，
+            而那会把"退出自动深色"重新交回样式表层（下面这条注释说的"meta 早于样式表
+            生效"就没了）⇒ 先不做。
         ★ 为什么写 meta 而不是 CSS 的 `:root{color-scheme}`：meta 在 head 里
-          **早于样式表**被解析，首帧就已经生效，不给自动反色留下半秒的窗口。
-        ★ 将来真要做暗色模式时，改这一行（去掉 / 换成 `light dark`）+ 自己写
-          `@media (prefers-color-scheme: dark)` 的 token 覆写，而不是删掉它了事。 */}
+          **早于样式表**被解析，首帧就已经生效，不给自动反色留下半秒的窗口。 */}
     <meta name="color-scheme" content="light dark" />
-    {/* ★★ 2026-10-17：深色模式落地（Jelly Slider 主题切换按钮）—— 上面 2026-10-08
-        那条注释写明的改法："将来真要做暗色模式时，改这一行（换成 `light dark`）"。
-        深色 token 初版见 src/styles/tokens.css 末尾 `html.dark`。 */}
-    {/* ★★ 2026-10-17：深色模式**首帧防闪**。规则与 src/scripts/theme.ts 的
-        getTheme() 逐字对应：localStorage.theme > prefers-color-scheme。
-        必须是内联 + 同步（classic）脚本：在首次绘制前把 `dark` 类挂上，
-        否则选了深色的访客每次进站都先闪一下纸白（与下面 pt/tsl-nav 同一手法）。 */}
-    <script is:inline>
-      try {
-        var __th = localStorage.getItem('theme');
-        if (__th === 'dark' || (!__th && matchMedia('(prefers-color-scheme: dark)').matches)) {
-          document.documentElement.classList.add('dark');
-        }
-      } catch (e) {}
-    </script>
     <!-- 百度搜索资源平台的站点归属验证（公开标识符，不是密钥）。
          用途：在 ziyuan.baidu.com 证明这个站是你的，之后才能提交 sitemap。
          别删 —— 删了以后无法重新验证站点。换域名后需要在百度重新申请一个。 -->
@@ -128,16 +122,34 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="alternate" type="application/rss+xml" title={`${site.name} — RSS`} href="/rss.xml" />
     <link rel="preload" href="/fonts/plex-sans-400.woff2" as="font" type="font/woff2" crossorigin />
-    {/* 页面过渡的**首帧保险**（2026-09-27）：上一页在点击时把 pt 写进 sessionStorage 并盖上蒙版；
-        这里必须在**首次绘制之前**把蒙版补上，否则会先闪一下目标页的内容再盖上（站主要求"严禁首帧闪烁"）。
-        必须是 inline + 同步（classic）脚本：type=module 会被 defer 到绘制之后，那就晚了。
-        代价约 110 字节，进每一页的内联脚本预算。
-        ★ 2026-10-02 第九轮又加了**同一手法的第二个标记 tsl-nav**（时间切片剧场 →
-        相册的交接，约 120 字节）：主页绿幕满屏后跳转前写下它，目标页据此在首帧
-        直接铺一屏同款深绿（`.tsl-veil`，见 gallery/index.astro）—— 晚一步挂就等于
-        先闪一下纸白。两个标记各自读掉即删，互不影响；不写进 sessionStorage 的
-        场合（隐私模式）只是少一道入场动画，导航本身不受影响。 */}
+    {/* 首帧保险（**两块并成一块**，见下）。都是 inline + 同步（classic）脚本：
+        type=module 会被 defer 到绘制之后，那就晚了。
+        ① 页面过渡的蒙版（2026-09-27）：上一页在点击时把 pt 写进 sessionStorage 并盖上蒙版；
+           这里必须在**首次绘制之前**把蒙版补上，否则会先闪一下目标页的内容再盖上
+           （站主要求"严禁首帧闪烁"）。约 110 字节。
+           ★ 2026-10-02 第九轮又加了**同一手法的第二个标记 tsl-nav**（时间切片剧场 →
+           相册的交接，约 120 字节）：主页绿幕满屏后跳转前写下它，目标页据此在首帧
+           直接铺一屏同款深绿（`.tsl-veil`，见 gallery/index.astro）—— 晚一步挂就等于
+           先闪一下纸白。两个标记各自读掉即删，互不影响；不写进 sessionStorage 的
+           场合（隐私模式）只是少一道入场动画，导航本身不受影响。
+        ② 深色模式的 `dark` 类（2026-10-17）：规则与 src/scripts/theme.ts 的 getTheme()
+           逐字对应（localStorage.theme > prefers-color-scheme）。不在这里挂上，
+           选了深色的访客每次进站都会先闪一下纸白。
+        ★★ 为什么**并进同一块**而不是各写一个 <script>：文章页的脚本条数预算
+           （tests/build-output.test.ts「文章页脚本数量与体积都在预算内」，上限 5 条）
+           —— 各写一块就是 6 条，当场红。两块都是"首帧前的同步小片段"、同一个用途，
+           合成一块天经地义；**标签数少了，内联字节一个没多**（代码原样搬过来）。
+           ⚠ 别为了看清楚再拆成两块 —— 那会撞那条预算，而且不是"预算太紧"，
+             是这个页面上的脚本本来就该合并（5 条里已经有 4 条 module）。
+        ⚠ 两块各自带 try/catch（隐私模式下 localStorage 会抛）：一块抛了不许拖累另一块。 */}
     <script is:inline>
+      try {
+        var __th = localStorage.getItem('theme');
+        if (__th === 'dark' || (!__th && matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {}
+
       try {
         if (sessionStorage.getItem('pt')) {
           sessionStorage.removeItem('pt');

@@ -5,6 +5,7 @@ import Base from '../layouts/Base.astro';
 import PleatedInfinity from '../components/PleatedInfinity.astro';
 import PageTitle from '../components/PageTitle.astro';
 import SocialIcon from '../components/SocialIcon.astro';
+import ThemeToggle from '../components/ThemeToggle.astro';
 
 // 关于页正文来自 content/pages/about.md —— 主题不持有任何正文（content-model.md §7）
 const entry = await getEntry('pages', 'about');
@@ -234,6 +235,19 @@ const isExternal = (h: string) => /^https?:/i.test(h);
       </div>
     </section>
   )}
+  {/* ★★ 2026-10-17 站主拍板「按钮只放在关于页」—— 所以主题开关挂在这里（右栏 FIG.05），
+      **不在顶栏、不在首页**。它因此成了全站**唯一**引用那个 ~460 KB WebGPU 渲染器
+      chunk 的地方（见 src/components/ThemeToggle.astro 与 tests/theme-toggle.test.ts）。
+      · 装置 = 原版 Jelly Slider（vendor 在 src/vendor/jelly-slider/）
+      · 组件自己在**页面空闲时**才去拉渲染器（懒加载），不挡关于页首屏
+      · 无 WebGPU / 减少动效的浏览器降级成一枚普通文字开关，主题照样切
+      ⚠ 别顺手把它搬回顶栏：那会让每一页都下载 460 KB（站主已明确否决）。 */}
+  <section class="display-block fig-block" aria-labelledby="display-title">
+    <p class="fig-no" aria-hidden="true">FIG.05</p>
+    <h2 class="fig-h" id="display-title">显示模式</h2>
+    <ThemeToggle />
+    <p class="display-note">拖动开关切换深色 / 浅色。选择只存在本机（<code>localStorage</code>），不进 cookie。</p>
+  </section>
   </aside><!-- /.about-side -->
   </div><!-- /.about-grid -->
 </Base>
@@ -750,6 +764,14 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     text-decoration: none;
   }
   .lang-note {
+    font-size: var(--fs-xs);
+    color: var(--muted);
+  }
+
+  /* ---- 显示模式（FIG.05，2026-10-17）：装置 + 一句说明 ----
+     只给说明文字上新样式：装置自己的样式在组件里（scoped），本页不越权改它。 */
+  .display-note {
+    margin: var(--sp-3) 0 0;
     font-size: var(--fs-xs);
     color: var(--muted);
   }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { RUNTIME_DEPS_ALLOWED } from './_deps';
 
 /* 404 页 2026-10-06 这一轮的契约：底纹 ∞ 换新 + 装置「裂痕 FRACTURE」。
  *
@@ -1012,10 +1013,13 @@ describe('404 · 构建产物', () => {
     expect(archive, '归档行的 data-* 被动过').toMatch(/<li\s+data-date="[^"]+"\s+data-year="\d{4}"/);
   });
 
-  it('零新增运行时依赖（红线）', () => {
-    const deps = JSON.parse(read('package.json')).dependencies ?? {};
-    expect(Object.keys(deps).length, `dependencies 应恰好 3 个，实际 ${Object.keys(deps).length}`).toBe(3);
-    expect(Object.keys(deps)).toEqual(expect.arrayContaining(['astro', '@astrojs/rss', '@astrojs/sitemap']));
+  it('运行时依赖只许住在白名单里（红线）', () => {
+    /* 白名单在 `tests/_deps.ts`（唯一一份）。2026-10-17 站主拍板收下 Jelly Slider 的
+       渲染器之后，「恰好 3 个」改成「恰好是这张清单」—— 严不严没变，改起来只改一处。 */
+    const deps = Object.keys(JSON.parse(read('package.json')).dependencies ?? {}).sort();
+    expect(deps, `dependencies 与 tests/_deps.ts 的白名单不一致：实际 ${deps.join(' , ')}`).toEqual(
+      RUNTIME_DEPS_ALLOWED,
+    );
   });
 
   it('页面不新增外链资源（零第三方请求）', () => {

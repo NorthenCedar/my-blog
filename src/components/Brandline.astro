@@ -21,8 +21,8 @@ const links = NAV_LINKS;
     ))}
     <a href="/rss.xml">RSS</a>
   </nav>
-  {/* ★ 2026-10-17：Jelly Slider 主题切换（亮/暗）。flex 子项，落在导航右侧。 */}
-  <ThemeToggle />
+  {/* 主题开关（Jelly Slider）不在顶栏 —— 2026-10-17 站主拍板「按钮只放在关于页」⇒
+      那 462 KB 的渲染器 chunk 只被 /about/ 引用。见 src/pages/about.astro 的 FIG.05。 */}
   {/* 移动端抽屉（零 JS）；桌面隐藏 */}
   <NavDrawer current={current} />
 </div>

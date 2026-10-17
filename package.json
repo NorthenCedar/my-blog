@@ -23,7 +23,7 @@
     "@astrojs/rss": "^4.0.19",
     "@astrojs/sitemap": "^3.7.4",
     "@typegpu/noise": "0.12.1",
-    "@typegpu/sdf": "0.12.2",
+    "@typegpu/sdf": "0.12.1",
     "astro": "^7.3.5",
     "typegpu": "0.12.8",
     "unplugin-typegpu": "0.12.6",

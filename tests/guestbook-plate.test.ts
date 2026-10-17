@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { RUNTIME_DEPS_ALLOWED } from './_deps';
 
 /* 留言页保留机械环，与标签区的陶瓷金属底纹及准星隔离。 */
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
@@ -77,9 +78,7 @@ describe('留言页 · 机械环底纹', () => {
     expect(GUEST).toContain('留言');
   });
 
-  it('没有新增运行时依赖', () => {
-    expect(Object.keys(JSON.parse(read('package.json')).dependencies).sort()).toEqual(
-      ['@astrojs/rss', '@astrojs/sitemap', 'astro'],
-    );
+  it('运行时依赖只许住在白名单里', () => {
+    expect(Object.keys(JSON.parse(read('package.json')).dependencies).sort()).toEqual(RUNTIME_DEPS_ALLOWED);
   });
 });

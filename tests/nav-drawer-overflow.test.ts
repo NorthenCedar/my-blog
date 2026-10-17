@@ -186,9 +186,12 @@ describe('内页顶栏 · 不得建立 fixed 的包含块（手机端抽屉点�
  *   `Emulation.setAutoDarkModeOverride`，**不能用** `--blink-settings=forceDarkModeEnabled`
  *   —— 后者是"强制反色"，会忽略页面的退出声明，拿它验证必得假阴性）：
  *     背景块 ✗ · border-top ✗ · box-shadow ✗ · 背景图渐变 ✗ · **内联 SVG ✓** · 文字 ✓
- *   ⇒ 汉堡改成内联 SVG；另在 `<head>` 声明 `color-scheme: only light`（Chrome 官方给出的
+ *   ⇒ 汉堡改成内联 SVG；另在 `<head>` 声明 `color-scheme`（Chrome 官方给出的
  *     auto-dark 退出方式，见 developer.chrome.com/blog/new-in-chrome-98 "Opting out of
  *     auto-dark themes"），作为"整页都不被乱改"的那一道。
+ *     ⚠ 2026-10-17 深色模式落地后这个值由 `only light` 改成了 `light dark`
+ *       —— 两种写法都挡得住自动反色，取与事实相符的那个（站上真有深色 token 了）。
+ *       下面那条断言已相应**翻转**：必须是 `light dark`，不许退回 `only light`。
  *
  *   ⚠ 这条契约的意义：这两个写法**在浅色下长得一模一样**，只有在自动深色下才分得出。
  *     所以不能靠目检，必须钉在测试里。
@@ -218,13 +221,14 @@ describe('汉堡按钮 · 自动深色下必须可见（2026-10-08）', () => {
     expect(NAV, '汉堡又用 ::before/::after 画线段了 —— 那是旧写法（背景块）').not.toMatch(/\.navbtn\s+\.bars::/);
   });
 
-  it('★ head 声明 color-scheme: only light（官方退出自动深色的方式）', () => {
+  it('★ head 声明 color-scheme: light dark（挡住自动深色，也是深色模式的前提）', () => {
     expect(BASE, '缺这条 ⇒ 手机系统深色时整页会被浏览器按自己的算法反色（按钮消失只是最刺眼的一处）')
-      .toMatch(/<meta\s+name="color-scheme"\s+content="only light"\s*\/?>/);
-    /* 反向：不许声明成 `light dark` —— 那等于承诺"我自己处理深色"，
-       浏览器会把原生控件（滚动条 / 表单）按系统深色渲染，而本站正文是纸白 ⇒ 界面对不上。 */
-    expect(BASE, 'color-scheme 不该写成 light dark（本站没有深色版，原生控件会与纸白割裂）')
-      .not.toMatch(/name="color-scheme"\s+content="light dark"/);
+      .toMatch(/<meta\s+name="color-scheme"\s+content="light dark"\s*\/?>/);
+    /* 反向（2026-10-17 **翻转**）：不许退回 `only light`。
+       站上已经有了 `html.dark` 的 token（tokens.css 末尾）⇒ 再声明"只有浅色"是句假话；
+       两种写法都挡得住自动反色，所以留着 `only light` 只有坏处、没有好处。 */
+    expect(BASE, 'color-scheme 不许退回 only light（站上已有深色 token，那是一句假话）')
+      .not.toMatch(/name="color-scheme"\s+content="only light"/);
   });
 
   it.skipIf(!hasDist)('产物里逐页核对：汉堡是 svg、head 有 color-scheme、且没有 ::before 旧写法', () => {
@@ -235,7 +239,7 @@ describe('汉堡按钮 · 自动深色下必须可见（2026-10-08）', () => {
     for (const f of pages) {
       const html = readFileSync(f, 'utf8');
       if (!/<svg[^>]*class="bars"[^>]*>/.test(html)) bad.push(`${f}: 汉堡不是 svg`);
-      if (!html.includes('name="color-scheme" content="only light"')) bad.push(`${f}: 缺 color-scheme`);
+      if (!html.includes('name="color-scheme" content="light dark"')) bad.push(`${f}: 缺 color-scheme`);
     }
     expect(bad, bad.join(' | ')).toEqual([]);
   });

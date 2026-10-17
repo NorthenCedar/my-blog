@@ -30,7 +30,6 @@ import { getEntry } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import BootIntro from '../components/BootIntro.astro';
 import NavDrawer from '../components/NavDrawer.astro';
-import ThemeToggle from '../components/ThemeToggle.astro';
 import { NAV_LINKS } from '../lib/nav';
 import { getVisiblePosts } from '../lib/posts';
 import { getSite } from '../lib/site';
@@ -213,8 +212,8 @@ const titleLines: { ch: string; i: number }[][] = (() => {
           ))}
           <a href="/rss.xml">RSS</a>
         </nav>
-        {/* ★ 2026-10-17：Jelly Slider 主题切换（亮/暗）。flex 子项，落在导航右侧。 */}
-        <ThemeToggle />
+        {/* 主题开关（Jelly Slider）不在首页 —— 2026-10-17 站主拍板「按钮只放在关于页」⇒
+            那 462 KB 的渲染器 chunk 只被 /about/ 引用。见 src/pages/about.astro 的 FIG.05。 */}
         <NavDrawer current="index" />
       </div>
 

@@ -4,6 +4,11 @@
  * 原版代码在 src/vendor/jelly-slider/（三处本站改动见各文件 ★ 标注），
  * 接入逻辑在 src/scripts/theme-toggle.ts，主题契约见 src/scripts/theme.ts。
  *
+ * ★ 2026-10-17 两处站主口径：
+ *   · 「按钮只放在关于页」⇒ 本组件**只被 src/pages/about.astro 引用**（右栏 FIG.05）；
+ *     顶栏 / 首页 / 内页顶栏都不挂它 —— 那个 ~460 KB 的渲染器 chunk 于是只被 /about/ 引用。
+ *   · 下面 <script> 是**懒加载**：等页面空闲了再去拉那个 chunk，不占关于页首屏。
+ *
  * 无 WebGPU 的浏览器降级为普通文字开关（主题照样切）。
  * 无障碍：role=switch + aria-checked + 键盘可操作；canvas 纯装饰 aria-hidden。
  */
@@ -20,14 +25,33 @@
   <canvas aria-hidden="true" width="168" height="76"></canvas>
 </div>
 <script>
-  import { initJellyThemeToggle } from '../scripts/theme-toggle';
-  document.querySelectorAll<HTMLElement>('[data-theme-toggle]').forEach((el) => {
-    if (el.dataset.ttInit) return;
+  /* ★ 2026-10-17 懒加载（站主：「只在放按钮的那几页懒加载它」）。
+     渲染器是 ~460 KB 的 chunk（TypeGPU + 光追场景），不该挡关于页首屏。
+     `import()` 是**动态**的 ⇒ Astro/Vite 把它切成独立 chunk，只有真调到这一行才下载。
+     ⚠ 用 `requestIdleCallback` 而不是"第一次交互时再拉"：后者会让第一次摸到按钮时
+       画布还是空的，观感是"点不动"；空闲加载则通常在用户看清标题之前就位。
+       `timeout` 是上界：用户一直在滚也会在 2.5 s 内拉起来（Safari 没有 rIC ⇒ 退回 setTimeout）。 */
+  type IdleWindow = Window & {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+  };
+  const boot = () => {
+    const el = document.querySelector<HTMLElement>('[data-theme-toggle]');
+    if (!el || el.dataset.ttInit) return;
     el.dataset.ttInit = '1';
-    void initJellyThemeToggle(el).catch(() => {
-      /* 初始化失败保持空白画布，不抛到控制台吓唬人 —— 降级逻辑在脚本内部已处理 */
-    });
-  });
+    void import('../scripts/theme-toggle')
+      .then((m) => m.initJellyThemeToggle(el))
+      .catch(() => {
+        /* chunk 拉不下来（离线 / 被拦）⇒ 画布保持空白；
+           降级 pill 也由那个模块创建，所以这里不补 —— 别在控制台吓唬访客 */
+      });
+  };
+  const schedule = () => {
+    const w = window as IdleWindow;
+    if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(boot, { timeout: 2500 });
+    else setTimeout(boot, 1200);
+  };
+  if (document.readyState === 'complete') schedule();
+  else window.addEventListener('load', schedule, { once: true });
 </script>
 <style>
   .theme-toggle {
@@ -41,8 +65,14 @@
     display: block;
     width: 168px;
     height: 76px;
-    cursor: grab;
     touch-action: none;
+    /* ★ 2026-10-17：这里**不写** `cursor: grab`（原来有）。站主口径：「光标确实不要，
+       只显示站内的那个圆形光标」—— 站上那枚跟手圆点由 `html.cursor-none,
+       html.cursor-none *{cursor:none}` 全局接管，任何 `cursor:` 都是重复的暗示，
+       而 `grab`（抓取手）与"拖动果冻"这件事对不上，还不在测试允许的那几个值里。
+       ⚠ 减少动效档（下面那条）**必须留着**：那一档站内圆点不注册（`cursor-none`
+       不会被加上），没有任何提示会让按钮看起来像一块死图 —— 这是无障碍要求，
+       不是风格选择。 */
   }
   .theme-toggle:focus-visible {
     outline: 2px solid var(--accent);
