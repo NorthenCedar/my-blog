@@ -141,3 +141,103 @@ describe('深底（dusk 系）上的文字颜色', () => {
          它守的是 token 层面的通用规则（dusk-6/dusk-5 在任何深底上都要成立），
          与签名无关。删签名不该把token 层的门闩一起带走。 */
 });
+
+/* ============================================================================
+ * 暗色模式「黑 + 橙」（2026-10-18 站主定案，与 rhine-lock 立体 ∞ 的原版配色一致）
+ *
+ * 判据设计说明（守关系，不守快照）：
+ *   · 不钉死每个 token 的具体十六进制 —— 换一档橙不该让整站红掉。
+ *   · 钉三件**会真的出事**的关系：
+ *     ① 暗色底必须是**近黑**（L 极低）—— 否则「暗色模式」名不副实；
+ *     ② 暗色底必须与 Jelly Slider 的 `PAPER_DARK` **字面量相等** ——
+ *        两者脱钩时那个画布的地面色会与页面纸色不一致（历史上真发生过：
+ *        按钮在 ∞ 底纹上现出一个矩形）。这条已由 theme-toggle.test.ts 守，
+ *        这里再钉一次是为了让"改 tokens 忘了改 vendor"当场红在token 层。
+ *     ③ 暗色底上每一个前景 token 必须**仍达标**（正文 4.5:1 / 装饰件≥ 1.1:1）——
+ *        黑底比深绿底更暗，理论上只升不降；这条守的是"万一有人把某个 token
+ *        改成深色值塞进暗色段"这种情况。
+ *   ★ 亮色段**不在本断言范围内**：站主要「亮色仍是纸白 + 墨绿」，那是另一条断言的事。
+ * ======================================================================== */
+describe('暗色模式：黑底 + 橙强调（2026-10-18）', () => {
+  const css = readFileSync('src/styles/tokens.css', 'utf8');
+  // 抠出 html.dark { ... } 块（缩进两空格的都在里面）
+  const darkBlock = css.slice(css.indexOf('html.dark {'), css.indexOf('html.dark {') + 2000);
+  const tok = (name: string) => {
+    const m = darkBlock.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6,8})`));
+    return m?.[1] ?? null;
+  };
+
+  const s2l = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const lum = (hex: string) => {
+    const h = hex.replace('#', '');
+    const n = h.length === 3 ? [...h].map((c) => c + c).join('') : h;
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(n.slice(i, i + 2), 16) / 255);
+    return 0.2126 * s2l(r) + 0.7152 * s2l(g) + 0.0722 * s2l(b);
+  };
+  const ratio = (a: string, b: string) => {
+    const la = lum(a), lb = lum(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  };
+
+  it('① 暗色底是近黑（不是深绿场）：相对亮度必须低于 0.01', () => {
+    const paper = tok('paper')!;
+    expect(paper, 'html.dark 里没有 --paper').toBeTruthy();
+    const L = lum(paper);
+    expect(L, `暗色底 ${paper} 的亮度 ${L.toFixed(4)} 太高，不是近黑（旧的深绿 #131b17 是 0.0068）`).toBeLessThan(0.01);
+  });
+
+  it('② 暗色底与 Jelly Slider 渲染器的 PAPER_DARK 逐字相等', () => {
+    const vendored = readFileSync('src/vendor/jelly-slider/constants.ts', 'utf8');
+    const m = vendored.match(/PAPER_DARK\s*=\s*'(#[0-9a-fA-F]{6})'/);
+    expect(m, 'constants.ts 里找不到 PAPER_DARK 字面量').toBeTruthy();
+    expect(tok('paper'), 'tokens.css 的 --paper 与渲染器的 PAPER_DARK 脱钩了 ⇒ 按钮地面色会与页面不一致').toBe(m![1]);
+  });
+
+  it('③ 暗色段每个 token 都在黑底上仍可辨（正文 >= 4.5:1，装饰件 >= 1.1:1）', () => {
+    const paper = tok('paper')!;
+    // 正文类：必须达到 WCAG AA 正文对比度
+    for (const [name, min] of [
+      ['ink', 4.5], ['muted', 4.5], ['accent', 4.5],
+      ['accent-ink', 4.5], ['signal-text', 4.5], ['ink-motif', 4.5],
+    ] as const) {
+      const v = tok(name);
+      expect(v, `html.dark 缺少 --${name}`).toBeTruthy();
+      const r = ratio(v!, paper);
+      expect(r, `--${name} ${v} 在暗色底 ${paper} 上只有 ${r.toFixed(2)}:1，低于 ${min}:1`).toBeGreaterThanOrEqual(min);
+    }
+    // 装饰类：没有AA 阈值，但必须比底亮出来（否则「抬升面」糊成一片）
+    for (const [name, min] of [['hair', 1.1], ['panel', 1.1], ['accent-wash', 1.05], ['code-inline-bg', 1.1]] as const) {
+      const v = tok(name);
+      expect(v, `html.dark 缺少 --${name}`).toBeTruthy();
+      const r = ratio(v!, paper);
+      expect(r, `--${name} ${v} 在暗色底上只有 ${r.toFixed(2)}:1，看不出层次`).toBeGreaterThanOrEqual(min);
+    }
+  });
+
+  it('④ 暗色强调色是**橙**（不是墨绿）—— 与引入的 rhine-lock 立体 ∞ 原版配色一致', () => {
+    const accent = tok('accent')!;
+    const h = accent.replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    // 橙的定义：红最高、蓝最低，且蓝显著低于绿（绿是「脏」掉的那一个）
+    expect(r, `--accent ${accent} 的红通道不是最高，橙应该红最高`).toBeGreaterThan(g);
+    expect(b, `--accent ${accent} 的蓝通道太高，绿橙都该压住蓝`).toBeLessThan(g * 0.6);
+    // 明确排除墨绿（绿最高）
+    expect(g, `--accent ${accent} 的绿通道最高，这是墨绿不是橙`).toBeLessThan(r);
+  });
+
+  it('⑤ 亮色段仍是纸白 + 墨绿（这次只改暗色，不许顺手动亮色）', () => {
+    const rootEnd = css.indexOf('html.dark {');
+    const rootBlock = css.slice(0, rootEnd);
+    // 亮色的 paper 仍是纸白族（高亮度）
+    // ⚠ 这里刻意用 [ \t]* 而不是 \s*：\s 会跨行匹配到 html.dark 段里去，
+    //   那就不是「亮色的 --paper」而是「整份文件第一个 --paper」，判据会假绿。
+    const lightPaper = rootBlock.match(/--paper:[ \t]*(#[0-9a-fA-F]{6})/)?.[1];
+    expect(lightPaper, '没在 :root 段找到 --paper').toBeTruthy();
+    expect(lum(lightPaper!), `亮色底 ${lightPaper} 不该是暗色`).toBeGreaterThan(0.8);
+    // 亮色的 accent 仍是绿（红通道不是最高）
+    const lightAccent = rootBlock.match(/--accent:[ \t]*(#[0-9a-fA-F]{6})/)?.[1]!;
+    const h = lightAccent.replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16);
+    expect(g, `亮色 --accent ${lightAccent} 不再是绿了，亮色段被误改`).toBeGreaterThan(r);
+  });
+});

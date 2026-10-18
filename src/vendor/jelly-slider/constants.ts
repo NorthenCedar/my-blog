@@ -116,7 +116,11 @@ export const GROUND_MEAN = 143 / 255;
  */
 /** 两档的纸色，**必须与 tokens.css 的 `--paper` 一致**（亮 / 深各一条，有门闩守着）。 */
 export const PAPER_LIGHT = '#fafaf7';
-export const PAPER_DARK = '#131b17';
+/* ★ 2026-10-18 暗色模式改「黑 + 橙」⇒ 深色纸色从 #131b17（深墨绿）换成 #0b0b0c
+   （rhine-lock 原版 PAPER_DARK = [0.043,0.043,0.047] 按 sRGB 换算）。
+   ⚠ 改这一行必须同步改 tokens.css 的 `html.dark { --paper: … }` ——
+     `tests/theme-toggle.test.ts:139` 会断言两者字面量相等，画布与页面脱钩就红。 */
+export const PAPER_DARK = '#0b0b0c';
 
 /** #rrggbb → 线性无关的 (r,g,b) 0..1（画布是 rgba8unorm，着色器写出的就是编码后的值）。 */
 function fromHex(hex: string, depth: number): d.v4f {
