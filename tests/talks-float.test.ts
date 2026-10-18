@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { RUNTIME_DEPS_ALLOWED } from './_deps';
 
 /* 说说页「浮游 FLOAT」（斜飘雨线 + 下半屏椭圆涟漪）+ 原位漂浮 + 墨点螺旋底纹
  * （2026-10-04）的契约。
@@ -380,11 +381,11 @@ describe('说说页 · 墨点螺旋底纹（替代百褶 ∞）', () => {
 });
 
 describe('说说页 · 红线与依赖', () => {
-  it('运行时依赖只有 astro / @astrojs/rss / @astrojs/sitemap', () => {
+  it('运行时依赖只许住在白名单里（tests/_deps.ts）', () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>;
     };
-    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(['@astrojs/rss', '@astrojs/sitemap', 'astro']);
+    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(RUNTIME_DEPS_ALLOWED);
   });
 
   it('零外部资源：本轮新增的样式里没有外链 / @import / rgba', () => {

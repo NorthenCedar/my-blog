@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { RUNTIME_DEPS_ALLOWED } from './_deps';
 
 /* 文章页「阅读尺」（READING RULE）+ 工程方格底纹 + 右栏目录（2026-10-03）的契约。
  *
@@ -299,11 +300,11 @@ describe('文章页右栏目录 · 版式契约', () => {
 });
 
 describe('文章页 · 红线与依赖', () => {
-  it('运行时依赖只有 astro / @astrojs/rss / @astrojs/sitemap', () => {
+  it('运行时依赖只许住在白名单里（tests/_deps.ts）', () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>;
     };
-    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(['@astrojs/rss', '@astrojs/sitemap', 'astro']);
+    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(RUNTIME_DEPS_ALLOWED);
   });
 
   it('零外部资源：本页新增的样式里不许出现任何外链', () => {

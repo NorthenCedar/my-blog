@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { RUNTIME_DEPS_ALLOWED } from './_deps';
 
 /* 相册「照片陈列」这一族的契约。
  *
@@ -388,11 +389,12 @@ describe('相册 · 与页面其他部分的互锁', () => {
 });
 
 describe('相册 · 红线与预算', () => {
-  it('零新增运行时依赖 / 零外部资源', () => {
+  it('运行时依赖只许住在白名单里 / 零外部资源', () => {
     const pkg = JSON.parse(read('package.json'));
-    const deps = Object.keys(pkg.dependencies ?? {});
-    expect(deps.length, `dependencies 应恰好 3 个，实际 ${deps.length}`).toBe(3);
-    expect(deps).toEqual(expect.arrayContaining(['astro', '@astrojs/rss', '@astrojs/sitemap']));
+    const deps = Object.keys(pkg.dependencies ?? {}).sort();
+    expect(deps, `dependencies 与 tests/_deps.ts 的白名单不一致：实际 ${deps.join(' , ')}`).toEqual(
+      RUNTIME_DEPS_ALLOWED,
+    );
     /* ★ 这一族现在有 4 个文件 ⇒ 一起查。剥过注释再查（注释里会引用参考站域名）。
        ⚠ 判据必须是"真会去取的那种 URL"（src=/href=/url(http…)），不能裸查 `https?://`
          —— 显影板那层胶片颗粒是**内联 SVG 的 data URI**，它的 XML 命名空间就写着

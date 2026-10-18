@@ -3,6 +3,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { TAGS } from '../src/tag-registry';
 import { readPostFrontmatter, visiblePosts } from './content-invariants.test';
+import { RUNTIME_DEPS_ALLOWED } from './_deps';
 
 /* 标签区共用装置契约：2026-10-16 按站主选择换成陶瓷金属无限符号。
  * 保留准星、矩阵、槽位隔离与内容验证；留言页独立保留机械环。
@@ -332,9 +333,10 @@ describe('标签区 · 构建产物', () => {
     expect(ONE_HTML, '标签行丢了').toMatch(/class="p-tags"/);
   });
 
-  it('零新增运行时依赖（红线）', () => {
-    const deps = JSON.parse(read('package.json')).dependencies ?? {};
-    expect(Object.keys(deps).length, `dependencies 应恰好 3 个，实际 ${Object.keys(deps).length}`).toBe(3);
-    expect(Object.keys(deps)).toEqual(expect.arrayContaining(['astro', '@astrojs/rss', '@astrojs/sitemap']));
+  it('运行时依赖只许住在白名单里（红线）', () => {
+    const deps = Object.keys(JSON.parse(read('package.json')).dependencies ?? {}).sort();
+    expect(deps, `dependencies 与 tests/_deps.ts 的白名单不一致：实际 ${deps.join(' , ')}`).toEqual(
+      RUNTIME_DEPS_ALLOWED,
+    );
   });
 });

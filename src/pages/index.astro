@@ -212,6 +212,9 @@ const titleLines: { ch: string; i: number }[][] = (() => {
           ))}
           <a href="/rss.xml">RSS</a>
         </nav>
+        {/* 主题开关（Jelly Slider）不在首页 —— 2026-10-17 站主拍板「按钮只放在关于页」⇒
+            那 462 KB 的渲染器 chunk 只被 /about/ 引用。见 src/pages/about.astro 的 .theme-dock
+            （页面右上角；2026-10-17 第二轮从右栏 FIG.05 搬上去的）。 */}
         <NavDrawer current="index" />
       </div>
 

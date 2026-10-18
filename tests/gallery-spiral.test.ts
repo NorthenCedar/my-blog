@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { RUNTIME_DEPS_ALLOWED } from './_deps';
 import {
   clamp,
   clampV,
@@ -771,11 +772,12 @@ describe('螺旋盘 · 点击放大（站主 2026-10-07：「点击照片那张�
 });
 
 describe('螺旋盘 · 红线与预算', () => {
-  it('零新增运行时依赖 / 零外部资源', () => {
+  it('运行时依赖只许住在白名单里 / 零外部资源', () => {
     const pkg = JSON.parse(read('package.json'));
-    const deps = Object.keys(pkg.dependencies ?? {});
-    expect(deps.length, `dependencies 应恰好 3 个，实际 ${deps.length}`).toBe(3);
-    expect(deps).toEqual(expect.arrayContaining(['astro', '@astrojs/rss', '@astrojs/sitemap']));
+    const deps = Object.keys(pkg.dependencies ?? {}).sort();
+    expect(deps, `dependencies 与 tests/_deps.ts 的白名单不一致：实际 ${deps.join(' , ')}`).toEqual(
+      RUNTIME_DEPS_ALLOWED,
+    );
     expect(CODE, '页面里出现了外部资源引用（src/href）').not.toMatch(/(?:src|href)=["']https?:/i);
     expect(CODE, '样式里出现了外部 url()').not.toMatch(/url\(\s*["']?https?:/i);
   });

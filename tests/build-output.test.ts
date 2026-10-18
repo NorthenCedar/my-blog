@@ -1058,15 +1058,18 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
   });
 
   it('评论脚本不使用 innerHTML（XSS 头号风险）', () => {
-    const html = readFileSync(page, 'utf8');
-    const inline = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)]
-      .map((m) => m[1])
-      .join('\n');
-    const external = walk(DIST, (n) => n.endsWith('.js') || n.endsWith('.mjs'))
-      .map((f) => readFileSync(f, 'utf8'))
-      .join('\n');
-    const all = inline + external;
-
+    /* ★ 2026-10-17 只改了**扫描范围**，判定本身一个字没动。
+       原来扫的是 `dist/` 里**所有** `.js` —— 在"站上的脚本全是自己写的"那个年代
+       这是个够用的代理（而且比现在更宽）。但 2026-10-17 关于页收进了 Jelly Slider
+       的渲染器（vendored 原版代码，里面确实有几处 `innerHTML` 是它自己用的，
+       与评论系统毫无关系）⇒ 老写法会把**别人的库**判成"评论脚本有 XSS"。
+       现在的范围 = **文章页真正加载的那份 JS 闭包**（内联 + 它的 chunk，
+       走 `jsLoadedBy()`，与下面"评论区不引入第三方域名"那条同一个口径）——
+       这恰恰就是这条断言要守的东西：评论代码住在文章页会加载的脚本里。
+       ⚠ 这是**范围收窄**，不是放宽：文章页闭包里的任何脚本用 innerHTML 仍然会红。 */
+    const all = jsLoadedBy(page);
+    /* 先自证"量到了东西"：闭包要是空的，下面三条负向断言全是空转。 */
+    expect(all.length, '文章页的 JS 闭包是空的 ⇒ 这条判据会空转').toBeGreaterThan(2000);
     expect(all).not.toContain('innerHTML');
     expect(all).not.toContain('outerHTML');
     expect(all).not.toContain('insertAdjacentHTML');
@@ -1444,6 +1447,74 @@ describe.skipIf(!hasDist)('日志页 changes：不许有被 YAML 吃成对象的
     ).toBe(0);
     /* 反面正对照：确认本组断言不是空转 */
     expect(lis.length, '日志页一条条目都没有，本组断言等于空转').toBeGreaterThan(50);
+  });
+});
+
+/* ★★ Jelly Slider 主题开关的**放置与加载**契约（2026-10-17 站主拍板）。
+ * 站主原话：「只在放按钮的那几页懒加载它，且按钮只放在关于页」。
+ * 这一组守三件事，缺一件都不算做到：
+ *   ① **只在 /about/** —— 搬回顶栏 / 首页 = 每一页都下载 460 KB（站主已明确否决）；
+ *   ② 那个大 chunk **只有 /about/ 到得了**；
+ *   ③ 它是**动态** import 进来的 —— 静态 import 会被提到模块顶层，
+ *      等于首屏就下载，"懒"就没了（这是最容易在重构里丢掉的一条）。
+ * ★ 判"哪个是大 chunk"不靠内容指纹，用**结构**：关于页闭包里 >100 KB 的那些，
+ *   全站别的页面一个都不许到。将来换实现（不叫那个名字了）判据照样成立。
+ */
+describe.skipIf(!hasDist)('主题开关只住在关于页（2026-10-17）', () => {
+  const relToDist = (f: string) => f.replace(/\\/g, '/').replace(/^.*\bdist\//, '');
+  const TOGGLE_SRC = readFileSync('src/components/ThemeToggle.astro', 'utf8');
+
+  it('★ ① 全站 HTML 里只有关于页带 data-theme-toggle', () => {
+    const pages = htmlFiles().filter((f) => readFileSync(f, 'utf8').includes('data-theme-toggle'));
+    expect(pages.length, '一页都没有 ⇒ 判据会空转（按钮没渲染出来？）').toBeGreaterThan(0);
+    expect(pages.map(relToDist), '主题开关出现在别的页面上了（站主口径：只放在关于页）').toEqual([
+      'about/index.html',
+    ]);
+  });
+
+  it('★ ② 那个渲染器（>100 KB 的 chunk）只有关于页到得了', () => {
+    const about = join(DIST, 'about', 'index.html');
+    expect(existsSync(about), 'dist/about/index.html 不存在，先跑 npm run build').toBe(true);
+    const big = jsClosure(about).files.filter((f) => statSync(f).size > 100_000);
+    expect(big.length, '关于页没加载任何 >100 KB 的 chunk ⇒ 懒加载断了，本判据会空转').toBeGreaterThan(0);
+    const others = htmlFiles().filter((f) => f !== about);
+    expect(others.length, '其余页面清单为空 ⇒ 本判据会空转').toBeGreaterThan(5);
+    const leaked: string[] = [];
+    for (const p of others) {
+      const reached = new Set(jsClosure(p).files);
+      const html = readFileSync(p, 'utf8');
+      for (const f of big) {
+        const base = f.split(/[\\/]/).pop() as string;
+        if (reached.has(f)) leaked.push(`${relToDist(p)} 的 JS 闭包里有它`);
+        /* HTML 也要查：<link rel=modulepreload> / <script src> 不走闭包那条路径 */
+        else if (html.includes(base)) leaked.push(`${relToDist(p)} 的 HTML 里引用了 ${base}`);
+      }
+    }
+    expect(leaked, `这些页面会下载主题开关的渲染器：${[...new Set(leaked)].join(' | ')}`).toEqual([]);
+  });
+
+  it('★ ③ 渲染器走**动态** import（懒加载，不占首屏）', () => {
+    const at = TOGGLE_SRC.indexOf('<script>');
+    const script = TOGGLE_SRC.slice(at, TOGGLE_SRC.indexOf('</script>', at));
+    expect(script.length, '没切到组件的 <script> 块（写法变了？本判据会空转）').toBeGreaterThan(200);
+    expect(script, '渲染器必须是 import(...) 动态引入').toMatch(/import\(\s*['"]\.\.\/scripts\/theme-toggle['"]\s*\)/);
+    expect(
+      script,
+      '不该再用顶部的静态 import —— 那会被提到模块顶层，关于页首屏就得下载整个渲染器',
+    ).not.toMatch(/import\s+\{[^}]*initJellyThemeToggle/);
+  });
+
+  /* ★ 2026-10-17 第二轮（站主：按钮调到关于页右上角、删掉「显示模式」文字只留按钮）。
+     守两件事：挂载点还在两栏容器里（没被搬去顶栏 / 没被删掉），
+     以及「显示模式」这段文字没有跟着版本回潮 —— 站主明确说过只留按钮。 */
+  it('★ ④ 按钮在关于页的 .theme-dock 里，且「显示模式」文字没有回来', () => {
+    const html = readFileSync(join(DIST, 'about', 'index.html'), 'utf8');
+    expect(html, '关于页里没有 .theme-dock（按钮的挂载点丢了？）').toContain('theme-dock');
+    expect(html, '「显示模式」文字又出现了（站主口径：只留按钮）').not.toContain('显示模式');
+    const dock = html.indexOf('theme-dock');
+    const grid = html.indexOf('about-grid');
+    expect(grid, '关于页里没有两栏容器').toBeGreaterThan(-1);
+    expect(dock, '按钮不在两栏容器里（被搬出去了？）').toBeGreaterThan(grid);
   });
 });
 

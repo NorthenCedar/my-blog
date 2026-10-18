@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { RUNTIME_DEPS_ALLOWED } from './_deps';
 
 /* 相册区视口底纹 ∞ 的契约（站主 2026-10-08）。
  *
@@ -149,9 +150,9 @@ describe('相册 ∞ · 红线', () => {
     expect(css, '组件样式里出现了 rgb()/rgba()（alpha 由 8 位 hex 承载）').not.toMatch(/\brgba?\(/);
   });
 
-  it('★ 运行时依赖仍是 3 个', () => {
+  it('★ 运行时依赖只许住在白名单里', () => {
     const pkg = JSON.parse(read('package.json'));
-    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(['@astrojs/rss', '@astrojs/sitemap', 'astro']);
+    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(RUNTIME_DEPS_ALLOWED);
   });
 });
 
