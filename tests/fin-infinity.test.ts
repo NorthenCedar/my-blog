@@ -6,8 +6,8 @@
  * 扭转/前倾丢了），肉眼未必看得出来，但那就是「不是原汁原味」了。
  *
  * ★ 判据设计（守关系 / 守原版常量，不守快照）：
- *   · 原版的参数是**量出来的**（radius 285 / aspect 0.95 / depth 95 / twist 1.5 …），
- *     所以这些数字本身就该钉住 —— 它们不是"当前实现长这样"，是"原版就是这样"。
+ *   · 保留原版的半径、比例、厚度等参数。扭转量由首尾连续性约束：原版 1.5 圈
+ *     配合非零前倾会在参数归零处跳变，本站改为整圈，不能再把旧值钉成规格。
  *   · 几何那三行（Gerono 双纽线）单独钉：z = uDepth·sin(t) 是**自相交**的成因，
  *     少了它 ∞ 就退化成两条不相交的椭圆弧，整个形状立刻不对。
  *   · 点击脉冲必须真的连到 pointerdown —— ★ 原版**没有**点击交互（整份 Stage.ts
@@ -264,6 +264,36 @@ describe('立体∞ · grade（★ 修「发棕」的根因）', () => {
 });
 
 describe('立体 ∞ · 几何照抄原版（rhine-lock ∞ fin sculpture）', () => {
+  it('绕完一圈后的前倾轴连续，不能在参数归零处突然翻到另一侧', () => {
+    /* 实际执行生产 GLSL 的角度表达式。闭合曲线的切线/参考法向在 0 与 2π 相同，
+       所以把前倾轴写进这个公共参考系，就能比较接缝两端的真实方向。
+       原版 twist=1.5 让宽/高轴翻半圈；非零前倾随之反向，形成截图里的豁口。
+       GPU transform feedback 已确认：旧版顶点跳变 41～57，整圈扭转后约 0.001。 */
+    const code = stripComments(shaders);
+    const expression = (name: string): string => {
+      const match = new RegExp(`float\\s+${name}\\s*=\\s*([^;]+);`).exec(code);
+      if (!match) throw new Error(`生产着色器缺少 ${name} 表达式`);
+      return match[1];
+    };
+    const angles = new Function('t', 'uTime', 'uSpin', 'uTwist', 'uLean', `
+      const sin = Math.sin, pulse = 0;
+      const wave = ${expression('wave')};
+      const phi = ${expression('phi')};
+      const lean = ${expression('lean')};
+      return [Math.sin(lean) * Math.cos(phi), Math.sin(lean) * Math.sin(phi), Math.cos(lean)];
+    `) as (t: number, time: number, spin: number, twist: number, lean: number) => number[];
+    const params = scene.slice(scene.indexOf('export const FIN_PARAMS'), scene.indexOf('} as const'));
+    for (const time of [0, 5, 20, 60]) {
+      for (const spin of [0, 0.3, 2]) {
+        const before = angles(0, time, spin, num(params, 'twist'), num(params, 'lean'));
+        const after = angles(2 * Math.PI, time, spin, num(params, 'twist'), num(params, 'lean'));
+        const jump = Math.hypot(...before.map((v, i) => v - after[i]));
+        expect(jump, `时间 ${time} / 自转 ${spin}：前倾轴在接缝两端跳变 ${jump}`)
+          .toBeLessThan(0.000001);
+      }
+    }
+  });
+
   it('Gerono 双纽线那三行在（z 让两瓣在纵深上错开 ⇒ 带子能自相交）', () => {
     // 逐项分开判，不写成一个正则 —— 否则改动一下空格就整条失效
     expect(shaders, 'x = uRadius * cos(t) 不见了').toMatch(/uRadius\s*\*\s*c\b/);
@@ -279,13 +309,13 @@ describe('立体 ∞ · 几何照抄原版（rhine-lock ∞ fin sculpture）', (
     expect(scene, '没有 aIndex 实例属性').toMatch(/aIndex/);
   });
 
-  it('原版那组几何参数逐字保留（这些是量出来的，不是随手调的）', () => {
+  it('保留其余原版几何参数，扭转量由首尾连续性约束', () => {
     /* ★ 参数集中在 FIN_PARAMS 常量里，uniform 从那里读（`uRadius: { value: FIN_PARAMS.radius }`）。
        所以判据读那个常量块，而不是去grep 每个 uniform —— 否则改个写法就假红。*/
     const block = scene.slice(scene.indexOf('FIN_PARAMS'), scene.indexOf('} as const'));
     const P: [string, number][] = [
       ['radius', 285], ['aspect', 0.95], ['depth', 95],
-      ['twist', 1.5], ['lean', 0.62], ['thickness', 4.2],
+      ['lean', 0.62], ['thickness', 4.2],
       ['width', 84], ['height', 84],
     ];
     for (const [k, v] of P) {
@@ -353,14 +383,15 @@ describe('立体 ∞ · 姿态与机位（★ 正 vs 缺口：站主两轮反馈
     return m ? Number(m[1]) : NaN;
   };
 
-  it('雕塑必须「摆正」：俯仰极小、翻滚归零、偏航摆动收小', () => {
+  it('雕塑保持近乎正视，只做轻微顺时针校正，偏航摆动收小', () => {
     /* ★★ 这段判据的方向**翻转过两次**，别照着旧版本改回去：
        ① 最初 X 恒 0（完全正视）⇒ 站主报「环上一道缺口」：两瓣在 z 上错开，
           正视时这个纵深差投影不到屏幕，自相交处叠成一堵同向平墙。
        ② 于是照原版抬 16° ⇒ 缺口没了，但站主又说「歪了」。因为俯仰把两瓣推进
           不同纵深：近的更大更靠下、远的更小更靠上，整台装置是斜的。
        ③ 站主定调「别管那个缺口，把他摆正」⇒ 俯仰 2°、翻滚 0、摆动 ±2°。
-       所以这里守的是**"正"这一侧**：任何一项变大都会把 ② 的歪带回来。
+       ④ 接缝修好后，站主要求整体顺时针转一点；仅允许小幅负翻滚，不再钉死为零。
+       所以这里守的是**"正"这一侧**：大角度倾斜会把 ② 的歪带回来。
        注意它守的是关系（小到什么程度），不是"等于原版 16°"。 */
     const tilt = constNum('TILT_DEG');
     expect(Number.isFinite(tilt), '找不到 TILT_DEG（俯仰角常量）').toBe(true);
@@ -369,7 +400,8 @@ describe('立体 ∞ · 姿态与机位（★ 正 vs 缺口：站主两轮反馈
     expect(tilt, '俯仰角不该是负的（会把装置仰起来）').toBeGreaterThanOrEqual(0);
 
     const roll = constNum('ROLL_DEG');
-    expect(roll, `翻滚角 ${roll}° —— 整幅构图会被直接转斜（站主要「正」）`).toBe(0);
+    expect(roll, '负翻滚才是屏幕上的顺时针方向').toBeLessThan(0);
+    expect(roll, '只允许小幅校正，不能转成明显斜摆').toBeGreaterThanOrEqual(-3);
 
     const sway = constNum('YAW_SWAY_DEG');
     expect(Number.isFinite(sway), '找不到 YAW_SWAY_DEG（偏航摆动幅度）').toBe(true);

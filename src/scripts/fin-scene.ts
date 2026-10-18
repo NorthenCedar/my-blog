@@ -61,12 +61,13 @@ import { createFinGrade } from './fin-grade';
 /** 鳍片数（原版 FIN_COUNT = 400）。 */
 export const FIN_COUNT = 400;
 
-/** 原版参数（Stage.ts:179-183），逐字照抄 —— 这些是量出来的，不是随手调的。 */
+/** 基于原版参数（Stage.ts:179-183）；扭转改整圈以保证带前倾的鳍片首尾闭合。 */
 export const FIN_PARAMS = {
   radius: 285,
   aspect: 0.95,
   depth: 95,
-  twist: 1.5,
+  // 1 整圈保持首尾连续，同时比 2 圈更舒展；半圈会让接缝两侧的前倾方向相反。
+  twist: 1,
   lean: 0.62,
   thickness: 4.2,
   corner: 0.14,
@@ -99,11 +100,14 @@ const CAM_ASPECT = 16 / 9;
       站主明确「别管那个缺口，把他摆正」⇒ 俯仰收到 2°（几乎正视），
       翻滚归零，偏航摆动从 ±9° 收到 ±2°（那 ±9° 是左右瓣大小不对等的另一半成因）。
 
-   ⇒ 现在的取舍：**正 > 自相交的前后分离**。2° 只留一点点纵深暗示，
-     不再指望它把两瓣彻底分开（那要多 10 度以上，代价就是歪）。 */
+   ⇒ 现在的取舍：**正 > 自相交的前后分离**。2° 只留一点点纵深暗示。
+   ④ 本轮直接量首尾几何后推翻了②对缺口根因的判断：缺口实际来自 1.5 圈扭转
+      与前倾在参数归零处不连续，现已在 FIN_PARAMS 中改为整圈闭合。
+      姿态只负责构图，不再用它掩盖几何接缝。
+   ⑤ 接缝闭合后，站主感觉仍向左歪：沿画面顺时针微转 1°（负 Z 翻滚）。 */
 const TILT_DEG = 2;
 const TILT_WAVE_DEG = 0.6;
-const ROLL_DEG = 0;
+const ROLL_DEG = -1;
 /** 偏航摆动的幅度（原版 ±9°）。收到 ±2°：原版的大摆幅会把一瓣拉近、一瓣推远。 */
 const YAW_SWAY_DEG = 2;
 /** 装配动画期间雕塑多转的角度（原版 `(1 - intro) * 32`） */
@@ -490,7 +494,7 @@ export async function createFinScene(
 
     // 雕塑自转：原版 uSpin 由外部缓慢驱动（Stage.ts:383：spin += dt * 0.05）
     U.uSpin.value += step * 0.05;
-    /* ★★ 姿态：**近乎正视**。俯仰 2°（原版 16°）、翻滚 0（原版 -2°）、
+    /* ★★ 姿态：**近乎正视**。俯仰 2°（原版 16°）、顺时针微转 1°、
        偏航摆动 ±2°（原版 ±9°）。三项一起决定"正不正"，见常量处的三段历程。 */
     sculpture.rotation.set(
       (TILT_DEG + Math.sin(seconds * 0.11) * TILT_WAVE_DEG) * DEG,
