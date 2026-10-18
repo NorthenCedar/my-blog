@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RUNTIME_DEPS_ALLOWED } from './_deps';
 
-/* 留言页保留机械环，与标签区的陶瓷金属底纹及准星隔离。 */
+/* 留言页保留机械环，与标签区的百褶环及准星隔离。 */
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
 const strip = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
 const ASTRO = read('src/pages/guestbook.astro');
@@ -18,7 +18,7 @@ describe('留言页 · 机械环底纹', () => {
   it('留言页保留机械环与光槽，标签区使用独立素材', () => {
     expect(ASTRO).toContain("import MechanicalRing from '../components/MechanicalRing.astro'");
     expect(TAGS).not.toContain('<MechanicalRing />');
-    expect(TAGS).toContain("from '../assets/tags/plates/ceramic-infinity.webp'");
+    expect(TAGS).toContain('<PleatedInfinity />');
     expect(RING).toContain("from '../assets/tags/plates/mechanical-ring.webp'");
     expect(RING).toContain("from '../assets/tags/plates/ring.json'");
     expect(RING).toContain('projectRingLight(ring.fiber)');
@@ -69,10 +69,11 @@ describe('留言页 · 机械环底纹', () => {
     const tagsImage = image(TAGS_HTML);
     expect(guestImage).not.toBe('');
     expect(tagsImage).toBe('');
-    expect(TAGS_HTML.match(/class="tags-infinity"/g)).toHaveLength(1);
-    expect(TAGS_HTML).toContain('ceramic-infinity');
+    expect(TAGS_HTML.match(/data-pleated-infinity/g)).toHaveLength(1);
+    expect(TAGS_HTML).not.toContain('ceramic-infinity');
     expect(TAGS_HTML).not.toContain('class="ring-light"');
     expect(GUEST).not.toContain('ceramic-infinity');
+    expect(GUEST).not.toContain('data-pleated-infinity');
     expect(guestImage).toMatch(/srcset="[^"]+"/);
     expect(GUEST).toContain('class="ring-light"');
     expect(GUEST).toContain('留言');

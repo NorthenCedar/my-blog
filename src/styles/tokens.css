@@ -97,8 +97,6 @@
   --water-shadow: #53645a;
   --water-light: #ffffff;
   --water-strength: 0.17;
-  /* 标签区陶瓷金属无限符号：降低阴影浓度，保持矩阵文字清楚。 */
-  --tags-plate-opacity: 0.24;
   /* 留言页机械环：浅色金属保留铜色光槽。 */
   --ring-plate-opacity: 0.38;
   --ring-light-halo: #d8893f80;

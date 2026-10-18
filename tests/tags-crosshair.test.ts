@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TAGS } from '../src/tag-registry';
 import { readPostFrontmatter, visiblePosts } from './content-invariants.test';
 import { RUNTIME_DEPS_ALLOWED } from './_deps';
 
-/* 标签区共用装置契约：2026-10-16 按站主选择换成陶瓷金属无限符号。
+/* 标签区共用装置契约：2026-10-19 接手原关于页的交互百褶无限环。
  * 保留准星、矩阵、槽位隔离与内容验证；留言页独立保留机械环。
  */
 const ROOT = process.cwd();
@@ -16,9 +16,6 @@ const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
 /** 剥两类注释：Astro 模板里的 JSX 块注释、以及 <style> 里的 CSS 块注释。
  *  顺序有讲究：先剥 JSX —— 它内部若含 CSS 块注释，先剥 CSS 的会把 JSX 那个切碎。 */
 const strip = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
-
-const PLATE_DIR = join(ROOT, 'src/assets/tags/plates');
-const PLATE = join(PLATE_DIR, 'ceramic-infinity.webp');
 
 const IDX = read('src/pages/tags/index.astro');
 const ONE = read('src/pages/tags/[tag].astro');
@@ -52,55 +49,14 @@ const AI_POST_COUNT = visiblePosts(readPostFrontmatter()).filter((p) =>
   p.tags.includes('AI'),
 ).length;
 
-describe('标签区 · ∞ 底纹素材契约', () => {
-  it('陶瓷金属透明图进入构建管线，原始细节与体积均有边界', async () => {
-    expect(existsSync(PLATE)).toBe(true);
-    expect(statSync(PLATE).size).toBeLessThan(200 * 1024);
-    const { default: sharp } = await import('sharp');
-    const meta = await sharp(PLATE).metadata();
-    expect(meta.width).toBe(1600);
-    expect(meta.height).toBe(800);
-    expect(meta.hasAlpha).toBe(true);
-    const { data, info } = await sharp(PLATE).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-    const alpha = (x: number, y: number) => data[(y * info.width + x) * info.channels + 3];
-    for (const [x, y] of [[0, 0], [1599, 0], [0, 799], [1599, 799], [400, 400], [1200, 400]]) {
-      expect(alpha(x, y), '背景和双环内部必须透明，不能带黑色矩形').toBeLessThanOrEqual(8);
-    }
-    expect(data.some((value, i) => i % 4 === 3 && value > 200), '主体不能被清空').toBe(true);
+describe('标签区 · 交互百褶环挂载契约', () => {
+  it('复用原百褶环，保留交互控制器和静态后备图', () => {
+    expect(PLATE_NC).toContain("import PleatedInfinity from './PleatedInfinity.astro'");
+    expect((PLATE_NC.match(/<PleatedInfinity \/>/g) ?? [])).toHaveLength(1);
+    expect(PLATE_NC).not.toMatch(/ceramic-infinity|MechanicalRing|tags-infinity/);
   });
 
-  it('图按原比例显示，窄屏完整，宽屏不超过原生分辨率', () => {
-    expect(PLATE_CSS).toMatch(/aspect-ratio:\s*2 \/ 1/);
-    const rule = PLATE_CSS.match(/\.tags-infinity\s*\{([^}]*)\}/)?.[1] ?? '';
-    expect(rule).toContain('1400px');
-    expect(rule).toContain('150vh');
-    for (const match of PLATE_CSS.matchAll(/([\d.]+)vw/g)) {
-      expect(Number(match[1])).toBeLessThan(100);
-    }
-    expect(PLATE_CSS).toContain('object-fit: contain');
-  });
-
-  it('静态底纹不叠加原机械环光带，浓度独立可调', () => {
-    expect(PLATE_CSS).not.toMatch(/animation:|MechanicalRing|ring-light/);
-    expect(PLATE_CSS).toContain('var(--tags-plate-opacity)');
-    const tokens = read('src/styles/tokens.css');
-    const opacity = Number(tokens.match(/--tags-plate-opacity:\s*([\d.]+)/)?.[1]);
-    expect(opacity).toBeGreaterThanOrEqual(0.15);
-    expect(opacity).toBeLessThanOrEqual(0.4);
-    expect(PLATE_CSS).not.toMatch(/#[\da-fA-F]{3,8}\b|rgba?\(/);
-  });
-
-  it('★ 挂法：plate 具名槽（`.shell` 之外）+ 关掉本页百褶 ∞', () => {
-    expect(PLATE_CSS).toMatch(/position:\s*fixed/);
-    expect(PLATE_CSS).toMatch(/left:\s*50%/);
-    expect(PLATE_CSS).toMatch(/top:\s*50%/);
-    expect(PLATE_CSS).toMatch(/translate\(-50%,\s*-50%\)/);
-    expect(PLATE_CSS).toMatch(/z-index:\s*-1/);
-    expect(PLATE_CSS).toMatch(/pointer-events:\s*none/);
-    expect(PLATE_ASTRO).toMatch(/aria-hidden="true"/);
-    expect(PLATE_ASTRO).toMatch(/<Image[\s\S]*?widths=\{\[800, 1600\]\}/);
-    expect(PLATE_ASTRO).toMatch(/<Image[\s\S]*?sizes="[^"]*96vw[^"]*"/);
-
+  it('★ 挂法：plate 具名槽（`.shell` 之外）+ 关掉通用内页底纹', () => {
     /* 百褶 ∞（`.page-inf`，Topbar 渲染、全站内页共用）必须在本区两页关掉，
        不关就是两套母题叠着（关于页「切片档案」的教训）。
        ⚠ 用 `:global(...)` + `body.tags-plate` 前缀：那边写的是
@@ -290,7 +246,23 @@ describe('标签区 · 准星 CROSSHAIR 装置契约', () => {
 });
 
 describe('标签区 · 构建产物', () => {
-  it('总览页：矩阵格数与标签注册表一致 + 底纹 + 准星 + 关掉百褶 ∞', () => {
+  it('总览和所有单标签页实际挂载可交互百褶环，且不再加载金属图', () => {
+    expect(hasDist, '先 npm run build').toBe(true);
+    for (const tag of ['', ...TAGS]) {
+      const html = readFileSync(join(DIST, 'tags', tag, 'index.html'), 'utf8');
+      expect((html.match(/data-pleated-infinity/g) ?? []), `标签 ${tag || '总览'} 缺百褶环`).toHaveLength(1);
+      expect(html).toMatch(/<canvas\b/);
+      expect(html).toContain('pleated-infinity');
+      expect(html).toContain('data-crosshair');
+      expect(html).not.toMatch(/ceramic-infinity|class="tags-infinity"/);
+      const scripts = [...html.matchAll(/<script[^>]+src="(\/_astro\/[^"]+\.js)"/g)]
+        .map(m => readFileSync(join(DIST, m[1]), 'utf8'));
+      expect(scripts.some(code => code.includes('[data-pleated-infinity]')),
+        `标签 ${tag || '总览'} 只有静态环，没有加载点击控制器`).toBe(true);
+    }
+  });
+
+  it('总览页：矩阵格数与标签注册表一致 + 百褶环 + 准星', () => {
   expect(hasDist, '先 npm run build').toBe(true);
     /* ★ 2026-10-10：原来写死 `toBe(8)`，加第9 个标签 `项目` 时当场红了。
        格子数本来就是 TAGS 的**投影**，写死等于让它跟注册表各说各话 ——
@@ -299,11 +271,11 @@ describe('标签区 · 构建产物', () => {
     expect((IDX_HTML.match(/<li class="tag-cell"/g) ?? []).length,
       '标签总览的格数必须等于注册表里的标签数').toBe(TAGS.length);
     expect(IDX_HTML, '缺矩阵容器').toMatch(/class="tag-matrix"/);
-    expect(IDX_HTML, '缺底纹层').toMatch(/class="tags-infinity"/);
+    expect(IDX_HTML, '缺底纹层').toMatch(/data-pleated-infinity/);
     expect(IDX_HTML, '底纹必须走构建期优化管线（srcset）').toMatch(/<img[^>]*srcset="[^"]*"/);
     expect(IDX_HTML, '缺准星').toMatch(/class="crosshair"[^>]*data-crosshair|data-crosshair[^>]*class="crosshair"/);
     expect(IDX_HTML, '准星三条元素要一起产出').toMatch(/class="ch-dot"/);
-    expect(IDX_HTML, 'body 上没有 tags-plate ⇒ 百褶 ∞ 没被关掉').toMatch(/<body[^>]*class="[^"]*tags-plate/);
+    expect(IDX_HTML, 'body 上没有 tags-plate ⇒ 通用内页底纹没被关掉').toMatch(/<body[^>]*class="[^"]*tags-plate/);
     /* 内容必须服务端渲染完整（装置是装饰，不许承担内容） */
     for (const t of ['AI', '建站', '摄影', '钢琴']) {
       expect(IDX_HTML, `标签「${t}」没渲染出来`).toContain(`>${t}<`);
@@ -322,7 +294,7 @@ describe('标签区 · 构建产物', () => {
       `AI 标签下的格数必须等于内容源里 AI 标签的可见文章数（${AI_POST_COUNT}）`,
     ).toBe(AI_POST_COUNT);
     expect(ONE_HTML, '缺文章矩阵容器').toMatch(/class="post-matrix"/);
-    expect(ONE_HTML, '缺底纹层').toMatch(/class="tags-infinity"/);
+    expect(ONE_HTML, '缺底纹层').toMatch(/data-pleated-infinity/);
     expect(ONE_HTML, '缺准星').toMatch(/data-crosshair/);
     expect(ONE_HTML, 'body 上没有 tags-plate').toMatch(/<body[^>]*class="[^"]*tags-plate/);
     /* 两页共用同一份实现 ⇒ 准星的**标记结构**必须逐字相同 */

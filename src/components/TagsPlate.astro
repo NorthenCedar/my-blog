@@ -1,46 +1,13 @@
 ---
-/** 标签区底纹：陶瓷金属无限符号与本区专属准星。 */
-import { Image } from 'astro:assets';
-import plate from '../assets/tags/plates/ceramic-infinity.webp';
+/** 标签区复用原关于页的交互百褶环，并保留本区专属准星。 */
+import PleatedInfinity from './PleatedInfinity.astro';
 import Crosshair from './Crosshair.astro';
 ---
 
-<div class="tags-infinity" aria-hidden="true">
-  <Image
-    src={plate}
-    alt=""
-    widths={[800, 1600]}
-    sizes="(max-width: 767px) 96vw, min(94vw, 1400px)"
-    loading="eager"
-    decoding="async"
-  />
-</div>
+<PleatedInfinity />
 <Crosshair />
 
 <style>
-  .tags-infinity {
-    position: fixed;
-    left: 50%;
-    top: 50%;
-    width: var(--plate-w, min(94vw, 1400px, 150vh));
-    aspect-ratio: 2 / 1;
-    transform: translate(-50%, -50%);
-    opacity: var(--plate-op, var(--tags-plate-opacity));
-    pointer-events: none;
-    z-index: -1;
-  }
-  .tags-infinity :global(img) {
-    display: block;
-    width: 100%;
-    height: 100%;
-    max-width: none;
-    object-fit: contain;
-  }
-  @media (max-width: 767px) {
-    .tags-infinity {
-      width: var(--plate-w, min(96vw, 800px, 150vh));
-    }
-  }
   :global(body.tags-plate .page-inf) {
     display: none;
   }
