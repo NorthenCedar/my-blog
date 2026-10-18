@@ -45,8 +45,10 @@ def restore():
 # 每处变异留下的痕迹。还原后必须一个都不剩，否则说明 BAK 本身就脏。
 DIRTY = {
     SHADERS: ['uDepth * s);  // MUT', 'vec3(0.935, 0.895, 0.830) * (1.0 - uDenied)'],
-    SCENE: ['twist: 0.9,', 'denied += (deniedTarget - denied) * 0.1;'],
+    SCENE: ['twist: 0.9,', 'denied += (deniedTarget - denied) * 0.1;', '// MUT'],
     CTRL: ['/* MUT */ void 0;', "/* MUT */ canvas.addEventListener('__never__'", '// MUT'],
+    SHADERS: ['uDepth * s);  // MUT', 'vec3(0.935, 0.895, 0.830) * (1.0 - uDenied)',
+              'export const FIN_VERTEX_ATTRS = /* glsl */ `// MUT'],
     COMP: ['/* MUT display:none */'],
     CFG: ['find: "__TMP__",'],
 }
@@ -106,6 +108,13 @@ MUTATIONS = [
      "  host.addEventListener('pointerdown', onDown); // MUT"),
     ('⑩ pagehide 里的 removeEventListener 被摘掉（bfcache 往返会累积）',
      CTRL, "removeEventListener('pointermove', onMove);", "// MUT"),
+    ('⑪ ★ 把 aIndex 塞回共享 uniform 块（GLSL3 里 attribute 是保留字 ⇒ 线上画布全空白）',
+     SHADERS, 'export const FIN_VERTEX_ATTRS = /* glsl */ `\nattribute float aIndex;\n`;',
+     'export const FIN_VERTEX_ATTRS = /* glsl */ `// MUT\n`;'),
+    ('⑫ ★ 让片元着色器也拼 aIndex 那一块（同一个真 bug 的另一条路径）',
+     SCENE,
+     "sh.fragmentShader = sh.fragmentShader\n      .replace('#include <common>', `#include <common>\\n${FIN_COMMON}\\n${FIN_UNIFORMS}`)",
+     "sh.fragmentShader = sh.fragmentShader\n      .replace('#include <common>', `#include <common>\\n${FIN_COMMON}\\n${FIN_UNIFORMS}\\n${FIN_VERTEX_ATTRS}`) // MUT"),
 ]
 
 print('=' * 76)

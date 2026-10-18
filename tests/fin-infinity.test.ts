@@ -252,6 +252,80 @@ describe('立体 ∞ · 后处理（postprocessing + n8ao）', () => {
   });
 });
 
+/* ★★★ 这一组是 2026-10-18 线上目检抓出来的**最严重的一个**：装置在真机上一帧都没画。
+   报出来是这样的：
+     THREE.WebGLProgram: Shader Error 0 - VALIDATE_STATUS false
+     ERROR: 0:231: 'attribute' : Illegal use of reserved word
+        231: attribute float aIndex;
+   原因：`FIN_UNIFORMS` 是**顶点与片元两个着色器都拼进去**的共享块，而
+   `attribute` 在 GLSL3（three r150+ 的默认 WebGL2）里是**保留字**，只顶点侧合法。
+   ⇒ 片元着色器编译失败 ⇒ 整个 program 无效 ⇒ 画布全空白。
+
+   ★ 为什么这类 bug 值得单列一组判据：**它对静态断言完全隐形**。
+     前面 28 条全绿、构建通过、测试通过，只有"真机跑一次并读控制台"才现形。
+     而无头截图里它长得像"装置没生效 / 环境没适配"，极易被当成环境问题放过
+     （我这次就差点这么判）。⇒ 判据必须落在这个**语法层**上：
+     片元着色器里不许出现顶点侧专有的声明。 */
+describe('立体 ∞ · 着色器能在 GLSL3 下编过（★ 线上画布全空白就是这条）', () => {
+  /** 从 fin-shaders.ts 里切出一个导出常量的字符串内容 */
+  const block = (name: string): string => {
+    const i = shaders.indexOf(`export const ${name}`);
+    expect(i, `着色器里找不到 ${name}`).toBeGreaterThan(-1);
+    const body = shaders.slice(shaders.indexOf('`', i) + 1);
+    return body.slice(0, body.indexOf('`'));
+  };
+
+  it('共享 uniform 块里不许有 attribute / varying 之外的顶点侧声明', () => {
+    /* ★ 守的是「共享块只放两边都合法的东西」：
+       uniform 与 varying 两边都能声明，**attribute 只有顶点侧能声明**。 */
+    const shared = block('FIN_UNIFORMS');
+    expect(shared, '切不出 FIN_UNIFORMS（判据本身坏了）').not.toBe('');
+    expect(shared.replace(/\/\/.*$/gm, ' '),
+      "★ FIN_UNIFORMS 被顶点与片元共用，里面不许出现 attribute（GLSL3 里是保留字，片元侧直接编译失败）")
+      .not.toMatch(/\battribute\b/);
+  });
+
+  it('aIndex 单独成块，且只有顶点着色器拼它', () => {
+    expect(shaders, 'aIndex 的独立块 FIN_VERTEX_ATTRS 不见了').toMatch(/export const FIN_VERTEX_ATTRS/);
+    expect(block('FIN_VERTEX_ATTRS'), 'aIndex 的独立块里没有 attribute float aIndex')
+      .toMatch(/attribute\s+float\s+aIndex\s*;/);
+
+    /* ★ 按**行边界**切出片元着色器那一整段。
+       踩过的坑：`sh.fragmentShader = sh.fragmentShader` 这一行里有**两个**
+       `fragmentShader` ⇒ `split('fragmentShader')[1]` 只切到同一行的 `= sh.`（6 个字符）
+       ⇒ 判据覆盖不到真正那段拼接，变异 ⑫ 就漏过去了（实测漏过一次）。
+       所以按「从 sh.fragmentShader 行到下一个 `sh.xxx` 赋值行之前」来切。 */
+    const lines = scene.split(/\r?\n/);
+    const start = lines.findIndex(l => /^\s*sh\.fragmentShader\s*=/.test(l));
+    expect(start, '找不到片元着色器那段拼接（判据本身坏了）').toBeGreaterThan(-1);
+    let end = lines.length;
+    for (let i = start + 1; i < lines.length; i++) {
+      if (/^\s*sh\.\w+\s*=/.test(lines[i])) { end = i; break; }
+    }
+    const fragChunk = lines.slice(start, end).join('\n');
+    expect(fragChunk, '找不到片元着色器那段拼接（判据本身坏了）').toContain('FIN_UNIFORMS');
+    expect(fragChunk, '★ 片元着色器不许拼 FIN_VERTEX_ATTRS（attribute 是 GLSL3 保留字，片元侧编译失败）')
+      .not.toMatch(/FIN_VERTEX_ATTRS/);
+
+    /* 反向：顶点着色器那一段必须拼它，否则 aIndex 没声明 */
+    const vstart = lines.findIndex(l => /^\s*sh\.vertexShader\s*=/.test(l));
+    expect(vstart, '找不到顶点着色器那段拼接（判据本身坏了）').toBeGreaterThan(-1);
+    let vend = lines.length;
+    for (let i = vstart + 1; i < lines.length; i++) {
+      if (/^\s*sh\.\w+\s*=/.test(lines[i])) { vend = i; break; }
+    }
+    expect(lines.slice(vstart, vend).join('\n'),
+      '顶点着色器必须拼 FIN_VERTEX_ATTRS（否则 aIndex 没声明）').toMatch(/FIN_VERTEX_ATTRS/);
+  });
+
+  it('片元着色器整体里不许出现 attribute（GLSL3 保留字）', () => {
+    const fragShared = block('FIN_UNIFORMS') + block('FIN_SURFACE') + block('FIN_EMISSIVE');
+    expect(fragShared.replace(/\/\/.*$/gm, ' '),
+      '★ 片元侧拼进去的任何一块都不许含 attribute')
+      .not.toMatch(/\battribute\b/);
+  });
+});
+
 describe('立体 ∞ · 配色走 token（站规 §3 第 2 条：组件里不许写字面色值）', () => {
   it('着色器里没有硬编码的 RGB 三元组（本体色那几处）', () => {
     /* 原版把配色写死在着色器里（rlPaper / rlGraphite / orange / lime 四档）。

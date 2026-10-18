@@ -52,13 +52,26 @@ uniform vec3 uGlowDark;
 /* 16 槽环形缓冲的脉冲（uPulseT = 起始时刻，uPulseO = 起始相位） */
 uniform float uPulseT[16];
 uniform float uPulseO[16];
-attribute float aIndex;
 varying vec3 vLocal;
 varying vec3 vWorldNrm;
 varying float vSeed;
 varying float vPulse;
 varying float vParam;
 varying float vTip;
+`;
+
+/* ★★ `aIndex` 必须单独一块，不能放在上面那个共享块里（2026-10-18 修的真 bug）。
+   这一块 `FIN_UNIFORMS` 是**顶点与片元两个着色器都拼进去**的（fin-scene.ts 的
+   onBeforeCompile），而 `attribute` 在 GLSL3（three r150+ 默认 WebGL2）里是**保留字**，
+   只在顶点着色器里合法 —— 混进片元着色器会直接：
+       ERROR: 'attribute' : Illegal use of reserved word
+   ⇒ 整个 program `VALIDATE_STATUS false` ⇒ **画布全空白，一帧都不画**。
+   而这一切在无头截图里长得像"装置没生效"，很容易误判成环境问题。
+
+   它只有顶点着色器用（`rl_finTransform` 里 `float idx = aIndex;`），
+   片元侧只需要那五个 varying（通过 varying 传过来），所以拆开最干净。 */
+export const FIN_VERTEX_ATTRS = /* glsl */ `
+attribute float aIndex;
 `;
 
 export const FIN_VERTEX = /* glsl */ `

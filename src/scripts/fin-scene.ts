@@ -45,7 +45,7 @@ import {
   WebGLRenderer,
 } from 'three';
 
-import { FIN_COMMON, FIN_EMISSIVE, FIN_SURFACE, FIN_UNIFORMS, FIN_VERTEX } from './fin-shaders';
+import { FIN_COMMON, FIN_EMISSIVE, FIN_SURFACE, FIN_UNIFORMS, FIN_VERTEX, FIN_VERTEX_ATTRS } from './fin-shaders';
 
 /* 后处理（照搬原版 Stage.ts:266-282 的搭法）。
    ★ 动态 import 的原因：这两个包合起来会让关于页那个 chunk 明显变大
@@ -198,7 +198,7 @@ export async function createFinScene(
   finMat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', `#include <common>\n${FIN_COMMON}\n${FIN_UNIFORMS}\n${FIN_VERTEX}`)
+      .replace('#include <common>', `#include <common>\n${FIN_COMMON}\n${FIN_UNIFORMS}\n${FIN_VERTEX_ATTRS}\n${FIN_VERTEX}`)
       .replace(
         '#include <beginnormal_vertex>',
         'vec3 rlPos; vec3 rlNrm; rl_finTransform(position, normal, rlPos, rlNrm);\nvec3 objectNormal = rlNrm;',
