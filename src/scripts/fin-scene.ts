@@ -36,22 +36,25 @@ import {
   InstancedBufferAttribute,
   InstancedBufferGeometry,
   Mesh,
+  MeshDepthMaterial,
   MeshStandardMaterial,
   PerspectiveCamera,
-  PCFSoftShadowMap,
+  PCFShadowMap,
+  RGBADepthPacking,
   Scene,
   SRGBColorSpace,
-  Vector2,
   WebGLRenderer,
 } from 'three';
 
-import { FIN_COMMON, FIN_EMISSIVE, FIN_SURFACE, FIN_UNIFORMS, FIN_VERTEX, FIN_VERTEX_ATTRS } from './fin-shaders';
+import {
+  FIN_CARVE, FIN_COMMON, FIN_EMISSIVE, FIN_SURFACE, FIN_UNIFORMS, FIN_VERTEX, FIN_VERTEX_ATTRS,
+} from './fin-shaders';
 
 /* 后处理（照搬原版 Stage.ts:266-282 的搭法）。
    ★ 动态 import 的原因：这两个包合起来会让关于页那个 chunk 明显变大
      （postprocessing ≈ 200 KB+、n8ao ≈ 228 KB），不该让「没打开装置」的人付。
      场景本身就是动态 import 的，所以放在一起——**同一个 chunk，付一次**。 */
-import { EffectComposer, EffectPass, RenderPass } from 'postprocessing';
+import { DepthOfFieldEffect, EffectComposer, EffectPass, RenderPass } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 import { createFinGrade } from './fin-grade';
 
@@ -66,9 +69,44 @@ export const FIN_PARAMS = {
   twist: 1.5,
   lean: 0.62,
   thickness: 4.2,
+  corner: 0.14,
   width: 84,
   height: 84,
 } as const;
+
+/* ── 机位（原版 Stage.ts:418-425）──────────────────────────────────────
+   原版相机 `position.set(parallaxX*40, 60 + parallaxY*24, 1080 + …)`。
+   ★ 这里的 y = 60 **不是随手抬的一点**：相机在 (0,60,1080) 看向原点，
+     俯角 atan(60/1080) = 3.18°，正好是原版显式写的 `rotation.x = -3°`。
+     本站改用 lookAt(原点) 表达（视差也要靠它），所以只要把基准高度设成 60，
+     同一个俯角就自动复现了 —— 不必也不该再单独设 camera.rotation.x
+     （lookAt 每帧都会覆盖它，写了等于没写）。 */
+const CAM_Y = 60;
+const CAM_Z = 1080;
+/** 原版 16:9 的基准宽高比。窄于此就要拉远，否则 ∞ 的两端会被切掉。 */
+const CAM_ASPECT = 16 / 9;
+
+/* ── 雕塑姿态（原版 Stage.ts:420-425）──────────────────────────────────
+   ★★ 这是「缺口」的真正成因，2026-10-18 站主报的那个。
+   原版：rotation.set((16 + sin(t*0.11)*3)°, (sin(t*0.07)*9 - (1-intro)*32)°, -2°)，order "YXZ"。
+   本站原先**只写了 rotation.y**，X 恒为 0 ⇒ 完全正视。
+
+   为什么正视会裂出缺口：Gerono 双纽线的两瓣在 **z 上错开**（z = uDepth·sin t），
+   正视时 z 只影响透视大小、不影响屏幕位置 ⇒ 两瓣在屏幕上几乎完全重合，
+   自相交处不是「一条带穿过另一条」，而是两瓣叠成**一堵朝向相同的平墙**，
+   中间只剩一条硬边 —— 看上去就是一道缺口。
+   抬起 16° 之后，纵深差被投影成**屏幕上的位移**，两瓣分开了，
+   带子才真的「连在一起」并且看得出前后关系。 */
+const TILT_DEG = 16;
+const TILT_WAVE_DEG = 3;
+const ROLL_DEG = -2;
+/** 装配动画期间雕塑多转的角度（原版 `(1 - intro) * 32`） */
+const ASSEMBLE_TWIST_DEG = 32;
+const SCULPT_OFFSET_X = -10;
+
+const DEG = Math.PI / 180;
+/** 装配的缓动（原版 `get intro()`：1 - (1-a)³） */
+const easeIntro = (a: number): number => 1 - Math.pow(1 - Math.min(1, Math.max(0, a)), 3);
 
 export interface FinPalette {
   /** 亮色本体色（本站 --paper 的暗一档，鳍片要比底略深才看得出体积） */
@@ -135,7 +173,12 @@ export async function createFinScene(
   renderer.toneMapping = NoToneMapping;
   renderer.toneMappingExposure = 1;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = PCFSoftShadowMap;
+  /* ★ 原版是 `PCFShadowMap` + `shadow.radius = 5`（Stage.ts:168 / 300），**不是** PCFSoft。
+     这个区别不是口味问题：`shadow.radius` 只对 PCFShadowMap / VSM 生效，
+     对 PCFSoftShadowMap 是**静默无效**的 —— 写在同一行也读不到。
+     用错类型的结果就是：鳍片之间会跳出一排高频锯齿硬阴影（每片鳍都在投硬影），
+     看上去像"脏斑"，而不是原版那种被 radius 化开的柔影。 */
+  renderer.shadowMap.type = PCFShadowMap;
 
   const scene = new Scene();
   const camera = new PerspectiveCamera(30, 16 / 9, 20, 6000);
@@ -163,7 +206,24 @@ export async function createFinScene(
   const key = new DirectionalLight(0xfff6ea, 3.4);            // LOOK.key
   key.position.set(-0.379, 0.788, 0.485).multiplyScalar(1200);
   key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
+  /* mapSize 原版是 4096，本站取 2048：阴影相机覆盖 1040 世界单位，
+     2048 ⇒ 0.5 单位/texel，而容器最宽也就 ~960 CSS px、装置约占 700 px
+     ⇒ 已是 2 texel/px，比屏幕更密，再往上加只涨显存不涨质量。 */
+  key.shadow.mapSize.set(2048, 2048);
+  /* ★ 阴影相机必须显式设范围（原版 Stage.ts:296-300）。
+     DirectionalLight 的阴影相机默认是 OrthographicCamera(-5,5,5,-5, 0.5, 500) ——
+     那两对方位的单位是**世界单位**，而这座雕塑半径 285、鳍片 84，
+     灯又摆在 1200 米外 ⇒ 默认的 500 远平面根本够不到雕塑，
+     深度图里空无一物 ⇒ 阴影静默失效（不报错，只是没有）。
+     看上去就像「模型少了一块」：自相交处本该有的接触阴影没了，
+     只剩 AO 在硬撑，平面感一下子就出来了。原版这组数是配着 1200 的灯距量的。 */
+  const sc = key.shadow.camera;
+  sc.left = -520; sc.right = 520; sc.top = 420; sc.bottom = -420;
+  sc.near = 400; sc.far = 2000;
+  sc.updateProjectionMatrix();
+  key.shadow.bias = -0.0004;
+  key.shadow.normalBias = 0.6;
+  key.shadow.radius = 5;
   const fill = new DirectionalLight(0xdfe8ff, 0.55);          // LOOK.fill
   fill.position.set(0.853, 0.174, -0.4925).multiplyScalar(1200);
   const amb = new AmbientLight(new Color(palette.ambientLight), 0.8); // LOOK.env
@@ -188,6 +248,7 @@ export async function createFinScene(
     uSpin: { value: 0 },
     uLean: { value: FIN_PARAMS.lean },
     uThickness: { value: FIN_PARAMS.thickness },
+    uCorner: { value: FIN_PARAMS.corner },
     uWidth: { value: FIN_PARAMS.width },
     uHeight: { value: FIN_PARAMS.height },
     uAssemble: { value: 1 },
@@ -220,18 +281,40 @@ export async function createFinScene(
       .replace('#include <begin_vertex>', 'vec3 transformed = rlPos;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${FIN_COMMON}\n${FIN_UNIFORMS}`)
-      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${FIN_SURFACE}`)
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${FIN_CARVE}\n${FIN_SURFACE}`)
       .replace('#include <color_fragment>', 'diffuseColor.rgb = rlBody;')
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(0.55, 0.36, bevel);')
       .replace('#include <emissivemap_fragment>', FIN_EMISSIVE);
   };
 
+  /* ── 深度材质（原版 Stage.ts:201-213 的 finDepth）★ 本站原先漏了，是真 bug ──
+     three 做阴影/深度预通道时，**不读 material 的 onBeforeCompile** —— 它另用一份
+     MeshDepthMaterial。不接管的话，深度图里写进去的是**未经 rl_finTransform 的单位盒**：
+     400 个 1×1×1 的盒子全叠在原点，而屏幕上的鳍片在别处 ⇒
+       · 阴影：雕塑本体不在深度图里 ⇒ 自相交处的接触阴影全丢
+       · AO（n8ao 读深度）：按原点的假几何算 ⇒ 大面积误判为"遮挡"
+     后者的典型观感就是**某一片区域整体发暗、边界硬**，非常像"缺了一块"。
+     ⇒ 必须把同一套顶点变换 + 同一套 carve 接到深度材质上（原版两处都拼）。 */
+  const finDepth = new MeshDepthMaterial({ depthPacking: RGBADepthPacking });
+  finDepth.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>\n${FIN_COMMON}\n${FIN_UNIFORMS}\n${FIN_VERTEX_ATTRS}\n${FIN_VERTEX}`)
+      .replace('#include <begin_vertex>', 'vec3 rlPos; vec3 rlNrm; rl_finTransform(position, normal, rlPos, rlNrm);\nvec3 transformed = rlPos;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\n${FIN_UNIFORMS}`)
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${FIN_CARVE}`);
+  };
+
   const fins = new Mesh(finGeo, finMat);
+  fins.customDepthMaterial = finDepth;
   fins.frustumCulled = false;
   fins.castShadow = true;
   fins.receiveShadow = true;
 
   const sculpture = new Group();
+  sculpture.rotation.order = 'YXZ';   // 原版 Stage.ts:421 —— 顺序影响 16° 俯仰与自转的叠加
+  sculpture.position.x = SCULPT_OFFSET_X;
   sculpture.add(fins);
   scene.add(sculpture);
 
@@ -242,7 +325,10 @@ export async function createFinScene(
      暗角/色调映射的观感依赖原版的具体曝光，站内已有 ACESFilmic 在renderer 上。 */
   const composer = new EffectComposer(renderer, {
     frameBufferType: HalfFloatType,
-    multisampling: 0,
+    /* ★ 抗锯齿靠这里，不靠 `new WebGLRenderer({ antialias: true })` ——
+       composer 渲染到自己的 render target，renderer 的 canvas 级 MSAA 对它无效。
+       原版 high 档就是 `multisampling: 4`（Stage.ts:267），照抄。 */
+    multisampling: 4,
   });
   composer.addPass(new RenderPass(scene, camera));
   const ao = new N8AOPostPass(scene, camera, 1920, 1080);
@@ -253,6 +339,19 @@ export async function createFinScene(
   ao.configuration.screenSpaceRadius = false;
   ao.setQualityMode('Medium');
   composer.addPass(ao);
+  /* ── DoF（原版 Stage.ts:279-282，逐字照抄）──
+     这一层原先**故意没搬**，理由写的是「参数是按原版机位量的，本站容器与机位都不同，
+     照搬必然跑偏」。现在机位已经对齐原版（CAM_Z = 1080 / CAM_Y = 60），
+     那条理由不成立了 —— 而它在观感上不是可选项：
+     它把焦点（雕塑中心）以外的鳍片刃口轻微化开，压掉那层高频硬边。
+     没有它的观感是「脏」，有它才是「干净」。
+     ★ focusDistance 必须随 camZ 走（见 resize）：它是**世界单位**的视距，
+       窄屏下 camZ 被拉远，写死 1060 焦点就跑到雕塑前面去了。
+     原版 1060 与相机 1080 的差 20 正好是雕塑中心到相机的距离。 */
+  const dof = new DepthOfFieldEffect(camera, {
+    focusDistance: CAM_Z - 20, focusRange: 520, bokehScale: 1.2, resolutionScale: 0.5,
+  });
+  composer.addPass(new EffectPass(camera, dof));
   /* ── grade（照搬原版 GradeEffect 的色彩三步，见 fin-grade.ts 的注释）──
      必须排在 AO **之后**：grade 要作用在已经含 AO 的最终画面上，
      反过来的话 AO 会把 grade 提亮的暗部重新压回去。 */
@@ -276,7 +375,8 @@ export async function createFinScene(
 
   let seconds = 0;
   let w = 0, h = 0, dpr = 1;
-  const ptr = new Vector2();
+  /** 当前容器宽高比下的相机距离（resize 时按 CAM_Z 缩放出来） */
+  let camZ = CAM_Z;
 
   function setDenied(v: number) {
     deniedTarget = v;
@@ -314,10 +414,13 @@ export async function createFinScene(
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     /* 相机距离按容器宽高比调：窄屏时容器更瘦，FOV 30 的横向视野会不够，
-       ∞ 的两端会被切掉。按宽高比反比缩放距离。 */
-    const target = 1150;
+       ∞ 的两端会被切掉。按宽高比反比缩放距离（基准 1080 = 原版机位）。 */
     const ar = w / h;
-    camera.position.set(0, 0, target * Math.max(1, 1.62 / Math.max(ar, 0.35)));
+    camZ = CAM_Z * Math.max(1, CAM_ASPECT / Math.max(ar, 0.35));
+    /* 焦点跟着机位走：焦点始终落在雕塑中心（相机到原点距离再退 20 单位，
+       与原版 1080/1060 的关系一致）。 */
+    dof.circleOfConfusionMaterial.focusDistance = camZ - 20;
+    camera.position.set(0, CAM_Y, camZ);
     camera.lookAt(0, 0, 0);
   }
 
@@ -365,15 +468,27 @@ export async function createFinScene(
     // 视差缓动
     cxp += (px - cxp) * Math.min(1, step * 3.2);
     cyp += (py - cyp) * Math.min(1, step * 3.2);
-    ptr.set(cxp * 40, cyp * 40);
-    camera.position.x = ptr.x;
-    camera.position.y = ptr.y;
-    camera.rotation.y = cxp * 0.0279; // 原版 1.6° = 0.0279rad
+    /* 机位（原版 Stage.ts:418-419）：指针带 40/24 的平移 + 装配时从远处 dolly 进。
+       ★ y 的基准是 CAM_Y = 60 而不是 0 —— 这一项就是那 3° 俯角，见常量处的注释。 */
+    const intro = easeIntro(U.uAssemble.value);
+    camera.position.set(
+      cxp * 40,
+      CAM_Y + cyp * 24,
+      camZ + (1 - intro) * 300,
+    );
     camera.lookAt(0, 0, 0);
 
     // 雕塑自转：原版 uSpin 由外部缓慢驱动（Stage.ts:383：spin += dt * 0.05）
     U.uSpin.value += step * 0.05;
-    sculpture.rotation.y = Math.sin(seconds * 0.12) * 0.16;
+    /* ★★ 姿态（原版 Stage.ts:420-425，逐字）——**16° 俯仰是「缺口」的解药**。
+       本站原先只写了 rotation.y，X 恒 0 = 完全正视：两瓣在纵深上的差
+       （z = uDepth·sin t）投影不到屏幕上，自相交处就叠成一堵同向的平墙。
+       抬头看 16°，纵深差变成屏幕位移，两瓣错开、带子才连得起来。 */
+    sculpture.rotation.set(
+      (TILT_DEG + Math.sin(seconds * 0.11) * TILT_WAVE_DEG) * DEG,
+      (Math.sin(seconds * 0.07) * 9 - (1 - intro) * ASSEMBLE_TWIST_DEG) * DEG,
+      ROLL_DEG * DEG,
+    );
 
     // ★ 只调 composer.render：它内部第一道pass 就是 RenderPass(scene, camera)，
     //   自己再 renderer.render 一次等于把场景画两遍（多一倍光栅化开销，

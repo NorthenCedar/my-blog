@@ -42,6 +42,9 @@ export const FIN_UNIFORMS = /* glsl */ `
 uniform float uTime, uFlow, uCount, uRadius, uAspect, uDepth, uTwist, uSpin;
 uniform float uLean, uThickness, uWidth, uHeight, uAssemble, uDenied;
 uniform float uAlign, uDisorder, uDissolve, uVerify;
+/* 鳍片的圆角半径（原版 uCorner = 0.14）。本体色/自发光两块都要用到 carve，
+   所以它必须在这个**顶点+片元共用**的块里。 */
+uniform float uCorner;
 /* ★ 亮暗两端的本体色。**由JS 从 CSS token 读出来传进来**，不在着色器里写死 ——
    站规 §3 第 2 条：组件里不许写字面色值。 */
 uniform vec3 uBodyLight;
@@ -172,6 +175,23 @@ void rl_finTransform(in vec3 lp, in vec3 nrm, out vec3 worldPos, out vec3 worldN
     vPulse = pulse;
     vParam = t / 6.2831853;
 }
+`;
+
+/* ── 圆角切角（原版 `finCarveGlsl`）────────────────────────────────────
+   鳍片的截面不是直角矩形，四角是圆的 —— 靠片元里 discard 掉超出圆角半径的像素。
+
+   ★ 2026-10-18 补搬：本站此前**整块漏了**这一段，于是每片鳍都是硬边直角矩形。
+     在正视（无俯仰）下这不显眼，可一旦把带子按原版抬到 16° 俯仰看，
+     直角边会在自相交处叠出一排硬切线 —— 那是缺口看起来"像被切开"的帮凶之一。
+
+   ★ 为什么 colour 与 depth **两个材质都要拼**：AO 与阴影是从深度图算的。
+     只在颜色侧 discard，深度图里鳍片仍是矩形 ⇒ AO 会沿着不存在的直角边
+     压出一圈暗边，阴影也多出一圈。原版两处都拼（Stage.ts:196 / 210），照抄。 */
+export const FIN_CARVE = /* glsl */ `
+    {
+        vec2 rc = max(abs(vLocal.yz) - vec2(0.5 - uCorner), 0.0);
+        if (length(rc) > uCorner) discard;
+    }
 `;
 
 export const FIN_SURFACE = /* glsl */ `

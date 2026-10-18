@@ -142,13 +142,33 @@ MUTATIONS = [
     ('㉒ grade 从 composer 里摘掉（整层不见）',
      SCENE, 'composer.addPass(new EffectPass(camera, createFinGrade()));', '// MUT'),
     ('㉓ grade 排到 AO 之前（顺序错了 = grade 白做：AO 又把暗部压回去）',
+     SCENE, '  composer.addPass(ao);',
+     '  composer.addPass(new EffectPass(camera, createFinGrade())); // MUT\n  composer.addPass(ao);'),
+    # ── ㉔~㉜：姿态 / 机位 / 深度材质 / 阴影 / DoF（2026-10-18「那道缺口」）──
+    # ★ 这一组的每一处都对应一次**真实修掉的缺陷**。特别是 ㉔：
+    #   它就是那道缺口的直接成因（X 轴俯仰恒为 0 = 完全正视 ⇒ 两瓣叠成平墙），
+    #   而当时 42 条断言全绿 —— 所以必须验证新加的那一组真的咬得住。
+    ('㉔ ★ 雕塑的 X 轴俯仰归零（正视 ⇒ 两瓣叠成平墙 = 那道缺口）',
+     SCENE, 'const TILT_DEG = 16;', 'const TILT_DEG = 0; // MUT'),
+    ('㉕ ★ 相机基准高度改回 0（原版 y=60 = 3° 俯角）',
+     SCENE, 'const CAM_Y = 60;', 'const CAM_Y = 0; // MUT'),
+    ('㉖ 摘掉 customDepthMaterial（阴影/AO 会按未变形的单位盒算）',
+     SCENE, 'fins.customDepthMaterial = finDepth;', '// MUT'),
+    ('㉗ 深度材质不再拼 carve（AO 会沿着不存在的直角边压暗）',
      SCENE,
-     'composer.addPass(ao);\n  /* ── grade（照搬原版 GradeEffect 的色彩三步，见 fin-grade.ts 的注释）──\n'
-     '     必须排在 AO **之后**：grade 要作用在已经含 AO 的最终画面上，\n'
-     '     反过来的话 AO 会把 grade 提亮的暗部重新压回去。 */\n'
-     '  composer.addPass(new EffectPass(camera, createFinGrade()));',
-     'composer.addPass(new EffectPass(camera, createFinGrade())); // MUT\n'
-     '  composer.addPass(ao);'),
+     "      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\\n${FIN_CARVE}`);",
+     "      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>`); // MUT"),
+    ('㉘ uCorner 归零（鳍片退回硬直角矩形）',
+     SCENE, 'corner: 0.14,', 'corner: 0.0, // MUT'),
+    ('㉙ 阴影类型换回 PCFSoft（shadow.radius 静默失效 ⇒ 一排高频硬阴影）',
+     SCENE, 'renderer.shadowMap.type = PCFShadowMap;', 'renderer.shadowMap.type = PCFSoftShadowMap; // MUT'),
+    ('㉚ 阴影相机 far 缩回 500（够不到 1200 米外的灯 ⇒ 阴影静默失效）',
+     SCENE, 'sc.near = 400; sc.far = 2000;', 'sc.near = 400; sc.far = 500; // MUT'),
+    ('㉛ DoF 从 composer 里摘掉（鳍片刃口的高频硬边全暴露）',
+     SCENE, 'composer.addPass(new EffectPass(camera, dof));', '// MUT'),
+    ('㉜ DoF 排到 AO 之前（AO 读到的是已虚化的深度 ⇒ AO 与 DoF 互相打架）',
+     SCENE, '  composer.addPass(ao);',
+     '  composer.addPass(new EffectPass(camera, dof)); // MUT\n  composer.addPass(ao);'),
 ]
 
 print('=' * 76)

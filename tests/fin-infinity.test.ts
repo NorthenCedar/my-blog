@@ -206,8 +206,8 @@ describe('立体∞ · grade（★ 修「发棕」的根因）', () => {
        等于白做一遍 —— 这类「顺序错了还全绿」的 bug 静态断言完全看不出来，
        所以判据直接卡addPass 的先后。 */
     const code = stripComments(scene);
-    const iAo = code.lastIndexOf('addPass(ao');
-    const iGrade = code.lastIndexOf('addPass(new EffectPass(camera, createFinGrade())');
+    const iAo = code.indexOf('addPass(ao');
+    const iGrade = code.indexOf('addPass(new EffectPass(camera, createFinGrade())');
     expect(iAo, '找不到 AO 的 addPass').toBeGreaterThan(-1);
     expect(iGrade, '找不到 grade 的 addPass').toBeGreaterThan(-1);
     expect(iGrade, 'grade 必须排在 AO 之后').toBeGreaterThan(iAo);
@@ -304,6 +304,145 @@ describe('立体 ∞ · 几何照抄原版（rhine-lock ∞ fin sculpture）', (
     expect(scene).toMatch(/onBeforeCompile/);
     expect(scene, '不许换成裸 ShaderMaterial（会丢掉阴影与AO 所需的深度输出）')
       .not.toMatch(/new\s+ShaderMaterial/);
+  });
+});
+
+/* ★★★ 这一组是「那道缺口」的门闩（2026-10-18 站主放大截图报的，测试全绿却存在）。
+   现象：∞ 左半瓣中部裂开一道缺口，缺口下面是一片**朝向完全相同的平墙**。
+
+   根因不是着色器公式（`wave` / `phi` / `lean` 逐字比对过，与原版一字不差），
+   而是**姿态少写了一整个轴**：
+     原版 sculpture.rotation.set(16°±3°, Y, -2°)，order "YXZ"；
+     本站只写了 rotation.y，X 恒为 0 ⇒ 完全正视。
+   Gerono 双纽线的两瓣在 z 上错开（z = uDepth·sin t），正视时纵深差不投影到屏幕
+   ⇒ 两瓣叠成一堵同向的平墙 ⇒ 看上去就是缺口。抬 16° 之后两瓣分开，带子才连起来。
+
+   ★ 为什么之前 42 条断言全绿：它们守的全是**参数值**（radius/twist/lean…）和
+     **着色器公式**，没有一条守「雕塑在空间里是怎么摆的」。
+     参数全对、公式全对、姿态错一个轴，照样不是原版 —— 这正是这一组的价值。 */
+describe('立体 ∞ · 姿态与机位（★ 「缺口」= 少写了整个 X 轴俯仰）', () => {
+  const code = stripComments(scene);
+  const constNum = (name: string): number => {
+    const m = new RegExp(`const\\s+${name}\\s*=\\s*(-?[\\d.]+)`).exec(code);
+    return m ? Number(m[1]) : NaN;
+  };
+
+  it('雕塑必须有 X 轴俯仰（正视时两瓣叠成平墙 = 那道缺口）', () => {
+    const tilt = constNum('TILT_DEG');
+    expect(Number.isFinite(tilt), '找不到 TILT_DEG（俯仰角常量）').toBe(true);
+    /* 守关系：0° 就是故障态，所以下限要明显大于 0；原版是 16°。 */
+    expect(tilt, `俯仰角 ${tilt}° 太小 —— 正视时两瓣的纵深差投影不到屏幕，`
+      + '又叠成那堵平墙（原版 16°）').toBeGreaterThan(8);
+    expect(tilt, '俯仰角不该夸张到失真（原版 16°）').toBeLessThan(30);
+
+    /* 必须是**每帧在 render 里**写，且用 rotation.set 一次写三个轴。
+       只写 rotation.x 或只写 rotation.y 都会漏掉一个轴 —— 那正是原 bug 的形状。 */
+    const body = fnBody(scene, 'render');
+    expect(body, '雕塑姿态不在 render 里更新（装配/波动都要每帧写）')
+      .toMatch(/sculpture\.rotation\.set\(/);
+    const setCall = /sculpture\.rotation\.set\(([\s\S]*?)\);/.exec(body);
+    expect(setCall, '切不出 sculpture.rotation.set 的实参（判据本身坏了）').toBeTruthy();
+    expect(setCall![1], 'X 轴没有用 TILT_DEG —— 又变回正视了').toMatch(/TILT_DEG/);
+    /* 三个轴都要有东西（-2° 的 roll 也在原版里） */
+    expect(setCall![1].split(',').length, 'rotation.set 少传了轴（原版是 x/y/z 三个）')
+      .toBeGreaterThanOrEqual(3);
+    expect(constNum('ROLL_DEG'), '原版那道 -2° 的 roll 不见了').toBeCloseTo(-2, 0);
+    expect(scene, 'rotation.order 必须是 YXZ（原版 Stage.ts:421，顺序影响俯仰与自转的叠加）')
+      .toMatch(/rotation\.order\s*=\s*'YXZ'/);
+  });
+
+  it('相机基准高度是 60，不是 0（那就是原版的 -3° 俯角）', () => {
+    /* 原版 position.set(…, 60 + …, 1080 + …) 且显式写 rotation.x = -3°。
+       相机在 (0,60,1080) 看向原点 ⇒ 俯角 atan(60/1080) = 3.18°，两者是同一件事。
+       本站用 lookAt 表达，所以**只要 y 的基准是 60** 就够了；
+       反过来，把 y 设成 0 就同时抹掉了这 3°，且 lookAt 会覆盖任何手写的 rotation.x。 */
+    expect(constNum('CAM_Y'), '相机基准高度 CAM_Y 应≈60（原版机位的 -3° 俯角）').toBeCloseTo(60, 0);
+    expect(constNum('CAM_Z'), '相机基准距离 CAM_Z 应≈1080（原版机位）').toBeCloseTo(1080, 0);
+    const body = fnBody(scene, 'render');
+    const camSet = /camera\.position\.set\(([\s\S]*?)\);/.exec(body);
+    expect(camSet, 'render 里没有 camera.position.set（判据本身坏了）').toBeTruthy();
+    expect(camSet![1], '★ 相机 y 又写回 0 了 —— 3° 俯角随之消失')
+      .toMatch(/CAM_Y/);
+    /* 反向：不许再出现「只给 x/y 单独赋值」的写法（那会在 lookAt 之前把基准抹掉） */
+    expect(body, '不许再单独给 camera.position.y 赋值（会覆盖 CAM_Y 基准）')
+      .not.toMatch(/camera\.position\.y\s*=/);
+  });
+
+  it('★ 深度材质必须接管：否则阴影与 AO 都按「未变形的单位盒」算', () => {
+    /* three 做阴影/深度预通道时**不读** material 的 onBeforeCompile，
+       它另用一份 MeshDepthMaterial。不接管的话深度图里写进去的是 400 个
+       全叠在原点、从未经过 rl_finTransform 的 1×1×1 盒子：
+         · 阴影：雕塑本体不在深度图里 ⇒ 自相交处的接触阴影全丢
+         · AO（n8ao 读深度）：按原点的假几何算 ⇒ 大片区域被误判为遮挡 ⇒
+           看上去像"某块区域整体发暗、边界硬"，是缺口观感的帮凶。
+       原版 Stage.ts:201-213 就接了（finDepth），本站此前整段漏了。 */
+    expect(code, 'fins 没有 customDepthMaterial ⇒ 阴影/AO 用的是未变形的单位盒')
+      .toMatch(/customDepthMaterial\s*=\s*finDepth/);
+    /* 深度材质必须走**同一套**顶点变换 + 同一套 carve（关系，不是有就行） */
+    const depthBlock = code.slice(code.indexOf('new MeshDepthMaterial'));
+    expect(depthBlock.length, '找不到 MeshDepthMaterial 那段（判据本身坏了）').toBeGreaterThan(0);
+    const end = depthBlock.indexOf('const fins =');
+    const depthSrc = end > 0 ? depthBlock.slice(0, end) : depthBlock;
+    expect(depthSrc, '深度材质调用的不是同一个 rl_finTransform ⇒ 深度图与画面会错位')
+      .toMatch(/rl_finTransform/);
+    expect(depthSrc, '深度材质没拼 FIN_CARVE ⇒ AO 会沿着不存在的直角边压出暗边')
+      .toMatch(/FIN_CARVE/);
+    expect(depthSrc, '深度材质没拼顶点块 FIN_VERTEX').toMatch(/FIN_VERTEX\b/);
+  });
+
+  it('鳍片是圆角矩形（原版 finCarveGlsl + uCorner 0.14），不是硬直角', () => {
+    expect(shaders, '圆角切角块 FIN_CARVE 不见了（原版 finCarveGlsl）').toMatch(/export const FIN_CARVE/);
+    expect(shaders, 'carve 没有 discard 掉圆角外的像素').toMatch(/length\(rc\)\s*>\s*uCorner\)\s*discard/);
+    const block = scene.slice(scene.indexOf('FIN_PARAMS'), scene.indexOf('} as const'));
+    expect(num(block, 'corner'), 'uCorner 应≈0.14（原版 Stage.ts:181）').toBeCloseTo(0.14, 2);
+    expect(scene, 'uCorner 没有接到 FIN_PARAMS').toMatch(/uCorner:\s*\{\s*value:\s*FIN_PARAMS\.corner/);
+    /* 颜色侧也要拼（否则本体色那套 bevel/rim 与 carve 对不上） */
+    expect(code.replace(/\s+/g, ' '), '颜色着色器没拼 FIN_CARVE').toMatch(/\$\{FIN_CARVE\}/);
+  });
+
+  it('阴影：PCFShadowMap + radius（PCFSoft 下 radius 是静默无效的）+ 阴影相机够到雕塑', () => {
+    /* 原版是 PCFShadowMap + shadow.radius = 5。写成 PCFSoftShadowMap 时
+       shadow.radius **不生效也不报错** —— 结果是一排高频硬阴影，
+       看起来像脏斑，而不是原版那种被 radius 化开的柔影。 */
+    expect(code, 'shadowMap.type 应为 PCFShadowMap（原版 Stage.ts:168；'
+      + 'PCFSoft 下 shadow.radius 静默失效）').toMatch(/shadowMap\.type\s*=\s*PCFShadowMap/);
+    const radius = /key\.shadow\.radius\s*=\s*(-?[\d.]+)/.exec(code);
+    expect(radius, 'shadow.radius 不见了').toBeTruthy();
+    expect(Number(radius![1]), 'radius 应≈5（原版）').toBeCloseTo(5, 0);
+
+    /* ★ 守关系：阴影相机的 far 必须够到灯距，否则深度图里空无一物 ——
+       阴影**静默失效**（不报错，只是没有），看上去就是"少了一块"。
+       灯的摆放是 position.set(...).multiplyScalar(1200)。 */
+    const lampDist = /key\.position\.set\([^)]*\)\.multiplyScalar\(\s*([\d.]+)\s*\)/.exec(code);
+    expect(lampDist, '读不到 key 灯的摆放距离（判据本身坏了）').toBeTruthy();
+    const far = /sc\.far\s*=\s*([\d.]+)/.exec(code) ?? /shadow\.camera[\s\S]{0,80}?far\s*=\s*([\d.]+)/.exec(code);
+    expect(far, '阴影相机的 far 没设（默认 500 ⇒ 够不到 1200 米外的灯）').toBeTruthy();
+    expect(Number(far![1]), `阴影相机 far=${far![1]} 够不到灯距 ${lampDist![1]} ⇒ 阴影静默失效`)
+      .toBeGreaterThan(Number(lampDist![1]));
+    const near = /sc\.near\s*=\s*([\d.]+)/.exec(code);
+    expect(near, '阴影相机的 near 没设').toBeTruthy();
+    expect(Number(near![1]), '阴影相机 near 必须小于灯距（否则雕塑落在 near 之前）')
+      .toBeLessThan(Number(lampDist![1]));
+  });
+
+  it('DoF 在 AO 之后、grade 之前（原版 Stage.ts:279-284 的顺序）', () => {
+    /* 这一层原先"故意没搬"，理由是机位不同会跑偏；机位对齐之后就没有理由了。
+       它在观感上不是可选项：把焦点外的鳍片刃口化开，压掉高频硬边。 */
+    expect(code, 'DepthOfFieldEffect 不见了（原版有这层）').toMatch(/DepthOfFieldEffect/);
+    /* ★ 用 indexOf（**第一次**出现）而不是 lastIndexOf：
+       判的是「谁先被加进 composer」，重复出现时 lastIndexOf 会指向末尾那一份，
+       把「在前面插一行同样的调用」这种变异放过去（实测踩过）。 */
+    const iAo = code.indexOf('addPass(ao');
+    const iDof = code.indexOf('addPass(new EffectPass(camera, dof)');
+    const iGrade = code.indexOf('addPass(new EffectPass(camera, createFinGrade())');
+    expect(iAo, '找不到 AO 的 addPass').toBeGreaterThan(-1);
+    expect(iDof, '找不到 DoF 的 addPass').toBeGreaterThan(-1);
+    expect(iGrade, '找不到 grade 的 addPass').toBeGreaterThan(-1);
+    expect(iDof, 'DoF 必须排在 AO 之后（AO 要读原始深度，先虚化就废了）').toBeGreaterThan(iAo);
+    expect(iDof, 'DoF 必须排在 grade 之前（grade 是最终的显示空间编码）').toBeLessThan(iGrade);
+    /* 焦点是世界单位的视距 ⇒ 窄屏拉远后必须跟着 camZ 走，写死会跑焦 */
+    expect(code, 'focusDistance 没有随 camZ 更新（窄屏会焦点错位）')
+      .toMatch(/focusDistance\s*=\s*camZ/);
   });
 });
 
