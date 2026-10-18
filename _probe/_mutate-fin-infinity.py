@@ -16,8 +16,13 @@
   ④ alias：把 three/examples 的alias挪走（构建会挂）
   ⑤ 配色：把本体色改回着色器里写死（站规 §3 第 2 条）
   ⑥ 显隐：把 canvas 改成 display:none（AGENTS ★★★★ 事故）
-  ⑦ 降级：去掉 webglcontextlost 处理
-  ⑧ 主题：把 uDenied 改成缓动（原版是刻意硬切）
+⑦ 降级：去掉 webglcontextlost 处理
+ ⑧ 主题：把 uDenied 改成缓动（原版是刻意硬切）
+ ⑨ ★ 把pointerdown/pointermove 退回挂在 host 上 —— 这一条是**真实发生过的 bug**
+     （装饰层 pointer-events:none，事件挂它身上等于挂死，点击反馈与视差全是死代码，
+      而当时 25 条断言全绿）。补它是因为新加的三条判据就是为它而设的，
+      不验证就等于不知道新判据有没有真的咬住。
+ ⑩ 把.pagehide 里的 removeEventListener 摘掉（bfcache 往返会累积）
 """
 import subprocess, os, sys, pathlib
 
@@ -41,7 +46,7 @@ def restore():
 DIRTY = {
     SHADERS: ['uDepth * s);  // MUT', 'vec3(0.935, 0.895, 0.830) * (1.0 - uDenied)'],
     SCENE: ['twist: 0.9,', 'denied += (deniedTarget - denied) * 0.1;'],
-    CTRL: ['/* MUT */ void 0;', "/* MUT */ canvas.addEventListener('__never__'"],
+    CTRL: ['/* MUT */ void 0;', "/* MUT */ canvas.addEventListener('__never__'", '// MUT'],
     COMP: ['/* MUT display:none */'],
     CFG: ['find: "__TMP__",'],
 }
@@ -96,6 +101,11 @@ MUTATIONS = [
      CTRL, "canvas.addEventListener('webglcontextlost'", "/* MUT */ canvas.addEventListener('__never__'"),
     ('⑧ uDenied 改成缓动（原版是刻意硬切）',
      SCENE, 'denied = deniedTarget;', 'denied += (deniedTarget - denied) * 0.1; // MUT'),
+    ('⑨ ★ 指针监听退回挂在 host 上（装饰层 pointer-events:none ⇒ 点击反馈变死代码）',
+     CTRL, "  addEventListener('pointerdown', onDown);",
+     "  host.addEventListener('pointerdown', onDown); // MUT"),
+    ('⑩ pagehide 里的 removeEventListener 被摘掉（bfcache 往返会累积）',
+     CTRL, "removeEventListener('pointermove', onMove);", "// MUT"),
 ]
 
 print('=' * 76)

@@ -34,23 +34,32 @@ const num = (src: string, name: string): number => {
 
 /* 按「从这行到下一个顶层 `});`」切出一个监听器的函数体，
    并**剥掉注释**再返回。
-   ★ 两个坑都在这里踩过（都是变异验证抓出来的，不是想出来的）：
+   ★ 三个坑都在这里踩过（前两个是变异验证抓出来的，第三个是手工目检发现的真 bug）：
      ① 用 `indexOf('});')` 切边界会跨过嵌套的箭头函数/对象字面量 ——
         实测 `pointerdown` 那样切出来是 4754 字符，跨到了文件后半段，判据假绿。
         ⇒ 改成取到下一个「行首 `});` 或 `addEventListener`」为止。
      ② **剥注释**：把调用注释掉（`/* scene.pulse(0.25); *\/`）之后，
         正则照样能在注释里匹配到 `scene.pulse(` ⇒ 变异漏过。
         同类错误在配色那条也犯过一次（`rlPaper` 只存在于注释里）。
-        ⇒ 任何"某行**不该**再出现 X"的判据，都必须先剥注释。 */
+        ⇒ 任何"某行**不该**再出现 X"的判据，都必须先剥注释。
+     ③ **剥注释必须在定位 marker 之前**（2026-10-18 加）：原先是
+        `indexOf(marker)` 先在带注释的原文上跑、`剥注释` 放在最后 ——
+        于是注释里写一句「pointerdown 原来挂在 host 上」就会把 marker 抢走，
+        切出的是一行注释而不是函数体 ⇒ 判据假红。
+        剥注释用空格替换（不删字符），行结构不变，切边界逻辑照旧可用。 */
+function stripComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length))
+    .replace(/\/\/.*$/gm, m => ' '.repeat(m.length));
+}
+
 function handlerBody(src: string, marker: string): string {
-  const i = src.indexOf(marker);
+  const code = stripComments(src);
+  const i = code.indexOf(marker);
   if (i < 0) return '';
-  const rest = src.slice(i);
+  const rest = code.slice(i);
   const m = /\n\s*\}\);|\n\s*addEventListener\(/.exec(rest.slice(1));
-  const body = m ? rest.slice(0, m.index + 1) : rest;
-  return body
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/\/\/.*$/gm, ' ');
+  return m ? rest.slice(0, m.index + 1) : rest;
 }
 
 describe('立体 ∞ · 几何照抄原版（rhine-lock ∞ fin sculpture）', () => {
@@ -125,17 +134,24 @@ describe('立体 ∞ · 几何照抄原版（rhine-lock ∞ fin sculpture）', (
 
 describe('立体 ∞ · 点击脉冲（★ 本轮新加，原版没有）', () => {
   it('脉冲挂在 pointerdown 上（原版是由键盘触发的，rhine-lock 的 lock.svelte.ts:305）', () => {
-    expect(ctrl, '没找到 pointerdown 监听').toMatch(/pointerdown/);
     /* ★ 判据不能写成 `pointerdown[\s\S]{0,400}scene\.pulse\(` ——
        那种写法有两个洞，变异验证已经把它们都试出来了：
          ① 字符数上限：脉冲调用离监听超过 N 行就查不到（改个顺序就假绿）；
          ② 顺序假设：默认 pulse 在监听「之前」，倒过来写就漏。
-       正确做法：切出 pointerdown 那个监听函数的**函数体**，在里面找 pulse ——
-       与距离、顺序都无关。*/
-    expect(ctrl, '没找到 pointerdown 监听').toMatch(/pointerdown/);
-    const body = handlerBody(ctrl, 'pointerdown');
-    expect(body.length, '切不出 pointerdown 监听器的函数体（判据本身坏了）').toBeGreaterThan(0);
-    expect(body, 'pointerdown 监听里没有调用 pulse() —— 点击反馈被摘掉了')
+       正确做法：从注册语句里**解析出 handler 标识符**，再切那个 handler 的
+       函数体，在里面找 pulse —— 与距离、顺序、以及是否内联全都无关。
+       （2026-10-18：原来写死 marker='pointerdown'，监听改成具名 onDown 后失效，
+        顺着它修才暴露 handlerBody 的第三个坑 —— 见stripComments 的注释。）*/
+    const code = stripComments(ctrl);
+    const reg = code.match(/addEventListener\(\s*'pointerdown'\s*,\s*([A-Za-z_$][\w$]*)/);
+    expect(reg, '没找到 pointerdown 的注册语句（判据本身坏了）').toBeTruthy();
+    const handler = reg![1];
+    const body =
+      handlerBody(ctrl, `${handler} = (`) ||
+      handlerBody(ctrl, `${handler} = function`) ||
+      handlerBody(ctrl, `function ${handler}`);
+    expect(body.length, `切不出 ${handler} 的函数体（判据本身坏了）`).toBeGreaterThan(0);
+    expect(body, `${handler} 里没有调用 scene.pulse() —— 点击反馈被摘掉了`)
       .toMatch(/scene\.pulse\s*\(/);
   });
 
@@ -149,6 +165,46 @@ describe('立体 ∞ · 点击脉冲（★ 本轮新加，原版没有）', () =
 
   it('点击不抢正文交互（点在链接/按钮上不触发）', () => {
     expect(ctrl, '没有排除交互元素').toMatch(/closest\(['"`]a,button,input/);
+  });
+});
+
+/* ★★ 这一组是补一条真 bug 的门闩（2026-10-18，线上目检时手工发现的，测试没抓到）。
+   bug：`pointerdown` / `pointermove` 原来挂在 host 上，而 host 是
+   `pointer-events:none` 的装饰层 ⇒ 它**永远收不到指针事件** ⇒ 点击脉冲和视差
+   都是死代码，25 条断言却全绿。
+   根因是判据只问「代码里有没有 pointerdown」，没问「**它挂在谁身上**」——
+   一个挂在死元素上的监听，和一个没写的监听，在文本上长得一样。
+   ⇒ 这三条守的全是「关系」：装饰层必须仍是 none（别为了让点击活就把遮挡去掉），
+     同时指针事件必须走 window（能活），且两边要摘干净（不漏）。 */
+describe('立体 ∞ · 指针事件挂在谁身上（★ 这组为「装饰层 pointer-events:none 吃掉监听」而设）', () => {
+  /** 从组件 CSS 里切出 `.fin-infinity { ... }` 这一条规则 */
+  const hostRule = comp.match(/\.fin-infinity\s*\{([^}]*)\}/)?.[1] ?? '';
+
+  it('底纹仍是装饰层：pointer-events 必须保持 none（挡了它正文就没法选中）', () => {
+    expect(hostRule, '切不出 .fin-infinity 规则（判据本身坏了）').not.toBe('');
+    expect(hostRule, '★ 底纹不许吃指针 —— 它盖在正文之上').toMatch(/pointer-events:\s*none/);
+    expect(hostRule, 'z-index 必须是 -1（它是底纹，不是浮层）').toMatch(/z-index:\s*-1/);
+  });
+
+  it('★ 脉冲与视差监听必须挂 window（挂 host 等于挂死：none 的元素收不到事件）', () => {
+    const code = ctrl.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/.*$/gm, ' ');
+    /* ⚠ 判据守的是**行首裸调用**（`addEventListener(...)`，前面不能有 `host.` / `view.` 等
+       接收者）。写成 `expect(code).not.toMatch(/host\.addEventListener\('pointerdown'/`
+       只挡了host 一种写法，`view.addEventListener` 照样能溜过去 ⇒ 变异验证能咬住。 */
+    expect(code, 'pointerdown 没挂到 window 上 ⇒ 装饰层收不到事件，点击反馈是死的')
+      .toMatch(/^\s*addEventListener\(\s*'pointerdown'/m);
+    expect(code, 'pointermove 没挂到 window 上 ⇒ 视差是死的')
+      .toMatch(/^\s*addEventListener\(\s*'pointermove'/m);
+    /* 反向：任何挂在具体元素上的指针监听都不允许 */
+    expect(code, '指针监听不许挂在具体元素上（装饰层是 pointer-events:none）')
+      .not.toMatch(/\b\w+\.addEventListener\(\s*'pointer(?:down|move)'/);
+  });
+
+  it('window 监听必须在 pagehide 时摘掉（bfcache 往返会逐次累积）', () => {
+    const code = ctrl.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/.*$/gm, ' ');
+    const hide = code.slice(code.indexOf("'pagehide'"));
+    expect(hide, '找不到 pagehide 清理段').toContain("removeEventListener('pointerdown'");
+    expect(hide, '找不到 pagehide 清理段').toContain("removeEventListener('pointermove'");
   });
 });
 

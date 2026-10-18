@@ -304,6 +304,7 @@
 | ★★ 同一个几何量**硬编码在三处**，只改两处 | 2026-10-17 第四轮：`theme-toggle.ts` 里 `W = 176, H = 84` 覆写着 `canvas.width/height`，而 `ThemeToggle.astro` 的属性与 CSS 是 **168×76** ⇒ 长期以来画面按 176×84 渲染再拉伸到 168×76 显示（2.095 vs 2.211）。**不报错、不红测，只是悄悄变形**，很容易被误判成"fov 不对"。⇒ 按钮尺寸的单一来源是**四处**：canvas 属性 / CSS / `theme-toggle.ts` 的 `W·H` / `about.astro` 的 `.about-side { padding-top }`。改一处就把四处一起看 |
 | ★ 把 `fov` 当"缩放"调，忘了它是**垂直**的 | 2026-10-17 第四轮：画布从 168×76 加高到 168×104 想让影子有空间，直接不调 fov ⇒ 宽高比变了、水平视野被收窄、槽变宽溢出。`mat4.perspective(fov, w/h)` 的 fov 是垂直角 ⇒ 要保持"槽占画面宽度的比例"，必须按 `2·tan(f/2) = 2·tan(f₀/2)·(w₀/h₀)/(w/h)` 解新 fov（本轮 23° → 31.11°）。**改画布宽高比时 fov 是一等公民**，不是可选微调 |
 | ★ 给着色器函数加参数，只改了「入口那一处」 | 2026-10-17 第三轮：给 `renderBackground` 加 `uv` 参数后，`rayMarchNoJelly` 的**签名与内部调用**漏改（还有 658 行的调用点）⇒ 页面报 `Resolution of the following tree failed: … Identifier uv not found`，**按钮整块消失**（不是画错，是整个渲染树失败）。⇒ 加参数时把"所有下游"一起扫（TypeGPU 的类型检查不到这种），抓法：`--enable-logging=stderr --dump-dom` 能看到完整堆栈，别只盯截图 |
+| ★★★ 判据只问「有没有这个监听」，不问「**它挂在谁身上**」 | 2026-10-18（关于页立体 ∞）：`pointerdown` / `pointermove` 挂在 `host` 上，而底纹是 `pointer-events:none` 的装饰层（站规要求，不然盖住正文）⇒ **它永远收不到指针事件**，点击脉冲与视差全是死代码，而当时 **25 条断言全绿**。根因：判据是 `expect(ctrl).toMatch(/pointerdown/)` + 函数体里有 `scene.pulse(` —— 一个**挂在死元素上**的监听，和一个**根本没写**的监听，在文本上长得一样。⇒ ① 涉及事件可达性的判据必须钉「接收者」：装饰层仍须 `pointer-events:none`，但事件走 `window`（站内既有做法），坐标再按 host 的 rect 归一化；② 同理"某段不许出现 X"要在**剥注释之后**做（否则注释里"原来挂在 host 上"会**抢走** marker，判据切出一行注释而假红 —— 这个坑在 `handlerBody` 里连踩两次才修对根因）。护栏：`tests/fin-infinity.test.ts`「指针事件挂在谁身上」三条 + `_probe/_mutate-fin-infinity.py` ⑨⑩（⑨ 就是这个 bug 本身，2/2 咬住） |
 
 ---
 
