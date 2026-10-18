@@ -24,7 +24,7 @@
  */
 
 import {
-  ACESFilmicToneMapping,
+  NoToneMapping,
   AmbientLight,
   BoxGeometry,
   BufferGeometry,
@@ -53,6 +53,7 @@ import { FIN_COMMON, FIN_EMISSIVE, FIN_SURFACE, FIN_UNIFORMS, FIN_VERTEX, FIN_VE
      场景本身就是动态 import 的，所以放在一起——**同一个 chunk，付一次**。 */
 import { EffectComposer, EffectPass, RenderPass } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
+import { createFinGrade } from './fin-grade';
 
 /** 鳍片数（原版 FIN_COUNT = 400）。 */
 export const FIN_COUNT = 400;
@@ -96,7 +97,8 @@ export interface FinScene {
   /** 装配动画：像笔触一样从交叉点画出来（原版 0.5 秒） */
   playAssemble(): void;
   resize(w: number, h: number, dpr: number): void;
-  render(dt: number): void;
+  /** ★ 入参单位是**毫秒**（rl-core 的 startLoop 就是这么给的），不是秒 */
+  render(dtMs: number): void;
   dispose(): void;
 }
 
@@ -125,7 +127,12 @@ export async function createFinScene(
     powerPreference: 'high-performance',
   });
   renderer.outputColorSpace = SRGBColorSpace;
-  renderer.toneMapping = ACESFilmicToneMapping;
+  /* ★★ 原版是 `NoToneMapping`（Stage.ts:162）—— 它自己做 grade：exposure 1.5
+     → Khronos PBR Neutral → sat 0.7（LOOK）。而 ACES 对暖色有**系统性偏黄**：
+     本站 body 是暖白 rlPaper(0.935/0.895/0.830)、key 灯是暖白 0xfff6ea，
+     两者相乘再过 ACES ⇒ 整台雕塑在纸白页面上发棕/发金（2026-10-18 站主报的原问题）。
+     先关掉 ACES 看基础形态，grade 管线另议。 */
+  renderer.toneMapping = NoToneMapping;
   renderer.toneMappingExposure = 1;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
@@ -145,14 +152,21 @@ export async function createFinScene(
   const sceneDark = new Color(palette.sceneDark);
   const bg = new Color(palette.sceneDark);
 
-  /* ── 灯（原版 lights()：一盏 key 投阴影 + 一盏 fill + 环境光）── */
-  const key = new DirectionalLight(0xffffff, 2.4);
-  key.position.set(320, 420, 520);
+  /* ── 灯（原版 Stage.ts:290-304 的 lights()，逐字照抄）──
+     ★ **两盏灯都有色温**，这是亮色档「发棕」的直接成因：原版 key 是暖白
+       0xfff6ea、fill 是冷蓝 0xdfe8ff，加起来是**中性偏亮**的白；
+       本站原先两盏都写成纯白 0xffffff（key 2.4 / fill 0.7），
+       等于把原版的色温对比抹平了，暖调全靠 body 色撑着 ⇒ 整台雕塑发棕。
+     ★ 原版**没有 AmbientLight** —— 环境光来自 studio.hdr 走 PMREM，
+       用 scene.environmentIntensity = LOOK.env 控制。本站不引外部 HDR
+       （站规：禁外部资源），用 AmbientLight 顶替，强度对齐 LOOK.env = 0.8。 */
+  const key = new DirectionalLight(0xfff6ea, 3.4);            // LOOK.key
+  key.position.set(-0.379, 0.788, 0.485).multiplyScalar(1200);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
-  const fill = new DirectionalLight(0xffffff, 0.7);
-  fill.position.set(-360, -180, 260);
-  const amb = new AmbientLight(new Color(palette.ambientLight), 0.9);
+  const fill = new DirectionalLight(0xdfe8ff, 0.55);          // LOOK.fill
+  fill.position.set(0.853, 0.174, -0.4925).multiplyScalar(1200);
+  const amb = new AmbientLight(new Color(palette.ambientLight), 0.8); // LOOK.env
   scene.add(key, fill, amb);
 
   /* ── 雕塑（鳍片）── */
@@ -239,9 +253,16 @@ export async function createFinScene(
   ao.configuration.screenSpaceRadius = false;
   ao.setQualityMode('Medium');
   composer.addPass(ao);
+  /* ── grade（照搬原版 GradeEffect 的色彩三步，见 fin-grade.ts 的注释）──
+     必须排在 AO **之后**：grade 要作用在已经含 AO 的最终画面上，
+     反过来的话 AO 会把 grade 提亮的暗部重新压回去。 */
+  composer.addPass(new EffectPass(camera, createFinGrade()));
 
-  /* ── 装配动画（uAssemble：0.5-0.5cos(πx)，原版 0.5 秒笔触式画出来）── */
-  const ASSEMBLE_DUR = 0.5;
+  /* ── 装配动画（uAssemble：0.5-0.5cos(πx)）──
+     ★ 原版 Stage.ts:339 的默认值是 `playAssemble(duration = 2300)`，即 **2.3 秒**。
+       这里原先写的是 0.5 秒，那不是原版值（而且叠加 dt 单位 bug 后实际只跑
+       0.167 秒，肉眼几乎看不到笔触画出来的过程）。 */
+  const ASSEMBLE_DUR = 2.3;
   let assembleFrom = 0;
   let assembleT0 = -1;
   U.uAssemble.value = 0;
@@ -300,12 +321,23 @@ export async function createFinScene(
     camera.lookAt(0, 0, 0);
   }
 
-  function render(dt: number) {
-    const step = Math.min(dt, 0.05);
+  function render(dtMs: number) {
+    /* ★★ dt 的单位是**毫秒**（rl-core 的 startLoop 给的是 `now - last`）。
+       2026-10-18 真机实测踩过这个坑：这里原来写的是 `Math.min(dt, 0.05)` ——
+       把毫秒当秒用，于是 step **恒等于 0.05**（不管帧间隔是 16ms 还是 100ms，
+       都比 0.05 大，一律被钳到 0.05）。后果是时间流速变成
+       「0.05 × 帧率」秒/秒，**与真实时间彻底脱钩**：
+         · 无头软渲染 15.6 fps 下 uTime 只有 0.78/秒（看着像变慢了，其实是巧合）
+         · 真机 60Hz ⇒ uTime 3.0/秒 = **3 倍速**；144Hz ⇒ 7.2/秒
+       uFlow / uSpin / 脉冲的 age 全部走 uTime，所以「动得太快、脉冲也太快」。
+       同一个函数下面的 composer.render(dt / 1000) 早就承认 dt 是毫秒，
+       只有上面那行漏了 —— 同一个值在同一个函数里被当两种单位用。
+       ⇒ 转换集中在这里做一次，下游一律拿秒。钳位 50ms 对齐原版的 0.05 秒。 */
+    const step = Math.min(dtMs, 50) / 1000;
     seconds += step;
     U.uTime.value = seconds;
-    // 整条带子沿曲线匀速流动（原版 uFlow 每秒 +0.6）
-    U.uFlow.value = (U.uFlow.value + step * 0.6) % FIN_COUNT;
+    // 整条带子沿曲线匀速流动（原版 Stage.ts:382：flow + dt * 1.6）
+    U.uFlow.value = (U.uFlow.value + step * 1.6) % FIN_COUNT;
 
     // 装配：跑完就停在 1，不回弹
     if (assembleT0 >= 0) {
@@ -324,8 +356,11 @@ export async function createFinScene(
     fins.material.color.setRGB(1, 1, 1); // 本体色在着色器里算，这里只给光用
     bg.copy(sceneDark).lerp(sceneLight, 1 - denied);
     renderer.setClearColor(bg, 0);
-    amb.intensity = 0.9 * (1 - denied * 0.72);      // 环境光降到 28%
-    key.intensity = 2.4 * (1 - denied * 0.5);
+    /* ★ 环境光 = 原版的 environmentIntensity（Stage.ts:427）。
+       原版用 studio.hdr 走 PMREM，本站不引外部 HDR（站规：禁外部资源），
+       用 AmbientLight 顶替，强度对齐 LOOK.env = 0.8，联动系数 0.72 照抄。 */
+    amb.intensity = 0.8 * (1 - denied * 0.72);
+    key.intensity = 3.4 * (1 - denied * 0.5);
 
     // 视差缓动
     cxp += (px - cxp) * Math.min(1, step * 3.2);
@@ -336,14 +371,14 @@ export async function createFinScene(
     camera.rotation.y = cxp * 0.0279; // 原版 1.6° = 0.0279rad
     camera.lookAt(0, 0, 0);
 
-    // 雕塑自转：原版 uSpin 由外部缓慢驱动
-    U.uSpin.value += step * 0.06;
+    // 雕塑自转：原版 uSpin 由外部缓慢驱动（Stage.ts:383：spin += dt * 0.05）
+    U.uSpin.value += step * 0.05;
     sculpture.rotation.y = Math.sin(seconds * 0.12) * 0.16;
 
     // ★ 只调 composer.render：它内部第一道pass 就是 RenderPass(scene, camera)，
     //   自己再 renderer.render 一次等于把场景画两遍（多一倍光栅化开销，
-    //   而且 clearColor 的设置时机也会打架）。
-    composer.render(dt / 1000);
+    //   而且 clearColor 的设置时机也会打架）。传**秒**（后处理的时间单位）。
+    composer.render(step);
   }
 
   function setPointer(nx: number, ny: number) {

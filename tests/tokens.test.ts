@@ -4,10 +4,17 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 describe('token 对比度', () => {
+  /* ★ 这条要 fork 一个 node 子进程跑脚本，**不能用 vitest 默认的 5 秒预算**
+     —— 全量门禁是 46 个 worker 并发，那 5 秒里有相当一部分被排队和进程创建吃掉。
+     2026-10-18 实测：单独跑这条 1.2 秒，全量跑 7.3 秒 ⇒ 纯超时，不是判据失败。
+     给它 30 秒。这不是放松判据（脚本的输出要求一个字没变），
+     而是承认「fork 子进程」和「读文件」这两类操作天生比纯计算慢。
+     ⚠ 判据红了要区分「断言失败」和「超时」—— 后者跟判据无关，
+       只看 `Error: Test timed out` 还是 `AssertionError`。 */
   it('scripts/assert-tokens.mjs 从 tokens.css 复算后全部达标', () => {
     const out = execFileSync('node', ['scripts/assert-tokens.mjs'], { encoding: 'utf8' });
     expect(out).toContain('全部 token 对比度达标');
-  });
+  }, 30000);
 
   it('所有成对颜色都出现在 tokens.css 里（防止改名后断言静默失效）', () => {
     const css = readFileSync('src/styles/tokens.css', 'utf8');

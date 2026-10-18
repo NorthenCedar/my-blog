@@ -33,8 +33,9 @@ CTRL = ROOT / 'src/scripts/fin-infinity.ts'
 COMP = ROOT / 'src/components/FinInfinity.astro'
 CFG = ROOT / 'astro.config.mjs'
 TOKENS = ROOT / 'src/styles/tokens.css'
+GRADE = ROOT / 'src/scripts/fin-grade.ts'
 
-BAK = {p: p.read_text(encoding='utf-8') for p in (SHADERS, SCENE, CTRL, COMP, CFG, TOKENS)}
+BAK = {p: p.read_text(encoding='utf-8') for p in (SHADERS, SCENE, CTRL, COMP, CFG, TOKENS, GRADE)}
 
 
 def restore():
@@ -43,14 +44,17 @@ def restore():
 
 
 # 每处变异留下的痕迹。还原后必须一个都不剩，否则说明 BAK 本身就脏。
+# ★ 标记必须**足够精确**：tokens.css 的注释里就写着 `#ddd6c6`（记录它被提亮前的值），
+#   所以这里不能用裸色值当标记，否则还原后自己会误报「没还原干净」。
 DIRTY = {
-    SHADERS: ['uDepth * s);  // MUT', 'vec3(0.935, 0.895, 0.830) * (1.0 - uDenied)'],
-    SCENE: ['twist: 0.9,', 'denied += (deniedTarget - denied) * 0.1;', '// MUT'],
-    CTRL: ['/* MUT */ void 0;', "/* MUT */ canvas.addEventListener('__never__'", '// MUT'],
     SHADERS: ['uDepth * s);  // MUT', 'vec3(0.935, 0.895, 0.830) * (1.0 - uDenied)',
               'export const FIN_VERTEX_ATTRS = /* glsl */ `// MUT'],
+    SCENE: ['twist: 0.9,', 'denied += (deniedTarget - denied) * 0.1;', '// MUT'],
+    CTRL: ['/* MUT */ void 0;', "/* MUT */ canvas.addEventListener('__never__'", '// MUT'],
     COMP: ['/* MUT display:none */'],
     CFG: ['find: "__TMP__",'],
+    TOKENS: ['--fin-body-light: #ddd6c6; // MUT'],
+    GRADE: ['sat: 1.0, // MUT'],
 }
 
 
@@ -115,6 +119,36 @@ MUTATIONS = [
      SCENE,
      "sh.fragmentShader = sh.fragmentShader\n      .replace('#include <common>', `#include <common>\\n${FIN_COMMON}\\n${FIN_UNIFORMS}`)",
      "sh.fragmentShader = sh.fragmentShader\n      .replace('#include <common>', `#include <common>\\n${FIN_COMMON}\\n${FIN_UNIFORMS}\\n${FIN_VERTEX_ATTRS}`) // MUT"),
+    # ── ⑬~⑲：时间单位与速率（2026-10-18 真机实测揪出的真 bug）──
+    ('⑬ dt 的毫秒→秒转换被去掉（step 恒 0.05 ⇒ 60Hz 下 3 倍速、144Hz 下 7 倍速）',
+     SCENE, 'const step = Math.min(dtMs, 50) / 1000;', 'const step = Math.min(dtMs, 0.05); // MUT'),
+    ('⑭ composer 又直接读入参（同一函数里两种单位）',
+     SCENE, 'composer.render(step);', 'composer.render(dtMs / 1000); // MUT'),
+    ('⑮ uFlow 速率退回 0.6（比例不再是原版的 1.6）',
+     SCENE, 'U.uFlow.value + step * 1.6)', 'U.uFlow.value + step * 0.6) // MUT'),
+    ('⑯ uSpin 速率退回 0.06（原版 0.05，被放大 3.6 倍）',
+     SCENE, 'U.uSpin.value += step * 0.05;', 'U.uSpin.value += step * 0.06; // MUT'),
+    ('⑰ 装配动画压回 0.5 秒（原版 2.3 秒 ⇒ 笔触过程看不见）',
+     SCENE, 'const ASSEMBLE_DUR = 2.3;', 'const ASSEMBLE_DUR = 0.5; // MUT'),
+    ('⑱ 两盏灯退回纯白（原版 0xfff6ea / 0xdfe8ff ⇒ 雕塑发棕）',
+     SCENE, 'new DirectionalLight(0xfff6ea, 3.4)', 'new DirectionalLight(0xffffff, 2.4) // MUT'),
+    ('⑲ 亮色本体色退回 #ddd6c6（原版 rlPaper ≈ #efe4d3 ⇒ 看着是土黄不是纸白）',
+     TOKENS, '--fin-body-light: #efe4d3;', '--fin-body-light: #ddd6c6; // MUT'),
+    # ── ⑳~㉓：grade（去「发棕」的那一层）──
+    ('⑳ toneMapping 换回 ACES（原版是 NoToneMapping，ACES 对暖色系统性偏黄）',
+     SCENE, 'renderer.toneMapping = NoToneMapping;', 'renderer.toneMapping = 4 as never; // MUT'),
+    ('㉑ grade 的 sat 写成 1（等于没有 grade ⇒ 装置照样发棕）',
+     GRADE, 'sat: 0.7,', 'sat: 1.0, // MUT'),
+    ('㉒ grade 从 composer 里摘掉（整层不见）',
+     SCENE, 'composer.addPass(new EffectPass(camera, createFinGrade()));', '// MUT'),
+    ('㉓ grade 排到 AO 之前（顺序错了 = grade 白做：AO 又把暗部压回去）',
+     SCENE,
+     'composer.addPass(ao);\n  /* ── grade（照搬原版 GradeEffect 的色彩三步，见 fin-grade.ts 的注释）──\n'
+     '     必须排在 AO **之后**：grade 要作用在已经含 AO 的最终画面上，\n'
+     '     反过来的话 AO 会把 grade 提亮的暗部重新压回去。 */\n'
+     '  composer.addPass(new EffectPass(camera, createFinGrade()));',
+     'composer.addPass(new EffectPass(camera, createFinGrade())); // MUT\n'
+     '  composer.addPass(ao);'),
 ]
 
 print('=' * 76)

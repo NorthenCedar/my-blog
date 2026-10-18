@@ -43,13 +43,13 @@ export function initFinInfinity(root: HTMLElement): void {
     return dark
       ? {
           bodyLight: hex('--accent'), bodyDark: hex('--fin-body-dark'),
-          glowLight: hex('--accent-ink'), glowDark: hex('--accent'),
+          glowLight: hex('--accent-ink'), glowDark: hex('--fin-glow-dark'),
           sceneLight: hex('--fin-body-dark'), sceneDark: hex('--paper'),
           ambientLight: hex('--fin-ambient-dark'),
         }
       : {
           bodyLight: hex('--fin-body-light'), bodyDark: hex('--accent'),
-          glowLight: hex('--accent-ink'), glowDark: hex('--accent'),
+          glowLight: hex('--accent-ink'), glowDark: hex('--fin-glow-dark'),
           sceneLight: hex('--paper'), sceneDark: hex('--fin-body-light'),
           ambientLight: hex('--fin-ambient-light'),
         };

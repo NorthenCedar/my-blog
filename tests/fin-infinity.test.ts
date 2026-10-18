@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs';
 
 const shaders = readFileSync('src/scripts/fin-shaders.ts', 'utf8');
 const scene = readFileSync('src/scripts/fin-scene.ts', 'utf8');
+const grade = readFileSync('src/scripts/fin-grade.ts', 'utf8');
 const ctrl = readFileSync('src/scripts/fin-infinity.ts', 'utf8');
 const comp = readFileSync('src/components/FinInfinity.astro', 'utf8');
 const astroCfg = readFileSync('astro.config.mjs', 'utf8');
@@ -61,6 +62,180 @@ function handlerBody(src: string, marker: string): string {
   const m = /\n\s*\}\);|\n\s*addEventListener\(/.exec(rest.slice(1));
   return m ? rest.slice(0, m.index + 1) : rest;
 }
+
+/** 切出一个具名函数（或方法）的函数体：按大括号配平，剥掉注释。
+ *  比 handlerBody 通用 —— handlerBody 只认 `});` / addEventListener 两种边界。 */
+function fnBody(src: string, name: string): string {
+  const code = stripComments(src);
+  const start = code.search(new RegExp(`(?:function\\s+${name}\\b|\\b${name}\\s*\\([^)]*\\)\\s*\\{)`));
+  if (start < 0) return '';
+  let i = code.indexOf('{', start);
+  if (i < 0) return '';
+  let depth = 0;
+  for (let j = i; j < code.length; j++) {
+    if (code[j] === '{') depth++;
+    else if (code[j] === '}' && --depth === 0) return code.slice(i + 1, j);
+  }
+  return code.slice(i + 1);
+}
+
+describe('立体 ∞ · 时间单位与速率（★ 2026-10-18 真机实测揪出的真 bug）', () => {
+  /* 背景：rl-core 的 startLoop 给的 dt 是**毫秒**（`now - last`，钳 100）。
+     render() 原先写 `Math.min(dt, 0.05)` —— 把毫秒当秒 ⇒ step 恒等于 0.05
+     ⇒ 时间流速 = 「0.05 × 帧率」秒/秒，与真实时间脱钩：
+       无头软渲染 15.6fps 下 uTime 只有 0.78/秒（看着像变慢，其实是巧合），
+       真机 60Hz 就是 3.0/秒（3 倍速）、144Hz 是 7.2/秒。
+     uFlow / uSpin / 脉冲 age 全走 uTime，所以「动得太快、脉冲也太快」。
+     同函数下面 `composer.render(dt / 1000)` 早就承认 dt 是毫秒，只有上面那行漏了。 */
+
+  it('render 把毫秒换成了秒（下游一律拿秒）', () => {
+    const body = fnBody(scene, 'render');
+    expect(body.length, '切不出 render 的函数体（判据本身坏了）').toBeGreaterThan(0);
+    /* step 必须从入参派生**并且**做毫秒→秒转换。
+       只判「有没有 / 1000」不够（可能在别处做），所以同时要求：
+         · step 的定义里出现 / 1000
+         · 秒基准变量在同一条语句里被累加（seconds += step） */
+    const stepDef = /const\s+step\s*=\s*([^;]+);/.exec(body);
+    expect(stepDef, 'render 里没有 const step = ...（判据本身坏了）').toBeTruthy();
+    expect(stepDef![1], 'step 没做毫秒→秒的转换 —— dt 是毫秒，这行漏了就是 3~7 倍速')
+      .toMatch(/\/\s*1000\b/);
+    expect(stepDef![1], 'step 必须由入参 dt 派生，不能写死').toMatch(/\bdt/i);
+    expect(body, 'seconds 没有用 step 推进（时间基准断了）').toMatch(/seconds\s*\+=\s*step\b/);
+  });
+
+  it('后处理与几何共用同一个时间基准（同一个 step）', () => {
+    const body = fnBody(scene, 'render');
+    /* ★ 同一个 dt 在同一个函数里被当成两种单位，就是这个 bug 的成因。
+       守卫关系而不是记参数：composer 必须收到那个已经换算过的 step，
+       不能再单独读一次入参。 */
+    expect(body, 'composer.render 没有收到换算后的 step').toMatch(/composer\.render\(\s*step\s*\)/);
+    expect(body, 'composer.render 又直接读了入参 ⇒ 同一函数里两种单位')
+      .not.toMatch(/composer\.render\(\s*dt/i);
+  });
+
+  it('速率与原版的比例一致：flow : spin : time = 1.6 : 0.05 : 1', () => {
+    /* ★ 守的是**比例**，不是绝对值 —— 以后整体调快/调慢不必动这条判据，
+       但三者之间的相对关系必须与原版一致（Stage.ts:382-383）。
+       原版：flow += dt*1.6；spin += dt*0.05；time += dt。 */
+    const body = fnBody(scene, 'render');
+    const flow = /uFlow\.value\s*=\s*\(\s*U\.uFlow\.value\s*\+\s*step\s*\*\s*([\d.]+)\s*\)/.exec(body);
+    const spin = /uSpin\.value\s*\+=\s*step\s*\*\s*([\d.]+)/.exec(body);
+    expect(flow, 'uFlow 没有按 step * k 推进（判据本身坏了）').toBeTruthy();
+    expect(spin, 'uSpin 没有按 step * k 推进（判据本身坏了）').toBeTruthy();
+    /* 带余量，不写零容差快照 */
+    expect(Number(flow![1]), 'flow 相对 time 的速率应≈1.6（原版 Stage.ts:382）')
+      .toBeCloseTo(1.6, 1);
+    expect(Number(spin![1]), 'spin 相对 time 的速率应≈0.05（原版 Stage.ts:383）')
+      .toBeCloseTo(0.05, 2);
+  });
+
+  it('装配动画是秒级的（原版 playAssemble 默认 2300ms）', () => {
+    /* 原来写 0.5 秒不是原版值（2.3 秒），叠加 dt 单位 bug 后实际只跑 0.167 秒，
+       笔触画出来的过程肉眼根本看不到。判据给区间：必须是以秒计的量级。 */
+    const dur = /ASSEMBLE_DUR\s*=\s*([\d.]+)/.exec(stripComments(scene));
+    expect(dur, '找不到 ASSEMBLE_DUR').toBeTruthy();
+    expect(Number(dur![1]), '装配时长被压到亚秒级（原版是 2.3 秒的笔触动画）')
+      .toBeGreaterThan(1.5);
+    expect(Number(dur![1]), '装配时长不该拖到十秒级').toBeLessThan(4);
+  });
+
+  it('两盏灯都有色温（原版 key 暖白 / fill 冷蓝），不是纯白', () => {
+    /* ★ 亮色档「发棕」的直接成因：原版 key=0xfff6ea（暖白）、fill=0xdfe8ff（冷蓝），
+       两者的色温差互相抵消，出来的是中性亮白。本站原先两盏都写 0xffffff，
+       等于把色温对比抹平，暖调全靠 body 色撑着 ⇒ 整台雕塑偏棕。 */
+    const code = stripComments(scene);
+    const lamps = [...code.matchAll(/new\s+DirectionalLight\(\s*(0x[0-9a-fA-F]{6})\s*,\s*([\d.]+)/g)]
+      .map(m => ({ color: m[1].toLowerCase(), intensity: Number(m[2]) }));
+    expect(lamps.length, '没找到两盏方向光（判据本身坏了）').toBe(2);
+    for (const l of lamps) {
+      expect(l.color, `灯 ${l.color} 是纯白 —— 原版两盏都有色温（0xfff6ea / 0xdfe8ff）`)
+        .not.toBe('0xffffff');
+    }
+    /* 暖白 + 冷蓝：R 通道一个高一个低，方向相反 */
+    const warm = lamps.find(l => l.color === '0xfff6ea');
+    const cool = lamps.find(l => l.color === '0xdfe8ff');
+    expect(warm, '找不到原版的暖白 key（0xfff6ea）').toBeTruthy();
+    expect(cool, '找不到原版的冷蓝 fill（0xdfe8ff）').toBeTruthy();
+    /* 原版强度：key 3.4 / fill 0.55，key 明显更亮 */
+    expect(warm!.intensity, 'key 强度应≈3.4（原版 LOOK.key）').toBeCloseTo(3.4, 1);
+    expect(cool!.intensity, 'fill 强度应≈0.55（原版 LOOK.fill）').toBeCloseTo(0.55, 2);
+  });
+
+  it('亮色档本体色够亮（原版 rlPaper = 0.935/0.895/0.830 ⇒ 绿通道 228）', () => {
+    /* 原来是 #ddd6c6（绿 214），暗一大截 ⇒ 雕塑看着像土黄/棕色而不是纸白。
+       判据守"亮度下限"，不锁死具体色值（色温微调不必改判据）。 */
+    const m = /--fin-body-light:\s*(#[0-9a-fA-F]{6})/.exec(tokens);
+    expect(m, 'tokens.css 缺 --fin-body-light').toBeTruthy();
+    const g = parseInt(m![1].slice(3, 5), 16);
+    expect(g, `亮色档本体色太暗（原版绿通道 228，当前 ${g}）⇒ 在纸白页面上看着发棕`)
+      .toBeGreaterThanOrEqual(220);
+  });
+
+  it('装置的橙与 UI 的橙是两档（可各自调）', () => {
+    /* 原版的橙过了 grade 管线里的 sat 0.7（Khronos PBR Neutral 再降饱和），
+       本站没有那层，同一个 #ff7b00 直出就偏艳。所以装置单独走--fin-glow-dark。 */
+    const g = /--fin-glow-dark:\s*(#[0-9a-fA-F]{6})/.exec(tokens);
+    expect(g, 'tokens.css 缺 --fin-glow-dark（装置的自发光不该跟 UI 强调色绑死）').toBeTruthy();
+    const accent = /--accent:\s*(#[0-9a-fA-F]{6})/.exec(tokens);
+    expect(accent).toBeTruthy();
+    expect(g![1].toLowerCase(), '装置的橙又绑回 --accent 了 ⇒ 两个档没法分开调')
+      .not.toBe(accent![1].toLowerCase());
+    expect(ctrl, '控制器没读 --fin-glow-dark').toMatch(/--fin-glow-dark/);
+  });
+});
+
+describe('立体∞ · grade（★ 修「发棕」的根因）', () => {
+  /* 实测（2026-10-18，装置区域最亮 5% 像素）：
+     没有 grade 时 #F7EAC7，**R−B 差 48.3**、中位饱和度 0.271、亮度中位 106；
+     有了 grade 之后 #F3EBDE，R−B 差 21.0、饱和度 0.102、亮度中位 186。
+     「棕」在这里不是主观形容，是这一个可比的数字 —— 中性白该是 5~10，
+     连原版纸色 (239,228,212) 本身也只有 27。 */
+
+  it('renderer 不用 ACES（原版是 NoToneMapping，自己做 grade）', () => {
+    /* ★ ACES 对暖色有系统性偏黄，且不提供原版那种「高光去饱和」。
+       本站 body 是暖白、key 灯是暖白，两者相乘本来就偏暖 ——
+       缺了 grade 的 sat 0.7 就没有任何东西把它拉回中性。 */
+    const code = stripComments(scene);
+    expect(code, '又用回 ACESFilmicToneMapping 了').not.toMatch(/ACESFilmicToneMapping/);
+    expect(code, 'toneMapping 应为 NoToneMapping（原版 Stage.ts:162）')
+      .toMatch(/toneMapping\s*=\s*NoToneMapping/);
+  });
+
+  it('grade 排在 AO **之后**（顺序错了 = grade 白做）', () => {
+    /* AO 之后才轮到 grade。反过来的话：grade 把暗部提亮了，紧接着 AO 又压回去，
+       等于白做一遍 —— 这类「顺序错了还全绿」的 bug 静态断言完全看不出来，
+       所以判据直接卡addPass 的先后。 */
+    const code = stripComments(scene);
+    const iAo = code.lastIndexOf('addPass(ao');
+    const iGrade = code.lastIndexOf('addPass(new EffectPass(camera, createFinGrade())');
+    expect(iAo, '找不到 AO 的 addPass').toBeGreaterThan(-1);
+    expect(iGrade, '找不到 grade 的 addPass').toBeGreaterThan(-1);
+    expect(iGrade, 'grade 必须排在 AO 之后').toBeGreaterThan(iAo);
+  });
+
+  it('grade 带曝光 + 降饱和（sat 必须 < 1，这是去棕的那一步）', () => {
+    const code = stripComments(grade);
+    const exp = /exposure:\s*([\d.]+)/.exec(code);
+    const sat = /sat:\s*([\d.]+)/.exec(code);
+    expect(exp, '找不到曝光系数').toBeTruthy();
+    expect(sat, '找不到饱和度系数').toBeTruthy();
+    expect(Number(exp![1]), '曝光应 > 1（原版 LOOK.exposure = 1.5；不足 1 会更暗更脏）')
+      .toBeGreaterThan(1);
+    expect(Number(sat![1]), '★ sat 必须 < 1 —— 暖白本体 × 暖白 key 全靠这一步拉回中性，'
+      + '写成 1 等于没有 grade，装置照样发棕')
+      .toBeLessThan(1);
+    /* Khronos PBR Neutral 的两处核心：高光肩 + 高光区去饱和 */
+    expect(code, 'neutral 的高光肩 startCompression 不见了').toMatch(/startCompression/);
+    expect(code, 'neutral 的去饱和系数不见了').toMatch(/desaturation/);
+  });
+
+  it('grade 只动颜色，不动 alpha（装置叠在正文下面）', () => {
+    /* alpha 是它能看见正文的原因；在这里动等于自己把画布裁了。 */
+    const out = /outputColor\s*=\s*vec4\(([^;]+)\);/.exec(stripComments(grade));
+    expect(out, '找不到 grade 的输出语句').toBeTruthy();
+    expect(out![1], 'alpha 必须原样带出').toMatch(/inputColor\.a/);
+  });
+});
 
 describe('立体 ∞ · 几何照抄原版（rhine-lock ∞ fin sculpture）', () => {
   it('Gerono 双纽线那三行在（z 让两瓣在纵深上错开 ⇒ 带子能自相交）', () => {
