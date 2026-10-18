@@ -1466,13 +1466,31 @@ describe.skipIf(!hasDist)('主题开关只住在关于页（2026-10-17）', () =
     expect(existsSync(about), 'dist/about/index.html 不存在，先跑 npm run build').toBe(true);
     const big = jsClosure(about).files.filter((f) => statSync(f).size > 100_000);
     expect(big.length, '关于页没加载任何 >100 KB 的 chunk ⇒ 懒加载断了，本判据会空转').toBeGreaterThan(0);
+
+    /* ★★ 2026-10-18：判据要排除 **three.module.min.js**。
+     *   本条的**本意**是「主题开关那个渲染器不许泄漏到别的页」（站主口径：只放关于页）。
+     *   但 three 现在被**两个页面共用**：
+     *     · 关于页 —— 新加的立体 ∞（fin-scene）+ 主题开关本体；
+     *     · 首页 —— TIME SLICE 的蝴蝶（time-slice-scene.ts），那一段2026-09-30
+     *       就在 `await import('./time-slice-scene')`，而那个文件 import 裸 `three`。
+     *   ⇒ three 是**全站共享的基础设施**，不是任何一个装置的私有资产。
+     *   本条改为：**扣掉 three 之后**，关于页闭包里剩下的 >100 KB chunk 才受本条约���。
+     *   ⚠ 别把这条改成"三个页都允许 >100KB"—— 那是把门闩整个关掉：
+     *     主题开关那460 KB 渲染器一旦被人搬回顶栏，本条必须立刻红。*/
+    const threeFile = 'three.module.min';
+    const bigMinusThree = big.filter((f) => !(f.split(/[\\/]/).pop() ?? '').startsWith(threeFile));
+    expect(
+      bigMinusThree.length,
+      '关于页除 three 外没有任何 >100 KB 的 chunk ⇒ 本判据会空转（渲染器被 tree-shake 掉了？）',
+    ).toBeGreaterThan(0);
+
     const others = htmlFiles().filter((f) => f !== about);
     expect(others.length, '其余页面清单为空 ⇒ 本判据会空转').toBeGreaterThan(5);
     const leaked: string[] = [];
     for (const p of others) {
       const reached = new Set(jsClosure(p).files);
       const html = readFileSync(p, 'utf8');
-      for (const f of big) {
+      for (const f of bigMinusThree) {
         const base = f.split(/[\\/]/).pop() as string;
         if (reached.has(f)) leaked.push(`${relToDist(p)} 的 JS 闭包里有它`);
         /* HTML 也要查：<link rel=modulepreload> / <script src> 不走闭包那条路径 */

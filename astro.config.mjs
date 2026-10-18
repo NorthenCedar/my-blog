@@ -60,16 +60,38 @@ export default defineConfig({
       // 而 Vite 8 的 SSR module runner 只执行 ESM、不提供 require，
       // picomatch 4.x 又是纯 CJS —— 内联即炸。
       // 这里把它 alias 到一个 ESM 外壳，壳内用 createRequire 在运行时加载真包。
-      alias: {
-        picomatch: fileURLToPath(new URL('./scripts/picomatch-esm-shim.mjs', import.meta.url)),
-        // ★ 2026-09-30：真 3D DNA（站主拍板「用 three.js，接受破例」）。
-        //   三个 vendor 文件（three.module.min.js / GLTFLoader.js / BufferGeometryUtils.js）
-        //   都放在 src/vendor/ 下 —— **不能**放 public/：
-        //   tests/build-output.test.ts 断言产物 JS 必须匹配 /^dist\/_astro\//，
-        //   从 public/ 直拷出来的 .js 会被判成「手拷进来」。
-        //   GLTFLoader 内部写的是裸说明符 `from 'three'`，所以这里给它一个别名指到 vendor。
-        three: fileURLToPath(new URL('./src/vendor/three.module.min.js', import.meta.url)),
-      },
+      alias: [
+        {
+          find: 'picomatch',
+          replacement: fileURLToPath(new URL('./scripts/picomatch-esm-shim.mjs', import.meta.url)),
+        },
+        /* ★ 2026-10-18：关于页那个立体 ∞ 要用 n8ao（AO），而 n8ao 有一行
+           `import { Pass } from "three/examples/jsm/postprocessing/Pass.js"`。
+           ★★ 这里为什么必须用**数组式** alias（而不是原来那个对象式）：
+             Vite 的 alias 对 `find` 字符串做的是**前缀匹配**，不是精确匹配。
+             原来只写了 `three: …/three.module.min.js`，于是
+             `three/examples/jsm/postprocessing/Pass.js` 被吸成
+             `…/three.module.min.js/examples/jsm/postprocessing/Pass.js`
+             ⇒ UNLOADABLE_DEPENDENCY「系统找不到指定的路径」（实测踩过一次）。
+           解法：把长路径写在**前面**（Vite 取最长匹配优先），指向本仓 vendor 化的那一份；
+           `three` 留在后面兜住裸 `three`。 */
+        {
+          find: 'three/examples/jsm/postprocessing/Pass.js',
+          replacement: fileURLToPath(
+            new URL('./src/vendor/three-examples/postprocessing/Pass.js', import.meta.url),
+          ),
+        },
+        /* ★ 2026-09-30：真 3D DNA（站主拍板「用 three.js，接受破例」）。
+           三个 vendor 文件（three.module.min.js / GLTFLoader.js / BufferGeometryUtils.js）
+           都放在 src/vendor/ 下 —— **不能**放 public/：
+           tests/build-output.test.ts 断言产物 JS 必须匹配 /^dist\/_astro\//，
+           从 public/ 直拷出来的 .js 会被判成「手拷进来」。
+           GLTFLoader 内部写的是裸说明符 `from 'three'`，所以这里给它一个别名指到 vendor。 */
+        {
+          find: 'three',
+          replacement: fileURLToPath(new URL('./src/vendor/three.module.min.js', import.meta.url)),
+        },
+      ],
     },
   },
 });

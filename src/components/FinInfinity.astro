@@ -1,0 +1,96 @@
+---
+/**
+ * 立体 ∞（FinInfinity）—— 关于页背景装置。
+ *
+ * 移植自 `tmc5csxr9m-cpu/rhine-lock` 的 ∞ fin sculpture：400 片长方体鳍
+ * 沿 Gerono 双纽线摆开，每片绕切线扭转 + 前倾，靠自发光在边缘点亮一道亮边。
+ * 几何与材质在 `src/scripts/fin-shaders.ts` / `fin-scene.ts`。
+ *
+ * ★ 三层结构（与站内其它装置同构）：
+ *   [data-fin-static] 无 JS / reduced-motion / ≤767px 时的静态层（一个真 SVG ∞）
+ *   [data-fin-view]   WebGL 层（脚本判定可跑才显）
+ *   canvas           WebGL 画布
+ * ⚠ **显隐只用 opacity，不用 hidden/display**（AGENTS 事故表 ★★★★）：
+ *   canvas 尺寸是量出来的，display:none 时 getBoundingClientRect 全是 0 ⇒
+ *   renderer 按 0尺寸初始化 ⇒ 永远画不出来。静态层用 hidden 是安全的（它是纯 SVG）。
+ *
+ * ★ 只在这一页、且动态 import —— three.js 544 KB + n8ao WASM 803 KB 不能上每一页。
+ *   见 about.astro 里的同类注释。
+ */
+---
+
+<div class="fin-infinity" data-fin-infinity>
+  {/* 静态回退层：无 JS / reduced-motion / 窄屏时，装置的全部内容 */}
+  <div class="fin-static" data-fin-static>
+    <svg viewBox="0 0 120 120" aria-hidden="true">
+      <path d="M60 22 C78 22 88 32 88 45 C88 62 74 72 60 98 C46 72 32 62 32 45 C32 32 42 22 60 22 Z"></path>
+    </svg>
+  </div>
+  {/* WebGL 层：脚本判定可跑才去掉 hidden */}
+  <div class="fin-view" data-fin-view hidden>
+    <canvas data-fin-cv></canvas>
+  </div>
+</div>
+
+<script>
+  import '../scripts/fin-infinity';
+</script>
+
+<style>
+  .fin-infinity {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    width: min(94vw, 1400px, 150vh);
+    aspect-ratio: 1.65;
+    transform: translate(-50%, -50%);
+    z-index: -1;
+    /* ⚠ pointer-events: 不能设 none —— 站主要「点一下有反馈」，
+       点击脉冲要接在这块上。但要挡住下面正文的选择（见下方 .fin-view）。 */
+    pointer-events: none;
+  }
+  .fin-view,
+  .fin-view canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* ⚠ 不用 max-width:none —— 那个是百褶那套为解决图片溢出加的，
+       画布填满容器就是对的，加了反而会在容器比视口窄时留白。 */
+  }
+  .fin-view canvas {
+    opacity: 0;
+    transition: opacity 260ms ease;
+  }
+  /* 只有脚本判定可跑、场景真的起来之后才淡入（.fin-on 由控制器挂上） */
+  .fin-infinity.fin-on .fin-view canvas { opacity: 1; }
+  .fin-infinity.fin-on .fin-static { opacity: 0; }
+
+  .fin-static {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    opacity: 0.34;
+    transition: opacity 260ms ease;
+  }
+  .fin-static svg { width: clamp(140px, 22vmin, 300px); }
+  .fin-static path {
+    fill: none;
+    /* ★ 用 token，不用字面色值（站规 §3 第 2 条） */
+    stroke: var(--fin-body-light);
+    stroke-width: 5;
+    vector-effect: non-scaling-stroke;
+  }
+  /* 暗色模式：静态层换成暗色档的鳍片色（token 已在 html.dark 里覆写） */
+  :global(html.dark) .fin-static path { stroke: var(--fin-body-dark); }
+
+  @media (max-width: 767px) {
+    .fin-infinity { width: min(96vw, 800px, 150vh); }
+  }
+  /* 窄屏 / reduced-motion：只留静态层，WebGL 层永不显示。
+     ⚠ 这里用 display:none 是**安全的** —— 与上面的理由不冲突：
+       那条禁令针对的是「靠量尺寸的 canvas」，静态层是纯 SVG，尺寸由 CSS 给。 */
+  @media (max-width: 767px) {
+    .fin-view { display: none; }
+  }
+</style>
