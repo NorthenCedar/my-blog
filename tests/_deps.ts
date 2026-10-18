@@ -24,6 +24,13 @@
  *     语义上属于 devDependencies，但 `@astrojs/sitemap` 这条构建期集合同样住在
  *     `dependencies` 里 ⇒ 沿用仓库现状，不动（免得改出"CF 上装不到"的风险）。
  *   · 其余四条 — 只被 `src/vendor/jelly-slider/**` 用到，且只在**关于页**被加载。
+ *   · `postprocessing` / `n8ao`（2026-10-18 站主拍板，为了关于页那个立体 ∞ 的
+ *     后处理：色调映射 + AO）。**原版 rhine-lock 还用了 drei，本仓不需要** ——
+ *     场景里只有一台雕塑，没有可复用的模型/环境组件。
+ *     n8ao 是 **WASM**（803 KB），走**独立文件同源加载**（不是 base64 内联）：
+ *     内联会让体积涨到 ~1.1 MB（+37%）且整个 bundle 下完才能开始编译，
+ *     独立文件则能边下边编、独立缓存。实测**同一道规则下 B 全面优于 A**，
+ *     零第三方的约束已于同日撤除（见 AGENTS.md §3 开头）。
  */
 export const RUNTIME_DEPS_ALLOWED = [
   // 站点骨架
@@ -33,6 +40,9 @@ export const RUNTIME_DEPS_ALLOWED = [
   // Jelly Slider 主题开关的渲染器（2026-10-17）
   '@typegpu/noise',
   '@typegpu/sdf',
+  // 立体 ∞ 的后处理（2026-10-18）：色调映射 / 辉光 / AO
+  'n8ao',
+  'postprocessing',
   'typegpu',
   'unplugin-typegpu',
   'wgpu-matrix',

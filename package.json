@@ -25,6 +25,8 @@
     "@typegpu/noise": "0.12.1",
     "@typegpu/sdf": "0.12.1",
     "astro": "^7.3.5",
+    "n8ao": "^2.0.1",
+    "postprocessing": "^6.39.5",
     "typegpu": "0.12.8",
     "unplugin-typegpu": "0.12.6",
     "wgpu-matrix": "3.4.2"
