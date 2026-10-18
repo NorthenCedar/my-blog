@@ -577,6 +577,8 @@ html.dark {
      环境光 = 纸色同源 */
   --fin-body-light: #f6f4ee;
   --fin-ambient-light: #fafaf7;
+  /* 点击脉冲的淡绿表面色，独立于界面墨绿，避免染成深绿条。 */
+  --fin-pulse-light: #b9dfc3;
 }
 html.dark {
   /* 暗色档：鳍片 = 冷灰（对 --paper #0b0b0c 有明度差，约 1.9:1 —— 够撑出体积又不抢眼）；

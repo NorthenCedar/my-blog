@@ -474,8 +474,9 @@ export async function createFinScene(
     renderer.setClearColor(bg, 0);
     /* ★ 环境光 = 原版的 environmentIntensity（Stage.ts:427）。
        原版用 studio.hdr 走 PMREM，本站不引外部 HDR（站规：禁外部资源），
-       用 AmbientLight 顶替，强度对齐 LOOK.env = 0.8，联动系数 0.72 照抄。 */
-    amb.intensity = 0.8 * (1 - denied * 0.72);
+       用 AmbientLight 顶替，基准强度 LOOK.env = 0.8，联动系数 0.72。
+       亮色额外加 0.4 柔和补光，把暗面提白；暗色不加，保留原有层次。 */
+    amb.intensity = 0.8 * (1 - denied * 0.72) + 0.4 * (1 - denied);
     key.intensity = 3.4 * (1 - denied * 0.5);
 
     // 视差缓动

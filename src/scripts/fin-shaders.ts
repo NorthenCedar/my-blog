@@ -208,6 +208,9 @@ export const FIN_SURFACE = /* glsl */ `
        本站改为亮色 = 纸白+ 墨绿、暗色 = 黑 + 橙，与 §3 的暗色定案一致。
        uDenied 在两个 token 色之间插值 —— 与原版同构。 */
     vec3 rlBody = mix(uBodyLight, uBodyDark, uDenied) * (0.95 + vSeed * 0.07);
+    // 亮色脉冲染到整片鳍的表面，随 vPulse 自然退回暖白；暗色仍走原来的橙色细边。
+    float pulseTint = clamp(vPulse, 0.0, 1.0) * (1.0 - uDenied) * 0.65;
+    rlBody = mix(rlBody, uGlowLight, pulseTint);
 `;
 
 export const FIN_EMISSIVE = /* glsl */ `
