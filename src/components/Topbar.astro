@@ -56,7 +56,8 @@ const { wordmark, current } = Astro.props;
     <a href="/rss.xml">RSS</a>
   </nav>
   {/* 主题开关（Jelly Slider）不在顶栏 —— 2026-10-17 站主拍板「按钮只放在关于页」⇒
-      那 462 KB 的渲染器 chunk 只被 /about/ 引用。见 src/pages/about.astro 的 FIG.05。 */}
+      那 462 KB 的渲染器 chunk 只被 /about/ 引用。见 src/pages/about.astro 的 .theme-dock
+      （页面右上角；2026-10-17 第二轮从右栏 FIG.05 搬上去的）。 */}
   {/* 移动端抽屉（零 JS）；桌面隐藏 —— 见组件内注释 */}
   <NavDrawer current={current} />
 </div>

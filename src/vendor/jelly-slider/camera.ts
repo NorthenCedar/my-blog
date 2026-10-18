@@ -120,4 +120,22 @@ export class CameraController {
   get cameraUniform() {
     return this.#uniform;
   }
+
+  /**
+   * ★ 本站加（2026-10-17 第七轮）：世界坐标 → 画布归一化坐标（0..1，左上原点）。
+   *
+   * 唯一用途是 CPU 侧的**指针命中测试**（`events.ts` 判断"点没点在软条上"）——
+   * 着色器里的 `getRay` 走的是逆矩阵反投影，方向正好相反，别互相替代。
+   *
+   * ⚠ 用**不含 jitter** 的 `#baseProj`，不用每帧抖动后的 `#proj`：命中判据要和
+   *   "用户实际看到的构图"对齐，而半个像素的时域抖动对判据毫无意义，反而会让
+   *   命中区每帧晃。`#baseProj` 只在 resize（`updateProjection`）时变。
+   */
+  project(x: number, y: number, z: number): { x: number; y: number } {
+    const viewPos = m.vec4.transformMat4(d.vec4f(x, y, z, 1), this.#view, d.vec4f());
+    const clip = m.vec4.transformMat4(viewPos, this.#baseProj, d.vec4f());
+    const w = clip[3] === 0 ? 1e-6 : clip[3];
+    /* WebGPU 的 NDC：x 向右为正、y **向上**为正 ⇒ 屏幕 y 要翻过来 */
+    return { x: (clip[0] / w) * 0.5 + 0.5, y: 0.5 - (clip[1] / w) * 0.5 };
+  }
 }

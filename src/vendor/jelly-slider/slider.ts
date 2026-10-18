@@ -46,7 +46,11 @@ export class Slider {
   substeps = 6;
   damping = 0.01;
   bendingStrength = 0.1;
-  archStrength = 2;
+  /* ★ 本站改（2026-10-17 第二轮）：2 → 0.8。
+     开关的行程很短（亮色端只剩 ~0.65），原版的 2 会把压缩段拱得很高、
+     顶端还被光线步进的 bbox（top 0.65）切平 ⇒ 静止时看着像一块被削了角的楔子。
+     0.8 只留一道低伏的隆起 —— 既保留"被挤住的果冻"的手感，又不会顶出槽。 */
+  archStrength = 0.8;
   endFlatCount = 1;
   endFlatStiffness = 0.05;
   bendingExponent = 1.2;
@@ -115,7 +119,12 @@ export class Slider {
     const controlPointsView = this.controlPointsBuffer.as('readonly');
 
     const padding = 0.01;
-    const left = start.x - this.totalLength * padding;
+    /* ★ 本站改（2026-10-17 第二轮）：左侧余量 1% → 5%。
+       开关的亮色端被压得很短（~0.65），积分 + 约束会把中段往锚点**左侧**挤出去；
+       1% 的余量（左边只到 -1.019）不够 ⇒ 挤出去的那一截被光线步进的 bbox 直切，
+       静止时看起来是一块"削了角的楔子"。放到 5%（-1.095）刚好兜住。
+       ⚠ 右侧仍是 10%：深色端在 1.0，本来就留得够。 */
+    const left = start.x - this.totalLength * 0.05;
     const right = end.x + this.totalLength * padding * 10;
     const bottom = -0.3;
     const top = 0.65;
@@ -191,7 +200,22 @@ export class Slider {
     this.#targetX = std.clamp(x, minX, maxX);
   }
 
-  update(dt: number) {
+  /**
+   * ★ 本站加（2026-10-17 第七轮）：当前链条各点的**只读快照**。
+   *
+   * 给 CPU 侧的指针命中测试用（`scene.ts` 的 `eventHandler.hitTest`）：
+   * `#pos` 就是物理积分后的真实形状 —— 被压缩时会拱起、跟手时会弯，
+   * 用固定矩形做命中区会在链条拱起来时"点得到空处"，在它趴下时又"整块都能点"。
+   * ⚠ 这是内部数组本身，不是拷贝 —— 别在调用方改它。
+   */
+  get points(): readonly d.v2f[] {
+    return this.#pos;
+  }
+
+  /* ★ 2026-10-17 第六轮：加 `dispatchBezier` 开关，只为"首帧热身"用。
+     热身要跑几十步物理，但**只有最后一步的形状会被采样到** —— 中间每一步都派发一次
+     256×128 的贝塞尔计算，在手机上就是一次看得见的启动卡顿。 */
+  update(dt: number, dispatchBezier = true) {
     if (dt <= 0) return;
 
     const h = dt / this.substeps;
@@ -209,7 +233,9 @@ export class Slider {
     this.#computeNormals();
     this.#computeControlPoints();
     this.#updateGPUBuffer();
-    this.#computeBezierPipeline.dispatchThreads(...BEZIER_TEXTURE_SIZE);
+    if (dispatchBezier) {
+      this.#computeBezierPipeline.dispatchThreads(...BEZIER_TEXTURE_SIZE);
+    }
   }
 
   #integrate(h: number, damp: number, compression: number) {
@@ -283,6 +309,59 @@ export class Slider {
       // Re-pin endpoints
       this.#pos[0] = d.vec2f(this.anchor[0], this.anchor[1] + this.#yOffset);
       this.#pos[this.n - 1] = d.vec2f(this.#targetX, 0.08 + this.#yOffset);
+
+      /* ★★ 本站加（2026-10-18 第十一轮，站主截图：软条中段拱成一团、端头竖成一片）。
+       *
+       * **先量几何，再谈修法**（`_probe/_slider_sim.py` 是这段物理的逐行移植，判据都在那）：
+       *
+       *   链长 1.9（17 点 × restLen 0.11875），亮色档 `targetX = 0`
+       *   ⇒ 水平跨度只有 1.0 ⇒ **富余 0.9 的长度是消不掉的**。
+       *   链长固定 ⇒ 这 0.9 只能变成「拱起」或「折返」，二选一，没有第三条路。
+       *   （原版的亮色端更靠左：`TARGET_MIN+TARGET_OFFSET = -0.33` ⇒ 压缩更狠、
+       *     折返更多 —— 堆起来是原版就有的样子，本站只是把它摆到了取景正中。）
+       *
+       * 站主要修的是**端头竖起来的那一片**，实测（线上真浏览器，`__ttscene.probe`）：
+       *   `tipDeg = 145.8°`、`folds = 4`、`lift = 0.17`。
+       *   病灶是 `scene.ts` 的 `cap3D`：
+       *       const angle = atan2(last.y - secondLast.y, last.x - secondLast.x);
+       *   末段一旦朝左（负 dx），这个角就翻到 ±180° 附近 ⇒ 那个饼形端面被摆成竖片。
+       *   ⇒ 真凶是**末段朝左**，不是"拱得太高"。
+       *
+       * 修法为什么是「关进槽里」而不是「禁止折返」：
+       *   · 试过硬性 `x[i] >= x[i-1]`（`_slider_sweep.py`）：**与段长约束直接打架**，
+       *     富余的 0.9 被强行摊进 1.0 的跨度 ⇒ 最长段被拉到 **2.02 倍** restLen
+       *     （实测 segMax 1.11~2.02），画面上是"某一段被拽长的橡皮筋"，比原来更糟。
+       *   · 试过硬性端头护栏（`tip_guard`）：同样打架，segMax 2.02。
+       *   ⇒ 96 组参数扫描（`_slider_search.py`，旋钮 = archStrength / bendingStrength /
+       *     damping / yCap / tipGuard）**过判据 0 组** —— 这不是"还没调到"，
+       *     是这个方向本身走不通。
+       *
+       *   真正对症的是**取消折返的空间**：槽（capsule）在世界坐标里就是
+       *   `x ∈ [anchor.x, targetX]` 这一段。链跑出 `targetX` 右边，既出了槽，
+       *   又让末段朝左。把它夹回槽内，富余长度就只能向上拱（`archStrength` 那一项），
+       *   末段自然朝右。实测（同上脚本，亮色档 targetX=0）：
+       *       不夹：tipDeg 172°、segMax 1.42
+       *       夹住：tipDeg  37°、segMax 1.05   ← 37° 是端头本来的造型，见下
+       *
+       * ⚠ 剩下的 ~38° 不是 bug：`#integrate` 把端点 pin 在 `y = 0.08 + yOffset`，
+       *   而链身躺在 `yOffset` —— 落差 0.11 配 restLen 0.119 ⇒
+       *   `atan2(0.11, 0.119) = 42.8°`。端头本来就是这个斜度（`cap3D` 那个饼形端面）。
+       * ⚠ 别在这里加"高度上限"：实测 yCap 一开就把段长拉到 1.35~1.55 倍
+       *   （压高度 = 逼链缩短 = 段长约束被违反），得不偿失。堆高交给 archStrength。
+       * ⚠ 两端取 min/max 是防一手：`setDragX` 的钳位区间是
+       *   `[anchor.x − totalLength, anchor.x + totalLength]`，理论上允许 targetX < anchor.x。
+       *   那种情况下 `lo > hi`，两个分支会来回抢同一个点（每帧在两个值间抖）。
+       *   本站行程 [LIGHT_END, DARK_END] = [0, 0.9] 恒在 anchor 右边，但别依赖这个前提。
+       */
+      const lo = Math.min(this.anchor[0], this.#targetX);
+      const hi = Math.max(this.anchor[0], this.#targetX);
+      for (let i = 1; i < this.n - 1; i++) {
+        if (this.#pos[i].x < lo) {
+          this.#pos[i].x = lo;
+        } else if (this.#pos[i].x > hi) {
+          this.#pos[i].x = hi;
+        }
+      }
     }
   }
 

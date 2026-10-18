@@ -1503,6 +1503,19 @@ describe.skipIf(!hasDist)('主题开关只住在关于页（2026-10-17）', () =
       '不该再用顶部的静态 import —— 那会被提到模块顶层，关于页首屏就得下载整个渲染器',
     ).not.toMatch(/import\s+\{[^}]*initJellyThemeToggle/);
   });
+
+  /* ★ 2026-10-17 第二轮（站主：按钮调到关于页右上角、删掉「显示模式」文字只留按钮）。
+     守两件事：挂载点还在两栏容器里（没被搬去顶栏 / 没被删掉），
+     以及「显示模式」这段文字没有跟着版本回潮 —— 站主明确说过只留按钮。 */
+  it('★ ④ 按钮在关于页的 .theme-dock 里，且「显示模式」文字没有回来', () => {
+    const html = readFileSync(join(DIST, 'about', 'index.html'), 'utf8');
+    expect(html, '关于页里没有 .theme-dock（按钮的挂载点丢了？）').toContain('theme-dock');
+    expect(html, '「显示模式」文字又出现了（站主口径：只留按钮）').not.toContain('显示模式');
+    const dock = html.indexOf('theme-dock');
+    const grid = html.indexOf('about-grid');
+    expect(grid, '关于页里没有两栏容器').toBeGreaterThan(-1);
+    expect(dock, '按钮不在两栏容器里（被搬出去了？）').toBeGreaterThan(grid);
+  });
 });
 
 describe.skipIf(hasDist)('构建产物（未构建）', () => {

@@ -54,7 +54,19 @@ export const taaResolveFn = tgpu.computeFn({
   const inTextRegion = fadeInX * fadeOutX * fadeInY * fadeOutY;
   const blendFactor = std.mix(d.f32(0.9), d.f32(0.7), inTextRegion);
 
-  const resolvedColor = d.vec4f(std.mix(currentColor.rgb, historyColorClamped, blendFactor), 1.0);
+  /* ★★ 2026-10-17 第五轮：rgb 走时域混合，**alpha 不走**（直接取当前帧）。
+     两个坑叠在一起，任何一个都会毁掉"透明"这件事：
+       ① 原来这里写死 `1.0`：整条链的 alpha 在 TAA 这一步被抹平成不透明
+          （实测：着色器返回 `vec4f(0,0,0,0)` 的整块区域在页面上仍显示为纯黑）；
+       ② 改成 `mix(current.a, history.a, 0.9)` 仍然不行 —— 静止即停帧，画面只渲染几帧，
+          alpha 停在 0.556（历史纹理初值污染），实测画布出现一大块 111 的灰斑，
+          而它对应的着色器 alpha 明明是 0.15。
+     ⇒ alpha **不做时域混合**：它不需要抗锯齿（浓度来自平滑的 shade，本身没有高频噪声），
+       却会因为"没收敛"变成漂浮的脏块。rgb 继续混合，果冻边缘的时域抗锯齿照旧。 */
+  const resolvedColor = d.vec4f(
+    std.mix(currentColor.rgb, historyColorClamped, blendFactor),
+    currentColor.a,
+  );
 
   std.textureStore(taaResolveLayout.$.outputTexture, d.vec2u(gid.x, gid.y), resolvedColor);
 });
