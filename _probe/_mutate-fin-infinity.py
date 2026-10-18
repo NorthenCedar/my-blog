@@ -145,13 +145,18 @@ MUTATIONS = [
      SCENE, '  composer.addPass(ao);',
      '  composer.addPass(new EffectPass(camera, createFinGrade())); // MUT\n  composer.addPass(ao);'),
     # ── ㉔~㉜：姿态 / 机位 / 深度材质 / 阴影 / DoF（2026-10-18「那道缺口」）──
-    # ★ 这一组的每一处都对应一次**真实修掉的缺陷**。特别是 ㉔：
-    #   它就是那道缺口的直接成因（X 轴俯仰恒为 0 = 完全正视 ⇒ 两瓣叠成平墙），
-    #   而当时 42 条断言全绿 —— 所以必须验证新加的那一组真的咬得住。
-    ('㉔ ★ 雕塑的 X 轴俯仰归零（正视 ⇒ 两瓣叠成平墙 = 那道缺口）',
-     SCENE, 'const TILT_DEG = 16;', 'const TILT_DEG = 0; // MUT'),
-    ('㉕ ★ 相机基准高度改回 0（原版 y=60 = 3° 俯角）',
-     SCENE, 'const CAM_Y = 60;', 'const CAM_Y = 0; // MUT'),
+    # ★ 这一组的每一处都对应一次**真实修掉的缺陷**。
+    # ★★ ㉔/㉕ 的方向在 2026-10-18 晚翻转过：姿态判据原先守"必须有 16° 俯仰"
+    #   （治缺口），站主随后说「歪了」，判据改成守"必须近乎正视"。
+    #   所以这两条变异现在改的是**反方向**——把歪倒回去，必须被咬住。
+    ('㉔ ★ 俯仰改回 16°（治好缺口，但两瓣一近一远 ⇒ 站主说的「歪」）',
+     SCENE, 'const TILT_DEG = 2;', 'const TILT_DEG = 16; // MUT'),
+    ('㉕ ★ 相机基准高度抬回 60（= 3° 俯角，和雕塑抬头等价，同样会歪）',
+     SCENE, 'const CAM_Y = 0;', 'const CAM_Y = 60; // MUT'),
+    ('㉞ 翻滚改回原版的 -2°（整幅构图直接转斜）',
+     SCENE, 'const ROLL_DEG = 0;', 'const ROLL_DEG = -2; // MUT'),
+    ('㉟ 偏航摆动改回原版的 ±9°（摆到一侧时左右瓣大小不对等）',
+     SCENE, 'const YAW_SWAY_DEG = 2;', 'const YAW_SWAY_DEG = 9; // MUT'),
     ('㉖ 摘掉 customDepthMaterial（阴影/AO 会按未变形的单位盒算）',
      SCENE, 'fins.customDepthMaterial = finDepth;', '// MUT'),
     ('㉗ 深度材质不再拼 carve（AO 会沿着不存在的直角边压暗）',

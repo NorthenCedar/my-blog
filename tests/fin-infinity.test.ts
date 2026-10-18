@@ -346,50 +346,60 @@ describe('立体 ∞ · 几何照抄原版（rhine-lock ∞ fin sculpture）', (
    ★ 为什么之前 42 条断言全绿：它们守的全是**参数值**（radius/twist/lean…）和
      **着色器公式**，没有一条守「雕塑在空间里是怎么摆的」。
      参数全对、公式全对、姿态错一个轴，照样不是原版 —— 这正是这一组的价值。 */
-describe('立体 ∞ · 姿态与机位（★ 「缺口」= 少写了整个 X 轴俯仰）', () => {
+describe('立体 ∞ · 姿态与机位（★ 正 vs 缺口：站主两轮反馈的取舍）', () => {
   const code = stripComments(scene);
   const constNum = (name: string): number => {
     const m = new RegExp(`const\\s+${name}\\s*=\\s*(-?[\\d.]+)`).exec(code);
     return m ? Number(m[1]) : NaN;
   };
 
-  it('雕塑必须有 X 轴俯仰（正视时两瓣叠成平墙 = 那道缺口）', () => {
+  it('雕塑必须「摆正」：俯仰极小、翻滚归零、偏航摆动收小', () => {
+    /* ★★ 这段判据的方向**翻转过两次**，别照着旧版本改回去：
+       ① 最初 X 恒 0（完全正视）⇒ 站主报「环上一道缺口」：两瓣在 z 上错开，
+          正视时这个纵深差投影不到屏幕，自相交处叠成一堵同向平墙。
+       ② 于是照原版抬 16° ⇒ 缺口没了，但站主又说「歪了」。因为俯仰把两瓣推进
+          不同纵深：近的更大更靠下、远的更小更靠上，整台装置是斜的。
+       ③ 站主定调「别管那个缺口，把他摆正」⇒ 俯仰 2°、翻滚 0、摆动 ±2°。
+       所以这里守的是**"正"这一侧**：任何一项变大都会把 ② 的歪带回来。
+       注意它守的是关系（小到什么程度），不是"等于原版 16°"。 */
     const tilt = constNum('TILT_DEG');
     expect(Number.isFinite(tilt), '找不到 TILT_DEG（俯仰角常量）').toBe(true);
-    /* 守关系：0° 就是故障态，所以下限要明显大于 0；原版是 16°。 */
-    expect(tilt, `俯仰角 ${tilt}° 太小 —— 正视时两瓣的纵深差投影不到屏幕，`
-      + '又叠成那堵平墙（原版 16°）').toBeGreaterThan(8);
-    expect(tilt, '俯仰角不该夸张到失真（原版 16°）').toBeLessThan(30);
+    expect(tilt, `俯仰角 ${tilt}° 太大 —— 两瓣会被推进不同纵深，一大一小一高一低（= 「歪」）`)
+      .toBeLessThanOrEqual(4);
+    expect(tilt, '俯仰角不该是负的（会把装置仰起来）').toBeGreaterThanOrEqual(0);
 
-    /* 必须是**每帧在 render 里**写，且用 rotation.set 一次写三个轴。
-       只写 rotation.x 或只写 rotation.y 都会漏掉一个轴 —— 那正是原 bug 的形状。 */
+    const roll = constNum('ROLL_DEG');
+    expect(roll, `翻滚角 ${roll}° —— 整幅构图会被直接转斜（站主要「正」）`).toBe(0);
+
+    const sway = constNum('YAW_SWAY_DEG');
+    expect(Number.isFinite(sway), '找不到 YAW_SWAY_DEG（偏航摆动幅度）').toBe(true);
+    expect(sway, `偏航摆动 ±${sway}° 太大 —— 摆到一侧时会让一瓣近一瓣远，左右大小不对等`)
+      .toBeLessThanOrEqual(3);
+
+    /* 必须是**每帧在 render 里**写，且用 rotation.set 一次写三个轴。 */
     const body = fnBody(scene, 'render');
     expect(body, '雕塑姿态不在 render 里更新（装配/波动都要每帧写）')
       .toMatch(/sculpture\.rotation\.set\(/);
     const setCall = /sculpture\.rotation\.set\(([\s\S]*?)\);/.exec(body);
     expect(setCall, '切不出 sculpture.rotation.set 的实参（判据本身坏了）').toBeTruthy();
-    expect(setCall![1], 'X 轴没有用 TILT_DEG —— 又变回正视了').toMatch(/TILT_DEG/);
-    /* 三个轴都要有东西（-2° 的 roll 也在原版里） */
+    expect(setCall![1], 'X 轴没有用 TILT_DEG（姿态常数被绕过）').toMatch(/TILT_DEG/);
+    expect(setCall![1], '偏航没走 YAW_SWAY_DEG（幅度就管不住了）').toMatch(/YAW_SWAY_DEG/);
     expect(setCall![1].split(',').length, 'rotation.set 少传了轴（原版是 x/y/z 三个）')
       .toBeGreaterThanOrEqual(3);
-    expect(constNum('ROLL_DEG'), '原版那道 -2° 的 roll 不见了').toBeCloseTo(-2, 0);
     expect(scene, 'rotation.order 必须是 YXZ（原版 Stage.ts:421，顺序影响俯仰与自转的叠加）')
       .toMatch(/rotation\.order\s*=\s*'YXZ'/);
   });
 
-  it('相机基准高度是 60，不是 0（那就是原版的 -3° 俯角）', () => {
-    /* 原版 position.set(…, 60 + …, 1080 + …) 且显式写 rotation.x = -3°。
-       相机在 (0,60,1080) 看向原点 ⇒ 俯角 atan(60/1080) = 3.18°，两者是同一件事。
-       本站用 lookAt 表达，所以**只要 y 的基准是 60** 就够了；
-       反过来，把 y 设成 0 就同时抹掉了这 3°，且 lookAt 会覆盖任何手写的 rotation.x。 */
-    expect(constNum('CAM_Y'), '相机基准高度 CAM_Y 应≈60（原版机位的 -3° 俯角）').toBeCloseTo(60, 0);
+  it('相机不许带俯角（CAM_Y = 0）—— 相机低头和雕塑抬头是同一件事', () => {
+    /* 原版 `position.set(…, 60 + …, 1080 + …)`，atan(60/1080)=3.18°，正是它手写的
+       `rotation.x = -3°`：**相机低头 3° ≡ 雕塑抬头 3°**，两者会叠加。
+       站主要「正」，所以基准高度归零；lookAt 每帧覆盖 rotation.x，别想着单独设它。 */
+    expect(constNum('CAM_Y'), '相机基准高度 CAM_Y 应≈0（一抬就是俯角，等于又歪了）').toBeCloseTo(0, 5);
     expect(constNum('CAM_Z'), '相机基准距离 CAM_Z 应≈1080（原版机位）').toBeCloseTo(1080, 0);
     const body = fnBody(scene, 'render');
     const camSet = /camera\.position\.set\(([\s\S]*?)\);/.exec(body);
     expect(camSet, 'render 里没有 camera.position.set（判据本身坏了）').toBeTruthy();
-    expect(camSet![1], '★ 相机 y 又写回 0 了 —— 3° 俯角随之消失')
-      .toMatch(/CAM_Y/);
-    /* 反向：不许再出现「只给 x/y 单独赋值」的写法（那会在 lookAt 之前把基准抹掉） */
+    expect(camSet![1], '相机 y 没走 CAM_Y（基准就没人管了）').toMatch(/CAM_Y/);
     expect(body, '不许再单独给 camera.position.y 赋值（会覆盖 CAM_Y 基准）')
       .not.toMatch(/camera\.position\.y\s*=/);
   });

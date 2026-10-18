@@ -76,30 +76,36 @@ export const FIN_PARAMS = {
 
 /* ── 机位（原版 Stage.ts:418-425）──────────────────────────────────────
    原版相机 `position.set(parallaxX*40, 60 + parallaxY*24, 1080 + …)`。
-   ★ 这里的 y = 60 **不是随手抬的一点**：相机在 (0,60,1080) 看向原点，
-     俯角 atan(60/1080) = 3.18°，正好是原版显式写的 `rotation.x = -3°`。
-     本站改用 lookAt(原点) 表达（视差也要靠它），所以只要把基准高度设成 60，
-     同一个俯角就自动复现了 —— 不必也不该再单独设 camera.rotation.x
-     （lookAt 每帧都会覆盖它，写了等于没写）。 */
-const CAM_Y = 60;
+   ★ y = 60 是原版显式写的 3.18° 俯角（atan(60/1080) 恰好等于它手写的
+     `rotation.x = -3°`）。
+
+   ★★ 2026-10-18 晚把它归零。站主看的是"正不正"：**相机俯角与雕塑俯仰是同一件事**
+     的两种写法（相机低头 3° ≡ 雕塑抬头 3°），两者会叠加，而只要存在俯角，
+     两瓣（z = ±95）在屏幕上就会一大一小、一高一低 —— 站主把这读成「歪了」。
+     代价写在 TILT_DEG 那边：正视会丢一点自相交处的前后分离。 */
+const CAM_Y = 0;
 const CAM_Z = 1080;
 /** 原版 16:9 的基准宽高比。窄于此就要拉远，否则 ∞ 的两端会被切掉。 */
 const CAM_ASPECT = 16 / 9;
 
-/* ── 雕塑姿态（原版 Stage.ts:420-425）──────────────────────────────────
-   ★★ 这是「缺口」的真正成因，2026-10-18 站主报的那个。
-   原版：rotation.set((16 + sin(t*0.11)*3)°, (sin(t*0.07)*9 - (1-intro)*32)°, -2°)，order "YXZ"。
-   本站原先**只写了 rotation.y**，X 恒为 0 ⇒ 完全正视。
+/* ── 雕塑姿态 ─────────────────────────────────────────────────────────
+   历程（三段都留在这儿，别再走回头路）：
+   ① 最初只写 rotation.y，X 恒 0 ⇒ 完全正视；
+   ② 站主报「环上一道缺口」⇒ 照原版抬 16° 俯仰。原因：Gerono 双纽线两瓣在 z 上
+      错开（z = uDepth·sin t），正视时这个纵深差投影不到屏幕上，两瓣叠成一堵
+      朝向相同的平墙，中间只剩一条硬边。抬起来之后纵深差变成屏幕位移，带子才连得起来；
+   ③ ★ 抬 16° 之后站主又说「歪了」。因为俯仰同时也把两瓣推进不同的纵深：
+      近的一瓣更大更靠下，远的一瓣更小更靠上 —— 整台装置看上去是斜的。
+      站主明确「别管那个缺口，把他摆正」⇒ 俯仰收到 2°（几乎正视），
+      翻滚归零，偏航摆动从 ±9° 收到 ±2°（那 ±9° 是左右瓣大小不对等的另一半成因）。
 
-   为什么正视会裂出缺口：Gerono 双纽线的两瓣在 **z 上错开**（z = uDepth·sin t），
-   正视时 z 只影响透视大小、不影响屏幕位置 ⇒ 两瓣在屏幕上几乎完全重合，
-   自相交处不是「一条带穿过另一条」，而是两瓣叠成**一堵朝向相同的平墙**，
-   中间只剩一条硬边 —— 看上去就是一道缺口。
-   抬起 16° 之后，纵深差被投影成**屏幕上的位移**，两瓣分开了，
-   带子才真的「连在一起」并且看得出前后关系。 */
-const TILT_DEG = 16;
-const TILT_WAVE_DEG = 3;
-const ROLL_DEG = -2;
+   ⇒ 现在的取舍：**正 > 自相交的前后分离**。2° 只留一点点纵深暗示，
+     不再指望它把两瓣彻底分开（那要多 10 度以上，代价就是歪）。 */
+const TILT_DEG = 2;
+const TILT_WAVE_DEG = 0.6;
+const ROLL_DEG = 0;
+/** 偏航摆动的幅度（原版 ±9°）。收到 ±2°：原版的大摆幅会把一瓣拉近、一瓣推远。 */
+const YAW_SWAY_DEG = 2;
 /** 装配动画期间雕塑多转的角度（原版 `(1 - intro) * 32`） */
 const ASSEMBLE_TWIST_DEG = 32;
 const SCULPT_OFFSET_X = -10;
@@ -313,7 +319,7 @@ export async function createFinScene(
   fins.receiveShadow = true;
 
   const sculpture = new Group();
-  sculpture.rotation.order = 'YXZ';   // 原版 Stage.ts:421 —— 顺序影响 16° 俯仰与自转的叠加
+  sculpture.rotation.order = 'YXZ';   // 原版 Stage.ts:421 —— 顺序影响俯仰与自转的叠加
   sculpture.position.x = SCULPT_OFFSET_X;
   sculpture.add(fins);
   scene.add(sculpture);
@@ -341,7 +347,7 @@ export async function createFinScene(
   composer.addPass(ao);
   /* ── DoF（原版 Stage.ts:279-282，逐字照抄）──
      这一层原先**故意没搬**，理由写的是「参数是按原版机位量的，本站容器与机位都不同，
-     照搬必然跑偏」。现在机位已经对齐原版（CAM_Z = 1080 / CAM_Y = 60），
+     照搬必然跑偏」。现在机位已经对齐（CAM_Z = 1080），
      那条理由不成立了。作用：把焦点（雕塑中心）以外的鳍片刃口轻微化开。
      ★ 原版的取值很克制（bokehScale 1.2 / focusRange 520，而带子的纵深只有 ±95），
        所以**产物上的效果是轻微的一层**，不是那种一眼可见的虚化 —— 别以为它没生效。
@@ -472,7 +478,8 @@ export async function createFinScene(
     cxp += (px - cxp) * Math.min(1, step * 3.2);
     cyp += (py - cyp) * Math.min(1, step * 3.2);
     /* 机位（原版 Stage.ts:418-419）：指针带 40/24 的平移 + 装配时从远处 dolly 进。
-       ★ y 的基准是 CAM_Y = 60 而不是 0 —— 这一项就是那 3° 俯角，见常量处的注释。 */
+       ★ y 的基准是 CAM_Y —— 2026-10-18 晚归零（原版是 60，等于 3.18° 俯角；
+         俯角会让两瓣一大一小，站主读成「歪」，见常量处的三段历程）。 */
     const intro = easeIntro(U.uAssemble.value);
     camera.position.set(
       cxp * 40,
@@ -483,13 +490,11 @@ export async function createFinScene(
 
     // 雕塑自转：原版 uSpin 由外部缓慢驱动（Stage.ts:383：spin += dt * 0.05）
     U.uSpin.value += step * 0.05;
-    /* ★★ 姿态（原版 Stage.ts:420-425，逐字）——**16° 俯仰是「缺口」的解药**。
-       本站原先只写了 rotation.y，X 恒 0 = 完全正视：两瓣在纵深上的差
-       （z = uDepth·sin t）投影不到屏幕上，自相交处就叠成一堵同向的平墙。
-       抬头看 16°，纵深差变成屏幕位移，两瓣错开、带子才连得起来。 */
+    /* ★★ 姿态：**近乎正视**。俯仰 2°（原版 16°）、翻滚 0（原版 -2°）、
+       偏航摆动 ±2°（原版 ±9°）。三项一起决定"正不正"，见常量处的三段历程。 */
     sculpture.rotation.set(
       (TILT_DEG + Math.sin(seconds * 0.11) * TILT_WAVE_DEG) * DEG,
-      (Math.sin(seconds * 0.07) * 9 - (1 - intro) * ASSEMBLE_TWIST_DEG) * DEG,
+      (Math.sin(seconds * 0.07) * YAW_SWAY_DEG - (1 - intro) * ASSEMBLE_TWIST_DEG) * DEG,
       ROLL_DEG * DEG,
     );
 
