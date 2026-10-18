@@ -234,7 +234,7 @@ const vbBox = PAGE.match(/<svg class="chrono-svg"[^>]*viewBox="0 0 [\d.]+ ([\d.]
     }
   });
 
-  it('★★ 颜色只从 token 读，alpha 由 8 位 hex 承载（AGENTS §3 第 4 条）', () => {
+  it('★★ 颜色只从 token 读，alpha 由 8 位 hex 承载（AGENTS §3 第 3 条）', () => {
     /* ★ 这条是**补上的缺口**：相册 / 灯箱 / 星座 / 404 各有自己的颜色纪律断言，
        只有走时仪这一页没有 —— 于是本轮新增 `.chrono-mon` 时没人拦着色值。
        同 AGENTS §5「照抄挂法要逐条问」的反面：**没有守卫的地方就是没有规矩**。

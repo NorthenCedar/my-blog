@@ -7,12 +7,15 @@
 
 ## 1. 这是什么
 
-**北杉札记**（northcedar.top）—— 一个**零第三方请求**的静态博客。
+**北杉札记**（northcedar.top）—— 一个静态博客。
+
+> **★ 2026-10-18 起本站不再守「零第三方请求」**（见 §3 开头说明）。资源、字体、图片
+> 仍以自托管为默认，但**不再有断言强制**——可以走 CDN 了。
 
 | 项 | 值 |
 |---|---|
 | 技术栈 | **Astro** 静态站（无框架运行时）+ Cloudflare Pages Functions（评论/点赞接口）+ D1 |
-| 依赖 | 运行时 = **`tests/_deps.ts` 里那张白名单**（站点骨架 3 条 + Jelly Slider 渲染器 5 条，2026-10-17 站主拍板）；开发期只有 `vitest` / `wrangler`。**加任何一条都要显式改那张白名单**（8 处断言都读它，见 §3 第 9 条）否则 `npm test` 直接红 |
+| 依赖 | 运行时 = **`tests/_deps.ts` 里那张白名单**（站点骨架 3 条 + Jelly Slider 渲染器 5 条，2026-10-17 站主拍板）；开发期只有 `vitest` / `wrangler`。**加任何一条都要显式改那张白名单**（多处断言都读它，见 `tests/_deps.ts` 自身的说明）否则 `npm test` 直接红 |
 | 仓库 | `https://github.com/NorthenCedar/personal`（**私有**）· 主分支 `main` |
 | 部署 | push 到 `main` ⇒ Cloudflare Pages **自动构建**（约 1 分钟）。**构建失败时线上继续挂着上一个成功的部署** |
 | 内容 | `content/posts/<slug>/index.md`（一篇文章一个文件夹，图放同目录）· `content/pages/*.md`（关于/日志等单页） |
@@ -31,7 +34,7 @@
 | ⑤ | `src/styles/tokens.css` | 全部设计 token（颜色/间距/字号）。**组件里不许出现字面色值** | 全读 |
 | ⑥ | `src/layouts/Base.astro` · `src/lib/posts.ts` · `src/content.config.ts` · `src/tag-registry.ts` | 外壳（head/脚本/过渡标记）、文章管线、内容契约、标签注册表 | 全读 |
 | ⑦ | `docs/boot-intro-work-order.md` | **（已作废）**开场动画的旧施工工单：20.16 s 逐帧复刻版。v1.15 把开场整份重走后它不再是现行契约 | 只在考古时搜关键词（155 KB，别通读） |
-| ⑧ | `docs/comment-system-plan.md` · `functions/api/**` | 评论/点赞接口与 D1。`api/admin/comments.ts` 是**写作台**用的留言管理接口（钥匙在环境变量 `ADMIN_TOKEN` 里，见 §3 第 8 条） | 改后端时读 |
+| ⑧ | `docs/comment-system-plan.md` · `functions/api/**` | 评论/点赞接口与 D1。`api/admin/comments.ts` 是**写作台**用的留言管理接口（钥匙在环境变量 `ADMIN_TOKEN` 里，见 §3 第 7 条） | 改后端时读 |
 
 **不要**通读 `docs/session-log-*.md`（历史会话流水，500 KB+，只用来考古）。
 
@@ -39,18 +42,21 @@
 
 ## 3. 铁律（多数有测试守着，破坏会被 `npm test` 当场抓住）
 
-1. **零第三方请求**。不许 CDN、外链字体、统计脚本、图床、外链图标库。图片一律进仓库、走构建管线。
-   断言在 `tests/build-output.test.ts`（"零第三方资源加载"）。
-2. **字体自托管 · 图片必须带 alt**（`alt` 为空字符串会让 `npm test` 失败）。
-3. **内容层原则：「主题不持有正文」** —— 页面与组件里不许硬编码文章内容。
-4. **颜色/间距只能来自 token**（`tokens.css`），且 **alpha 一律写 8 位 hex**（`#1a1a1a0b`），
+> **★ 2026-10-18：原第 1 条「零第三方请求」已整条撤除**（站主决定）。起因是引入
+> `postprocessing` + `n8ao`（后者是 WASM，走独立文件同源加载）之后，这条断言会把合法的
+> 资源管线写法也判红。**代价要记住**：产物里混进 CDN 外链现在**不再有人拦**，只剩 build 自查。
+> 相邻的「字体自托管」「canonical 指向正式域名」两条断言**独立存在、未受影响**。
+
+1. **字体自托管 · 图片必须带 alt**（`alt` 为空字符串会让 `npm test` 失败）。
+2. **内容层原则：「主题不持有正文」** —— 页面与组件里不许硬编码文章内容。
+3. **颜色/间距只能来自 token**（`tokens.css`），且 **alpha 一律写 8 位 hex**（`#1a1a1a0b`），
    组件里**不许写 `rgba()`**。
-5. **改完必须 `npm run verify`**（= `build` + `vitest`）。**Cloudflare 只跑构建、不跑测试** ⇒
+4. **改完必须 `npm run verify`**（= `build` + `vitest`）。**Cloudflare 只跑构建、不跑测试** ⇒
    测试能抓到的问题会**静默上线**。
-6. **推送到 `main` 就是在发布**。推送前确认：`npm run verify` 过、`git status` 里没有漏提交的图片、
+5. **推送到 `main` 就是在发布**。推送前确认：`npm run verify` 过、`git status` 里没有漏提交的图片、
    没有把临时文件加进去（见 §5）。
-7. **回滚用 `git revert`，绝不 `reset --hard` / 强推**：已推送的历史不重写，回滚本身也要可再撤。
-8. **管理类接口一律 fail closed**（2026-10-09 加）。`functions/api/admin/**` 只认
+6. **回滚用 `git revert`，绝不 `reset --hard` / 强推**：已推送的历史不重写，回滚本身也要可再撤。
+7. **管理类接口一律 fail closed**（2026-10-09 加）。`functions/api/admin/**` 只认
    `Authorization: Bearer <ADMIN_TOKEN>`，**没配 `ADMIN_TOKEN` 就整个接口返回 500、一个人都不放行** ——
    环境变量漏配是部署期最常见的事故，它的后果必须钉死是"用不了"而不是"谁都能删"。
    密钥只从环境变量读、**绝不进仓库**（`.dev.vars` 已在 `.gitignore` 里）；

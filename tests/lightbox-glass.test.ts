@@ -77,7 +77,7 @@ describe('灯箱 · 上一张/下一张的圆形白玻璃', () => {
          **-webkit- 前缀那行**的子串命中 —— 删掉无前缀那行它照样绿。必须排除前缀。 */
       expect(block, `${t.name}：该有背景模糊（玻璃的本体），且不许只剩 -webkit- 那一份`)
         .toMatch(/(?<!-webkit-)backdrop-filter:\s*[^;]*blur\(/);
-      /* 负向：不许写字面色值、不许 rgba()（AGENTS §3 第 4 条） */
+      /* 负向：不许写字面色值、不许 rgba()（AGENTS §3 第 3 条） */
       expect(block, `${t.name}：自己写了字面色值`).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
       expect(block, `${t.name}：自己写了 rgba()`).not.toMatch(/\brgba?\(/);
       /* 负向：整份源码里不许有 WebGL 那条路（见文件头 ①） */
@@ -111,7 +111,7 @@ describe('灯箱 · 上一张/下一张的圆形白玻璃', () => {
     for (const name of ['--dark-glass-bg-hot', '--dark-glass-line', '--dark-glass-blur']) {
       expect(TOKENS, `tokens.css 缺 ${name}`).toContain(name);
     }
-    /* ★ 8 位 hex、alpha 写全（AGENTS §3 第 4 条），不许 6 位也不许 rgba()。
+    /* ★ 8 位 hex、alpha 写全（AGENTS §3 第 3 条），不许 6 位也不许 rgba()。
        ⚠ `--dark-glass-blur` / `--dark-glass-sat` 是**长度与百分比**，不是颜色 ——
          第一版把整组都当颜色查，判据自己先红了。凡是"这组里凡是颜色都必须 8 位 hex"。 */
     const NC = TOKENS.replace(/\/\*[\s\S]*?\*\//g, ' ');

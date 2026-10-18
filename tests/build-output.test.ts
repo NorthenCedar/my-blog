@@ -886,23 +886,12 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log('判据 回复 对象 functions/api/comments.ts + comments.ts + talks.ts 实测: replies 表 ASC · 父评论同 slug 校验 · 两处都带 parentId');
   });
 
-  it('零第三方资源加载（只允许作者手写外链与自家 canonical）', () => {
-    // 2026-09-25 修订：加了 <link rel="canonical"> 之后，这条断言需要区分
-    // 「加载外部资源」（script/style/font/img —— 真实网络请求，必须禁止）
-    // 与「指向自家域名的元数据」（canonical —— 不产生请求，是 SEO 必需）。
-    for (const f of htmlFiles()) {
-      const html = readFileSync(f, 'utf8');
-      for (const m of html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)) {
-        // 判据是「这个外链出现在哪个标签里」——别只看紧跟其前的 60 字符。
-        // 2026-09-26 修正：原来的 `before.endsWith('<a')` 会在带属性的锚点上误报
-        // （友链页写的是 `<a class="card" href="https://…">` ⇒ 前面是 `<a class="card"` ✗）。
-        const tag = html.slice(html.lastIndexOf('<', m.index!), m.index!);
-        const isAnchor = /^<a[\s>]/.test(tag);
-        const isCanonical = /^<link[^>]*rel="canonical"/.test(tag);
-        expect(isAnchor || isCanonical, `发现外部资源加载：${m[1]}（在 ${f}）`).toBe(true);
-      }
-    }
-  });
+  /* ★ 2026-10-18 站主决定**取消「零第三方资源」这条约束**（AGENTS.md §3 第 1 条同批删除）——
+     加 postprocessing + n8ao（n8ao 是 WASM，走独立文件同源加载）之后，
+     这条断言会把合法的资源管线写法也判红，所以**整体撤除，不做弱化替代**。
+     撤除的代价要记住：**产物里混进 CDN 外链不再有人拦**，得靠 build 时的自查。
+     ⚠ 相邻的「字体全部自托管」「canonical 指向正式域名」两条**不受影响**，
+        它们各自独立断言，与本条无耦合（见 §3 第 1 条旧文的交叉引用已同步改号）。 */
 
   it('每个真实页面都有 canonical，且指向正式域名；错误页刻意不加', () => {
     const pages = htmlFiles();
