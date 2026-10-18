@@ -53,7 +53,7 @@ DIRTY = {
     CTRL: ['/* MUT */ void 0;', "/* MUT */ canvas.addEventListener('__never__'", '// MUT'],
     COMP: ['/* MUT display:none */'],
     CFG: ['find: "__TMP__",'],
-    TOKENS: ['--fin-body-light: #ddd6c6; // MUT'],
+    TOKENS: ['--fin-body-light: #ddd6c6; // MUT', '--fin-body-light: #efe4d3; // MUT'],
     GRADE: ['sat: 1.0, // MUT'],
 }
 
@@ -132,8 +132,8 @@ MUTATIONS = [
      SCENE, 'const ASSEMBLE_DUR = 2.3;', 'const ASSEMBLE_DUR = 0.5; // MUT'),
     ('⑱ 两盏灯退回纯白（原版 0xfff6ea / 0xdfe8ff ⇒ 雕塑发棕）',
      SCENE, 'new DirectionalLight(0xfff6ea, 3.4)', 'new DirectionalLight(0xffffff, 2.4) // MUT'),
-    ('⑲ 亮色本体色退回 #ddd6c6（原版 rlPaper ≈ #efe4d3 ⇒ 看着是土黄不是纸白）',
-     TOKENS, '--fin-body-light: #efe4d3;', '--fin-body-light: #ddd6c6; // MUT'),
+    ('⑲ 亮色本体色退回 #ddd6c6（暗一大截 ⇒ 看着是土黄不是纸白）',
+     TOKENS, '--fin-body-light: #f6f4ee;', '--fin-body-light: #ddd6c6; // MUT'),
     # ── ⑳~㉓：grade（去「发棕」的那一层）──
     ('⑳ toneMapping 换回 ACES（原版是 NoToneMapping，ACES 对暖色系统性偏黄）',
      SCENE, 'renderer.toneMapping = NoToneMapping;', 'renderer.toneMapping = 4 as never; // MUT'),
@@ -169,6 +169,11 @@ MUTATIONS = [
     ('㉜ DoF 排到 AO 之前（AO 读到的是已虚化的深度 ⇒ AO 与 DoF 互相打架）',
      SCENE, '  composer.addPass(ao);',
      '  composer.addPass(new EffectPass(camera, dof)); // MUT\n  composer.addPass(ao);'),
+    # ── ㉝：本次「奶油黄」（2026-10-18 晚）──
+    # ★ 这条守的是**关系**而非色值：把本体色换回原版那个暖纸 #efe4d3，
+    #   亮度那条（绿通道 ≥220，228 照样过）与别的断言都不会响，只有暖度差会咬。
+    ('㉝ 本体色换回原版暖纸 #efe4d3（亮度够，但在本站更亮更冷的纸白上读成奶油黄）',
+     TOKENS, '--fin-body-light: #f6f4ee;', '--fin-body-light: #efe4d3; // MUT'),
 ]
 
 print('=' * 76)

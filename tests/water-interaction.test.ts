@@ -68,7 +68,11 @@ describe('留言页浅水 · 指针与生命周期', () => {
     expect(alpha(r.pixels)).toBe(0);
     r.move(600, 300); r.move(650, 300); r.tick();
     expect(alpha(r.pixels)).toBeGreaterThan(0);
-  });
+    /* ★ 显式给预算：这里推进的是**模拟时间**（45×100ms），不真的等 ——
+       但 45 帧的场递推本身是纯计算，单跑 2.6 秒、46 个 worker 满负载时 6.4 秒，
+       会撞上 vitest 默认的 5 秒上限，报的是「Test timed out」而不是断言失败。
+       （同一类坑：tests/tokens.test.ts 里那条 fork 子进程的用例。） */
+  }, 20000);
 
   it.each([{ reduced: true }, { mobile: true }, { context: false }])('降级条件 %j 不运行', (opts) => {
     const r = run(opts);

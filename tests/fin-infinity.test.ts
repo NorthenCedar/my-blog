@@ -171,6 +171,32 @@ describe('立体 ∞ · 时间单位与速率（★ 2026-10-18 真机实测揪�
       .toBeGreaterThanOrEqual(220);
   });
 
+  it('亮色档本体色不比页面纸白更暖（否则读成奶油黄）', () => {
+    /* ★ 第二次栽在同一个坑上：上一版把本体色照抄成原版的暖纸 #efe4d3，
+       亮度够了、看着还是黄。原因是**包围色变了** ——
+       原版页面底是暖灰纸 #e7e5e1（R−B = 6）且比雕塑暗，暖白鳍片压上去读作"白"；
+       本站纸白是 #fafaf7（R−B = 3）且比雕塑亮，同一个暖白就成了奶油黄。
+       同一个绝对色值，换了底就换了观感。
+       所以判据守**关系**（本体相对纸白的暖度差），不守固定色值 ——
+       0 是纯中性，超过 8 肉眼就是黄。 */
+    /* 取**首次出现**：亮色档的 :root 定义排在 html.dark 的覆写之前
+       （--paper 的深色覆写在 522 行之后，这里读到的仍是纸白那一档）。 */
+    const rgb = (name: string): [number, number, number] => {
+      const m = new RegExp(`${name}:\\s*#([0-9a-fA-F]{6})`).exec(tokens);
+      expect(m, `tokens.css 里缺 ${name}`).toBeTruthy();
+      const v = m![1];
+      return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16)) as [number, number, number];
+    };
+    const body = rgb('--fin-body-light');
+    const paper = rgb('--paper');
+    const bodyWarm = body[0] - body[2];
+    const paperWarm = paper[0] - paper[2];
+    expect(bodyWarm - paperWarm,
+      `本体比纸白暖 ${bodyWarm - paperWarm} 阶（本体 R−B ${bodyWarm} / 纸白 R−B ${paperWarm}）`
+      + ' ⇒ 纸白页面上会读成奶油黄')
+      .toBeLessThanOrEqual(8);
+  });
+
   it('装置的橙与 UI 的橙是两档（可各自调）', () => {
     /* 原版的橙过了 grade 管线里的 sat 0.7（Khronos PBR Neutral 再降饱和），
        本站没有那层，同一个 #ff7b00 直出就偏艳。所以装置单独走--fin-glow-dark。 */
