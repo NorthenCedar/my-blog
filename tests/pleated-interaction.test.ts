@@ -10,12 +10,16 @@ function run(options: { reduced?: boolean; context?: boolean; hidden?: boolean }
   const events = new Map<string, (event?: any) => void>();
   const frames = new Map<number, (time: number) => void>();
   let time = 0, id = 0, vertices = new Float32Array(), selection = '';
+  let dark = false;
+  const colors = new Map<string, number[]>();
   class Element { constructor(public control = false) {} closest() { return this.control ? this : null; } }
   const target = new Element();
   const listen = (name: string, fn: () => void) => events.set(name, fn);
   const gl = new Proxy({
     createShader: () => ({}), createProgram: () => ({}), createBuffer: () => ({}),
     getShaderParameter: () => true, getProgramParameter: () => true, getAttribLocation: () => 0,
+    getUniformLocation: (_: unknown, name: string) => name,
+    uniform3fv: (name: string, values: number[]) => { colors.set(name, [...values]); },
     bufferData: (_: unknown, data: Float32Array) => { vertices = data.slice(); },
   }, { get: (object, key) => key in object ? object[key as keyof typeof object] : () => {} });
   let context = options.context !== false;
@@ -31,13 +35,15 @@ function run(options: { reduced?: boolean; context?: boolean; hidden?: boolean }
     document, Element, performance: { now: () => time },
     window: { devicePixelRatio: 1, addEventListener: listen },
     matchMedia: () => query,
-    getComputedStyle: () => ({ getPropertyValue: (name: string) => ({ '--pleat-base': '#fff', '--pleat-wave': '#a4cfad', '--pleat-opacity': '.3', '--pleat-wave-opacity': '.58' })[name] }),
+    getComputedStyle: () => ({ getPropertyValue: (name: string) => (dark
+      ? { '--pleat-base': '#b47a4a', '--pleat-wave': '#ffd0a0', '--pleat-opacity': '.52', '--pleat-wave-opacity': '.52', '--pleat-contrast': '.65' }
+      : { '--pleat-base': '#fff', '--pleat-wave': '#a4cfad', '--pleat-opacity': '.3', '--pleat-wave-opacity': '.58', '--pleat-contrast': '.5' })[name] }),
     requestAnimationFrame: (fn: (time: number) => void) => { frames.set(++id, fn); return id; },
     cancelAnimationFrame: (id: number) => frames.delete(id),
     ResizeObserver: class { observe() {} },
   });
   return {
-    canvas, host, frames,
+    canvas, host, frames, colors,
     get green() { let max = 0; for (let n = 6; n < vertices.length; n += 7) max = Math.max(max, vertices[n]); return max; },
     point() {
       // 从实际首帧薄片三角形内部取一点，带上画布在视口中的偏移。
@@ -52,6 +58,7 @@ function run(options: { reduced?: boolean; context?: boolean; hidden?: boolean }
     hide(hidden: boolean) { document.hidden = hidden; events.get('visibilitychange')?.(); },
     reduce(reduced: boolean) { query.matches = reduced; query.change(); },
     restore() { context = true; events.get('webglcontextrestored')?.(); },
+    theme(value: boolean) { dark = value; events.get('themechange')?.(); },
   };
 }
 
@@ -103,5 +110,23 @@ describe('百褶环 · 点击和浏览器生命周期', () => {
     const r = run(); r.emit('webglcontextlost');
     expect(r.host.ready).toBe(false); expect(r.canvas.hidden).toBe(true); expect(r.frames.size).toBe(0);
     r.restore(); expect(r.host.ready).toBe(true); expect(r.frames.size).toBe(1);
+  });
+
+  it('切换主题即刻更新薄片与脉冲色，保留传播中的波及单一帧循环', () => {
+    const r = run(), point = r.point();
+    r.emit('pointerdown', point); r.emit('pointerup', point); r.tick(5);
+    const wave = r.green;
+    expect(wave).toBeGreaterThan(0);
+    r.theme(true);
+    expect(r.colors.get('uBase')).toEqual([180, 122, 74].map(c => c / 255));
+    expect(r.colors.get('uWave')).toEqual([255, 208, 160].map(c => c / 255));
+    expect(r.green).toBe(wave);
+    expect(r.frames.size).toBe(1);
+    r.theme(false);
+    expect(r.colors.get('uBase')).toEqual([1, 1, 1]);
+    expect(r.colors.get('uWave')).toEqual([164, 207, 173].map(c => c / 255));
+    expect(r.frames.size).toBe(1);
+    r.emit('webglcontextlost'); r.theme(true); r.restore();
+    expect(r.colors.get('uWave')).toEqual([255, 208, 160].map(c => c / 255));
   });
 });

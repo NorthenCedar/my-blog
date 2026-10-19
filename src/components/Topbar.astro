@@ -106,6 +106,10 @@ const { wordmark, current } = Astro.props;
     pointer-events: none;
     z-index: -1;
   }
+  html.dark body.archive-plate .page-inf {
+    filter: var(--pleat-dark-filter);
+    opacity: var(--pleat-dark-opacity);
+  }
 
   /* ---------- 顶栏：极简，只有站名与主导航 ----------
      ★ 2026-09-30 换成原型 topbar 的**质感**（首页用的就是这套），但布局保持原样：

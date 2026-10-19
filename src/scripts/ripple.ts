@@ -13,16 +13,22 @@ import { prefersReducedMotion } from './rl-core';
   let image: ImageData;
   let raf = 0, lastTime = 0;
   let previous: { x: number; y: number; time: number } | undefined;
-  const styles = getComputedStyle(canvas);
+  let styles = getComputedStyle(canvas);
   const color = (name: string) => {
     let hex = styles.getPropertyValue(name).trim().slice(1);
     // 构建器会把六位色压成三位，必须先展开再读通道。
     if (hex.length === 3) hex = [...hex].map((digit) => digit + digit).join('');
     return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
   };
-  const shadow = color('--water-shadow');
-  const light = color('--water-light');
-  const strength = parseFloat(styles.getPropertyValue('--water-strength'));
+  let shadow: number[], light: number[], strength: number, lightGain: number;
+  function readPalette() {
+    styles = getComputedStyle(canvas!);
+    shadow = color('--water-shadow');
+    light = color('--water-light');
+    strength = parseFloat(styles.getPropertyValue('--water-strength'));
+    lightGain = parseFloat(styles.getPropertyValue('--water-light-gain'));
+  }
+  readPalette();
   const enabled = () => !reduce.matches && desktop.matches && document.visibilityState === 'visible';
 
   function stop() {
@@ -56,7 +62,7 @@ import { prefersReducedMotion } from './rl-core';
         const slope = (h[i - 1] - h[i + 1]) * 0.65 + (h[i - w] - h[i + w]) * 0.76;
         const shade = slope > 0 ? light : shadow;
         pixels[p] = shade[0]; pixels[p + 1] = shade[1]; pixels[p + 2] = shade[2];
-        pixels[p + 3] = Math.min(1, Math.abs(slope) * 2.5) * strength * (slope > 0 ? 2.6 : 1) * fade * 255;
+        pixels[p + 3] = Math.min(1, Math.abs(slope) * 2.5) * strength * (slope > 0 ? lightGain : 1) * fade * 255;
       }
     }
     ctx!.putImageData(image, 0, 0);
@@ -98,5 +104,9 @@ import { prefersReducedMotion } from './rl-core';
   });
   reduce.addEventListener('change', resize);
   desktop.addEventListener('change', resize);
+  document.addEventListener('themechange', () => {
+    readPalette();
+    if (raf) paint();
+  });
   resize();
 })();

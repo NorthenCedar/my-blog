@@ -337,6 +337,7 @@ describe.skipIf(!hasDist)('日志页 · 走时仪：可点、可降级', () => {
  * 断言守四件事：无 JS 不出现 / 与走时仪同层（plate 槽）/ 窄屏不渲染 / 不抢无障碍树。
  */
 describe.skipIf(!hasDist)('日志页 · 滚动轨（右侧可拖的滚动条）', () => {
+  const railComponent = readFileSync(join(ROOT, 'src/components/ScrollRail.astro'), 'utf8');
   it('无 JS 时不出现：产出的 DOM 带 hidden（脚本到位才摘）', () => {
     expect(PAGE, 'rail 不带 hidden ⇒ 无 JS 时也会画出一根拉不动的条').toMatch(
       /<div class="rail"[^>]*\bhidden\b/,
@@ -345,11 +346,11 @@ describe.skipIf(!hasDist)('日志页 · 滚动轨（右侧可拖的滚动条）'
 
   it('与走时仪同一层：放进 plate 槽（`.shell` 的 transform 带不偏它）', () => {
     const plate = CODE.slice(CODE.indexOf('<Fragment slot="plate">'), CODE.indexOf('</Fragment>'));
-    expect(plate, '滚动轨没放进 plate 槽').toMatch(/class="rail"/);
+    expect(plate, '滚动轨没放进 plate 槽').toContain('<ScrollRail');
   });
 
   it('窄屏不渲染（手机上触屏滚动更自然，条只会挡内容）', () => {
-    expect(CODE).toMatch(/@media\s*\(max-width:\s*767px\)[\s\S]*?\.rail\s*\{[\s\S]*?display:\s*none/);
+    expect(railComponent).toMatch(/@media\s*\(max-width:\s*767px\)[\s\S]*?\.rail\s*\{[\s\S]*?display:\s*none/);
   });
 
   it('不抢无障碍树与 Tab 序（键盘 / 读屏走原生滚动）', () => {
@@ -358,7 +359,7 @@ describe.skipIf(!hasDist)('日志页 · 滚动轨（右侧可拖的滚动条）'
   });
 
   it('主规则里**不许写 display** —— 写了会盖过 UA 的 [hidden]，无 JS 那档就漏了', () => {
-    const rule = CODE.match(/\.rail\s*\{([^}]*)\}/)?.[1] ?? '';
+    const rule = railComponent.match(/\.rail\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(rule.length, '没找到 .rail 主规则').toBeGreaterThan(0);
     expect(rule, '给 .rail 写了 display ⇒ 盖过 [hidden]').not.toMatch(/display:/);
   });

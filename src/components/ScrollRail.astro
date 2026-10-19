@@ -1,0 +1,44 @@
+---
+// 放在 Base 的 plate 槽中，避开转场给正文容器建立的 fixed 包含块。
+// 页面把 scroll-rail 合并到已有脚本入口，避免为每根轨道增加独立请求。
+---
+<div class="rail" data-rail hidden aria-hidden="true" tabindex="-1">
+  <span class="rail-thumb" data-rail-thumb></span>
+</div>
+
+<style>
+  /* 视觉宽 3px，命中区 22px；无 JS 时保留 hidden，不能用 display 覆盖它。 */
+  .rail {
+    position: fixed;
+    top: 50%;
+    right: 0.75rem;
+    z-index: 2;
+    width: 22px;
+    height: min(44vh, 360px);
+    transform: translateY(-50%);
+    touch-action: none;
+  }
+  .rail::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    transform: translateX(-50%);
+    border-radius: 2px;
+    background: var(--hair);
+  }
+  .rail-thumb {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 3px;
+    transform: translateX(-50%);
+    border-radius: 2px;
+    background: var(--accent);
+  }
+  @media (max-width: 767px) {
+    .rail { display: none; }
+  }
+</style>

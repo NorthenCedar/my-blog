@@ -163,30 +163,30 @@ const total = albums.reduce((n, a) => n + a.total, 0);
       left: 0;
       right: 0;
       z-index: 30;   /* ★ 站上 z-index 阶梯：抽屉 40/41 · 过渡蒙版 45 · 灯箱 50 · 开场 60 · 光标 64+ */
-      color: rgb(255 255 255 / 76%);
-      border-bottom-color: rgb(255 255 255 / 14%);
-      background: linear-gradient(180deg, rgb(0 0 0 / 26%), transparent);
+      color: var(--gallery-topbar-ink);
+      border-bottom-color: var(--gallery-topbar-line);
+      background: var(--gallery-topbar-bg);
       box-shadow: none;   /* 原版那道"顶部高光"是给浅底用的，压在深底上是一道白边 */
     }
     :global(body.chrome-page .topbar.topbar .site) {
-      color: #fff;
+      color: var(--gallery-topbar-emphasis);
     }
     /* ⚠️ 同外壳那条：`> nav:not(.navpanel)` —— 漏了 `:not()` 会把抽屉自己按成横排（踩过）。 */
     :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a) {
-      color: rgb(255 255 255 / 76%);
-      border-color: rgb(255 255 255 / 22%);
+      color: var(--gallery-topbar-ink);
+      border-color: var(--gallery-topbar-nav-line);
     }
     :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a:hover),
     :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a:focus-visible) {
-      color: #fff;
-      border-color: rgb(255 255 255 / 55%);
+      color: var(--gallery-topbar-emphasis);
+      border-color: var(--gallery-topbar-hot-line);
       /* ★ 2026-10-01 顶栏改胶囊后补的抵消：外壳胶囊 hover/focus 给了 --accent-wash 浅绿底，
          那是**纸白顶栏**用的；本页顶栏浮在深墨绿板上，第五轮定稿没有底色 ⇒ 显式归透明。 */
       background: transparent;
     }
     :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a[aria-current='page']) {
-      color: #fff;
-      border-color: var(--accent-ink);
+      color: var(--gallery-topbar-emphasis);
+      border-color: var(--gallery-topbar-current-line);
       /* ★ 同上：当前页的浅绿底是纸白顶栏的配色，深板上回到定稿的「白字 + 绿描边、无底色」。 */
       background: transparent;
     }
@@ -211,9 +211,7 @@ const total = albums.reduce((n, a) => n + a.total, 0);
     height: 100svh;
     min-height: 420px;
     overflow: hidden;
-    background:
-      radial-gradient(110% 70% at 12% 0%, #2d7d462e 0%, transparent 58%),
-      linear-gradient(178deg, #090c0c 0%, #101814 34%, #1a251f 62%, #34413a 100%);
+    background: var(--gallery-bath-bg);
   }
   /* 无 JS 时整块不出现。显式写一条，免得上游给 .bath 加了 display 后 [hidden] 被覆盖 */
   .bath[hidden] {
@@ -270,8 +268,9 @@ const total = albums.reduce((n, a) => n + a.total, 0);
     font-size: clamp(2.4rem, 8vw, 4.6rem);
     line-height: 1;
     letter-spacing: 0.12em;
-    color: #fff;
-    text-shadow: 0 2px 14px rgb(0 0 0 / 45%);
+    text-align: center;
+    color: var(--gallery-bath-ink);
+    text-shadow: var(--gallery-bath-shadow);
     pointer-events: none;
     user-select: none;
     z-index: 2;             /* ★ 压在颗粒层之上：颗粒可以盖照片，但不能盖花体字 */
@@ -295,8 +294,8 @@ const total = albums.reduce((n, a) => n + a.total, 0);
     font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
     font-size: var(--fs-xs);
     letter-spacing: 0.12em;
-    color: #fff;
-    text-shadow: 0 1px 8px rgb(0 0 0 / 45%);
+    color: var(--gallery-bath-ink);
+    text-shadow: var(--gallery-bath-hint-shadow);
     pointer-events: none;
     user-select: none;
   }
@@ -392,9 +391,7 @@ const total = albums.reduce((n, a) => n + a.total, 0);
       /* 层叠阶梯：正文 ≤4 < 过渡蒙版 45 < 交接层 46 < 相册灯箱 50 < 开场 60 */
       z-index: 46;
       pointer-events: none;
-      background:
-        radial-gradient(110% 70% at 12% 0%, color-mix(in srgb, var(--accent) 18%, transparent) 0%, transparent 58%),
-        linear-gradient(178deg, var(--dusk-1) 0%, var(--dusk-2) 34%, var(--dusk-3) 62%, var(--dusk-4) 100%);
+      background: var(--gallery-entry-bg);
       animation: tsl-veil-out 620ms var(--ease) both;
     }
     :global(.tsl-in) .bath-mark,

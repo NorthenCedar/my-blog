@@ -787,7 +787,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(tcss, '墨色层丢了 mix-blend-mode:darken —— 那就退化成"盖一块板"了').toMatch(
       /\.pt-ink\{[^}]*mix-blend-mode:darken/,
     );
-    // 转场使用独立的黑橙 token，亮暗主题下均不借用绿色强调色。
+    // 转场使用独立 token，亮色为墨绿，暗色为黑橙。
     expect(tcss, '墨色层底色没走 token').toMatch(/\.pt-ink\{[^}]*background:var\(--pt-ink\)/);
     expect(tcss, '描边字颜色没走 token').toMatch(/\.pt-word\{[^}]*text-stroke:1\.3pxvar\(--pt-letter\)/);
     // reduce-motion 必须整套关掉（含蒙版本身）
@@ -1039,7 +1039,9 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     //      ⇒ 按前几次同样的口径抬到 **12800**（实测 +7.0% 余量，与 ④ 的 +7.3% 同量级）。
     // 标签数那条只是"别让页面无限堆脚本"的粗筛，真正的约束是下面的字节数；
     // 现在 5 处 = head 保险 + 光标 + 统计 + 评论 loader + 过渡 loader（阅读尺并在过渡 loader 那个块里，不新增标签）。
-    const BUDGET = 12800;
+    // 2026-10-19：文章复用日志推动条，滚动/拖动与动态高度重算合并进原脚本入口。
+    // 新增共享控制器后实测 13801 字节；仍限制 5 个入口，预算由 12800 字节调整为 14 KiB。
+    const BUDGET = 14336;
     console.log(`内联脚本体积: ${inline.join(' + ')} = ${inlineTotal} 字节 · 含同源外链合计 ${full} 字节（预算 ${BUDGET}）· ${scripts.length} 处 <script>`);
 
     expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBeLessThanOrEqual(5);

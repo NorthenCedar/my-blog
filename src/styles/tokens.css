@@ -65,6 +65,28 @@
   --pleat-wave: #a4cfad;
   --pleat-opacity: 0.82;
   --pleat-wave-opacity: 0.82;
+  --pleat-fallback-filter: none;
+  /* 跟手光标：亮底保留墨色纱，暗底单独抬亮圆圈描边。 */
+  --cursor-disc-line: #1a1a1a38;
+  --cursor-disc-fill: #1a1a1a14;
+  --cursor-disc-hot-fill: #1a1a1a29;
+  --cursor-dot: #ffffff;
+  --cursor-dot-line: #1a1a1a59;
+  --cursor-ripple: #ffffffe6;
+  --cursor-ripple-line: #1a1a1a40;
+  /* 相册显影板与浮在板上的桌面导航，亮色保持原来的深墨绿。 */
+  --gallery-bath-bg: radial-gradient(110% 70% at 12% 0%, #2d7d462e 0%, transparent 58%), linear-gradient(178deg, #090c0c 0%, #101814 34%, #1a251f 62%, #34413a 100%);
+  --gallery-bath-ink: #ffffff;
+  --gallery-bath-shadow: 0 2px 14px #00000073;
+  --gallery-bath-hint-shadow: 0 1px 8px #00000073;
+  --gallery-topbar-ink: #ffffffc2;
+  --gallery-topbar-emphasis: #ffffff;
+  --gallery-topbar-line: #ffffff24;
+  --gallery-topbar-nav-line: #ffffff38;
+  --gallery-topbar-hot-line: #ffffff8c;
+  --gallery-topbar-current-line: var(--accent-ink);
+  --gallery-topbar-bg: linear-gradient(180deg, #00000042, transparent);
+  --gallery-entry-bg: radial-gradient(110% 70% at 12% 0%, color-mix(in srgb, var(--accent) 18%, transparent) 0%, transparent 58%), linear-gradient(178deg, var(--dusk-1) 0%, var(--dusk-2) 34%, var(--dusk-3) 62%, var(--dusk-4) 100%);
   /* ★★★ 明暗对比（不是浓淡！）：把薄片的着色**朝着色区间的中点**压缩。
      站主 2026-10-16：「图二那个没有那么大的明暗对比」—— 要的是**变平**，不是变淡。
 
@@ -97,8 +119,10 @@
   --water-shadow: #53645a;
   --water-light: #ffffff;
   --water-strength: 0.17;
+  --water-light-gain: 2.6;
   /* 留言页机械环：浅色金属保留铜色光槽。 */
   --ring-plate-opacity: 0.38;
+  --ring-metal-filter: none;
   --ring-light-halo: #d8893f80;
   --ring-light-core: #fff9eb;
   --dur-ring-flow: 24s;
@@ -482,11 +506,11 @@
      替掉站点原先 2200ms 四段那套）。原型的时序是错配的：入 240 / 驻留 320 / 出 340，
      等长读起来机械，错配才有惯性 —— 所以这里只给总时长，各段比例写在 transition.css。 */
   --pt-sweep: 900ms;
-  /* 页间转场独立使用黑橙色板，不借用亮色界面的绿色强调色。 */
-  --pt-ink: #090807;
-  --pt-edge: #754324;
-  --pt-letter: #ffc38b;
-  --pt-accent: #ed8c3b;
+  /* 亮色转场：墨绿浸染与浅色描边，绿色读数线在深底上保持清楚。 */
+  --pt-ink: #0b1a14;
+  --pt-edge: #16241e;
+  --pt-letter: #f2f4f1;
+  --pt-accent: #4caf50;
 }
 
 /* 开场时间轴 · 手机极简版（≤767px，1.5 s）。
@@ -531,6 +555,36 @@ html.boot-mini {
      ⚠ 这一改动与 tokens.css 第 464 行记的站主原始要求（「绿色全色系，黑白灰和少量橙色系」）
        不同：那是**亮色**的要求，本次只改暗色，亮色一行未动。 */
 html.dark {
+  /* 百褶底纹采用低饱和铜橙，保留原图的褶皱明暗。 */
+  --pleat-dark-filter: grayscale(1) sepia(1) saturate(2.2) hue-rotate(-18deg) brightness(0.85) contrast(1.05);
+  --pleat-dark-opacity: 0.25;
+  /* 墨迹和月相只换色阶，透明边缘与笔触深浅仍来自原图。 */
+  --ink-plate-dark-filter: grayscale(1) invert(1) brightness(0.65) sepia(1) saturate(3) hue-rotate(-20deg);
+  --links-plate-dark-opacity: 0.17;
+  --links-plate-dark-mobile-opacity: 0.12;
+  --talks-plate-dark-opacity: 0.16;
+  --gallery-inf-dark-opacity: 0.16;
+  --log-inf-dark-opacity: 0.16;
+  /* 时间切片的出口与相册交接幕共用此色板，切页前后保持同色。 */
+  --gallery-bath-bg: linear-gradient(178deg, #f56800 0%, #f37309 45%, #e65d00 100%);
+  --gallery-entry-bg: var(--gallery-bath-bg);
+  --cursor-disc-line: #ffb570a6;
+  --cursor-disc-fill: #ed8c3b14;
+  --cursor-disc-hot-fill: #ed8c3b2e;
+  --cursor-ripple: #ffc082d9;
+  /* 金属环压暗近中性的外壳，保留铜色光槽；水波采用低亮度琥珀反光。 */
+  --ring-metal-filter: url(#ring-dark-metal);
+  --ring-plate-opacity: 0.60;
+  --ring-light-halo: #e68d4566;
+  --ring-light-core: #ffc082;
+  --water-shadow: #44362e;
+  --water-light: #d78d54;
+  --water-strength: 0.20;
+  --water-light-gain: 1.25;
+  --pt-ink: #090807;
+  --pt-edge: #754324;
+  --pt-letter: #ffc38b;
+  --pt-accent: #ed8c3b;
   --paper: #0b0b0c;       /* = rhine-lock PAPER_DARK：近黑略偏冷（不是纯黑） */
   --ink: #f2f4f1;         /* = --on-ink：深底前景字（**17.79:1**，旧深绿底上 15.86） */
   --muted: #a9b4ac;       /* 深底次级字（**9.19:1**，旧 8.20） */
@@ -662,10 +716,10 @@ html.dark body.chrome-console {
   --deco-orbit-strong: #e8924938;
   --deco-orbit-soft: #e8924917;
   --deco-orbit-inner: #e892492e;
-  --home-hero-1: #f17608;
-  --home-hero-2: #ff7b00;
-  --home-hero-3: #fa7803;
-  --home-hero-4: #ef7107;
+  --home-hero-1: #eb6100;
+  --home-hero-2: #f56800;
+  --home-hero-3: #ef6100;
+  --home-hero-4: #e85c00;
   --home-hero-ink: #21150d;
   --home-hero-sub: #21150d;
   --home-hero-meta: #21150d;
@@ -677,15 +731,15 @@ html.dark body.chrome-console {
   --home-flow-line: #000000;
   --home-flow-width: 1.2px;
   --home-dna-inset: 20vw;
-  --home-halo: #ff963520;
-  --home-halo-soft: #ff7b0014;
+  --home-halo: #ff7b0010;
+  --home-halo-soft: #ff6a000a;
   --home-grid: #e8924914;
   --home-glass: #ffb5700f;
   --home-glass-soft: #ffb57004;
   --home-glass-light: #ffd1aa26;
   --home-active-bg: #f4924314;
   --home-active-line: #f4924347;
-  --home-dusk-top: #ef7107;
+  --home-dusk-top: #e85c00;
   --home-dusk-mid: #593218;
   --home-paper-edge: #100d0bf5;
   --dna-body-copper: #875432;
@@ -695,4 +749,36 @@ html.dark body.chrome-console {
   --dna-key: #ffd7ae;
   --dna-fill: #a66636;
   --dna-rim: #ffac5a;
+}
+
+/* 文章的工程方格与页边刻度：暗底用铜灰，亮色仍使用原墨绿配方。 */
+html.dark body.post-plate {
+  --deco-plate-fine: #bd9c7c17;
+  --deco-plate-coarse: #c89b752e;
+}
+
+/* 相册暗色：显影板与交接幕共用浓橙，板面文字和桌面导航为近黑。 */
+html.dark body.gallery-inf-plate {
+  --gallery-bath-ink: #15100b;
+  --gallery-bath-shadow: 0 1px 2px #ffcfa680;
+  --gallery-bath-hint-shadow: var(--gallery-bath-shadow);
+  --gallery-topbar-ink: #21150d;
+  --gallery-topbar-emphasis: #15100b;
+  --gallery-topbar-line: #21150d38;
+  --gallery-topbar-nav-line: #21150d59;
+  --gallery-topbar-hot-line: #21150d99;
+  --gallery-topbar-current-line: #21150d;
+  --gallery-topbar-bg: linear-gradient(180deg, #f56800e6, #f5680024);
+}
+
+/* 标签百褶环：铜橙薄片与暖杏色脉冲分开；同档 alpha 保留原来的波动浓度关系。 */
+html.dark body.tags-plate {
+  --pleat-base: #b47a4a;
+  --pleat-wave: #ffd0a0;
+  --pleat-opacity: 0.52;
+  --pleat-wave-opacity: 0.52;
+  --pleat-contrast: 0.65;
+  --pleat-fallback-filter: grayscale(1) sepia(1) saturate(3.5) hue-rotate(-20deg) brightness(0.5);
+  --deco-crosshair-line: #ed8c3b66;
+  --deco-crosshair-dot: #ffb570b3;
 }

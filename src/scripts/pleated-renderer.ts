@@ -68,14 +68,18 @@ export function createPleatedRenderer(canvas: HTMLCanvasElement, palette: PleatP
       const loc = gl.getAttribLocation(program, name);
       gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 28, offset);
     }
-    gl.uniform3fv(gl.getUniformLocation(program, 'uBase'), palette.base);
-    gl.uniform3fv(gl.getUniformLocation(program, 'uWave'), palette.wave);
-    gl.uniform1f(gl.getUniformLocation(program, 'uOpacity'), palette.opacity);
-    gl.uniform1f(gl.getUniformLocation(program, 'uWaveOpacity'), palette.waveOpacity);
-    gl.uniform1f(gl.getUniformLocation(program, 'uContrast'), palette.contrast);
+    const setPalette = (next: PleatPalette) => {
+      gl.uniform3fv(gl.getUniformLocation(program, 'uBase'), next.base);
+      gl.uniform3fv(gl.getUniformLocation(program, 'uWave'), next.wave);
+      gl.uniform1f(gl.getUniformLocation(program, 'uOpacity'), next.opacity);
+      gl.uniform1f(gl.getUniformLocation(program, 'uWaveOpacity'), next.waveOpacity);
+      gl.uniform1f(gl.getUniformLocation(program, 'uContrast'), next.contrast);
+    };
+    setPalette(palette);
     const aspect = gl.getUniformLocation(program, 'uAspect');
     gl.enable(gl.DEPTH_TEST); gl.clearColor(0, 0, 0, 0);
     return {
+      setPalette,
       draw(pleats: Pleats) {
         const width = canvas.clientWidth, height = canvas.clientHeight;
         if (!width || !height) return;

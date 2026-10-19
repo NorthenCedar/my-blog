@@ -10,6 +10,7 @@ function run(opts: { reduced?: boolean; mobile?: boolean; context?: boolean; hid
   const frames = new Map<number, (t: number) => void>();
   const queries: { matches: boolean; change?: () => void }[] = [];
   let clock = 0, id = 0;
+  let dark = false;
   let pixels = new Uint8ClampedArray();
   const ctx = {
     createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) }),
@@ -32,7 +33,9 @@ function run(opts: { reduced?: boolean; mobile?: boolean; context?: boolean; hid
       queries.push(query);
       return Object.assign(query, { addEventListener: (_: string, fn: () => void) => { query.change = fn; } });
     },
-    getComputedStyle: () => ({ getPropertyValue: (name: string) => ({ '--water-shadow': '#53645a', '--water-light': '#fff', '--water-strength': '0.17' })[name] ?? '' }),
+    getComputedStyle: () => ({ getPropertyValue: (name: string) => (dark
+      ? { '--water-shadow': '#44362e', '--water-light': '#d78d54', '--water-strength': '0.20', '--water-light-gain': '1.25' }
+      : { '--water-shadow': '#53645a', '--water-light': '#fff', '--water-strength': '0.17', '--water-light-gain': '2.6' })[name] ?? '' }),
   });
   return {
     canvas, frames, document,
@@ -42,6 +45,7 @@ function run(opts: { reduced?: boolean; mobile?: boolean; context?: boolean; hid
     hide() { document.visibilityState = 'hidden'; events.get('visibilitychange')?.(); },
     show() { document.visibilityState = 'visible'; events.get('visibilitychange')?.(); },
     reduce() { queries[0].matches = true; queries[0].change?.(); },
+    theme(value: boolean) { dark = value; events.get('themechange')?.(); },
   };
 }
 const alpha = (pixels: Uint8ClampedArray) => pixels.reduce((n, v, i) => n + (i % 4 === 3 ? v : 0), 0);
@@ -92,6 +96,31 @@ describe('留言页浅水 · 指针与生命周期', () => {
       expect(r.pixels[i + 2]).toBe(r.pixels[i]);
     }
     expect(highlights).toBeGreaterThan(0);
+  });
+
+  it('同页切换明暗主题立即更新波色，暗色反光限幅，切回恢复白色', () => {
+    const r = run();
+    r.move(300, 300); r.move(500, 300); r.tick();
+    const shades = () => {
+      const visible = new Set<string>();
+      let peak = 0;
+      for (let i = 0; i < r.pixels.length; i += 4) {
+        if (!r.pixels[i + 3]) continue;
+        visible.add([...r.pixels.slice(i, i + 3)].join(','));
+        peak = Math.max(peak, r.pixels[i + 3]);
+      }
+      return { visible, peak };
+    };
+    expect(shades().visible.has('255,255,255')).toBe(true);
+    r.theme(true);
+    const dark = shades();
+    expect(dark.visible.has('215,141,84')).toBe(true);
+    expect(dark.visible.has('255,255,255')).toBe(false);
+    expect(dark.peak).toBeLessThanOrEqual(64);
+    expect(r.frames.size).toBe(1);
+    r.theme(false);
+    expect(shades().visible.has('255,255,255')).toBe(true);
+    expect(r.frames.size).toBe(1);
   });
 
   it('触屏不触发；切到后台或运行中开启减少动效会清场停帧', () => {

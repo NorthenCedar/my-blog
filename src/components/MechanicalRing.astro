@@ -13,6 +13,15 @@ const lap = light.length.toFixed(3);
 ---
 
 <div class="mechanical-ring" aria-hidden="true">
+  {/* 调色滤镜独立于流光，减少动效时仍可供静态金属使用。 */}
+  <svg class="ring-filter" width="0" height="0" focusable="false">
+    <defs>
+      {/* 保留原图的光照与 alpha：中性金属收为石墨色，铜色光槽保持暖亮。 */}
+      <filter id="ring-dark-metal" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+        <feColorMatrix type="matrix" values="1.8 0 -1.626 0 0  0.72 0 -0.4704 0 0  0.18 0 0.1074 0 0  0 0 0 1 0" />
+      </filter>
+    </defs>
+  </svg>
   <Image
     class="mechanical-ring-img"
     src={plate}
@@ -57,6 +66,11 @@ const lap = light.length.toFixed(3);
     height: 100%;
     max-width: none;
     object-fit: contain;
+    filter: var(--ring-metal-filter);
+  }
+  .ring-filter {
+    position: absolute;
+    overflow: hidden;
   }
   .ring-light {
     position: absolute;

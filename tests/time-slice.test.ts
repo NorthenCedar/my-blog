@@ -737,15 +737,18 @@ describe('时间切片 · 产物骨架（无 JS 可用是底线）', () => {
     );
   });
 
-  it('产物 CSS：穿窗后全屏转绿的绿幕 = 相册页开场同款深绿（--dusk-1..4 四档 + --accent 光晕）', () => {
+  it('产物 CSS：穿窗出口与相册交接幕共用主题色板，亮色深绿、暗色橙色', () => {
     const css = homepageCss();
     const i = css.indexOf('.tsl-green');
     expect(i).toBeGreaterThan(-1);
     const block = css.slice(i, i + 600);
-    expect(block).toContain('var(--dusk-1)');
-    expect(block).toContain('var(--dusk-4)');
-    expect(block).toContain('178deg');
-    expect(block).toContain('var(--accent)');
+    expect(block).toContain('var(--gallery-entry-bg)');
+    const tokens = readFileSync('src/styles/tokens.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const light = tokens.match(/:root\s*\{([^}]*)\}/)?.[1] ?? '';
+    const dark = tokens.match(/html\.dark\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(light).toMatch(/--gallery-entry-bg:[^;]*var\(--dusk-1\)[^;]*var\(--dusk-4\)/);
+    expect(dark).toContain('--gallery-entry-bg: var(--gallery-bath-bg)');
+    expect(dark).toMatch(/--gallery-bath-bg:\s*linear-gradient\(178deg/);
   });
 });
 
@@ -761,7 +764,7 @@ describe('时间切片 · 相册页的交接（站主第九轮 ③：缓缓浮�
        **永远匹配不上**，交接层与上浮动效双双静默失效（本轮实测踩到）。 */
     expect(gal).toContain(':global(.tsl-in) .tsl-veil');
     expect(gal).toContain('@keyframes tsl-veil-out');
-    expect(gal).toContain('var(--dusk-4)');
+    expect(gal).toContain('background: var(--gallery-entry-bg)');
     // ② 内容上浮：板里的花体字 + 板下的标题/筛选
     expect(gal).toContain('@keyframes tsl-rise-in');
     expect(gal).toContain(':global(.tsl-in) .bath-mark');

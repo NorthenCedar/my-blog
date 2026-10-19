@@ -5,19 +5,22 @@ import { createPleatedRenderer } from './pleated-renderer';
   const host = document.querySelector<HTMLElement>('[data-pleated-infinity]');
   const canvas = host?.querySelector<HTMLCanvasElement>('canvas');
   if (!host || !canvas) return;
-  const styles = getComputedStyle(host);
+  let styles = getComputedStyle(host);
   const color = (name: string) => {
     let hex = styles.getPropertyValue(name).trim().slice(1);
     if (hex.length === 3) hex = [...hex].map(c => c + c).join('');
     return [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
   };
-  const palette = {
-    base: color('--pleat-base'), wave: color('--pleat-wave'),
-    opacity: parseFloat(styles.getPropertyValue('--pleat-opacity')),
-    waveOpacity: parseFloat(styles.getPropertyValue('--pleat-wave-opacity')),
-    /* ★ 明暗对比（只压暗部跨度，不动整体浓淡）；1 = 原样，0 = 全平 */
-    contrast: parseFloat(styles.getPropertyValue('--pleat-contrast')),
+  const readPalette = () => {
+    styles = getComputedStyle(host);
+    return {
+      base: color('--pleat-base'), wave: color('--pleat-wave'),
+      opacity: parseFloat(styles.getPropertyValue('--pleat-opacity')),
+      waveOpacity: parseFloat(styles.getPropertyValue('--pleat-wave-opacity')),
+      contrast: parseFloat(styles.getPropertyValue('--pleat-contrast')),
+    };
   };
+  const palette = readPalette();
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const pleats = createPleats(), waves = new PleatWaves();
   let renderer = createPleatedRenderer(canvas, palette);
@@ -79,6 +82,11 @@ import { createPleatedRenderer } from './pleated-renderer';
   window.addEventListener('pageshow', () => { suspended = false; start(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else start(); });
   reduced.addEventListener('change', () => { stop(); start(); });
+  document.addEventListener('themechange', () => {
+    Object.assign(palette, readPalette());
+    renderer?.setPalette(palette);
+    if (renderer && !document.hidden) paint();
+  });
   canvas.addEventListener('webglcontextlost', e => {
     e.preventDefault(); stop(); renderer = null; canvas.hidden = true; host.removeAttribute('data-ready');
   });

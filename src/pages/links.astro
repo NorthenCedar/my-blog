@@ -169,6 +169,10 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     max-width: none;
     object-fit: contain;
   }
+  :global(html.dark) .inf-ink-plate {
+    filter: var(--ink-plate-dark-filter);
+    opacity: var(--plate-op, var(--links-plate-dark-opacity));
+  }
 
   /* 装置画布：与底纹同层（同 z-index:-1），DOM 在后 ⇒ 连线画在墨笔 ∞ **之上**、正文之下。
      `inset:0` 满屏 ⇒ 一次对尺寸，滚动时不需要任何重算（fixed 不随文档走）。 */
@@ -306,6 +310,9 @@ const isExternal = (h: string) => /^https?:/i.test(h);
        —— 与说说页浮游同口径（背景要的是"更轻"，不是"没有"）。 */
     .inf-ink-plate {
       opacity: var(--plate-op, 0.06);
+    }
+    :global(html.dark) .inf-ink-plate {
+      opacity: var(--plate-op, var(--links-plate-dark-mobile-opacity));
     }
   }
 </style>

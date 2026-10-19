@@ -74,7 +74,10 @@ const selectorsWith = (css: string, token: string): string[] => {
   const re = /([^{}]*)\{([^{}]*)\}/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(css))) {
-    if (m[2].includes(token) && !m[1].trim().startsWith('@')) out.push(m[1].trim());
+    // 只认动画声明里的完整名称，颜色 token（如 --gallery-topbar-ink）不算动效。
+    const animations = [...m[2].matchAll(/(?:^|;)\s*animation(?:-name)?:([^;]+)/g)];
+    if (animations.some(a => new RegExp(`(?:^|[\\s,])${token}(?=[\\s,]|$)`).test(a[1]))
+      && !m[1].trim().startsWith('@')) out.push(m[1].trim());
   }
   return out;
 };

@@ -96,7 +96,10 @@ html.dark body.chrome-console .dusk {
 html.dark body.chrome-console .paper-wrap {
   background: linear-gradient(180deg, var(--home-paper-edge) 0%, var(--paper) 18%, var(--paper) 82%, var(--home-paper-edge) 100%) fixed;
 }
-html.dark body.chrome-console .paper-inf { filter: sepia(0.65) saturate(0.7); }
+html.dark body.chrome-console .paper-inf {
+  filter: var(--pleat-dark-filter);
+  opacity: var(--pleat-dark-opacity);
+}
 html.dark body.chrome-console .card:hover { border-color: var(--home-active-line); }
 html.dark body.chrome-console .card::after {
   background: radial-gradient(46% 46% at 50% 0%, var(--home-glass-light), transparent 72%);

@@ -36,7 +36,10 @@ import fallback from '../assets/about/plates/pleated-infinity.webp';
     max-width: none;
     object-fit: contain;
   }
-  .pleated-infinity :global(img) { opacity: var(--pleat-opacity); }
+  .pleated-infinity :global(img) {
+    opacity: var(--pleat-opacity);
+    filter: var(--pleat-fallback-filter);
+  }
   .pleated-infinity[data-ready] :global(img),
   .pleated-infinity canvas[hidden] { display: none; }
   @media (max-width: 767px) {

@@ -41,8 +41,8 @@
     height: 34px;
     /* 盘用**极淡墨色纱**而不是半透明白：本站是纸白底，白盘在白底上看不见，
        而白点又需要"比盘更亮"才读得出来（参考图那种关系：盘偏暗、点亮）。 */
-    border: 1px solid rgb(26 26 26 / 22%);
-    background: rgb(26 26 26 / 8%);
+    border: 1px solid var(--cursor-disc-line);
+    background: var(--cursor-disc-fill);
     transition:
       width 0.25s,
       height 0.25s,
@@ -54,22 +54,22 @@
     width: 22px;
     height: 22px;
     border-color: var(--accent-ink);
-    background: rgb(26 26 26 / 16%);
+    background: var(--cursor-disc-hot-fill);
   }
   .cr-dot {
     z-index: 66;
     width: 8px;
     height: 8px;
     /* 白点 + 发丝深色边：纸面上"白上白"会消失，这圈边只是保证它读得出来 */
-    background: #fff;
-    box-shadow: 0 0 0 1px rgb(26 26 26 / 35%);
+    background: var(--cursor-dot);
+    box-shadow: 0 0 0 1px var(--cursor-dot-line);
   }
   .cr-ripple {
     z-index: 64;
     width: 68px;
     height: 68px;
-    border: 2px solid rgb(255 255 255 / 90%);
-    box-shadow: 0 0 0 1px rgb(26 26 26 / 25%);
+    border: 2px solid var(--cursor-ripple);
+    box-shadow: 0 0 0 1px var(--cursor-ripple-line);
     /* 位置走 --x/--y，scale 写在同一串 transform 里 —— 见文件底部注释：把 scale 当独立属性会连位移一起放大 */
     transform: translate3d(var(--x, 0px), var(--y, 0px), 0) translate(-50%, -50%) scale(1);
   }
@@ -118,7 +118,7 @@
     if (!matchMedia('(hover: hover)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     root.classList.add('cursor-none');
 
-    const HOT = 'a,button,input,textarea,select,summary,[role="button"],[role="tab"]';
+    const HOT = 'a,button,input,textarea,select,summary,[role="button"],[role="tab"],[data-rail]';
     let x = 0;
     let y = 0;
     let tx = 0;

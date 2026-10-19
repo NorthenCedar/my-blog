@@ -493,6 +493,11 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     max-width: none;
     object-fit: contain;
   }
+  /* 暗底上的月相使用哑光铜橙，仍能分辨圆缺与半透明边缘。 */
+  :global(html.dark) .float-plate {
+    filter: var(--ink-plate-dark-filter);
+    opacity: var(--plate-op, var(--talks-plate-dark-opacity));
+  }
 
   /* 装置画布：与底纹同层（同 z-index:-1），DOM 在后 ⇒ 雨画在墨点**之上**、正文之下。
      `inset:0` 满屏 ⇒ 一次对尺寸，滚动时不需要任何重算（fixed 不随文档走）。 */

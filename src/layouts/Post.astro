@@ -4,6 +4,7 @@ import Base from './Base.astro';
 import Meta from '../components/Meta.astro';
 import Toc from '../components/Toc.astro';
 import CommentSection from '../components/CommentSection.astro';
+import ScrollRail from '../components/ScrollRail.astro';
 import { headingTree, type PostMeta } from '../lib/post-meta';
 
 interface Props {
@@ -47,6 +48,7 @@ const toc = headingTree(headings);
      （关于页底纹当时实测跳 91px，见 Base.astro 的 plate 槽注释）。
      ⚠ 归档页的 `.tape` 现在就挂在 `.shell` 里，有同一个隐患（已记进 spec §6.28 的待办）。 */}
   <Fragment slot="plate">
+    <ScrollRail />
     {/* 底纹层：工程方格（细格 1u + 粗格 6u）+ 左右视口刻度轨。纯装饰，不拦指针。 */}
     <div class="plate-grid" aria-hidden="true"></div>
 
@@ -424,4 +426,5 @@ const toc = headingTree(headings);
   import '../scripts/copy-code';
   import '../scripts/comments';
   import '../scripts/reading-rule';
+  import '../scripts/scroll-rail';
 </script>

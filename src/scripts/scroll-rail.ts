@@ -1,5 +1,5 @@
 /* =============================================================================
- * 日志页 · 滚动轨（SCROLL RAIL）—— 页面右侧一根**可拖动**的滚动条
+ * 文章与日志 · 滚动轨（SCROLL RAIL）—— 页面右侧一根**可拖动**的滚动条
  *
  * ★ 为什么需要它（站主 2026-10-08：「再加一个拖动的条要不然太长了」）：
  *   全站的原生滚动条在 2026-10-02 被**站主自己要求删掉**了 —— 见 `src/styles/base.css`
@@ -89,6 +89,8 @@
   /* 自托管字体到位后行高会变 ⇒ 文档高度跟着变，重量一次 */
   document.fonts?.ready.then(measure).catch(() => {});
   window.addEventListener('load', measure);
+  // 评论、图片等异步内容改变文档高度后，重新计算拖动范围。
+  if ('ResizeObserver' in window) new ResizeObserver(measure).observe(document.body);
 
   let dragging = false;
   rail.addEventListener('pointerdown', (e) => {

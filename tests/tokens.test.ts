@@ -167,8 +167,8 @@ describe('深底（dusk 系）上的文字颜色', () => {
  * ======================================================================== */
 describe('暗色模式：黑底 + 橙强调（2026-10-18）', () => {
   const css = readFileSync('src/styles/tokens.css', 'utf8');
-  // 抠出 html.dark { ... } 块（缩进两空格的都在里面）
-  const darkBlock = css.slice(css.indexOf('html.dark {'), css.indexOf('html.dark {') + 2000);
+  // 按实际规则边界取色板，不按字符数截断；新增装饰 token 不应让正文对比度漏检。
+  const darkBlock = css.replace(/\/\*[\s\S]*?\*\//g, '').match(/html\.dark\s*\{([^}]*)\}/)?.[1] ?? '';
   const tok = (name: string) => {
     const m = darkBlock.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6,8})`));
     return m?.[1] ?? null;

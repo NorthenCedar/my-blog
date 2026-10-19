@@ -111,6 +111,10 @@ import plate from '../assets/gallery/plates/inf-brush.webp';
     max-width: none;
     object-fit: contain;
   }
+  :global(html.dark) .gallery-inf {
+    filter: var(--ink-plate-dark-filter);
+    opacity: var(--plate-op, var(--gallery-inf-dark-opacity));
+  }
 
   /* ★★ 必须关掉本区三页的百褶 ∞（`.page-inf`，Topbar 渲染、全站内页共用）。
      不关就是两套母题叠在一起（关于页「切片档案」的教训）。
