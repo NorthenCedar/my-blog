@@ -147,6 +147,14 @@
   --on-band: #ffffff;      /* 黑带上 17.4:1 */
   --on-band-sub: #dedede;  /* 黑带上 12.94:1 */
   --on-band-meta: #b4b4b4; /* 黑带上 8.39:1 */
+  --footer-bg: var(--ink);
+  --footer-meta: var(--on-band-meta);
+  --footer-link: var(--on-band-sub);
+  --footer-value: var(--on-band);
+  --footer-hover: var(--accent-ink);
+  --social-icon-fill: #000000;
+  --jelly-tip-light: #ff7313;
+  --jelly-tip-dark: #266b3b;
   --code-bg: #0e0e0e;
   --code-fg: #ededed;      /* 对代码底 16.49:1 */
   --code-inline-bg: #f2f1ef; /* 行内代码底色（装饰，文字仍是 --ink） */
@@ -474,6 +482,11 @@
      替掉站点原先 2200ms 四段那套）。原型的时序是错配的：入 240 / 驻留 320 / 出 340，
      等长读起来机械，错配才有惯性 —— 所以这里只给总时长，各段比例写在 transition.css。 */
   --pt-sweep: 900ms;
+  /* 页间转场独立使用黑橙色板，不借用亮色界面的绿色强调色。 */
+  --pt-ink: #090807;
+  --pt-edge: #754324;
+  --pt-letter: #ffc38b;
+  --pt-accent: #ed8c3b;
 }
 
 /* 开场时间轴 · 手机极简版（≤767px，1.5 s）。
@@ -525,6 +538,12 @@ html.dark {
   /* ★ 强调色：绿 → 橙。取 rhine-lock 原版的 #ff7b00（辉光橙）——
      实测对 #0b0b0c 是 7.57:1，比原来的绿（7.08:1）还高一点，不用另调色。 */
   --accent: #ff7b00;      /* 深底专用橙（**7.57:1**）★ 原绿 #4caf50 */
+  --footer-bg: #cf681c;   /* 暗色页脚：更深的橙，保留深色文字的对比度 */
+  --footer-meta: var(--paper);
+  --footer-link: var(--paper);
+  --footer-value: var(--paper);
+  --footer-hover: var(--paper);
+  --social-icon-fill: var(--accent-ink);
   --accent-ink: #ffb570;  /* 深底上的亮字橙（**11.33:1**）★ 原浅绿 #8fe0b0 */
   --accent-wash: #241a12; /* 深底橙洗（悬停底色）★ 原深绿 #1c2822 → 暖橙调 */
   --panel: #1c1c1e;       /* 抬升面（1.16:1）★ 原 #1c2822 墨绿，黑底上抬不起来 */
@@ -574,6 +593,7 @@ html.dark {
   /* 亮色档：鳍片 = 纸白近中性（只比 --paper 暖 5 阶，保留一点纸的手感）；
      环境光 = 纸色同源 */
   --fin-body-light: #f6f4ee;
+  --fin-static-stroke: var(--fin-body-light);
   --fin-ambient-light: #fafaf7;
   /* 点击脉冲的淡绿表面色，独立于界面墨绿，避免染成深绿条。 */
   --fin-pulse-light: #b9dfc3;
@@ -582,6 +602,97 @@ html.dark {
   /* 暗色档：鳍片 = 冷灰（对 --paper #0b0b0c 有明度差，约 1.9:1 —— 够撑出体积又不抢眼）；
      环境光压到 ~28% 亮度（对应原版那个 0.72 的系数） */
   --fin-body-dark: #3a3a3e;
+  --fin-static-stroke: var(--fin-body-dark);
   --fin-ambient-dark: #0d0d0f;
   --fin-glow-dark: #e08a3f;
+}
+
+/* 首页的 DNA 灯光：亮色沿用原模型与原灯色，暗色以铜色和石墨色分开双链。 */
+body.chrome-console {
+  --tsl-entry-color: #1f614b;
+  --tsl-entry-opacity: 0.025;
+  --tsl-entry-glow: 0.15;
+  --tsl-entry-frame: #285b46;
+  --tsl-glass-edge: #205b45c4;
+  --tsl-glass-back-line: #34715980;
+  --tsl-glass-fill: #ffffff00;
+  --tsl-glass-highlight: #effff6e0;
+  --tsl-glass-tint: #2b715e01;
+  --tsl-glass-shadow: #163c2d12;
+  --tsl-glass-sheen: 0.12;
+  --tsl-glass-sheen-low: 0.025;
+  --dna-sky: #d8ece0;
+  --dna-ground: #1a2b23;
+  --dna-key: #ffffff;
+  --dna-fill: #a8d4bc;
+  --dna-rim: #ffffff;
+}
+html.dark body.chrome-console {
+  --tsl-entry-color: #0b100e;
+  --tsl-entry-opacity: 0.32;
+  --tsl-entry-glow: 1;
+  --tsl-entry-frame: #ffffff;
+  --tsl-glass-edge: #ff9b4799;
+  --tsl-glass-back-line: #cf7c3d66;
+  --tsl-glass-fill: #a5afad0a;
+  --tsl-glass-highlight: #ffe5cbb3;
+  --tsl-glass-tint: #ff7b000a;
+  --tsl-glass-shadow: #00000066;
+  --tsl-glass-sheen: 0.24;
+  --tsl-glass-sheen-low: 0.09;
+  --paper: #100d0b;
+  --ink: #eee4d9;
+  --muted: #b6a699;
+  --hair: #463326;
+  --on-band: #f5eee7;
+  --on-band-sub: #ddd0c5;
+  --on-band-meta: #b7a89c;
+  --accent-bright: #ffb570;
+  --logo-ink: #edc7a4;
+  --logo-glow: #ff9b47;
+  --ink-1: #e0a36f;
+  --ink-2: #a86c43;
+  --dusk-1: #140e0a;
+  --dusk-2: #21150f;
+  --dusk-3: #342216;
+  --dusk-4: #2a1c14;
+  --dusk-5: #8d684d;
+  --dusk-6: #dfb68e;
+  --dglass-line: #ffad6630;
+  --deco-orbit-strong: #e8924938;
+  --deco-orbit-soft: #e8924917;
+  --deco-orbit-inner: #e892492e;
+  --home-hero-1: #f17608;
+  --home-hero-2: #ff7b00;
+  --home-hero-3: #fa7803;
+  --home-hero-4: #ef7107;
+  --home-hero-ink: #21150d;
+  --home-hero-sub: #21150d;
+  --home-hero-meta: #21150d;
+  --home-hero-line: #442b1b59;
+  --home-hero-grid: #442b1b14;
+  --home-hero-glass: #442b1b12;
+  --home-hero-glass-soft: #442b1b05;
+  --home-nav-active-bg: #ffd1aa40;
+  --home-flow-line: #000000;
+  --home-flow-width: 1.2px;
+  --home-dna-inset: 20vw;
+  --home-halo: #ff963520;
+  --home-halo-soft: #ff7b0014;
+  --home-grid: #e8924914;
+  --home-glass: #ffb5700f;
+  --home-glass-soft: #ffb57004;
+  --home-glass-light: #ffd1aa26;
+  --home-active-bg: #f4924314;
+  --home-active-line: #f4924347;
+  --home-dusk-top: #ef7107;
+  --home-dusk-mid: #593218;
+  --home-paper-edge: #100d0bf5;
+  --dna-body-copper: #875432;
+  --dna-body-graphite: #302b27;
+  --dna-sky: #d59c6b;
+  --dna-ground: #1a0d06;
+  --dna-key: #ffd7ae;
+  --dna-fill: #a66636;
+  --dna-rim: #ffac5a;
 }

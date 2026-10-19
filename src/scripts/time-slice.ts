@@ -84,14 +84,14 @@
  * ★ 滚动剧场结构（脚本判定可跑才挂 .tsl-on）：
  *   .tsl-stage 默认矮（静态回退）；脚本挂 .tsl-on 后变 520vh，
  *   .tsl-view（sticky 100vh）里的画布用 CSS clip-path 裁出菱形窗：
- *   滚动进度 p 先把菱形窗放大到全屏（「穿过窗口」），再映射成飞行时间 t。
+ *   滚动进度 p 先把双层圆角玻璃窗放大到全屏（「穿过窗口」），再映射成飞行时间 t。
  *   t 与 p 都是 [0,1]，一一对应、可逆 —— 向上滚蝴蝶就倒退。
  * -------------------------------------------------------------------------- */
 
 /* 纯函数层住在 time-slice-core.ts（无 DOM、零随机源，测试直接 import）；
    这里转出口保持既有 import 路径兼容。 */
 import { createActivityGate, createSpring, prefersReducedMotion, shouldAnimate, startLoop } from './rl-core';
-import { TSL, tslTimeline } from './time-slice-core';
+import { TSL, tslTimeline, tslWindow } from './time-slice-core';
 
 export { TSL, TSL_FRAMES, TSL_SECONDS, tslHash, tslPath, tslTimeline } from './time-slice-core';
 
@@ -105,13 +105,16 @@ function init() {
   const cvs = host.querySelector<HTMLCanvasElement>('[data-tsl-cv]');
   const hud = host.querySelector<HTMLElement>('[data-tsl-hud]');
   const green = host.querySelector<HTMLElement>('[data-tsl-green]');
-  const ringPath = host.querySelector<SVGPathElement>('[data-tsl-ring] path');
+  const ring = host.querySelector<SVGSVGElement>('[data-tsl-ring]');
+  const ringPath = host.querySelector<SVGPathElement>('[data-tsl-front]');
+  const backPath = host.querySelector<SVGPathElement>('[data-tsl-back]');
+  const edgePath = host.querySelector<SVGPathElement>('[data-tsl-edges]');
   /* ★ 第九轮 ③：跳转地址仍然**只从静态回退层的真链接读**（不在 JS 里写死路径）。
      原来还读了一个 `.tsl-go`（「进入相册」胶囊），那一块已按站主原话删掉 ⇒
      这里换成 `.tsl-static a`：它是无 JS / 手机 / reduced-motion 那一档的入口，
      永远在场，语义比 CTA 更硬。 */
   const goLink = host.querySelector<HTMLAnchorElement>('.tsl-static a');
-  if (!stage || !view || !cvs || !hud || !green || !ringPath || !goLink) return;
+  if (!stage || !view || !cvs || !hud || !green || !ring || !ringPath || !backPath || !edgePath || !goLink) return;
 
   /* ---- 启用判定：桌面 + 动效允许，二者缺一 ⇒ 整个装置保持静态回退 ---- */
   const reduce = prefersReducedMotion();
@@ -136,7 +139,13 @@ function init() {
     if (h.length === 4) return parseInt(h[3]!.repeat(2), 16) / 255; // 4 位缩写：末位是 alpha
     return 1;
   };
+  const windowStyle = getComputedStyle(host);
+  const entryAlpha = Number.parseFloat(windowStyle.getPropertyValue('--tsl-entry-opacity'));
   const palette = {
+    entryColor: hex6(windowStyle.getPropertyValue('--tsl-entry-color').trim()),
+    entryAlpha: Number.isFinite(entryAlpha) ? Math.min(1, Math.max(0, entryAlpha)) : 0.32,
+    entryGlow: Number.parseFloat(windowStyle.getPropertyValue('--tsl-entry-glow')),
+    entryFrame: hex6(windowStyle.getPropertyValue('--tsl-entry-frame').trim()),
     deep: hex6(tok('--dusk-1')), // 隧道最深的底
     mid: hex6(tok('--dusk-2')), // 隧道主体的底
     lift: hex6(tok('--dusk-3')), // 标本框内衬 / 翼面淡端（略抬升）
@@ -155,6 +164,7 @@ function init() {
     DPR = Math.min(1.5, window.devicePixelRatio || 1);
     W = view.clientWidth;
     H = view.clientHeight;
+    ring.setAttribute('viewBox', `0 0 ${W} ${H}`);
   };
 
   /* ---- 指针视差（场景内自管平滑，不借首页那对 --mx/--my） ---- */
@@ -393,7 +403,7 @@ function init() {
   let tailT0 = 0; // 收尾起点时刻（0 = 未在收尾）
   let lastP = 0; // 上一帧的滚动进度 —— 用来判「读者是不是在往回滚」（见 render）
 
-  /* ---- 主循环：弹簧推 p → 时间轴 → 菱形窗/读数/CTA → 场景取数渲染 ---- */
+  /* ---- 主循环：弹簧推 p → 时间轴 → 玻璃窗/署名 → 场景取数渲染 ---- */
   const sstep = (a: number, b: number, v: number) => {
     const x = Math.min(1, Math.max(0, (v - a) / (b - a)));
     return x * x * (3 - 2 * x);
@@ -442,25 +452,14 @@ function init() {
     /* 尺寸（首次 / 变化时） */
     if (W !== view.clientWidth || H !== view.clientHeight) resize();
 
-    /* ---- 菱形窗（入口）：clip-path 与轮廓环共用同一组百分比坐标；
-       放大到全屏后（zoom=1）画布不再裁切，轮廓环收掉。
-       ★ 第八轮 ①：「这个窗口大一点」—— 基准半宽 14% → 19%（视口短边比例）。
-         窗口是**入口**那一扇的“画框”，与场景内的切片玻璃无关。 ---- */
-    const baseHalf = Math.min(W, H) * 0.19;
-    const rxPx = baseHalf + (W * 1.02 - baseHalf) * tl.zoom;
-    const ryPx = baseHalf + (H * 1.02 - baseHalf) * tl.zoom;
-    const rxP = (rxPx / W) * 100;
-    const ryP = (ryPx / H) * 100;
-    cvs.style.clipPath = `polygon(50% ${50 - ryP}%, ${50 + rxP}% 50%, 50% ${50 + ryP}%, ${50 - rxP}% 50%)`;
-
-    /* ---- 菱形轮廓环：**只剩入口那一扇** ----
-       站主第九轮 ③：「到尽头……也别显示那个绿色的框」⇒ 出口那个随 exit 放大
-       越过镜头的菱形环**整个删净**（原来它在标本处浮现、放大出画，正是收尾
-       画面里那道绿框）。入口的环照旧：与画布裁切共用同一组百分比坐标，
-       窗口张开到全屏（zoom=1）即收掉。 ---- */
-    const ringD = `M50 ${(50 - ryP).toFixed(2)} L${(50 + rxP).toFixed(2)} 50 L50 ${(50 + ryP).toFixed(2)} L${(50 - rxP).toFixed(2)} 50 Z`;
-    ringPath.setAttribute('d', ringD);
-    ringPath.parentElement!.style.opacity = tl.zoom > 0.985 ? '0' : '1';
+    /* 双层圆角玻璃：前沿与画布用同一条路径，侧转随穿窗进度归正。
+       只装饰入口；进入隧道前玻璃反光与后层共同淡出，收尾不新增出口边框。 */
+    const windowShape = tslWindow(W, H, tl.zoom);
+    cvs.style.clipPath = `path('${windowShape.front}')`;
+    ringPath.setAttribute('d', windowShape.front);
+    backPath.setAttribute('d', windowShape.back);
+    edgePath.setAttribute('d', windowShape.edges);
+    ring.style.opacity = String(windowShape.opacity);
 
     /* ---- 场景（exit = 出场穿窗进度；orbX/orbY = 拖动环视角；amb = 环绕切片；
        zoom = 入口菱窗张开进度 —— 场景用它做开场整体缩放，见第八轮 ①） ---- */

@@ -11,14 +11,16 @@
  * 无 WebGPU 时降级为普通开关（主题照样能切）。
  *
  * 行为：左端 = 亮色（0%），右端 = 暗色（100%），百分比显示原样保留。
- * 拖拽松手吸附到最近端落定后提交主题；点按切到另一端；键盘 ←/→/空格/回车可用。
+ * 拖动时页面与头部颜色随位置渐变，松手吸附落定后保存主题；点按仍直接切换。
+ * 键盘 ←/→/空格/回车可用。
  * 空白处按住挪动再松手 = 什么都不发生（见下面松手判定的注释）。
  */
-import { tgpu } from 'typegpu';
+import { tgpu, d } from 'typegpu';
 import { setupScene } from '../vendor/jelly-slider/scene.ts';
 import { DARK_END, LIGHT_END } from '../vendor/jelly-slider/events.ts';
 import { GROUND_TINT_DARK, GROUND_TINT_LIGHT } from '../vendor/jelly-slider/constants.ts';
 import { getTheme, setTheme, type Theme } from './theme.ts';
+import { colorChannels, createThemePreview, mixThemeColor } from './theme-preview';
 
 const MID = (LIGHT_END + DARK_END) / 2;
 /* 画布内部渲染尺寸（`canvas.width/height` 由这里写死，不看 HTML 属性）。
@@ -99,16 +101,42 @@ export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
   const context = tgRoot.configureContext({ canvas, alphaMode: 'premultiplied' });
   const scene = await setupScene(tgRoot, context);
   const events = scene.eventHandler;
+  const preview = createThemePreview();
+  let dragPreview = false;
+  const paintTip = (progress: number) => {
+    const color = mixThemeColor(preview.colors.light['--jelly-tip-light'], preview.colors.dark['--jelly-tip-dark'], progress);
+    scene.jellyColor = d.vec4f(...colorChannels(color), 1);
+  };
+  const paintProgress = (progress: number) => {
+    preview.update(progress);
+    const paper = mixThemeColor(preview.colors.light['--paper'], preview.colors.dark['--paper'], progress);
+    scene.groundTint = d.vec4f(...colorChannels(paper), progress);
+    paintTip(progress);
+  };
+  scene.onProgress = progress => { if (dragPreview) paintProgress(progress); };
 
   // 首帧即停在当前主题对应的端
   const startTheme = getTheme();
   applyGround(scene, startTheme);
+  paintTip(startTheme === 'dark' ? 1 : 0);
   events.setInitial(startTheme === 'dark' ? DARK_END : LIGHT_END);
   syncAria(root);
 
+  const endPreview = (): void => {
+    dragPreview = false;
+    preview.clear();
+    const theme = getTheme();
+    applyGround(scene, theme);
+    paintTip(theme === 'dark' ? 1 : 0);
+  };
+
   const commit = (end: number): void => {
+    dragPreview = false;
+    preview.clear();
     const t = themeOfEnd(end);
     if (getTheme() !== t) setTheme(t);
+    applyGround(scene, t);
+    paintTip(end === DARK_END ? 1 : 0);
     syncAria(root);
   };
 
@@ -126,15 +154,28 @@ export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
   let downY = 0;
   let downT = 0;
   let downOnCanvas = false;
+  let gestureMoved = false;
+  let pointerId: number | null = null;
   canvas.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || e.isPrimary === false || pointerId !== null) return;
+    pointerId = e.pointerId;
     downOnCanvas = true;
     downX = e.clientX;
     downY = e.clientY;
     downT = performance.now();
+    gestureMoved = false;
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!downOnCanvas || e.pointerId !== pointerId) return;
+    if (Math.hypot(e.clientX - downX, e.clientY - downY) >= 6) gestureMoved = true;
+    if (!events.isPointerDown || reduceMotion) return;
+    if (!events.didGrab) return;
+    if (gestureMoved) dragPreview = true;
   });
   window.addEventListener('pointerup', (e) => {
-    if (!downOnCanvas) return;
+    if (!downOnCanvas || e.pointerId !== pointerId) return;
     downOnCanvas = false;
+    pointerId = null;
     /* ★★ 2026-10-17 第九轮（站主：「按其他地方挪动时软条确实不动，但松开鼠标左键
        软条就会瞬移」）—— 瞬移发生在**松手这一下**，不在按下/移动那几帧。
 
@@ -157,12 +198,15 @@ export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
          所以这里读到的是这次松开保留下来的 `didGrab`（它只在 pointerdown 更新）。 */
     const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
     const dt = performance.now() - downT;
-    const tapped = moved < 6 && dt < 400;
+    // 中途拖出再拉回，也属于拖动；不能只看松手时首尾的距离。
+    const tapped = moved < 6 && dt < 400 && !gestureMoved;
     const other = getTheme() === 'dark' ? LIGHT_END : DARK_END;
     if (events.didGrab) {
       if (tapped) {
+        endPreview(); // 吸附未结束就重新点按，也要回到直接切换路径。
         snapToEnd(other); // 点按端头：切到另一端
       } else {
+        if (moved >= 6 && !reduceMotion) dragPreview = true;
         /* ★★ 2026-10-18 第十轮（站主：「为什么现在拖到大于50%不会自动吸到右边了，
            只有点击会到右边」）：读**指针的即时位置**，不读平滑值。
 
@@ -178,16 +222,25 @@ export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
         const cur = events.pointerTargetX;
         snapToEnd(cur >= MID ? DARK_END : LIGHT_END); // 拖拽：吸附最近端
       }
-    } else if (moved < 6) {
+    } else if (moved < 6 && !gestureMoved) {
+      endPreview();
       snapToEnd(other); // 空白处点按：切到另一端（与第七轮的场景 d 回归一致）
     }
     /* 空白处按住挪动过再松手 ⇒ 上面三个分支都不进 ⇒ 什么都不发生（就是站主要的行为） */
   });
-  window.addEventListener('pointercancel', () => {
-    downOnCanvas = false;
-  });
+  const cancelPreview = () => {
+    downOnCanvas = false; pointerId = null; dragPreview = false;
+    preview.clear(); events.cancelDrag();
+    const theme = getTheme();
+    events.setInitial(theme === 'dark' ? DARK_END : LIGHT_END);
+    applyGround(scene, theme); paintTip(theme === 'dark' ? 1 : 0);
+  };
+  window.addEventListener('pointercancel', (e) => { if (e.pointerId === pointerId) cancelPreview(); });
+  window.addEventListener('blur', cancelPreview);
+  window.addEventListener('pagehide', cancelPreview);
 
   root.addEventListener('keydown', (e) => {
+    if (['ArrowRight', 'End', 'ArrowLeft', 'Home', ' ', 'Enter'].includes(e.key)) endPreview();
     if (e.key === 'ArrowRight' || e.key === 'End') {
       snapToEnd(DARK_END);
       e.preventDefault();

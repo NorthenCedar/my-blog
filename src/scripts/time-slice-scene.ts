@@ -159,6 +159,10 @@ const FLAP_BOB = 0.04;
    ★ three 的 Color 不认 8 位 hex —— 带 alpha 的 token（--dglass-line）由控制器
      拆成「6 位色 + 独立 alpha」传进来（lineA），场景里用 opacity 承载。 */
 export interface TslPalette {
+  entryColor: string;
+  entryAlpha: number;
+  entryGlow: number;
+  entryFrame: string;
   deep: string;
   mid: string;
   lift: string;
@@ -533,11 +537,17 @@ export async function createTslScene(
         };
       })();
 
-  const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
-  renderer.setClearColor(new Color(pal.deep), 1);
+  const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+  const entryColor = new Color(pal.entryColor);
+  const tunnelColor = new Color(pal.deep);
+  const clearColor = entryColor.clone();
+  const entryFrame = new Color(pal.entryFrame);
+  const tunnelFrame = new Color(pal.white);
+  const frameColor = entryFrame.clone();
+  renderer.setClearColor(clearColor, pal.entryAlpha);
 
   const scene = new Scene();
-  scene.background = new Color(pal.deep);
+  // 入口玻璃透出所在页面；穿窗后恢复完整深色隧道，不再叠加透明页面底纹。
   // 链长 165 单位：雾只让最深处那截沉进尽头背光（近处（≈3 单位）零雾）
   scene.fog = new Fog(new Color(pal.deep), 26, 150);
 
@@ -861,6 +871,10 @@ export async function createTslScene(
             ⇒ 二次平滑删净：镜头的「轻惯性」由控制器那一层弹簧负责，一层就够。 */
       const se = settle * settle * (3 - 2 * settle);
       const grow = GROW_MIN + (1 - GROW_MIN) * ss(0, 1, zoom);
+      const enter = ss(0, 1, zoom);
+      clearColor.copy(entryColor).lerp(tunnelColor, enter);
+      frameColor.copy(entryFrame).lerp(tunnelFrame, enter);
+      renderer.setClearColor(clearColor, pal.entryAlpha + (1 - pal.entryAlpha) * enter);
       /* ★ azBase 是**常数**（不随 t、也不随 settle 变）：滚动推进不得带来任何
          朝向变化 —— 站主第七轮（六个感叹号）：「滚轮往上滚的时候不要变视角！！！
          视角和滚轮往下时一模一样！！」。
@@ -982,6 +996,7 @@ export async function createTslScene(
         // 玻璃片：让位的那一片之外，沿轴一路铺到尽头（撑出那条隧道）
         s.pane.visible = paneOp > 0.004;
         if (s.pane.visible) {
+          s.paneMat.color.copy(frameColor);
           s.paneMat.opacity = paneOp;
           s.pane.scale.setScalar(grow); // 开场整体缩放（第八轮 ①），位置不动
         }
@@ -1001,6 +1016,7 @@ export async function createTslScene(
          「改变视角后在滚动滚轮要回到原始视角且周围切片消失」）。
          归零是个常数目标 ⇒ 上行滚与下行滚在这里也没有区别。 */
       gridMat.opacity = 0.85 * clamp01(amb * 1.3);
+      gridMat.color.copy(frameColor);
       grid.visible = gridMat.opacity > 0.004;
 
       /* 尽头背光：恒定跟在镜头前 GLOW_AHEAD 处（点光口径，屏幕尺寸恒定），
@@ -1009,9 +1025,11 @@ export async function createTslScene(
       lightBig.position.set(live.x, live.y + 0.25, gz);
       lightCore.position.set(live.x, live.y + 0.25, gz - 0.5);
       endGlow.position.set(live.x, live.y + 0.2, gz - 6);
-      (lightBig.material as SpriteMaterial).opacity = 0.2 + 0.05 * Math.sin(now / 900) + 0.4 * exit;
-      (lightCore.material as SpriteMaterial).opacity = 0.68 + 0.05 * Math.sin(now / 700) + 0.2 * exit;
-      (endGlow.material as SpriteMaterial).opacity = 0.022 + 0.008 * Math.sin(now / 700) + 0.05 * exit;
+      // 亮色入口收掉白色背光雾；穿窗后恢复隧道原有光照。
+      const glow = pal.entryGlow + (1 - pal.entryGlow) * enter;
+      (lightBig.material as SpriteMaterial).opacity = (0.2 + 0.05 * Math.sin(now / 900) + 0.4 * exit) * glow;
+      (lightCore.material as SpriteMaterial).opacity = (0.68 + 0.05 * Math.sin(now / 700) + 0.2 * exit) * glow;
+      (endGlow.material as SpriteMaterial).opacity = (0.022 + 0.008 * Math.sin(now / 700) + 0.05 * exit) * glow;
 
       /* 调试出口（仅 ?tsl-dump=1）：实际渲染状态挂 window 供探针读取 */
       if (dumpOn) {

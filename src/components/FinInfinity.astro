@@ -76,12 +76,10 @@
   .fin-static path {
     fill: none;
     /* ★ 用 token，不用字面色值（站规 §3 第 2 条） */
-    stroke: var(--fin-body-light);
+    stroke: var(--fin-static-stroke);
     stroke-width: 5;
     vector-effect: non-scaling-stroke;
   }
-  /* 暗色模式：静态层换成暗色档的鳍片色（token 已在 html.dark 里覆写） */
-  :global(html.dark) .fin-static path { stroke: var(--fin-body-dark); }
 
   @media (max-width: 767px) {
     .fin-infinity { width: min(96vw, 800px, 150vh); }

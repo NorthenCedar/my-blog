@@ -35,6 +35,8 @@ import { getVisiblePosts } from '../lib/posts';
 import { getSite } from '../lib/site';
 import { isoDate, sortLogItems } from '../lib/log-order';
 import { readLanguageStats } from '../lib/lang-stats';
+import { tslWindow } from '../scripts/time-slice-core';
+import '../styles/home-dark.css';
 
 const site = await getSite();
 const posts = await getVisiblePosts();
@@ -59,6 +61,7 @@ const logItems = sortLogItems(logData.items ?? [])
 // 构建期实测（src/lib/lang-stats.ts）：不写死任何数字。
 // 拿不到数据就返回空数组 ⇒ 整块不渲染，不显示一条全是 0 的假条。
 const langSlices = readLanguageStats();
+const staticWindow = tslWindow(240, 240, 0);
 
 // 原型 S2 只露三篇。不覆盖 posts —— OS 状态条与导航还依赖全量列表。
 const HOME_POST_LIMIT = 3;
@@ -413,29 +416,47 @@ const titleLines: { ch: string; i: number }[][] = (() => {
   {/* ===== S6 · TIME SLICE 时间切片（主页收尾装置，SECTOR 06）=====
        参考：抖音 @afterimage 的「时间切片」（蝴蝶穿过嵌套方框隧道，每个时刻
        留一片残影，尽头落成标本）+ wodniack.dev 的门户机制（滚到底 → 滚进窗口）。
-       全部手写 Canvas2D 复刻，滚动驱动、可逆、可停在某一切片细看；尽头自然
+       three.js 场景配合双层玻璃入口，滚动驱动、可逆、可停在某一切片细看；尽头自然
        转入 /gallery/。零新依赖，弹簧/停帧/降级复用 rl-core。
        无 JS / reduced-motion / ≤767px：装置就是下面的静态回退层
-       （菱形 + 一句话 + 相册链接），脚本判定可跑才挂 .tsl-on 换成滚动剧场。 */}
+       （双层玻璃 + 一句话 + 相册链接），脚本判定可跑才挂 .tsl-on 换成滚动剧场。 */}
   <section class="tsl" id="s6" data-tsl>
     <div class="section tsl-band">
       <div class="section-head"><h2>时间的标本</h2><span>SECTOR 06</span></div>
-      <p class="tsl-lede">滚过下面的菱窗 —— 一段飞行正等着被切成薄片，落进相册。</p>
+      <p class="tsl-lede">滚过下面的玻璃窗 —— 一段飞行正等着被切成薄片，落进相册。</p>
     </div>
     <div class="tsl-stage" data-tsl-stage>
       <div class="tsl-view" data-tsl-view hidden>
         <canvas data-tsl-cv></canvas>
-        <svg class="tsl-ring" data-tsl-ring viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M50 36 L64 50 L50 64 L36 50 Z" vector-effect="non-scaling-stroke"></path>
+        <svg class="tsl-ring" data-tsl-ring viewBox="0 0 1280 720" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="tsl-glass-surface" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="var(--tsl-glass-fill)" />
+              <stop offset="42%" stop-color="var(--tsl-glass-tint)" />
+              <stop offset="45%" stop-color="var(--tsl-glass-highlight)" stop-opacity="var(--tsl-glass-sheen)" />
+              <stop offset="48%" stop-color="var(--tsl-glass-tint)" />
+              <stop offset="100%" stop-color="var(--tsl-glass-fill)" />
+            </linearGradient>
+            <linearGradient id="tsl-glass-rim" x1="0%" y1="0%" x2="100%" y2="80%">
+              <stop offset="0%" stop-color="var(--tsl-glass-highlight)" />
+              <stop offset="40%" stop-color="var(--tsl-glass-edge)" />
+              <stop offset="75%" stop-color="var(--tsl-glass-back-line)" />
+              <stop offset="100%" stop-color="var(--tsl-glass-highlight)" />
+            </linearGradient>
+          </defs>
+          <path class="tsl-window-back" data-tsl-back d="" />
+          <path class="tsl-window-edges" data-tsl-edges d="" />
+          <path class="tsl-window-front" data-tsl-front d="" fill="url(#tsl-glass-surface)" stroke="url(#tsl-glass-rim)" />
         </svg>
         {/* ★ 站主第九轮 ①：这一格原来是 FRAME 读数（`FRAME NN / 76 · T+X.XXS`），
             现在整条换成**蝴蝶模型的署名** —— CC-BY 4.0 要求可见署名，这正是
             §6.19 / §6.21 一直挂着的「发布前必须处理」。文字写在 HTML 里（无 JS
             也在、读屏也读得到），脚本只按窗口张开进度改它的不透明度：
-            **穿过菱窗之后就收掉**（站主：「进入窗口后不展示」）。
+            **穿过玻璃窗之后就收掉**（站主：「进入窗口后不展示」）。
             ★ 外链按站规带 target/rel；`pointerdown` 由控制器挡一下，免得被
               「拖动环视」的指针捕获抢走点击（见 time-slice.ts）。 */}
         <p class="tsl-hud" data-tsl-hud>
+          <span class="tsl-scroll-hint">请继续滚动滚轮</span>
           蝴蝶模型 Monarch Butterfly · Paul Spooner · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a> · via Poly Pizza
         </p>
         {/* ★ 站主第九轮 ③：「到尽头不要显示进入相册那个按钮……到绿屏时直接进相册」
@@ -448,10 +469,19 @@ const titleLines: { ch: string; i: number }[][] = (() => {
         <div class="tsl-green" data-tsl-green aria-hidden="true"></div>
       </div>
       <div class="tsl-static" data-tsl-static>
-        <svg viewBox="0 0 120 120" aria-hidden="true">
-          <path d="M60 10 L110 60 L60 110 L10 60 Z"></path>
+        <svg viewBox="50 45 145 150" aria-hidden="true">
+          <defs>
+            <linearGradient id="tsl-static-surface" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="var(--tsl-glass-highlight)" stop-opacity="var(--tsl-glass-sheen)" />
+              <stop offset="50%" stop-color="var(--tsl-glass-fill)" />
+              <stop offset="100%" stop-color="var(--tsl-glass-tint)" />
+            </linearGradient>
+          </defs>
+          <path class="tsl-window-back" d={staticWindow.back} />
+          <path class="tsl-window-edges" d={staticWindow.edges} />
+          <path class="tsl-window-front" d={staticWindow.front} fill="url(#tsl-static-surface)" stroke="var(--tsl-glass-edge)" />
         </svg>
-        <p>一段飞行正等着被切成薄片 —— 穿过菱窗，看时间在玻璃后凝固。</p>
+        <p>一段飞行正等着被切成薄片 —— 透过玻璃窗，看时间在玻璃后凝固。</p>
         <a href="/gallery/">进入相册</a>
       </div>
     </div>
@@ -1840,13 +1870,7 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     padding: var(--sp-7) var(--gutter);
     text-align: center;
   }
-  .tsl-static svg { width: clamp(96px, 15vmin, 150px); }
-  .tsl-static path {
-    fill: none;
-    stroke: var(--accent);
-    stroke-width: 5;
-    filter: drop-shadow(0 0 14px var(--deco-orbit-strong));
-  }
+  .tsl-static svg { width: clamp(160px, 22vmin, 220px); overflow: visible; }
   .tsl-static p { color: var(--muted); font-size: var(--fs-sm); max-width: 32em; }
   .tsl-static a { color: var(--accent-ink); font-weight: 600; }
 
@@ -1856,13 +1880,22 @@ const titleLines: { ch: string; i: number }[][] = (() => {
   .tsl-view { position: sticky; top: 0; height: 100vh; overflow: hidden; user-select: none; }
   .tsl-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .tsl-ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-  .tsl-ring path {
+  .tsl-window-back {
+    fill: var(--tsl-glass-fill);
+    stroke: var(--tsl-glass-back-line);
+    stroke-width: 1.1;
+    filter: drop-shadow(10px 14px 16px var(--tsl-glass-shadow));
+    vector-effect: non-scaling-stroke;
+  }
+  .tsl-window-edges {
     fill: none;
-    stroke: var(--accent);
-    stroke-width: 2;
-    vector-effect: non-scaling-stroke; /* preserveAspectRatio=none 会拉伸线宽，锁成 px */
-    filter: drop-shadow(0 0 10px var(--deco-orbit-strong));
-    /* 不做 opacity 过渡：入口/出口两段环都由脚本按 p/exit 逐帧写，过渡会拖后腿 */
+    stroke: var(--tsl-glass-back-line);
+    stroke-width: 0.8;
+    vector-effect: non-scaling-stroke;
+  }
+  .tsl-window-front {
+    stroke-width: 1.4;
+    vector-effect: non-scaling-stroke;
   }
   .tsl-hud {
     position: absolute;
@@ -1881,6 +1914,13 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     /* ★ 第九轮 ①：这一格从 FRAME 读数变成了**署名**（内容见标记处）。
        它只在「穿过菱窗之前」露面 —— 不透明度由脚本按窗口张开进度逐帧写，
        进窗口后归 0、同时挂 hidden（连外链也不再可点）。 */
+  }
+  .tsl-scroll-hint {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + var(--sp-2));
+    color: var(--muted);
+    white-space: nowrap;
   }
   /* ★ 许可链接必须**看得见**（署名存在的全部意义），所以要盖掉全站那条
      `a { color: var(--accent-ink) }` 兜底 —— 那是「对纸」的链色（#266b3b），

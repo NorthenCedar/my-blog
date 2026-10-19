@@ -5,7 +5,7 @@
  * 站主要的是「视觉包括风格全换成今天的最终版，页与页的过渡动画也换」。
  *
  * v3 的时间线只有 **900ms**（--pt-sweep），三个元素 + 一层内容后退：
- *   1. .pt-ink   墨色层从左侧斜切扫入，用 mix-blend-mode:darken 把底下的纸**染**成墨绿 ——
+ *   1. .pt-ink   黑色层从左侧斜切扫入，用 mix-blend-mode:darken 把底下的纸**染**暗 ——
  *                这是本方案的灵魂：内容不是被"盖住"，而是"被浸入墨色"。
  *                26% 完全覆盖 → 58% 左缘开始被斜切吃掉 → 100% 收成右侧一条线消失。
  *   2. .pt-word  关键词描边大字（站名 + RHINE LAB + NOTES）在墨层驻留期间横穿。
@@ -47,14 +47,14 @@ html.pt-on .pt {
 }
 
 /* ================= 1. 墨色浸染层（本方案的灵魂） =================
-   停在视口左侧之外；扫过时用 darken 把底下的纸白染成墨绿，
+   停在视口左侧之外；扫过时用 darken 把底下的内容染暗，
    于是内容"没消失，只是被浸入墨色"—— 比盖一块板高级得多。 */
 .pt-ink {
   position: absolute;
   inset: 0;
-  background: var(--ink-deep);
+  background: var(--pt-ink);
   /* 右缘一道深色描边 —— 横扫时形成"笔锋" */
-  border-right: 1px solid var(--ink-1);
+  border-right: 1px solid var(--pt-edge);
   mix-blend-mode: darken;
   transform: translate3d(-101%, 0, 0);
   will-change: transform;
@@ -99,13 +99,13 @@ html.pt-play .pt-ink {
   line-height: 1;
   letter-spacing: -0.02em;
   color: transparent;
-  -webkit-text-stroke: 1.3px var(--on-ink);
+  -webkit-text-stroke: 1.3px var(--pt-letter);
   white-space: nowrap;
   opacity: 0;
 }
 .pt-word em {
   font-style: normal;
-  color: var(--accent);
+  color: var(--pt-accent);
   -webkit-text-stroke: 0;
   font-size: 0.34em;
   letter-spacing: 0.16em;
@@ -146,7 +146,7 @@ html.pt-play .pt-word {
   right: 0;
   height: 1px;
   top: 0;
-  background: linear-gradient(90deg, transparent, var(--accent) 22%, var(--accent) 78%, transparent);
+  background: linear-gradient(90deg, transparent, var(--pt-accent) 22%, var(--pt-accent) 78%, transparent);
   opacity: 0;
 }
 html.pt-play .pt-scan {

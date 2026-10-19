@@ -74,6 +74,7 @@ export class EventHandler {
     this.canvas.addEventListener('pointerdown', (e) => {
       // 只认主键（右键/中键不拖）。触摸事件这里也是 0。
       if (e.button > 0) return;
+      if (e.isPrimary === false) return;
       // 已经在拖了就忽略第二根手指
       if (this.activePointerId !== null) return;
 
@@ -142,6 +143,7 @@ export class EventHandler {
     this.mouseX = x;
     this.targetMouseX = x;
     this.snapGoal = null;
+    this.snapDone = null;
     this.wake?.();
   }
 
@@ -203,5 +205,14 @@ export class EventHandler {
   /** ★ 本站加：吸附动画是否还在跑（scene.ts 据此决定是否继续出帧） */
   get isSnapping() {
     return this.snapGoal !== null;
+  }
+
+  /** 失焦、离页或手势取消时结束本次抓取，避免留下半途预览。 */
+  cancelDrag() {
+    this.isMouseDown = false;
+    this.activePointerId = null;
+    this.grabbed = false;
+    this.snapGoal = null;
+    this.snapDone = null;
   }
 }

@@ -1,8 +1,8 @@
 // 真 3D DNA 双螺旋（2026-09-30，站主拍板「用 three.js，接受破例」）
 //
-// 移植自视觉原型 nc-rhine-v7 v10.3，一行逻辑都没改 —— 原型那版是在无头 Chrome 里
+// 几何与自转移植自视觉原型 nc-rhine-v7 v10.3 —— 原型那版是在无头 Chrome 里
 // 跑真 WebGL 逐项量测调出来的（_probe/ 下有 geom-pca / geom-axis / axisangle / orderfix
-// / tilt-lab 五份取证脚本），这些结论直接搬过来，不重新试。
+// / tilt-lab 五份取证脚本），这些结论直接搬过来。2026-10-19 另加亮暗主题配色。
 //
 // ---------------------------------------------------------------------------
 // 加载策略（本站在原型之上多出来的唯一一处改动）
@@ -90,8 +90,9 @@ async function boot(host: HTMLElement) {
   cam.position.set(0, 0, 8);
   cam.lookAt(0, 0, 0);
 
-  /* 三点光照：白塑料管的体积感全靠它 */
-  scene.add(new THREE.HemisphereLight(0xd8ece0, 0x1a2b23, 1.2));
+  /* 灯色与双链材质跟随首页主题；亮色保留原 GLB 材质。 */
+  const sky = new THREE.HemisphereLight(0xd8ece0, 0x1a2b23, 1.2);
+  scene.add(sky);
   const key = new THREE.DirectionalLight(0xffffff, 2.4);
   key.position.set(1.1, 1.5, 1.3);
   scene.add(key);
@@ -111,6 +112,35 @@ async function boot(host: HTMLElement) {
     if (spin) renderer.render(scene, cam);
   };
 
+  const surfaces: { material: import('three').MeshStandardMaterial;
+    original: import('three').MeshStandardMaterial; chain: number }[] = [];
+  const paintTheme = () => {
+    const cs = getComputedStyle(host);
+    const color = (name: string) => cs.getPropertyValue(name).trim();
+    sky.color.set(color('--dna-sky'));
+    sky.groundColor.set(color('--dna-ground'));
+    key.color.set(color('--dna-key'));
+    fill.color.set(color('--dna-fill'));
+    rim.color.set(color('--dna-rim'));
+    const dark = document.documentElement.classList.contains('dark');
+    for (const { material, original, chain } of surfaces) {
+      if (dark) {
+        material.color.set(color(chain % 2 ? '--dna-body-graphite' : '--dna-body-copper'));
+        material.metalness = 0.35;
+        material.roughness = 0.48;
+      } else {
+        material.color.copy(original.color);
+        material.metalness = original.metalness;
+        material.roughness = original.roughness;
+      }
+    }
+    renderOnce();
+  };
+  paintTheme();
+  const themeObserver = new MutationObserver(paintTheme);
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  addEventListener('pagehide', () => themeObserver.disconnect(), { once: true });
+
   const fit = () => {
     const r = host.getBoundingClientRect();
     if (!r.width || !r.height) return;
@@ -124,6 +154,23 @@ async function boot(host: HTMLElement) {
     '/dna-slim.glb',
     (gltf: { scene: import('three').Object3D }) => {
       const src = gltf.scene;
+
+      // GLB 两条链共用同一材质；逐链克隆后才能分别设铜色与石墨色。
+      let chain = 0;
+      src.traverse((object) => {
+        const mesh = object as import('three').Mesh;
+        if (!mesh.isMesh) return;
+        const originals = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        const materials = originals.map((source) => {
+          const original = source as import('three').MeshStandardMaterial;
+          const material = original.clone();
+          surfaces.push({ material, original, chain });
+          return material;
+        });
+        mesh.material = Array.isArray(mesh.material) ? materials : materials[0];
+        chain++;
+      });
+      paintTheme();
 
       // 1) 量原始 bbox（此刻未做任何变换）
       const box0 = new THREE.Box3().setFromObject(src);

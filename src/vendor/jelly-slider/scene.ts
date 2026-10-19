@@ -1002,6 +1002,7 @@ export async function setupScene(root: TgpuRoot, context: GPUCanvasContext) {
   let animationFrameHandle = 0;
   let idleFrames = 0;
   let lastMouseX = Number.NaN;
+  let onProgress: ((progress: number) => void) | null = null;
 
   /* ★★ 2026-10-17 第六轮（站主：「刚点进这个关于页、按钮刷新出来的时候，软条突出部分的
      下部是黏在一起的；把这个软条拉到暗色再拉回亮色才不会粘在一起」）。
@@ -1057,6 +1058,10 @@ export async function setupScene(root: TgpuRoot, context: GPUCanvasContext) {
     eventHandler.update();
     slider.setDragX(eventHandler.currentMouseX);
     slider.update(deltaTime);
+
+    // 与百分比刻度共用真实端头位置，在本帧绘制前同步页面和果冻颜色。
+    const tipX = slider.points[slider.points.length - 1].x;
+    onProgress?.(Math.max(0, Math.min(1, (tipX - LIGHT_END) / (DARK_END - LIGHT_END))));
 
     const mouseX = eventHandler.currentMouseX;
     const moving =
@@ -1150,6 +1155,7 @@ export async function setupScene(root: TgpuRoot, context: GPUCanvasContext) {
     rayMarchPipeline,
     backgroundTexture,
     eventHandler, // ★ 本站加：主题切换需要驱动吸附（snapTo/setInitial）与读当前值
+    set onProgress(callback: ((progress: number) => void) | null) { onProgress = callback; },
     get qualityScale() {
       return qualityScale;
     },
@@ -1168,6 +1174,7 @@ export async function setupScene(root: TgpuRoot, context: GPUCanvasContext) {
       sceneParamsUniform.patch({
         jellyColor: v,
       });
+      wake();
     },
     /* ★ 2026-10-17 第三轮：地面基准色（rgb = 跟 --paper 走，w = 深色程度 0..1）。
        ⚠ 必须 wake() —— 静止时是**停帧**的，只 patch uniform 不排帧的话，

@@ -26,10 +26,12 @@ async function run() {
   const scene = state.scene = {
     // 这个返回值代表场景按当前可见几何给出的命中结果。
     hitTest: vi.fn(() => false), pulse: vi.fn(), resize: vi.fn(),
-    setDenied() {}, setPalette() {}, setPointer() {}, playAssemble() {}, dispose() {},
+    setDenied: vi.fn(), setPalette: vi.fn(), setPointer() {}, playAssemble() {}, dispose() {},
   };
   let selection = '';
-  vi.stubGlobal('document', { querySelector: () => null, documentElement: { classList: { contains: () => false } } });
+  vi.stubGlobal('document', { querySelector: () => null, documentElement: { classList: { contains: () => false } },
+    addEventListener: (name: string, fn: (e: any) => void) => events.set(name, fn),
+    removeEventListener: (name: string) => events.delete(name) });
   vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: () => '#ffffff' }));
   vi.stubGlobal('getSelection', () => selection);
   vi.stubGlobal('devicePixelRatio', 1);
@@ -44,6 +46,13 @@ async function run() {
   await vi.waitFor(() => expect(scene.resize).toHaveBeenCalled());
   return {
     scene,
+    preview(progress: number | null) {
+      const colors = {
+        light: { '--fin-body-light': '#f6f4ee', '--fin-pulse-light': '#b9dfc3', '--paper': '#fafaf7', '--fin-ambient-light': '#fafaf7' },
+        dark: { '--fin-body-dark': '#3a3a3e', '--fin-glow-dark': '#e08a3f', '--paper': '#0b0b0c', '--fin-ambient-dark': '#0d0d0f' },
+      };
+      events.get('themepreview')?.({ detail: progress === null ? null : { progress, colors } });
+    },
     select: () => { selection = '选中的正文'; },
     click(x: number, y: number, control = false, extra = {}) {
       events.get('pointerdown')?.({ clientX: x, clientY: y, button: 0, isPrimary: true,
@@ -53,6 +62,15 @@ async function run() {
 }
 
 describe('关于页无限环 · 只响应模型命中', () => {
+  it('拖动主题时模型跟随连续进度，预览结束后回到已提交主题', async () => {
+    const r = await run();
+    r.preview(.45);
+    expect(r.scene.setDenied).toHaveBeenLastCalledWith(.45);
+    expect(r.scene.setPalette).toHaveBeenLastCalledWith(expect.objectContaining({ bodyLight: '#f6f4ee', bodyDark: '#3a3a3e' }));
+    r.preview(null);
+    expect(r.scene.setDenied).toHaveBeenLastCalledWith(0);
+  });
+
   it('画布内的空白与环内孔洞不触发脉冲', async () => {
     const r = await run();
     r.click(120, 80);

@@ -787,9 +787,9 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(tcss, '墨色层丢了 mix-blend-mode:darken —— 那就退化成"盖一块板"了').toMatch(
       /\.pt-ink\{[^}]*mix-blend-mode:darken/,
     );
-    // 墨色层的底色与前景字色来自 token（不写死 #0b1a14）
-    expect(tcss, '墨色层底色没走 token').toMatch(/\.pt-ink\{[^}]*background:var\(--ink-deep\)/);
-    expect(tcss, '描边字颜色没走 token').toMatch(/\.pt-word\{[^}]*text-stroke:1\.3pxvar\(--on-ink\)/);
+    // 转场使用独立的黑橙 token，亮暗主题下均不借用绿色强调色。
+    expect(tcss, '墨色层底色没走 token').toMatch(/\.pt-ink\{[^}]*background:var\(--pt-ink\)/);
+    expect(tcss, '描边字颜色没走 token').toMatch(/\.pt-word\{[^}]*text-stroke:1\.3pxvar\(--pt-letter\)/);
     // reduce-motion 必须整套关掉（含蒙版本身）
     expect(tcss, 'reduced-motion 下没关掉 v3 的三个元素 / 内容后退').toMatch(
       /prefers-reduced-motion[^@]*\.pt-ink[^}]*animation:none!important/,

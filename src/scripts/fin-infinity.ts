@@ -6,12 +6,13 @@
  *   · **动态 import 场景**（three.js 544 KB + n8ao WASM 803 KB，不能上每一页）
  *   · 视口外 / 切标签 ⇒ 停帧；prefers-reduced-motion ⇒ 根本不启动
  *   · 启动失败（WebGL 拿不到 / WASM 404）⇒ 退回静态层，**绝不留空画布**
- *   · 主题切换 ⇒ 把 uDenied 设成 0/1（**硬切，照搬原版**，见 fin-scene.ts 注释）
+ *   · 点按主题仍直接切换，拖动预览时按连续进度更新 uDenied 与色板
  *   · 点击 ⇒ 触发脉冲（原版无此交互，是新加的）
  */
 
 import { createActivityGate, startLoop } from './rl-core';
 import type { FinPalette, FinScene } from './fin-scene';
+import { mixThemeColor, type ThemePreviewFrame } from './theme-preview';
 
 /** 脚本可跑的最严条件：过不了就只留静态层。 */
 const ok = () =>
@@ -56,6 +57,13 @@ export function initFinInfinity(root: HTMLElement): void {
   };
 
   const isDark = () => document.documentElement.classList.contains('dark');
+  let themePreview: ThemePreviewFrame | null = null;
+  const previewPalette = ({ colors, progress }: ThemePreviewFrame): FinPalette => ({
+    bodyLight: colors.light['--fin-body-light'], bodyDark: colors.dark['--fin-body-dark'],
+    glowLight: colors.light['--fin-pulse-light'], glowDark: colors.dark['--fin-glow-dark'],
+    sceneLight: colors.light['--paper'], sceneDark: colors.dark['--paper'],
+    ambientLight: mixThemeColor(colors.light['--fin-ambient-light'], colors.dark['--fin-ambient-dark'], progress),
+  });
 
   /* ── 启用 / 停用 ── */
   let scene: FinScene | null = null;
@@ -70,13 +78,14 @@ export function initFinInfinity(root: HTMLElement): void {
 
   const boot = async () => {
     const mod = await import('./fin-scene');
-    const s = await mod.createFinScene(canvas, buildPalette());
+    const s = await mod.createFinScene(canvas, themePreview ? previewPalette(themePreview) : buildPalette());
     if (disposed || !stopLoop) {
       s.dispose();
       return;
     }
     scene = s;
-    s.setDenied(isDark() ? 1 : 0);
+    s.setPalette(themePreview ? previewPalette(themePreview) : buildPalette());
+    s.setDenied(themePreview?.progress ?? (isDark() ? 1 : 0));
     resize();
     s.resize(host.getBoundingClientRect().width, host.getBoundingClientRect().height, devicePixelRatio || 1);
     s.playAssemble();
@@ -117,15 +126,22 @@ export function initFinInfinity(root: HTMLElement): void {
   const ro = new ResizeObserver(() => resize());
   ro.observe(host);
 
-  /* ── 主题切换 ⇒ uDenied 硬切（原版 Stage.ts:407 直接赋值）── */
+  /* ── 点按主题直接切换；拖动则使用 themepreview 的连续进度 ── */
   const mo = new MutationObserver(() => {
-    if (!scene) return;
+    if (!scene || themePreview) return;
     // ★ 换主题要**连色板一起换** —— 亮暗两套 token 不同，只改 uDenied 会让
     //   鳍片本体色还停在上一档的色值上（这是"暗色模式鳍片还是浅色"那类 bug 的来处）。
     scene.setPalette(buildPalette());
     scene.setDenied(isDark() ? 1 : 0);
   });
   mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  const onThemePreview = (event: Event) => {
+    themePreview = (event as CustomEvent<ThemePreviewFrame | null>).detail;
+    if (!scene) return;
+    scene.setPalette(themePreview ? previewPalette(themePreview) : buildPalette());
+    scene.setDenied(themePreview?.progress ?? (isDark() ? 1 : 0));
+  };
+  document.addEventListener('themepreview', onThemePreview);
 
   /* ── 点击反馈：★ 原版没有，是新加的 ──
      原版的脉冲由键盘触发（rhine-lock 的 lock.svelte.ts:305，语义是「你刚敲了口令」）。
@@ -194,6 +210,7 @@ addEventListener('pagehide', () => {
     disposed = true;
     ro.disconnect();
     mo.disconnect();
+    document.removeEventListener('themepreview', onThemePreview);
     mq.removeEventListener('change', onMq);
     removeEventListener('pointerdown', onDown);
     removeEventListener('pointermove', onMove);

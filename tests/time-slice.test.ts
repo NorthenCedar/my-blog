@@ -495,17 +495,18 @@ describe('时间切片 · 源码红线', () => {
     expect(SCENE).not.toContain('SPEC_Z - 1.7');
   });
 
-  it('菱形轮廓环只剩入口那一扇：出口那道绿框已删净（站主第九轮 ③）', () => {
+  it('双层玻璃只装饰入口，裁切与前沿共用路径，进入隧道后边框收起', () => {
     // 「到尽头……也别显示那个绿色的框」—— 出口那个随 exit 放大越过镜头的菱形环
     // （旧写法 `0.12 + 1.15 * exit^1.7`）整个删掉；入口那一扇照旧。
     expect(CORE).toContain('exitStart'); // 出场穿窗这段仍在（它是绿幕的驱动量）
-    expect(SRC).toContain("ringPath.setAttribute('d', ringD)"); // 环仍由脚本逐帧写
-    expect(SRC).toContain("polygon(50% "); // 入口：画布按菱形裁切
-    expect(SRC).toContain("ringPath.parentElement!.style.opacity = tl.zoom > 0.985 ? '0' : '1'");
+    expect(SRC).toContain('tslWindow(W, H, tl.zoom)');
+    expect(SRC).toContain("ringPath.setAttribute('d', windowShape.front)");
+    expect(SRC).toContain("path('${windowShape.front}')");
+    expect(SRC).toContain("backPath.setAttribute('d', windowShape.back)");
+    expect(SRC).toContain('ring.style.opacity = String(windowShape.opacity)');
     expect(SRC).not.toContain('ringX');
     expect(SRC).not.toContain('Math.pow(exit, 1.7)');
-    // ★ 第八轮 ①：「这个窗口大一点」—— 入口菱形窗的基准半宽 14% → 19%
-    expect(SRC).toContain('const baseHalf = Math.min(W, H) * 0.19;');
+    expect(CORE).toContain('export function tslWindow');
   });
 
   it('到底锁滚：链尾之后向下滚被吞掉（收尾由时间轴自动播完），且不困住读者', () => {
@@ -697,7 +698,7 @@ describe('时间切片 · 源码红线', () => {
 const at = '\\.[a-zA-Z][a-zA-Z0-9-]*(?:\\[data-astro-cid[^\\]]*\\])?';
 
 describe('时间切片 · 产物骨架（无 JS 可用是底线）', () => {
-  it('装置在首页产物里：静态回退层默认在场（菱形 + 相册链接），剧场默认缺席', () => {
+  it('装置在首页产物里：静态回退层默认在场（玻璃窗 + 相册链接），剧场默认缺席', () => {
     const html = homepageHtml();
     expect(html).toContain('data-tsl');
     expect(html).toContain('data-tsl-static');

@@ -51,6 +51,63 @@ export function tslTimeline(p: number) {
   };
 }
 
+type WindowPoint = readonly [number, number];
+
+/** 双层玻璃入口：同一条前沿路径供画布裁切与 SVG 描边共用，像素坐标随视口重算。
+ *  侧转与层间距离在穿窗过程中逐渐归零，展开后四角越过视口，反向滚动原路还原。 */
+export function tslWindow(width: number, height: number, zoom: number) {
+  const w = Math.max(1, width);
+  const h = Math.max(1, height);
+  const short = Math.min(w, h);
+  const z = Number.isFinite(zoom) ? clamp01(zoom) : 0;
+  const tilt = 1 - z;
+  const halfW = short * 0.23 + (w * 0.64 - short * 0.23) * z;
+  const halfH = short * 0.25 + (h * 0.64 - short * 0.25) * z;
+  const ax = 0.07 * tilt;
+  const ay = -0.18 * tilt;
+  const az = -0.045 * tilt;
+  const radius = short * 0.026 * (1 - z * 0.75);
+  const fmt = (p: WindowPoint) => `${p[0].toFixed(2)} ${p[1].toFixed(2)}`;
+
+  const pane = (back: boolean) => {
+    const scale = back ? 0.985 : 1;
+    const dx = back ? short * 0.033 * tilt : 0;
+    const dy = back ? -short * 0.025 * tilt : 0;
+    const corners: WindowPoint[] = ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([sx, sy]) => {
+      const x = sx * halfW * scale;
+      const y = sy * halfH * scale;
+      const xx = x * Math.cos(ay);
+      const zz = -x * Math.sin(ay);
+      const yy = y * Math.cos(ax) - zz * Math.sin(ax);
+      const depth = y * Math.sin(ax) + zz * Math.cos(ax);
+      const perspective = short * 3 / (short * 3 + depth);
+      return [w / 2 + dx + (xx * Math.cos(az) - yy * Math.sin(az)) * perspective,
+        h / 2 + dy + (xx * Math.sin(az) + yy * Math.cos(az)) * perspective];
+    });
+    const toward = (from: WindowPoint, to: WindowPoint): WindowPoint => {
+      const f = Math.min(0.18, radius / Math.hypot(to[0] - from[0], to[1] - from[1]));
+      return [from[0] + (to[0] - from[0]) * f, from[1] + (to[1] - from[1]) * f];
+    };
+    const starts = corners.map((p, i) => toward(p, corners[(i + 3) % 4]!));
+    const ends = corners.map((p, i) => toward(p, corners[(i + 1) % 4]!));
+    const d = `M${fmt(starts[0]!)} ` + corners.map((p, i) =>
+      `${i ? `L${fmt(starts[i]!)} ` : ''}Q${fmt(p)} ${fmt(ends[i]!)}`).join(' ') + ' Z';
+    const joins = corners.map((p, i): WindowPoint => [
+      starts[i]![0] * 0.25 + p[0] * 0.5 + ends[i]![0] * 0.25,
+      starts[i]![1] * 0.25 + p[1] * 0.5 + ends[i]![1] * 0.25,
+    ]);
+    return { d, joins };
+  };
+  const front = pane(false);
+  const back = pane(true);
+  return {
+    front: front.d,
+    back: back.d,
+    edges: front.joins.map((p, i) => `M${fmt(p)} L${fmt(back.joins[i]!)}`).join(' '),
+    opacity: 1 - smooth(0.72, 0.99, z),
+  };
+}
+
 /** 全程切片数（对齐参考视频的 FRAME NN / 76 读数口径） */
 export const TSL_FRAMES = 76;
 /** 参考视频总长（秒），只用于 HUD 的 T+ 读数 */
