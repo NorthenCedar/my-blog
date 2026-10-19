@@ -129,7 +129,7 @@ export function initFinInfinity(root: HTMLElement): void {
 
   /* ── 点击反馈：★ 原版没有，是新加的 ──
      原版的脉冲由键盘触发（rhine-lock 的 lock.svelte.ts:305，语义是「你刚敲了口令」）。
-     这里挂到点击上：点雕塑任意位置，从交叉点（0.25 相位）起跑一道光。
+     只在命中当前帧的可见鳍片时，从交叉点（0.25 相位）起跑一道光。
 
      ★★ 为什么监听挂 window 而不是 host（这条改过一次，是真bug 不是风格问题）：
        底纹是 `position:fixed` + `z-index:-1` 的**装饰层**，按站规必须
@@ -138,15 +138,20 @@ export function initFinInfinity(root: HTMLElement): void {
        而 `pointer-events:none` 的元素及其子元素**永远收不到指针事件** ⇒
        监听挂在 host 上等于挂了个死开关，点击脉冲和视差都不会触发。
        ⇒ 事件走 window（站内既有做法，见 pages/index.astro 的 tsl-ring），
-         坐标再按 host 的 rect 归一化。装饰层约定一个字没动。
+         点击坐标再按 canvas 的实际矩形归一化，装饰层不拦截指针。
      ⚠ 监听走 window 就必须**能在pagehide 时摘掉**，否则 bfcache 往返会逐次累积。 */
   const onDown = (e: PointerEvent) => {
-    if (!scene) return;
+    if (!scene || e.button !== 0 || !e.isPrimary) return;
     // 点在文字/链接上不触发（避免抢正常交互）
     const t = e.target as Element | null;
     if (t?.closest('a,button,input,textarea,select,label,[role="button"]')) return;
     // 拖选文字时别触发（否则选字会闪一道光）
     if (getSelection()?.toString()) return;
+    const r = canvas.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return;
+    const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+    const ny = 1 - ((e.clientY - r.top) / r.height) * 2;
+    if (Math.abs(nx) > 1 || Math.abs(ny) > 1 || !scene.hitTest(nx, ny)) return;
     scene.pulse(0.25);
   };
 

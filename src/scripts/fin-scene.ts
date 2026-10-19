@@ -57,6 +57,7 @@ import {
 import { DepthOfFieldEffect, EffectComposer, EffectPass, RenderPass } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 import { createFinGrade } from './fin-grade';
+import { createFinPicker } from './fin-picking';
 
 /** 鳍片数（原版 FIN_COUNT = 400）。 */
 export const FIN_COUNT = 400;
@@ -135,6 +136,8 @@ export interface FinPalette {
 }
 
 export interface FinScene {
+  /** 按当前可见鳍片检查归一化屏幕坐标，孔洞和片间空隙不命中。 */
+  hitTest(nx: number, ny: number): boolean;
   /** 点一下：沿曲线跑一道光。origin 0..1 是起始相位（0.25 = 从交叉点起） */
   pulse(origin?: number): void;
   setDenied(v: number): void;
@@ -327,6 +330,7 @@ export async function createFinScene(
   sculpture.position.x = SCULPT_OFFSET_X;
   sculpture.add(fins);
   scene.add(sculpture);
+  const picker = createFinPicker(renderer, camera, fins, U);
 
   /* ── 后处理（原版 Stage.ts:266-282 的搭法与参数，逐字照搬）──
      原版还有一层 DepthOfField 与自己的 grade（色调映射 + 暗角 + 色差），
@@ -515,6 +519,7 @@ export async function createFinScene(
   }
 
   function dispose() {
+    picker.dispose();
     finGeo.dispose();
     finMat.dispose();
     key.shadow.map?.dispose();
@@ -525,6 +530,7 @@ export async function createFinScene(
   assembleT0 = 0;
 
   return {
+    hitTest: picker.hitTest,
     pulse,
     setDenied,
     setPalette,

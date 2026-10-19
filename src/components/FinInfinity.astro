@@ -45,8 +45,7 @@
     aspect-ratio: 1.65;
     transform: translate(-50%, -50%);
     z-index: -1;
-    /* ⚠ pointer-events: 不能设 none —— 站主要「点一下有反馈」，
-       点击脉冲要接在这块上。但要挡住下面正文的选择（见下方 .fin-view）。 */
+    /* 点击由窗口监听，场景按可见鳍片判命中；底纹本身不拦截正文操作。 */
     pointer-events: none;
   }
   .fin-view,
