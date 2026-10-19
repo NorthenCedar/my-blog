@@ -27,7 +27,7 @@
 | **加/换友链** | `content/pages/links.md` —— 见 §19 | 不用 |
 | **写日志** | `content/pages/log.md` —— 见 §20 | 不用 |
 | **看/删留言** | `content/pages/guestbook.md` 是页面文案；留言本身在数据库 —— 见 §21 | 不用 |
-| 留言页机械环底纹 | `src/components/MechanicalRing.astro`；浓度与光带速度在 `tokens.css` 的 `--ring-plate-opacity` / `--dur-ring-flow` | 写留言不用管它 |
+| 留言页机械环底纹 | `src/components/MechanicalRing.astro` 按主题切换日／夜原图；浓度与光带速度在 `tokens.css` 的 `--ring-plate-opacity` / `--dur-ring-flow` | 写留言不用管它 |
 | 加相册、加照片 | `content/gallery/<相册名>/` —— 见 §17 | 不用 |
 | **归档页搜索/年月筛选** | 自动的，不用配 —— 见 §23 | 不用 |
 | **关于页头像 / 名字 / 社交账号 / 技术栈** | `content/pages/about.md` 的 frontmatter —— 见 §24 | 不用 |
@@ -417,7 +417,7 @@ export const TAGS = ['AI', '建站', '摄影', '成长', '随笔', '钢琴', '�
 ```css
 --pleat-opacity: 0.82;     /* 标签区百褶环浓度 */
 --pleat-contrast: 0.5;     /* 标签区薄片明暗跨度 */
---ring-plate-opacity: 0.38; /* 留言页机械环浓度 */
+--ring-plate-opacity: 0.48; /* 留言页亮色机械环浓度，暗色为 0.72 */
 --dur-ring-flow: 24s;      /* 留言页光带绕行一圈的时间 */
 ```
 
@@ -746,7 +746,9 @@ node scripts/assert-tokens.mjs   # 单独复算对比度
 暗色开场幕布沿用首屏信号橙，标志与跳过按钮为深色；时间切片右下角的滚轮提示随模型署名一起在穿窗时淡出。
 时间切片入口是轻微侧转的双层圆角玻璃，颜色由 `--tsl-glass-*` 调节：亮色浅玻璃配墨绿边缘，暗色石墨玻璃配橙色折光。`time-slice-core.ts` 的 `tslWindow()` 同时生成裁切与边框，反向滚动原路还原；手机与减少动态效果模式显示同款静态窗。
 亮色采用清玻璃：入口底色覆盖为 2.5%，表面不铺灰绿颜色，只留墨绿细边、切片轮廓和窄高光。入口底色、浓度、轮廓色和背光由 `--tsl-entry-*` 控制，穿窗时逐渐恢复原隧道色与背光。
-流线宽度由 `--home-flow-width` 调节（当前 1.2px），DNA 的内收距离由 `--home-dna-inset` 调节。
+亮暗流线共用 `--home-flow-width`（当前 1.2px）。`--home-flow-field-opacity` 与
+`--home-flow-path-opacity` 同时控制静止状态和开场揭幕终点，避免开场结束时浓度跳变；
+亮色为 0.22 / 0.62，暗色为 0.48 / 0.9。DNA 的内收距离由 `--home-dna-inset` 调节。
 顶部留白 `.band-core` 不单独着色，避免大窗口下在底边切出横向接缝；首屏仅保留纵向网格。
 DNA 双链为铜色与石墨色，材质和灯光由 `--dna-*` 调节，亮色模式保留原材质。
 改完跑 `npm run verify`。
@@ -1838,9 +1840,17 @@ items:
 - 暗色水波改用琥珀反光 `#d78d54` 和暖灰阴影 `#44362e`，强度 0.20；
   `--water-light-gain` 从亮色的 2.6 降为 1.25，反光峰值不超过 25% alpha。
   同页切换主题会立即重绘当前波面，轨迹与消散速度不变，平静时不额外申请帧。
-- 暗色机械环用 `--ring-metal-filter` 引用组件内的调色滤镜，将近中性的外壳收为石墨灰，
-  保留铜橙光槽和原有光照明暗；`--ring-plate-opacity` 为 0.60，流光改用暖橙。
-  滤镜定义独立于流光层，减少动态效果时仍显示静态金属。亮色沿用原图与原参数。
+- 暗色机械环直接使用原项目的夜间渲染图 `mechanical-ring-night.webp`，保留深色金属、
+  透明护罩、橙色光槽和银白反光，不再给日间图套调色滤镜。`--ring-plate-opacity` 为 0.72，
+  流光采用橙色光晕和暖白光芯。
+  亮色使用日间图，浓度提高为 0.48，`--ring-day-filter` 将原铜色光槽转为低饱和绿色，
+  并小幅增强金属反差；原图、透明通道和高光结构保留，正文附近不做局部淡出。
+  亮色流光收为暖白小光芯和淡绿光晕，`--ring-light-core-length` / `--ring-light-halo-length`
+  为 8 / 24，宽度为 2 / 6px；暗色保持原来的长度 28 / 48、宽度 3 / 9px。
+  绕行仍为 24 秒，光点继续按原光槽轨迹受到接头和管道遮挡。
+  两张图由 CSS 跟随站内主题切换；无脚本及减少动态效果模式也可显示正确的静态材质。
+  夜间源图无损转为 WebP，构建期生成 700 / 1400 宽度、质量 95 的版本；两张主题图均为本站资产，
+  增加一张图片的加载，不新增渲染循环。来源、固定版本及许可见 `src/assets/tags/plates/README.md`。
 - 说说页月相共用 `--ink-plate-dark-filter` 的哑光铜橙色阶，浓度由
   `--talks-plate-dark-opacity`（0.16）控制；圆缺、透明边缘和原有构图不变。
 - `src/components/WaterSurface.astro` 负责背景画布；`src/scripts/ripple.ts` 负责指针、光影与停帧；

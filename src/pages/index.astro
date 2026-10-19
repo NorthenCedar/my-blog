@@ -876,7 +876,7 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     width: 100%;
     height: 100%;
     z-index: 1;
-    opacity: 0.22;
+    opacity: var(--home-flow-field-opacity);
     pointer-events: none; /* 事件走 window，铺满首屏时"离开组件"无意义 */
     /* ★ 必须裁掉溢出的 path：JS 建 SVG 时两侧各外扩 90px，这些点在 .band 的
        overflow:hidden 之外**仍计入文档 scrollWidth**（390px 视口实测多 12px）。 */
@@ -897,13 +897,13 @@ const titleLines: { ch: string; i: number }[][] = (() => {
          min(46vw,520px) 的一半 —— 两个数必须同步，放一起才看得出来。 */
   /* ★ 幕布收成一条线的那一刻，这片线**已经是完整亮度**了（from 就是 .58/.9）——
      不然会出现"幕布那条线没了，再淡入一条新的线"，接不上。
-     整片线从亮到暗（.58 → .22）走完揭幕全程：内容上来时它自己退到背景去。 */
+     整片线从亮到暗走完揭幕全程，终点取当前主题的静止浓度，摘掉开场标记时不跳变。 */
   :global(html.boot-on) .rh-grid {
     animation: rh-field var(--bi-bloom) linear var(--bi-bloom-at) both;
   }
   @keyframes rh-field {
     from { opacity: 0.58; }
-    to { opacity: 0.22; }
+    to { opacity: var(--home-flow-field-opacity); }
   }
   :global(html.boot-on) .rh-grid :global(path) {
     /* ★★ 必须是 view-box（= 整个 SVG 的中心），**不能**用 fill-box：
@@ -940,7 +940,7 @@ const titleLines: { ch: string; i: number }[][] = (() => {
       opacity: 0.88;
       transform: translateX(0) scaleY(0.004);
     }
-    to { opacity: 0.62; transform: none; }
+    to { opacity: var(--home-flow-path-opacity); transform: none; }
   }
   .rh-grid__svg {
     position: absolute;
@@ -960,9 +960,9 @@ const titleLines: { ch: string; i: number }[][] = (() => {
   .rh-grid :global(path) {
     fill: none;
     stroke: var(--on-band-sub);
-    stroke-width: 1px;
+    stroke-width: var(--home-flow-width);
     vector-effect: non-scaling-stroke;
-    opacity: 0.62;
+    opacity: var(--home-flow-path-opacity);
   }
 
   /* ====================== 首屏 · 深墨绿场 ====================== */

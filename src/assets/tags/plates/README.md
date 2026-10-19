@@ -10,6 +10,16 @@
 
 `mechanical-ring.webp` 来自 RhinE 项目 `theme/assets/render/ring/ring-day.png`，保留原始 1400 × 900 画布及透明通道，仅转换为 WebP（质量 85）。`ring.json` 是同一模型导出的光槽轨迹，其中第四个分量表示该点是否可见。
 
+2026-10-20 亮色显示改为亮银外壳与绿色光槽：仅在日间图片上应用 `tokens.css` 的 `--ring-day-filter`（色相旋转、降低饱和度、小幅增强反差），源图片保持原样。亮色显示浓度 0.48，流光为短小暖白光芯与淡绿光晕；夜间原图不应用此滤镜。
+
+2026-10-20 补入 `mechanical-ring-night.webp`，直接采用原项目的 `ring-night.png`。保留 2800 × 1800 画布与 alpha，无损转换为 WebP，不调色、不重画。构建时生成 700 / 1400 宽度的响应式 WebP（质量 95）。夜间原图包含深色金属外壳、橙色光槽、透明护罩和银白反光；组件按站内 `html.dark` 选择日间／夜间图片，不再给日间图片套调色滤镜。
+
+- 夜间素材固定版本：`9eb0c72fa28fcf547455ee49bb04c9c83c848819`。
+- 原图：https://github.com/ericzhang12111-cell/RhinE/blob/9eb0c72fa28fcf547455ee49bb04c9c83c848819/theme/assets/render/ring/ring-night.png
+- 原文件 Git blob：`86563d21009bccb6bdbc8b691d76422ec88c8d37`。
+- 原实现：https://github.com/ericzhang12111-cell/RhinE/blob/9eb0c72fa28fcf547455ee49bb04c9c83c848819/theme/js/lib/ring.js
+- 原项目也是以 Blender 静态渲染图叠加光槽脉冲，并非浏览器实时计算环境反射。本站保留这一构成，夜间流光采用原版橙色光晕和暖白光芯；MIT 许可同下。
+
 - 作者项目：https://github.com/ericzhang12111-cell/RhinE
 - 用户提供的视频：https://www.bilibili.com/video/BV1mYpK6WEPn/
 - 获取日期：2026-10-16，main 分支；原许可全文保存在 `public/licenses/rhine-mechanical-ring.txt`，随站点发布。

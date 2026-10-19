@@ -2,6 +2,10 @@
    P1（2026-09-25 站主定案）：配色从旧方向（纯白 + 橙）换成莱茵方向（乳白 + 绿）。
    docs/design-spec.md §3/§5 已同步更新 —— 两处应始终一致，不一致就是 bug。 */
 :root {
+  /* 亮暗共用线宽；揭幕终点与静止浓度共用参数，避免摘掉开场标记时跳变。 */
+  --home-flow-width: 1.2px;
+  --home-flow-field-opacity: 0.22;
+  --home-flow-path-opacity: 0.62;
   /* 关于页百褶环：波包经过时沿切线疏密振动，并局部染成淡绿。
      ★★★ 浓淡这三轮反复了一次来回，每一次都有量：
         ① 10-15 站主：「线上太淡，要到参考图那个浓度」→ 0.3 → 1
@@ -120,11 +124,15 @@
   --water-light: #ffffff;
   --water-strength: 0.17;
   --water-light-gain: 2.6;
-  /* 留言页机械环：浅色金属保留铜色光槽。 */
-  --ring-plate-opacity: 0.38;
-  --ring-metal-filter: none;
-  --ring-light-halo: #d8893f80;
-  --ring-light-core: #fff9eb;
+  /* 留言页机械环：亮银外壳与低饱和墨绿光槽，流光收为短小的暖白亮点。 */
+  --ring-plate-opacity: 0.48;
+  --ring-day-filter: hue-rotate(105deg) saturate(0.55) contrast(1.12);
+  --ring-light-halo: #66887580;
+  --ring-light-core: #fffdf8;
+  --ring-light-halo-width: 6px;
+  --ring-light-core-width: 2px;
+  --ring-light-halo-length: 24;
+  --ring-light-core-length: 8;
   --dur-ring-flow: 24s;
   /* 单册场景：只由 AlbumScene 使用，不改变旧砖墙与总入口。 */
   --scene-hud-paper: #fafaf7e6;
@@ -572,11 +580,14 @@ html.dark {
   --cursor-disc-fill: #ed8c3b14;
   --cursor-disc-hot-fill: #ed8c3b2e;
   --cursor-ripple: #ffc082d9;
-  /* 金属环压暗近中性的外壳，保留铜色光槽；水波采用低亮度琥珀反光。 */
-  --ring-metal-filter: url(#ring-dark-metal);
-  --ring-plate-opacity: 0.60;
-  --ring-light-halo: #e68d4566;
-  --ring-light-core: #ffc082;
+  /* 夜间原图保留金属反射，微光沿用原版橙晕与暖白光芯；水波采用低亮度琥珀反光。 */
+  --ring-plate-opacity: 0.72;
+  --ring-light-halo: #ffb0408c;
+  --ring-light-core: #fff6ea;
+  --ring-light-halo-width: 9px;
+  --ring-light-core-width: 3px;
+  --ring-light-halo-length: 48;
+  --ring-light-core-length: 28;
   --water-shadow: #44362e;
   --water-light: #d78d54;
   --water-strength: 0.20;
@@ -729,7 +740,8 @@ html.dark body.chrome-console {
   --home-hero-glass-soft: #442b1b05;
   --home-nav-active-bg: #ffd1aa40;
   --home-flow-line: #000000;
-  --home-flow-width: 1.2px;
+  --home-flow-field-opacity: 0.48;
+  --home-flow-path-opacity: 0.9;
   --home-dna-inset: 20vw;
   --home-halo: #ff7b0010;
   --home-halo-soft: #ff6a000a;

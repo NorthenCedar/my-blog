@@ -160,6 +160,30 @@ describe.skipIf(!hasDist)('开场动画：产物契约', () => {
       .join('\n');
   const homeHtml = () => readFileSync(join(DIST, 'index.html'), 'utf8');
 
+  it('流场揭幕的最终浓度与静止状态一致，移除开场标记时不会突然变粗', () => {
+    const page = readFileSync('src/pages/index.astro', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const darkCss = readFileSync('src/styles/home-dark.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const tokens = readFileSync('src/styles/tokens.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const vars = (body: string) => Object.fromEntries([...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map(m => [m[1], m[2].trim()]));
+    const opacity = (body: string) => body.match(/(?:^|[;\s])opacity:\s*([^;]+);/)?.[1].trim();
+    for (const dark of [false, true]) {
+      const palette = {
+        ...vars(ruleBody(tokens, ':root {')),
+        ...(dark ? vars(ruleBody(tokens, 'html.dark body.chrome-console {')) : {}),
+      };
+      const resolve = (value: string | undefined) => value?.replace(/var\((--[\w-]+)\)/g, (_, key) => palette[key]);
+      for (const [selector, animation] of [['.rh-grid', 'rh-field'], ['.rh-grid :global(path)', 'rh-bloom']]) {
+        const normal = opacity(ruleBody(page, `\n  ${selector} {`));
+        const darkSelector = selector.replace(':global(path)', 'path');
+        const resting = (dark && opacity(ruleBody(darkCss, `html.dark body.chrome-console ${darkSelector} {`))) || normal;
+        const end = opacity(ruleBody(ruleBody(page, `@keyframes ${animation}`), 'to {'));
+        expect(resting, selector).toBeTruthy();
+        expect(end, animation).toBeTruthy();
+        expect(resolve(end), `${dark ? '暗色' : '亮色'} ${animation} 结束后浓度跳变`).toBe(resolve(resting));
+      }
+    }
+  });
+
   it('门控方向 fail-safe：默认不显示，只有 JS 判定该播才加 .boot-on', () => {
     const css = allCss();
     const checks: [string, boolean][] = [

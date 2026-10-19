@@ -25,12 +25,9 @@ html.dark body.chrome-console .band {
     radial-gradient(90% 60% at 88% 88%, var(--home-halo-soft) 0%, transparent 62%),
     linear-gradient(178deg, var(--home-hero-1) 0%, var(--home-hero-2) 34%, var(--home-hero-3) 62%, var(--home-hero-4) 100%);
 }
-/* 亮橙衬底后黑线已很清楚，降低整层浓度，避免线网压过正文。 */
-html.dark body.chrome-console .rh-grid { opacity: 0.48; }
+/* 线宽与静止/揭幕浓度由共用规则读取 token，暗色只覆盖线色。 */
 html.dark body.chrome-console .rh-grid path {
   stroke: var(--home-flow-line);
-  stroke-width: var(--home-flow-width);
-  opacity: 0.9;
 }
 html.dark body.chrome-console .band-core {
   /* 这里是会随窗口高度伸缩的顶部留白，着色会在底边切出一道横向分界。 */

@@ -44,6 +44,16 @@ describe('留言页 · 机械环底纹', () => {
     expect(TAGS_HTML).toContain('data-crosshair');
   });
 
+  it('亮暗分别使用原版日间与夜间渲染，不用调色滤镜替代夜间反光', () => {
+    expect(RING).toContain("from '../assets/tags/plates/mechanical-ring-night.webp'");
+    expect(RCSS).not.toMatch(/feColorMatrix|ring-metal-filter|ring-dark-metal/);
+    expect(GUEST).toMatch(/<img[^>]*class="[^"]*ring-day[^"]*"[^>]*>/);
+    expect(GUEST).toMatch(/<img[^>]*class="[^"]*ring-night[^"]*"[^>]*>/);
+    expect(RCSS).toMatch(/:global\(html\.dark\)[^{]*ring-night[^}]*display:\s*block/);
+    expect(RCSS).toMatch(/:global\(html\.dark\)[^{]*ring-day[^}]*display:\s*none/);
+    expect(RCSS).not.toContain('prefers-color-scheme');
+  });
+
   it('图片和流光共用画布，减少动态效果时保留静态底纹', () => {
     expect(RCSS).toMatch(/aspect-ratio:\s*1400 \/ 900/);
     expect(RCSS).toMatch(/\.ring-light\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0/);

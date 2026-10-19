@@ -5,6 +5,7 @@
  */
 import { Image } from 'astro:assets';
 import plate from '../assets/tags/plates/mechanical-ring.webp';
+import nightPlate from '../assets/tags/plates/mechanical-ring-night.webp';
 import ring from '../assets/tags/plates/ring.json';
 import { projectRingLight } from '../lib/mechanical-ring';
 
@@ -13,21 +14,25 @@ const lap = light.length.toFixed(3);
 ---
 
 <div class="mechanical-ring" aria-hidden="true">
-  {/* 调色滤镜独立于流光，减少动效时仍可供静态金属使用。 */}
-  <svg class="ring-filter" width="0" height="0" focusable="false">
-    <defs>
-      {/* 保留原图的光照与 alpha：中性金属收为石墨色，铜色光槽保持暖亮。 */}
-      <filter id="ring-dark-metal" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
-        <feColorMatrix type="matrix" values="1.8 0 -1.626 0 0  0.72 0 -0.4704 0 0  0.18 0 0.1074 0 0  0 0 0 1 0" />
-      </filter>
-    </defs>
-  </svg>
+  {/* 两种主题各用原版渲染；亮色光槽转为墨绿，夜间保留原图反光。 */}
   <Image
-    class="mechanical-ring-img"
+    class="mechanical-ring-img ring-day"
     src={plate}
     alt=""
     widths={[700, 1400]}
     sizes="(max-width: 767px) 96vw, min(94vw, 1400px)"
+    loading="eager"
+    decoding="async"
+  />
+  <Image
+    class="mechanical-ring-img ring-night"
+    src={nightPlate}
+    alt=""
+    width={1400}
+    height={900}
+    widths={[700, 1400]}
+    sizes="(max-width: 767px) 96vw, min(94vw, 1400px)"
+    quality={95}
     loading="eager"
     decoding="async"
   />
@@ -41,8 +46,8 @@ const lap = light.length.toFixed(3);
     <metadata>RhinE / Audio Archive authors · MIT · /licenses/rhine-mechanical-ring.txt</metadata>
     {light.segments.map(({ d, offset }) => (
       <g style={`--ring-offset: ${offset.toFixed(3)};`}>
-        <path class="ring-pulse ring-pulse-halo" d={d} stroke-dasharray={`48 ${light.length - 48}`} />
-        <path class="ring-pulse ring-pulse-core" d={d} stroke-dasharray={`28 ${light.length - 28}`} />
+        <path class="ring-pulse ring-pulse-halo" d={d} />
+        <path class="ring-pulse ring-pulse-core" d={d} />
       </g>
     ))}
   </svg>
@@ -66,11 +71,18 @@ const lap = light.length.toFixed(3);
     height: 100%;
     max-width: none;
     object-fit: contain;
-    filter: var(--ring-metal-filter);
   }
-  .ring-filter {
-    position: absolute;
-    overflow: hidden;
+  .mechanical-ring :global(img.ring-night) {
+    display: none;
+  }
+  .mechanical-ring :global(img.ring-day) {
+    filter: var(--ring-day-filter);
+  }
+  :global(html.dark) .mechanical-ring :global(img.ring-day) {
+    display: none;
+  }
+  :global(html.dark) .mechanical-ring :global(img.ring-night) {
+    display: block;
   }
   .ring-light {
     position: absolute;
@@ -86,11 +98,13 @@ const lap = light.length.toFixed(3);
   }
   .ring-pulse-halo {
     stroke: var(--ring-light-halo);
-    stroke-width: 9;
+    stroke-width: var(--ring-light-halo-width);
+    stroke-dasharray: var(--ring-light-halo-length) calc(var(--ring-lap) - var(--ring-light-halo-length));
   }
   .ring-pulse-core {
     stroke: var(--ring-light-core);
-    stroke-width: 3;
+    stroke-width: var(--ring-light-core-width);
+    stroke-dasharray: var(--ring-light-core-length) calc(var(--ring-lap) - var(--ring-light-core-length));
   }
   @keyframes ring-flow {
     from { stroke-dashoffset: var(--ring-offset); }
