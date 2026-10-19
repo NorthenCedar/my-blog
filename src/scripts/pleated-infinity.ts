@@ -18,6 +18,7 @@ import { createPleatedRenderer } from './pleated-renderer';
       opacity: parseFloat(styles.getPropertyValue('--pleat-opacity')),
       waveOpacity: parseFloat(styles.getPropertyValue('--pleat-wave-opacity')),
       contrast: parseFloat(styles.getPropertyValue('--pleat-contrast')),
+      glow: parseFloat(styles.getPropertyValue('--pleat-glow')) || 0,
     };
   };
   const palette = readPalette();

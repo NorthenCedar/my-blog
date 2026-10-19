@@ -4,6 +4,8 @@
 
 2026-10-19 起，`src/components/TagsPlate.astro` 在标签总览和具体标签页复用 `PleatedInfinity.astro`，保留原关于页的点击疏密波和淡绿色反馈。陶瓷金属图片已移除。
 
+2026-10-20 暗色环体改为石墨黑，点击脉冲改为橙色，与当前关于页共用 `--fin-body-dark` / `--fin-glow-dark`。随后为每片薄片添加常驻橙色细边辉光，点击时局部增强；静态后备图同步显示为黑灰与淡橙投影。源图片保持原样；亮色仍为暖白薄片与淡绿色反馈，常驻辉光强度为零。
+
 百褶环由原生 WebGL 绘制，静态后备图继续使用 `src/assets/about/plates/pleated-infinity.webp`；颜色、浓度与对比度由 `tokens.css` 的 `--pleat-*` 控制。
 
 ## 留言页：机械环

@@ -70,6 +70,7 @@
   --pleat-opacity: 0.82;
   --pleat-wave-opacity: 0.82;
   --pleat-fallback-filter: none;
+  --pleat-glow: 0;
   /* 跟手光标：亮底保留墨色纱，暗底单独抬亮圆圈描边。 */
   --cursor-disc-line: #1a1a1a38;
   --cursor-disc-fill: #1a1a1a14;
@@ -783,14 +784,15 @@ html.dark body.gallery-inf-plate {
   --gallery-topbar-bg: linear-gradient(180deg, #f56800e6, #f5680024);
 }
 
-/* 标签百褶环：铜橙薄片与暖杏色脉冲分开；同档 alpha 保留原来的波动浓度关系。 */
+/* 标签百褶环：沿用关于页的石墨黑本体与橙色脉冲，薄片明暗撑出黑底上的体积。 */
 html.dark body.tags-plate {
-  --pleat-base: #b47a4a;
-  --pleat-wave: #ffd0a0;
-  --pleat-opacity: 0.52;
-  --pleat-wave-opacity: 0.52;
-  --pleat-contrast: 0.65;
-  --pleat-fallback-filter: grayscale(1) sepia(1) saturate(3.5) hue-rotate(-20deg) brightness(0.5);
+  --pleat-base: var(--fin-body-dark);
+  --pleat-wave: var(--fin-glow-dark);
+  --pleat-opacity: 0.72;
+  --pleat-wave-opacity: 0.72;
+  --pleat-contrast: 0.8;
+  --pleat-glow: 0.5;
+  --pleat-fallback-filter: grayscale(1) brightness(0.23) drop-shadow(0 0 2px #e08a3f4d);
   --deco-crosshair-line: #ed8c3b66;
   --deco-crosshair-dot: #ffb570b3;
 }

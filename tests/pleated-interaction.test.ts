@@ -12,6 +12,7 @@ function run(options: { reduced?: boolean; context?: boolean; hidden?: boolean }
   let time = 0, id = 0, vertices = new Float32Array(), selection = '';
   let dark = false;
   const colors = new Map<string, number[]>();
+  const scalars = new Map<string, number>();
   class Element { constructor(public control = false) {} closest() { return this.control ? this : null; } }
   const target = new Element();
   const listen = (name: string, fn: () => void) => events.set(name, fn);
@@ -20,6 +21,7 @@ function run(options: { reduced?: boolean; context?: boolean; hidden?: boolean }
     getShaderParameter: () => true, getProgramParameter: () => true, getAttribLocation: () => 0,
     getUniformLocation: (_: unknown, name: string) => name,
     uniform3fv: (name: string, values: number[]) => { colors.set(name, [...values]); },
+    uniform1f: (name: string, value: number) => { scalars.set(name, value); },
     bufferData: (_: unknown, data: Float32Array) => { vertices = data.slice(); },
   }, { get: (object, key) => key in object ? object[key as keyof typeof object] : () => {} });
   let context = options.context !== false;
@@ -36,14 +38,14 @@ function run(options: { reduced?: boolean; context?: boolean; hidden?: boolean }
     window: { devicePixelRatio: 1, addEventListener: listen },
     matchMedia: () => query,
     getComputedStyle: () => ({ getPropertyValue: (name: string) => (dark
-      ? { '--pleat-base': '#b47a4a', '--pleat-wave': '#ffd0a0', '--pleat-opacity': '.52', '--pleat-wave-opacity': '.52', '--pleat-contrast': '.65' }
-      : { '--pleat-base': '#fff', '--pleat-wave': '#a4cfad', '--pleat-opacity': '.3', '--pleat-wave-opacity': '.58', '--pleat-contrast': '.5' })[name] }),
+      ? { '--pleat-base': '#b47a4a', '--pleat-wave': '#ffd0a0', '--pleat-opacity': '.52', '--pleat-wave-opacity': '.52', '--pleat-contrast': '.65', '--pleat-glow': '.28' }
+      : { '--pleat-base': '#fff', '--pleat-wave': '#a4cfad', '--pleat-opacity': '.3', '--pleat-wave-opacity': '.58', '--pleat-contrast': '.5', '--pleat-glow': '0' })[name] }),
     requestAnimationFrame: (fn: (time: number) => void) => { frames.set(++id, fn); return id; },
     cancelAnimationFrame: (id: number) => frames.delete(id),
     ResizeObserver: class { observe() {} },
   });
   return {
-    canvas, host, frames, colors,
+    canvas, host, frames, colors, scalars,
     get green() { let max = 0; for (let n = 6; n < vertices.length; n += 7) max = Math.max(max, vertices[n]); return max; },
     point() {
       // 从实际首帧薄片三角形内部取一点，带上画布在视口中的偏移。
@@ -128,5 +130,19 @@ describe('百褶环 · 点击和浏览器生命周期', () => {
     expect(r.frames.size).toBe(1);
     r.emit('webglcontextlost'); r.theme(true); r.restore();
     expect(r.colors.get('uWave')).toEqual([255, 208, 160].map(c => c / 255));
+  });
+
+  it('暗色常驻辉光无需点击，亮色归零，上下文恢复后保留当前强度', () => {
+    const r = run();
+    expect(r.scalars.get('uGlow')).toBe(0);
+    r.theme(true);
+    expect(r.green).toBe(0);
+    expect(r.scalars.get('uGlow')).toBeGreaterThan(0);
+    expect(r.frames.size).toBe(1);
+    r.emit('webglcontextlost'); r.restore();
+    expect(r.scalars.get('uGlow')).toBe(.28);
+    r.theme(false);
+    expect(r.scalars.get('uGlow')).toBe(0);
+    expect(r.green).toBe(0);
   });
 });

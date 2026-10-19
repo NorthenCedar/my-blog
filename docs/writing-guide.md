@@ -2174,9 +2174,12 @@ stack:                    # 技术栈：group 是分组小标题，items 是该�
 2026-10-19：标签总览和全部单标签页接手旧版可点击百褶环，移除陶瓷金属图片。
 关于页自 2026-10-18 起使用下面 §24.4 的立体鳍片环；本节参数只用于标签区的百褶环。
 
-暗色标签环使用铜色薄片 `#b47a4a` 和暖杏色脉冲 `#ffd0a0`，默认与波动 alpha 均为 0.52，
-明暗对比为 0.65；只在 `html.dark body.tags-plate` 下覆盖 `--pleat-*`。
-静态后备图使用 `--pleat-fallback-filter` 保留同色系，准星同步转橙。
+暗色标签环参照关于页，采用石墨黑薄片和橙色脉冲，分别复用 `--fin-body-dark`（`#3a3a3e`）
+与 `--fin-glow-dark`（`#e08a3f`）。默认与波动 alpha 均为 0.72，明暗对比为 0.8，
+用薄片的光照撑出黑底上的体积；只在 `html.dark body.tags-plate` 下覆盖 `--pleat-*`。
+薄片四周常驻柔和橙色细边光，`--pleat-glow` 控制强度（暗色 0.5、亮色 0）；
+点击时沿原轨迹增强脉冲与细边辉光，高光按剩余亮度空间等比收敛，避免橙色偏黄。
+静态后备图使用 `grayscale(1) brightness(0.23)` 同步转为黑灰，叠加淡橙投影，准星保持橙色。
 同页切换主题会更新 GPU 色板并保留正在传播的波；上下文恢复也使用最新主题。
 亮色继续使用原暖白与淡绿。
 
@@ -2189,6 +2192,7 @@ stack:                    # 技术栈：group 是分组小标题，items 是该�
 
 | 暖白 / 淡绿色、默认 / 波动浓度 | `tokens.css` 的 `--pleat-base`、`--pleat-wave`、`--pleat-opacity`、`--pleat-wave-opacity` |
 | **明暗对比**（满屏不变，改这个） | `tokens.css` 的 `--pleat-contrast` |
+| 暗色常驻细边辉光 | `tokens.css` 的 `--pleat-glow`；色相跟随 `--pleat-wave` |
 | 屏上尺寸 | `PleatedInfinity.astro` 的 `width: min(94vw, 1400px, 150vh)` |
 | 波速、宽度、振幅 | `src/scripts/pleated-core.ts` 的 `SPEED`、`WIDTH`、`AMPLITUDE`，沿归一化弧长计算 |
 | 轮廓、片数、扭转 | 同文件的 `createPleats` 与 `updatePleats`（改片数要**同步改厚度**，见下） |
