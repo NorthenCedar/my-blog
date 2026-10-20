@@ -1,4 +1,5 @@
 /** 凭据只在服务端运算；浏览器不导入此模块。 */
+import { scrypt } from 'node:crypto';
 export const AVATARS = ['leaf', 'helix', 'flask', 'crystal', 'orbit', 'infinity'] as const;
 const encoder = new TextEncoder();
 export class AccountError extends Error {
@@ -39,19 +40,24 @@ function equalHex(a: string, b: string) {
   return diff === 0;
 }
 async function derive(password: string, salt: string) {
-  const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: encoder.encode(salt), iterations: 600000 }, key, 256));
+  // Cloudflare 生产限制 PBKDF2 为 100000 次，而本地 workerd 不限。
+  // 标准 scrypt 使用约 32 MiB 内存，N*r*p=786432，低于平台 2^20 的成本上限。
+  return new Promise<string>((resolve, reject) => {
+    scrypt(password, salt, 32, { N: 32768, r: 8, p: 3, maxmem: 64 * 1024 * 1024 }, (error, derived) => {
+      if (error) reject(error); else resolve(hex(derived));
+    });
+  });
 }
 export async function hashPassword(password: string) {
   const salt = randomToken(16);
-  return `pbkdf2-sha256$600000$${salt}$${await derive(password, salt)}`;
+  return `scrypt$32768$8$3$${salt}$${await derive(password, salt)}`;
 }
 export async function verifyPassword(password: string, encoded: string) {
-  const match = /^pbkdf2-sha256\$600000\$([a-f0-9]{32})\$([a-f0-9]{64})$/.exec(encoded);
+  const match = /^scrypt\$32768\$8\$3\$([a-f0-9]{32})\$([a-f0-9]{64})$/.exec(encoded);
   if (!match || [...password].length > 128) return false;
   return equalHex(await derive(password, match[1]), match[2]);
 }
-export const DUMMY_PASSWORD_HASH = `pbkdf2-sha256$600000$${'0'.repeat(32)}$${'0'.repeat(64)}`;
+export const DUMMY_PASSWORD_HASH = `scrypt$32768$8$3$${'0'.repeat(32)}$${'0'.repeat(64)}`;
 export async function recoveryMatches(given: unknown, stored: string) {
   const code = text(given).trim().toLowerCase();
   return /^[a-f0-9]{64}$/.test(code) && equalHex(await digest(code), stored);

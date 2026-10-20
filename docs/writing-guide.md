@@ -1041,7 +1041,7 @@ npx wrangler d1 execute beishan-comments --remote --file=migrations/0004_visitor
 
 **站主怎样登录：** 先和普通访客一样注册自己的账号、保存恢复码。本人登录后访问 `/api/account`，读取 `user.id` 完整值；在 Cloudflare Pages `personal` 的生产环境变量中绑定 `OWNER_USER_ID`，值为该 ID，再触发新部署。先核对确为本人账户再绑定；不要把短身份标识、昵称或登录名当成完整 ID。未绑定时任何新账户都只是普通访客，首个注册者也不会自动成为站主。站主登录显示可信身份，可使用保留昵称；现有留言删除管理继续通过本机写作台，管理密钥仍只在本机/服务端，访客网页不接收它。
 
-**部署成本与隐私：** 无邮件或短信服务、无需验证码发送费用；继续使用现有 Pages Functions 与 D1 及其资源额度。密码用独立随机盐与 PBKDF2-SHA256 600000 次保存摘要；恢复码及会话也只存摘要。会话 30 天，HTTPS Cookie 为 HttpOnly/Secure/SameSite=Lax；只有本机 HTTP 预览使用独立开发 Cookie。注册按 IP 摘要每小时 3 次；登录按账号摘要每 15 分钟 10 次，恢复每 15 分钟 6 次，账户动作另有 IP 限流。写入时再次核对会话，防止并发退出或改密后继续写入；写作台现有 ADMIN_TOKEN 鉴权保持。
+**部署成本与隐私：** 无邮件或短信服务、无需验证码发送费用；继续使用现有 Pages Functions 与 D1 及其资源额度。密码用独立随机盐与 scrypt（N=32768、r=8、p=3，约 32 MiB 内存）保存摘要；恢复码及会话也只存摘要。会话 30 天，HTTPS Cookie 为 HttpOnly/Secure/SameSite=Lax；只有本机 HTTP 预览使用独立开发 Cookie。注册按 IP 摘要每小时 3 次；登录按账号摘要每 15 分钟 10 次，恢复每 15 分钟 6 次，账户动作另有 IP 限流。写入时再次核对会话，防止并发退出或改密后继续写入；写作台现有 ADMIN_TOKEN 鉴权保持。
 
 **浏览器回归：** 使用只含测试数据的本地库，以 `--persist-to _tmp-visitor-state` 初始化 0001–0004，并启动 `npx wrangler pages dev dist --ip 127.0.0.1 --port 4337 --persist-to _tmp-visitor-state` 后，运行 `python scripts/verify-visitor-accounts.py`。需要已安装 Chrome；脚本仅依赖 Python 标准库，创建独立浏览器资料目录，所有测试请求只发往本机 4337。它会注册、发测试留言和注销测试账户，不能指向真实用户库。`VISITOR_LAYOUT_ONLY=1` 可仅检查评论头像和说说表单布局，不注册或发表。
 
