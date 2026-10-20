@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import typegpu from 'unplugin-typegpu/vite';
+import { createVideoDevPlugin } from './src/lib/video-assets.mjs';
 
 export default defineConfig({
   // 站点正式地址（2026-09-25 绑定自有域名 northcedar.top）。
@@ -20,6 +21,7 @@ export default defineConfig({
   },
   vite: {
     plugins: [
+      createVideoDevPlugin(),
       // ★ 2026-10-17：Jelly Slider 主题开关（原版 WebGPU 实现，src/vendor/jelly-slider/）。
       //   TypeGPU 的 'use gpu' 函数体必须在构建时抽取 shader 源码；
       //   没有这个插件，运行时报 "Missing metadata for tgpu.fn function body"。

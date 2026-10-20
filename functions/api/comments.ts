@@ -9,9 +9,13 @@ import {
   type CommentRecord,
   type ReplyRecord,
 } from './_lib/comments-core';
+import { commentIdentity, attachCommentAuthors, saveAuthoredComment } from './_lib/visitor-comments';
+import { AccountError } from './_lib/visitor-core';
+import { publicUser } from './_lib/visitor-store';
 
 interface Env {
   COMMENTS_DB: D1Database;
+  OWNER_USER_ID?: string;
 }
 
 const json = (data: unknown, status = 200) =>
@@ -104,10 +108,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     replies = (rrows ?? []).map(toReplyRecord);
   }
 
-  return json({ comments, replies });
+  return json(await attachCommentAuthors(comments, replies, env));
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  try {
   let payload: unknown;
   try {
     payload = await request.json();
@@ -115,7 +120,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: '请求格式不对' }, 400);
   }
 
-  const check = validateComment(payload);
+  const author = await commentIdentity(payload, request, env);
+  const check = validateComment(author ? { ...(payload as Record<string, unknown>), name: author.nickname } : payload);
   if (!check.ok) return json({ error: check.error }, 400);
 
   // 蜜罐命中：**假装成功**但不落库 —— 让机器人以为得手，不来重试。
@@ -160,16 +166,24 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   // ---- 顶层评论（parentId = 0）----
   if (parentId === 0) {
+    if (author) {
+      const id = await saveAuthoredComment(request, env, author, 'comment', [slug, name, body, createdAt, ipHash]);
+      return json({ comment: { id, slug, name, body, createdAt, parentId: 0, replyTo: '', author: publicUser(author, env) } }, 201);
+    }
     const inserted = await env.COMMENTS_DB.prepare(
       'INSERT INTO comments (slug, name, body, created_at, ip_hash) VALUES (?, ?, ?, ?, ?) RETURNING id'
     )
       .bind(slug, name, body, createdAt, ipHash)
       .first<{ id: number }>();
 
-    return json({ comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId: 0, replyTo: '' } }, 201);
+    return json({ comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId: 0, replyTo: '', author: null } }, 201);
   }
 
   // ---- 回复（parentId > 0）----（父评论已在限流前校验过）
+  if (author) {
+    const id = await saveAuthoredComment(request, env, author, 'reply', [slug, parentId, replyTo, name, body, createdAt, ipHash]);
+    return json({ comment: { id, slug, name, body, createdAt, parentId, replyTo, author: publicUser(author, env) } }, 201);
+  }
   const inserted = await env.COMMENTS_DB.prepare(
     'INSERT INTO replies (slug, parent_id, reply_to, name, body, created_at, ip_hash) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id'
   )
@@ -177,7 +191,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .first<{ id: number }>();
 
   return json(
-    { comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId, replyTo } },
+    { comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId, replyTo, author: null } },
     201
   );
+  } catch (error) {
+    if (error instanceof AccountError) return json({ error: error.message }, error.status);
+    throw error;
+  }
 };

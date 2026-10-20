@@ -1,0 +1,14 @@
+---
+import Base from '../layouts/Base.astro';
+import '../styles/visitor.css';
+---
+<Base title="访客账户" chrome="page" noIndex>
+  <div class="visitor-account">
+    <h1>访客账户</h1>
+    <p class="visitor-hint">留下一张名片，下次见面时更容易认出你。匿名留言始终可以直接使用。</p>
+    <div data-account-notices role="status" aria-live="polite"></div>
+    <div data-account-state><p class="visitor-hint">正在读取账户…</p></div>
+    <noscript><p>账户设置需要 JavaScript，请启用后刷新。</p></noscript>
+  </div>
+</Base>
+<script>import '../scripts/visitor-settings';</script>

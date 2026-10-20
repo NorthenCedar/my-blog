@@ -30,6 +30,8 @@ interface Props {
   current?: NavKey;
   /** 404 这类错误页不该有 canonical —— 它不是真实内容页 */
   noCanonical?: boolean;
+  /** 账户设置等静态外壳不进入搜索索引。 */
+  noIndex?: boolean;
   /**
    * 追加到 `<body>` 的额外类名（空格分隔）。
    * ★ 2026-10-03 新增：关于页要一张**从 body 背景就开始**的深色大图，
@@ -59,7 +61,7 @@ interface Props {
    */
   chrome?: 'band' | 'console' | 'page';
 }
-const { title, description, current, noCanonical, chrome, bodyClass, fullWidth = false } = Astro.props;
+const { title, description, current, noCanonical, noIndex, chrome, bodyClass, fullWidth = false } = Astro.props;
 // 站名/简介/联系方式来自 content/site.md —— 主题不持有任何文案
 const site = await getSite();
 // 关于「Topbar 静态 import 的成本」：Astro 的样式图按 import 收集（不是按 render），
@@ -117,6 +119,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
          别删 —— 删了以后无法重新验证站点。换域名后需要在百度重新申请一个。 -->
     <meta name="baidu-site-verification" content="codeva-5aPQf9LUnL" />
     <title>{docTitle}</title>
+    {noIndex && <meta name="robots" content="noindex, nofollow" />}
     {description && <meta name="description" content={description} />}
     {!noCanonical && <link rel="canonical" href={canonical} />}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

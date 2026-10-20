@@ -964,7 +964,7 @@ export async function setupScene(root: TgpuRoot, context: GPUCanvasContext) {
   let lastTimestamp: number | null = null;
   let lastDt = 0;
   let frameCount = 0;
-  let warmedUp = false;
+  let initialized = false;
   const taaResolver = new TAAResolver(root, width, height);
 
   function createBindGroups() {
@@ -1005,34 +1005,6 @@ export async function setupScene(root: TgpuRoot, context: GPUCanvasContext) {
   let lastMouseX = Number.NaN;
   let onProgress: ((progress: number) => void) | null = null;
 
-  /* ★★ 2026-10-17 第六轮（站主：「刚点进这个关于页、按钮刷新出来的时候，软条突出部分的
-     下部是黏在一起的；把这个软条拉到暗色再拉回亮色才不会粘在一起」）。
-
-     **不是"物理还没收敛"**，是首帧的果冻链正处在一个**退化平衡点**上，三件事叠在一起：
-
-       ① 17 个点被摆成一条**水平直线**，y 一律取到钳位下限 `baseY + yOffset`（−0.03）；
-       ② 物理里**没有重力** —— `#integrate` 只有 Verlet 惯性和压缩时的拱形偏置，
-          所以这条直线本身就是一个合法解，**没人碰它，它永远不会自己抬起来**；
-       ③ 而 `getSceneDist` 是 `opUnion(地面, 果冻)`：果冻下半截埋在地面里时两者合成
-          **同一张面**（没有交线、没有接触影）⇒ 看着就是"黏在一起"。
-
-     站主手工做的那两步之所以能修好：`#targetX` 突变会让段长约束被违反，链条被拽开、
-     抬离地面，之后同样没有重力把它按回去，于是停在新平衡态上。
-
-     ⇒ 修法就是**在首帧之前把这件事自动做一遍**（而不是给初值硬塞一个形状 ——
-       手搓的拱形和约束解出来的形状对不上，会看到一次跳变）。
-     顺带解决第二个首帧病灶：首帧 `deltaTime = 0` ⇒ `update()` 直接 return ⇒
-     **贝塞尔纹理一次都没被写过**，首帧采样到的是未初始化纹理（distance 全 0
-     ⇒ 整个 bbox 都被判成"内部"），那本身就是一坨。
-     ⚠ 中间步 `dispatchBezier = false`，只留最后一次派发（理由见 slider.ts 的注释）。 */
-  function warmUpJelly() {
-    slider.setDragX(DARK_END);
-    for (let i = 0; i < 30; i++) slider.update(1 / 60, false);
-    slider.setDragX(eventHandler.currentMouseX);
-    for (let i = 0; i < 45; i++) slider.update(1 / 60, false);
-    slider.update(1 / 60);
-  }
-
   function render(timestamp: number) {
     if (canvas.width !== prevCanvasWidth || canvas.height !== prevCanvasHeight) {
       onResize();
@@ -1051,9 +1023,9 @@ export async function setupScene(root: TgpuRoot, context: GPUCanvasContext) {
       seed: d.vec2f((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2),
     });
 
-    if (!warmedUp) {
-      warmedUp = true;
-      warmUpJelly();
+    if (!initialized) {
+      initialized = true;
+      slider.setInitial(eventHandler.currentMouseX);
     }
 
     eventHandler.update();

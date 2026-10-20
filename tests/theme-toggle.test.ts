@@ -275,59 +275,7 @@ describe('画布透明通路（2026-10-17 第五轮）', () => {
   });
 });
 
-/**
- * ★★ 2026-10-17 第六轮（站主：「刚点进这个关于页、按钮刷新出来的时候，软条突出部分的
- *   下部是黏在一起的；把这个软条拉到暗色再拉回亮色才不会粘在一起」）。
- *
- * 根因不是"物理还没收敛"，而是**首帧处在一个退化平衡点**上：
- *   ① 17 个点被摆成一条水平直线，y 一律取到钳位下限 `baseY + yOffset`；
- *   ② 物理里**没有重力**（只有 Verlet 惯性与压缩时的拱形偏置）⇒ 这条直线本身就是
- *      一个合法解，没人碰它永远不会自己抬起来；
- *   ③ `getSceneDist` 是 `opUnion(地面, 果冻)` ⇒ 果冻下半截埋在地面里时两者合成
- *      **同一张面**，没有交线也没有接触影 ⇒ 看起来就是"黏在一起"。
- * 站主手工"拉到暗色再拉回来"能修好，是因为 `#targetX` 突变让段长约束被违反、
- * 链条被拽开并抬离地面，之后没有重力把它按回去。
- *
- * ⇒ 修法：首帧之前自动把这件事做一遍。下面守的是**这件事真的发生了**：
- *   热身必须真的挪端点（不是空跑）、且最后一次必须派发贝塞尔纹理。
- * ⚠ 首帧还有一个独立病灶：`deltaTime = 0` ⇒ `update()` 直接 return ⇒
- *   贝塞尔纹理一次都没被写过，首帧采样到未初始化纹理（distance 全 0
- *   ⇒ 整个 bbox 都被判成"内部"），那本身就是一坨。
- */
-describe('首帧的果冻状态（2026-10-17 第六轮）', () => {
-  const read = (rel: string) =>
-    readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
-  const stripComments = (src: string) =>
-    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  const scene = stripComments(read('../src/vendor/jelly-slider/scene.ts'));
-  const slider = stripComments(read('../src/vendor/jelly-slider/slider.ts'));
-
-  it('首帧之前先把手柄热身到真实平衡态（否则首帧是退化直线）', () => {
-    expect(
-      scene.includes('warmUpJelly();'),
-      '首帧必须热身 —— 没热身时链条躺在钳位下限上，下半截埋进地面',
-    ).toBe(true);
-    expect(
-      scene.includes('slider.setDragX(DARK_END);'),
-      '热身必须真的把端点拽到另一端（空跑一遍等于没做）',
-    ).toBe(true);
-    expect(
-      scene.includes('slider.update(1 / 60);'),
-      '热身最后一步必须派发贝塞尔纹理 —— 否则首帧采样到的仍是未初始化纹理',
-    ).toBe(true);
-  });
-
-  it('热身中间步不派发贝塞尔纹理，正常帧仍派发', () => {
-    expect(
-      slider.includes('update(dt: number, dispatchBezier = true)'),
-      '默认必须派发 —— 关掉默认值会让整个装置静止不再更新',
-    ).toBe(true);
-    expect(
-      (scene.match(/slider\.update\(1 \/ 60, false\)/g) ?? []).length >= 2,
-      '热身里的循环步都要带 false，否则 75 次 GPU 计算派发 = 一次可见的启动卡顿',
-    ).toBe(true);
-  });
-});
+// 首帧几何、纹理上传和停帧由 jelly-initialization.test.ts 跑真实场景验证。
 
 /**
  * ★★ 2026-10-17 第七轮（站主）：

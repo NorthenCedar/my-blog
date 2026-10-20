@@ -11,7 +11,11 @@
 // ⚠️ 不要从 functions/ 下 import 任何东西：那会把后端 core 整包拖进浏览器产物
 //（实测文章页 JS 从 5177 涨到 8310，直接顶爆预算）。需要共用的纯函数就写在这个文件里。
 
-export type Reply = {
+import { authorNode, identityControls, type Authored } from './visitor-client';
+const replyIdentityCleanup = new WeakMap<Element, () => void>();
+const removeReplyForm = (form: Element) => { replyIdentityCleanup.get(form)?.(); replyIdentityCleanup.delete(form); form.remove(); };
+
+export type Reply = Authored & {
   id: number;
   parentId: number;
   replyTo: string;
@@ -59,10 +63,11 @@ export const parentIdsOf = (rows: { id: number }[]) => rows.map((r) => r.id);
 export async function postComment(payload: Record<string, unknown>): Promise<Reply> {
   const r = await fetch('/api/comments', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-NC-Request': '1' },
     body: JSON.stringify(payload),
   });
   const b = (await r.json().catch(() => ({}))) as { comment?: Reply; error?: string };
+  if (r.status === 401 && payload.identity === 'account') window.dispatchEvent(new Event('visitor-session-expired'));
   if (!r.ok || !b.comment) throw new Error(b.error || '没发出去，稍后再试。');
   return b.comment;
 }
@@ -77,11 +82,8 @@ export function replyLi(r: Reply, onReply: () => void, fresh = false): HTMLLIEle
   const li = el('li', 'reply-item');
   li.dataset.replyId = String(r.id);
   // A / B 都是用户输入 ⇒ 用 textContent 写，绝不拼 HTML
-  const meta = el(
-    'p',
-    'reply-meta',
-    `${r.name}${r.replyTo ? ` 回复 ${r.replyTo}` : ''} · ${fmtTime(r.createdAt)}${fresh ? ' · 刚发表' : ''}`
-  );
+  const meta = el('p', 'reply-meta');
+  meta.append(authorNode(r, 'reply'), document.createTextNode(`${r.replyTo ? ` 回复 ${r.replyTo}` : ''} · ${fmtTime(r.createdAt)}${fresh ? ' · 刚发表' : ''}`));
   const body = el('p', 'reply-body', r.body);
   const btn = el('button', 'reply-btn', '回复');
   btn.type = 'button';
@@ -100,7 +102,7 @@ export function toggleReplyForm(
   ctx: { slug: string; parentId: number; replyTo: string; name: () => string; onAdded: () => void }
 ): void {
   const open = li.querySelector(':scope > .reply-form');
-  list.querySelectorAll('.reply-form').forEach((f) => f.remove());
+  list.querySelectorAll('.reply-form').forEach(removeReplyForm);
   if (open) return;
 
   const box = li.querySelector<HTMLElement>(':scope > .reply-list')!;
@@ -109,6 +111,7 @@ export function toggleReplyForm(
 
   const name = el('input', 'reply-name');
   name.type = 'text';
+  name.name = 'name';
   name.maxLength = 40;
   name.autocomplete = 'nickname';
   name.placeholder = '名字';
@@ -134,12 +137,13 @@ export function toggleReplyForm(
   send.type = 'submit';
   const cancel = el('button', 'reply-cancel', '取消');
   cancel.type = 'button';
-  cancel.addEventListener('click', () => form.remove());
+  cancel.addEventListener('click', () => removeReplyForm(form));
   const error = el('p', 'reply-error');
   error.setAttribute('role', 'alert');
   error.hidden = true;
 
   form.append(name, body, hp, send, cancel, error);
+  replyIdentityCleanup.set(form, identityControls(form));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     error.hidden = true;
@@ -149,13 +153,14 @@ export function toggleReplyForm(
       parentId: ctx.parentId,
       replyTo: ctx.replyTo,
       name: name.value,
+      identity: String(new FormData(form).get('identity') ?? 'anonymous'),
       body: body.value,
       website: hpInput.value,
     })
       .then((r) => {
         // 回复按**旧的在上**（站主 2026-09-28 拍板，对话要顺着读）⇒ append，不是 prepend
         box.append(replyLi(r, () => toggleReplyForm(list, li, { ...ctx, replyTo: r.name })));
-        form.remove();
+        removeReplyForm(form);
         ctx.onAdded();
       })
       .catch((err: Error) => {

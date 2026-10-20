@@ -36,6 +36,23 @@ body {
   line-height: var(--lh-body);
 }
 
+/* 带页脚的外壳至少铺满视口；短页由正文补足高度，长页继续自然排布。
+   首页的控制台外壳没有 SiteFooter，保留它原有的滚动与剧场布局。 */
+body:not(.chrome-console) {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+body:not(.chrome-console) > main {
+  flex: 1 0 auto;
+}
+
+body:not(.chrome-console) > footer {
+  flex-shrink: 0;
+}
+
 h1,
 h2,
 h3 {

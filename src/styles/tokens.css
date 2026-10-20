@@ -6,7 +6,7 @@
   --home-flow-width: 1.2px;
   --home-flow-field-opacity: 0.22;
   --home-flow-path-opacity: 0.62;
-  /* 关于页百褶环：波包经过时沿切线疏密振动，并局部染成淡绿。
+  /* 标签区百褶环：波包经过时沿切线疏密振动，并局部染成淡绿。
      ★★★ 浓淡这三轮反复了一次来回，每一次都有量：
         ① 10-15 站主：「线上太淡，要到参考图那个浓度」→ 0.3 → 1
         ② 10-16 站主看完对比度：「改回 0.75」
@@ -69,8 +69,9 @@
   --pleat-wave: #a4cfad;
   --pleat-opacity: 0.82;
   --pleat-wave-opacity: 0.82;
-  --pleat-fallback-filter: none;
-  --pleat-glow: 0;
+  /* 亮暗共用同一薄片细边光，亮色随淡绿波色、暗色单独覆盖为橙色。 */
+  --pleat-fallback-filter: drop-shadow(0 0 2px #a4cfad4d);
+  --pleat-glow: 0.5;
   /* 跟手光标：亮底保留墨色纱，暗底单独抬亮圆圈描边。 */
   --cursor-disc-line: #1a1a1a38;
   --cursor-disc-fill: #1a1a1a14;

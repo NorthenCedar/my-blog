@@ -8,8 +8,9 @@
 // 安全铁律同 comments.ts：**任何地方都不用 innerHTML**，用户输入一律 textContent。
 
 import { fmtTime, groupReplies, parentIdsOf, postComment, replyLi, toggleReplyForm, type Reply } from './reply-common';
+import { authorNode, identityControls, type Authored } from './visitor-client';
 
-type Comment = { id: number; name: string; body: string; createdAt: string };
+type Comment = Authored & { body: string; createdAt: string };
 
 const LIKE_STORE = 'nc-liked-talks';
 
@@ -114,7 +115,7 @@ const writeLiked = (list: string[]) => {
     li.dataset.id = String(c.id);
     const meta = document.createElement('p');
     meta.className = 'cmeta';
-    meta.textContent = `${c.name} · ${fmtTime(c.createdAt)}${fresh ? ' · 刚发表' : ''}`;
+    meta.append(authorNode(c), document.createTextNode(` · ${fmtTime(c.createdAt)}${fresh ? ' · 刚发表' : ''}`));
     const body = document.createElement('p');
     body.className = 'cbody';
     body.textContent = c.body;
@@ -145,6 +146,7 @@ const writeLiked = (list: string[]) => {
     const errorBox = box.querySelector<HTMLElement>('[data-error]')!;
     const form = box.querySelector<HTMLFormElement>('[data-form]')!;
     const submit = box.querySelector<HTMLButtonElement>('[data-submit]')!;
+    identityControls(form);
     const countSpan = document.querySelector<HTMLElement>(`[data-count-for="${CSS.escape(slug)}"]`);
     let loaded = false;
 
@@ -215,6 +217,7 @@ const writeLiked = (list: string[]) => {
       const payload = {
         slug,
         name: String(data.get('name') ?? ''),
+        identity: String(data.get('identity') ?? 'anonymous'),
         body: String(data.get('body') ?? ''),
         website: String(data.get('website') ?? ''),
         parentId: 0, // 主表单永远发顶层评论；回复走 toggleReplyForm

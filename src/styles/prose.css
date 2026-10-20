@@ -68,6 +68,16 @@
   width: 100%;
 }
 
+.prose video {
+  display: block;
+  margin: var(--sp-6) 0;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--hair);
+  background: var(--panel);
+}
+
 .prose hr {
   border: 0;
   border-top: 1px solid var(--hair);

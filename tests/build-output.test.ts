@@ -1041,7 +1041,9 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     // 现在 5 处 = head 保险 + 光标 + 统计 + 评论 loader + 过渡 loader（阅读尺并在过渡 loader 那个块里，不新增标签）。
     // 2026-10-19：文章复用日志推动条，滚动/拖动与动态高度重算合并进原脚本入口。
     // 新增共享控制器后实测 13801 字节；仍限制 5 个入口，预算由 12800 字节调整为 14 KiB。
-    const BUDGET = 14336;
+    // 2026-10-20：新增可选账密、恢复码、身份选择、头像与名片；完整闭包实测 21280 B。
+    // 预算 22 KiB，主题开关隔离断言继续独立生效。
+    const BUDGET = 22528;
     console.log(`内联脚本体积: ${inline.join(' + ')} = ${inlineTotal} 字节 · 含同源外链合计 ${full} 字节（预算 ${BUDGET}）· ${scripts.length} 处 <script>`);
 
     expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBeLessThanOrEqual(5);
@@ -1392,7 +1394,7 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     );
   });
 
-  it('★ 留言页 JS 总量（内联 + 同源外链闭包）≤ 20 KB', () => {
+  it('★ 留言页 JS 总量（内联 + 同源外链闭包）≤ 28 KiB', () => {
     /* 2026-10-16：站主选择连续浅水波面，替代离散 CSS 圆环。
        新增网格求解与像素光影，实测闭包约 18 KB；本页预算调整为 20 KiB。
        仍统计完整 import 闭包，不影响其他页面预算，不引入三维库。 */
@@ -1401,7 +1403,8 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     const html = readFileSync(page, 'utf8');
     const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
     const inline = scripts.map((s) => Buffer.byteLength(s[1], 'utf8')).reduce((a, b) => a + b, 0);
-    const BUDGET = 20480;
+    // 2026-10-20：账户与名片模块加入后完整闭包实测 26079 B。
+    const BUDGET = 28 * 1024;
     const { code, files } = jsClosure(page);
     const full = Buffer.byteLength(code, 'utf8');
     console.log(

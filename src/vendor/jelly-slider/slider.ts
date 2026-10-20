@@ -200,6 +200,58 @@ export class Slider {
     this.#targetX = std.clamp(x, minX, maxX);
   }
 
+  /** 直接在目标端求初始平衡态，不通过移动端点制造形变。 */
+  setInitial(x: number) {
+    this.setDragX(x);
+    const dx = this.#targetX - this.anchor.x;
+    const dy = 0.08 - this.anchor.y;
+    const curve = (t: number, height: number) =>
+      this.anchor.y + this.#yOffset + dy * t + height * Math.sin(Math.PI * t);
+    const samples = 128;
+    const curveLength = (height: number) => {
+      let length = 0;
+      for (let i = 1; i <= samples; i++) {
+        length += Math.hypot(dx / samples,
+          curve(i / samples, height) - curve((i - 1) / samples, height));
+      }
+      return length;
+    };
+    // 用同长度的单拱避开水平压缩产生的自折叠，再交还原有约束求解器。
+    let lo = 0;
+    let hi = this.totalLength;
+    for (let i = 0; i < 20; i++) {
+      const mid = (lo + hi) / 2;
+      if (curveLength(mid) < this.totalLength) lo = mid;
+      else hi = mid;
+    }
+    const lengths = [0];
+    for (let i = 1; i <= samples; i++) {
+      lengths[i] = lengths[i - 1] + Math.hypot(dx / samples,
+        curve(i / samples, lo) - curve((i - 1) / samples, lo));
+    }
+    let segment = 1;
+    for (let i = 0; i < this.n; i++) {
+      const distance = lengths[samples] * i / (this.n - 1);
+      while (segment < samples && lengths[segment] < distance) segment++;
+      const t = (segment - 1 + (distance - lengths[segment - 1]) /
+        (lengths[segment] - lengths[segment - 1] || 1)) / samples;
+      const px = this.anchor.x + dx * t;
+      const py = curve(t, lo);
+      this.#pos[i] = d.vec2f(px, py);
+      this.#prev[i] = d.vec2f(px, py);
+    }
+    let stable = 0;
+    for (let i = 0; i < 240 && stable < 4; i++) {
+      this.#step(1 / 60);
+      const movement = Math.max(...this.#pos.map((p, index) =>
+        Math.hypot(p.x - this.#prev[index].x, p.y - this.#prev[index].y)));
+      stable = movement < 1e-5 ? stable + 1 : 0;
+    }
+    // 首帧与前一物理帧一致；剩余速度不能在显示后再把初态顶开。
+    this.#prev = this.#pos.map(p => d.vec2f(p.x, p.y));
+    this.#publish();
+  }
+
   /**
    * ★ 本站加（2026-10-17 第七轮）：当前链条各点的**只读快照**。
    *
@@ -212,12 +264,15 @@ export class Slider {
     return this.#pos;
   }
 
-  /* ★ 2026-10-17 第六轮：加 `dispatchBezier` 开关，只为"首帧热身"用。
-     热身要跑几十步物理，但**只有最后一步的形状会被采样到** —— 中间每一步都派发一次
-     256×128 的贝塞尔计算，在手机上就是一次看得见的启动卡顿。 */
+  // 默认把当前物理帧上传 GPU；离线物理采样可跳过纹理计算。
   update(dt: number, dispatchBezier = true) {
     if (dt <= 0) return;
 
+    this.#step(dt);
+    this.#publish(dispatchBezier);
+  }
+
+  #step(dt: number) {
     const h = dt / this.substeps;
     const damp = std.clamp(this.damping, 0, 0.999);
     const compression = Math.max(
@@ -229,7 +284,9 @@ export class Slider {
       this.#integrate(h, damp, compression);
       this.#projectConstraints();
     }
+  }
 
+  #publish(dispatchBezier = true) {
     this.#computeNormals();
     this.#computeControlPoints();
     this.#updateGPUBuffer();

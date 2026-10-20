@@ -3,6 +3,7 @@
 // 安全铁律：用户输入一律用 textContent 写进 DOM，**任何地方都不用 innerHTML**。
 
 import { fmtTime, groupReplies, parentIdsOf, postComment, replyLi, toggleReplyForm, type Reply } from './reply-common';
+import { authorNode, identityControls, type Authored } from './visitor-client';
 
 const root = document.querySelector<HTMLElement>('[data-comments]');
 
@@ -15,7 +16,8 @@ if (root) {
   const form = root.querySelector<HTMLFormElement>('[data-form]')!;
   const submit = root.querySelector<HTMLButtonElement>('[data-submit]')!;
 
-  type Comment = { id: number; name: string; body: string; createdAt: string };
+  type Comment = Authored & { body: string; createdAt: string };
+  identityControls(form);
 
   const showError = (msg: string) => {
     errorBox.textContent = msg;
@@ -48,9 +50,8 @@ if (root) {
     const li = document.createElement('li');
     li.dataset.id = String(c.id);
 
-    const name = document.createElement('span');
-    name.className = 'comment-name';
-    name.textContent = c.name;
+    const name = authorNode(c);
+    name.classList.add('comment-name');
 
     const time = document.createElement('time');
     time.className = 'comment-time';
@@ -127,6 +128,7 @@ if (root) {
     const payload = {
       slug,
       name: String(data.get('name') ?? ''),
+      identity: String(data.get('identity') ?? 'anonymous'),
       body: String(data.get('body') ?? ''),
       website: String(data.get('website') ?? ''), // 蜜罐
       parentId: 0, // 主表单发的永远是顶层评论；回复走 toggleReplyForm 里的分支

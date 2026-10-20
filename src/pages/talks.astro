@@ -1,8 +1,10 @@
 ---
+import '../styles/visitor.css';
 import { getEntry } from 'astro:content';
 import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
+import { validateTalkVideos } from '../lib/video-assets.mjs';
 // 回复区样式（2026-09-28）：全局引入。本页 <style> 是 scoped，
 // 而回复元素是 JS 运行时创建的（没有 data-astro-cid）⇒ 写在本页 style 里不会生效。
 import '../styles/replies.css';
@@ -19,12 +21,17 @@ interface TalkImage {
   src: string;
   alt: string;
 }
+interface TalkVideo {
+  src: string;
+  alt: string;
+}
 interface Talk {
   id?: string;
   date: string | Date;
   text: string;
   href?: string;
   images?: TalkImage[];
+  videos?: TalkVideo[];
 }
 interface TalksData {
   intro?: string;
@@ -63,7 +70,10 @@ const slugOf = (t: Talk): string => {
   const nth = sameDay.indexOf(t);
   return `talk-${day}${nth === 0 ? '' : String.fromCharCode(97 + nth)}`;
 };
-const rows = items.map((t) => ({ t, slug: slugOf(t) }));
+const rows = items.map((t) => {
+  const slug = slugOf(t);
+  return { t, slug, videos: validateTalkVideos(t.videos, `content/pages/talks.md 的 ${slug}`) };
+});
 // 说说配图：构建期收进来，才能走 Astro 的优化管线（WebP + srcset）
 const talkAssets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/talks/*.{jpg,jpeg,png,webp,avif}', { eager: true });
 const assetOf = (name: string) => talkAssets[`/src/assets/talks/${name}`]?.default;
@@ -123,7 +133,7 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
   </header>
 
   <ol class="talks">
-    {rows.map(({ t, slug }) => (
+    {rows.map(({ t, slug, videos }) => (
       <li class="talk">
         <time datetime={iso(t.date)}>{fmt(t.date)}</time>
         <p class="body">
@@ -146,6 +156,19 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
                 <p class="missing">找不到图片 {img.src}（应放在 src/assets/talks/ 下）</p>
               ),
             )}
+          </div>
+        )}
+
+        {videos.length > 0 && (
+          <div class="clips">
+            {videos.map((video) => (
+              <figure class="clip">
+                <video controls preload="none" playsinline src={video.src} aria-label={video.alt}>
+                  <a href={video.src}>下载视频：{video.alt}</a>
+                </video>
+                <figcaption>{video.alt}</figcaption>
+              </figure>
+            ))}
           </div>
         )}
 
@@ -290,6 +313,30 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     /* 卡片底已改透明（= 纸白）⇒ 图底回到 `--panel`：配图带 alpha 时仍能看出图的边界，
        图没加载完也有个浅灰占位，不至于只剩一条空边框 */
     background: var(--panel);
+  }
+  .clips {
+    display: grid;
+    gap: var(--sp-3);
+    margin-top: var(--sp-3);
+    min-width: 0;
+  }
+  .clip {
+    margin: 0;
+    min-width: 0;
+  }
+  .clip video {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--hair);
+    background: var(--panel);
+  }
+  .clip figcaption {
+    margin-top: var(--sp-2);
+    color: var(--muted);
+    font-size: var(--fs-sm);
+    overflow-wrap: anywhere;
   }
   .missing {
     margin: 0;

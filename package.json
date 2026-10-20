@@ -5,13 +5,13 @@
   "private": true,
   "scripts": {
     "dev": "astro dev",
-    "build": "node scripts/gen-gallery-webp.mjs && astro build && node scripts/prune-draft-assets.mjs",
+    "build": "node scripts/gen-gallery-webp.mjs && astro build && node scripts/export-videos.mjs && node scripts/prune-draft-assets.mjs",
     "preview": "astro preview",
     "preview:note": "看效果请用 npm run preview（不要双击 dist/index.html）—— 本站资源全走 / 开头的绝对路径，file:// 下会解析到盘根目录，整站 CSS 与 DNA/logo 素材全部 404。",
     "test": "vitest run",
     "verify": "npm run build && vitest run",
     "comments:init": "wrangler d1 execute beishan-comments --local --file=migrations/0001_comments.sql",
-    "db:init": "npm run comments:init && wrangler d1 execute beishan-comments --local --file=migrations/0002_likes_and_visits.sql && wrangler d1 execute beishan-comments --local --file=migrations/0003_replies.sql",
+    "db:init": "npm run comments:init && wrangler d1 execute beishan-comments --local --file=migrations/0002_likes_and_visits.sql && wrangler d1 execute beishan-comments --local --file=migrations/0003_replies.sql && wrangler d1 execute beishan-comments --local --file=migrations/0004_visitor_accounts.sql",
     "db:init:remote": "wrangler d1 execute beishan-comments --remote --file=migrations/0002_likes_and_visits.sql && wrangler d1 execute beishan-comments --remote --file=migrations/0003_replies.sql",
     "dev:cf": "wrangler pages dev dist"
   },
