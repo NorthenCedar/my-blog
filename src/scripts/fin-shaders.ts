@@ -200,7 +200,7 @@ export const FIN_SURFACE = /* glsl */ `
     float rm = max(rq.x, rq.y);
     float onFace = step(0.49, abs(vLocal.x));
     float bevel = smoothstep(0.86, 1.0, rm);
-    // 边缘一圈细线：亮色版是暗边，深色版靠自发光把边缘"点亮"
+    // 两档均保留常驻细边：亮色淡绿，暗色橙色。
     float rim = onFace * smoothstep(0.90, 0.94, rm) * (1.0 - smoothstep(0.97, 0.995, rm));
 
     /* ★ 本体色：两端由 JS 从 CSS token 传进来（uBodyLight / uBodyDark）。
@@ -208,6 +208,8 @@ export const FIN_SURFACE = /* glsl */ `
        本站改为亮色 = 纸白+ 墨绿、暗色 = 黑 + 橙，与 §3 的暗色定案一致。
        uDenied 在两个 token 色之间插值 —— 与原版同构。 */
     vec3 rlBody = mix(uBodyLight, uBodyDark, uDenied) * (0.95 + vSeed * 0.07);
+    // 纸白上用一层淡绿色边膜承接自发光，让绿色在明亮环境里仍然可见。
+    rlBody = mix(rlBody, uGlowLight, rim * (1.0 - uDenied) * 0.45);
     // 亮色脉冲染到整片鳍的表面，随 vPulse 自然退回暖白；暗色仍走原来的橙色细边。
     float pulseTint = clamp(vPulse, 0.0, 1.0) * (1.0 - uDenied) * 0.65;
     rlBody = mix(rlBody, uGlowLight, pulseTint);
@@ -222,6 +224,7 @@ export const FIN_EMISSIVE = /* glsl */ `
         vec3 glow = vec3(0.0);
         // 缓慢扫过的扫描带：让静止时也有一点微动
         float scan = smoothstep(0.55, 1.0, sin(vParam * 6.2831853 * 3.0 - uTime * 2.4));
+        glow += rim * glowCool * 0.2 * (1.0 - uDenied);
         glow += rim * glowWarm * (0.25 + 1.6 * scan) * uDenied;
         glow += vPulse * rim * mix(glowCool * 0.9, glowWarm * 1.4, uDenied);
         glow += uVerify * rim * glowWarm * 0.8 * step(0.55, fract(vParam * 18.0 - uTime * 1.2));

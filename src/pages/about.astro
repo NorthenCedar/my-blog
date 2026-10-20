@@ -333,10 +333,10 @@ const isExternal = (h: string) => /^https?:/i.test(h);
       /* ★ 2026-10-17 第二轮：右上角的主题开关是绝对定位、不占行，
          右栏必须自己让出它的高度（画布高度 + 一道气），
          否则 FIG.02 的标题会钻到按钮底下。
-         ⚠ 104px 与 ThemeToggle.astro 里 canvas 的 CSS height 绑在一起，
-           改按钮尺寸时两处一起改（与 theme-toggle.ts 的 W/H 那组数是同一类耦合）。
-           2026-10-17 第四轮 76 → 104：画布加高是为了装下软条往下铺的影子。 */
-      padding-top: calc(136px + var(--sp-5));
+         ⚠ 与 ThemeToggle.astro 的画布实际占高绑定；渲染画布包含额外的阴影空间，
+           负外边距抵消上方留白，改变尺寸时按两者之和同步这里。 */
+      /* 200px 画布向上偏移 32px，实际占高 168px。 */
+      padding-top: calc(168px + var(--sp-5));
     }
     /* 主题开关：桌面档钉在内容区右上角，与右栏右缘对齐（见模板里的说明） */
     .theme-dock {

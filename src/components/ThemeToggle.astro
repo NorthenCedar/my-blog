@@ -23,7 +23,7 @@
   title="切换深色 / 浅色"
   tabindex="0"
 >
-  <canvas aria-hidden="true" width="220" height="136"></canvas>
+  <canvas aria-hidden="true" width="220" height="200"></canvas>
 </div>
 <script>
   /* ★ 2026-10-17 懒加载（站主：「只在放按钮的那几页懒加载它」）。
@@ -70,9 +70,11 @@
        ⇒ 画布加高 28px，给影子留出物理空间；同时 scene.ts 把 fov 23° → 31.1°、
        相机 target 下移 0.28 —— 三处是一组（加高改了宽高比，不调 fov 槽会变宽溢出，
        不下移相机则槽会悬在画面正中、下方空间仍然不够）。
-       ⚠ 改这个高度必须同步 `src/pages/about.astro` 的 `.about-side { padding-top }`
-         （那里要让出按钮的高度）。 */
-    height: 136px;
+       ⚠ 改这个高度必须同步 `src/pages/about.astro` 的 `.about-side { padding-top }`，
+         按包含负外边距的实际占高留白（当前 200 - 32 = 168px）。 */
+    /* 上下各扩展 32px；向上抵消新增取景，按钮留在原位，下方交给完整投影。 */
+    height: 200px;
+    margin-top: -32px;
     touch-action: none;
     /* ★★ 2026-10-17 第五轮：这一块仍然**只管尺寸**，别往这里加任何遮罩。
        历史（每次都失败，别重走）：

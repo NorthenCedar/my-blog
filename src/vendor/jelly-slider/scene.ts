@@ -814,7 +814,8 @@ const rayMarchFragmentFn = tgpu.fragmentFn({
  *     旧 2·d·tan(11.5°)·(168/76) = 新 2·d·tan(f/2)·(168/104)  ⇒  f = 31.11°
  * ⇒ 槽的**宽度占比保持不变**，变的是上下多出的留白（正是要给影子的）。
  */
-const TOGGLE_FOV = (39.9 * Math.PI) / 180;
+/* 136 → 200 的上下留白；按 tan 等比扩大垂直视野，保持按钮像素尺寸。 */
+const TOGGLE_FOV = (56.19 * Math.PI) / 180;
 
 /** 相机 target 的垂直偏移：槽往上挪一点，下方的空间交给影子（0.22 世界 ≈ 12 px）。 */
 const TOGGLE_TARGET_Y = -0.22;

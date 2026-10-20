@@ -659,7 +659,7 @@ html.dark {
   /* 亮色档：鳍片 = 纸白近中性（只比 --paper 暖 5 阶，保留一点纸的手感）；
      环境光 = 纸色同源 */
   --fin-body-light: #f6f4ee;
-  --fin-static-stroke: var(--fin-body-light);
+  --fin-static-stroke: var(--fin-pulse-light);
   --fin-ambient-light: #fafaf7;
   /* 点击脉冲的淡绿表面色，独立于界面墨绿，避免染成深绿条。 */
   --fin-pulse-light: #b9dfc3;

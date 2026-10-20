@@ -29,7 +29,7 @@ const MID = (LIGHT_END + DARK_END) / 2;
    fov 取景），槽会变扁、百分比字会被拉长。三处一起改：
      `src/components/ThemeToggle.astro`（canvas 属性 + CSS）、这里、`scene.ts` 的 TOGGLE_FOV。 */
 const W = 220;
-const H = 136;
+const H = 200;
 
 const themeOfEnd = (end: number): Theme => (end === DARK_END ? 'dark' : 'light');
 

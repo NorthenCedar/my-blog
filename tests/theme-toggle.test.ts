@@ -249,6 +249,30 @@ describe('画布透明通路（2026-10-17 第五轮）', () => {
       `H = ${h} 对应 fov ≈ ${want.toFixed(2)}°，实测 ${fovDeg}° —— 两处要一起改`,
     ).toBeLessThan(0.5);
   });
+
+  it('阴影留白增加时，按钮与命中投影在页面上保持原大小和位置', async () => {
+    const { CameraController } = await import('../src/vendor/jelly-slider/camera');
+    const { d } = await import('typegpu');
+    const toggle = read('../src/scripts/theme-toggle.ts');
+    const component = read('../src/components/ThemeToggle.astro');
+    const h = Number(/^const H = (\d+);/m.exec(toggle)![1]);
+    const fov = Number(/TOGGLE_FOV = \(([\d.]+) \* Math.PI\) \/ 180;/.exec(scene)![1]);
+    const targetY = Number(/TOGGLE_TARGET_Y = (-?[\d.]+);/.exec(scene)![1]);
+    const top = Number(/margin-top:\s*(-?\d+)px/.exec(component)?.[1] ?? 0);
+    expect(-top, '画布上下应多留至少 24px，投影尾部才不会贴着边界').toBeGreaterThanOrEqual(24);
+    expect(component).toContain(`height="${h}"`);
+    expect(component).toContain(`height: ${h}px`);
+    expect(read('../src/pages/about.astro')).toContain(`padding-top: calc(${h + top}px + var(--sp-5))`);
+    const root = { createUniform: () => ({ patch() {} }) };
+    const camera = (height: number, degrees: number, target: number) => new CameraController(root as any,
+      d.vec3f(0.024, 2.7, 1.9), d.vec3f(0, target, 0), d.vec3f(0, 1, 0), degrees * Math.PI / 180, 220, height);
+    const before = camera(136, 39.9, -.22), after = camera(h, fov, targetY);
+    for (const [x, y, z] of [[-1, 0, 0], [.9, .3, 0], [0, -.06, 1]]) {
+      const a = before.project(x, y, z), b = after.project(x, y, z);
+      expect(Math.abs(a.x * 220 - b.x * 220)).toBeLessThan(.05);
+      expect(Math.abs(a.y * 136 - (b.y * h + top))).toBeLessThan(.05);
+    }
+  });
 });
 
 /**
