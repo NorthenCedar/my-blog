@@ -1064,7 +1064,10 @@ npx wrangler d1 execute beishan-comments --remote --file=migrations/0004_visitor
 ## 15. 常见问题
 
 **Q：我没装 Node，能用吗？**
-需要 Node ≥ 22.12（这台机器上是 v24.21，已装好）。
+项目的 `.node-version` 固定为 Node 24.21.0（这台机器已安装），其他电脑也使用此版本。Cloudflare 会读取仓库根目录的版本文件，无需另改后台变量；机制见[官方构建说明](https://developers.cloudflare.com/pages/configuration/build-image/)。更新依赖后要用 CI 的 npm 版本做实际 `npm ci` 验证，已有 `node_modules` 上的构建或 dry-run 不能替代干净安装。
+
+**Q：部署提示 Undici 锁文件版本不一致？**
+保留根 `overrides` 中的 `undici@7.29.0 → 7.29.1` 精确覆盖，避免旧 npm 在嵌套覆盖上判定锁不同步；它不会把 Astro 的 Undici 8 降级。锁内 tarball 地址统一为官方 registry，并保留原版本及完整性摘要。正常执行 `npm ci`，不要改用忽略锁文件的安装来掩盖错误。
 
 **Q：`npm run dev` 报 `spawn EPERM`？**
 这台机器的沙箱拦了 vite 的子进程，需要在更宽的权限下跑。

@@ -10995,4 +10995,12 @@ sharp、source-map-js、Vite分别约束到0.35.5、1.2.2、8.3.3；本地预览
 
 整合验收为62个测试文件、1006项通过、1项保留跳过，所有原数值脚本预算不变。浏览器交互35项、头像裁切14项、完整隔离账户22项、账户光标14项通过并目检截图；真实本地D1接口13项通过，其中8并发留言恰好2成功/6限流，8并发同条点赞1成功/7幂等。30个HTML的分享元信息、1200×630默认PNG及sitemap检查通过；短期公开封面/自定义slug和未引用草稿图片夹具验证隔离后清除。独立审查补出的封面glob、Vary错误回退及头像旧响应问题已修正，未发现其他未解决P1/P2。原始日志和截图集中保存于 `D:/router/work/site-fixes-20261021/`；生产不写测试留言或账户。
 
-依赖官方production/full audit均0，缓存37项回归通过，Wrangler/Miniflare真实本地请求通过。完整干净重装副本因离线缺包与清理EPERM停止，未改ACL或重试该目录；只读ci dry-run通过，不将其写成实际clean-ci成功。清理本次Python缓存又被自动审批以blocked by policy拒绝，已保留为未跟踪文件，不影响构建或交付。
+依赖官方production/full audit均0，缓存37项回归通过，Wrangler/Miniflare真实本地请求通过。早先Windows干净重装副本因离线缺包与清理EPERM停止，未改ACL或重试该目录；后续独立WSL/Linux使用Node22.22.1与npm10.9.2完成真正的干净安装和整站构建。清理本次Python缓存被自动审批以blocked by policy拒绝，已保留为未跟踪文件，不影响构建或交付。
+
+### 6.116 部署环境与npm10锁文件兼容（2026-10-21）
+
+首部署8653555在Cloudflare的npm10.9.2干净安装阶段失败：嵌套的Miniflare→Undici覆盖被判定7.29.1与原始精确依赖7.29.0不符；默认Node22.16也低于现有Undici8的22.19要求。本地已有依赖上的1006项绿灯与npm11 dry-run未暴露此差异。用户提供构建日志后，在独立Linux/npm9复现相同EUSAGE。
+
+覆盖改为只匹配原始7.29.0的顶层精确键，不影响Astro的Undici8；用npm10.9.2重生成锁。403个包条目及所有版本、完整性摘要均保持，旧镜像tarball地址改为官方registry，避免复现期间实际遇到的镜像CDN超时。新增.node-version=24.21.0，与Windows已经验收的环境一致；Cloudflare按仓库文件选版本，不改后台配置。配置备份在work/site-fixes-20261021/before-ci。
+
+Linux/npm10.9.2的实际npm ci退出0（286个包），原始缓存包经源码SHA校验后自动应用补丁，完整构建30页与目标生成通过；Windows/Node24.21.0重新完整verify，仍1006通过、1保留跳过，完整官方审计0。证据为同工作目录linux-npm10-ci.log、linux-npm10-build.log、verify-ci-fix.log及dependencies/audit-after-ci-fix.json。此轮不接受以npm install替代CI的干净安装来掩盖锁错误。
