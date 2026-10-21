@@ -773,6 +773,13 @@ html.dark body.post-plate {
   --deco-plate-coarse: #c89b752e;
 }
 
+/* 留言声纹带：波形、回复刻度和游标随暗色页使用暖橙。 */
+html.dark body.guestbook-plate {
+  --deco-orbit-strong: #e8924938;
+  --deco-orbit-inner: #e892492e;
+  --deco-plate-coarse: #c89b752e;
+}
+
 /* 相册暗色：显影板与交接幕共用浓橙，板面文字和桌面导航为近黑。 */
 html.dark body.gallery-inf-plate {
   --gallery-bath-ink: #15100b;
