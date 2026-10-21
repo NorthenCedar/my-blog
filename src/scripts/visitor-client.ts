@@ -37,7 +37,7 @@ export function loadViewer() {
 }
 export function defaultAvatar(kind: string, id: number) {
   // 保留六个槽位的顺序，匿名留言刷新后仍是同一个图案。
-  const avatars = ['dorothy-chibi.png', 'helix.svg', 'silence-chibi.png', 'muelsyse-chibi.png', 'orbit.svg', 'infinity.svg'];
+  const avatars = ['dorothy-comic.png', 'helix.svg', 'ptilopsis-comic.png', 'muelsyse-comic.png', 'orbit.svg', 'infinity.svg'];
   return `/avatars/${avatars[(Math.abs(id) + (kind === 'reply' ? 3 : 0)) % avatars.length]}`;
 }
 export function portrait(url: string, name: string, fallback = '/avatars/helix.svg') {

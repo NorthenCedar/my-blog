@@ -1,7 +1,7 @@
 /** 凭据只在服务端运算；浏览器不导入此模块。 */
 import { scrypt } from 'node:crypto';
 import { DEFAULT_AVATARS } from '../../../src/lib/visitor-avatars';
-export const AVATARS = DEFAULT_AVATARS.map(avatar => avatar.id);
+export const AVATARS = [...DEFAULT_AVATARS.map(avatar => avatar.id), 'silence'] as const;
 const encoder = new TextEncoder();
 export class AccountError extends Error {
   constructor(public status: number, message: string) { super(message); }
