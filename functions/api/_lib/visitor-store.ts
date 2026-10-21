@@ -1,5 +1,6 @@
 import { digest, fail, randomToken } from './visitor-core';
 import { defaultAvatarUrl } from '../../../src/lib/visitor-avatars';
+import { guardPublicWrite, readJsonBody } from './public-write';
 
 export interface VisitorEnv { COMMENTS_DB: D1Database; OWNER_USER_ID?: string }
 export type Account = {
@@ -59,28 +60,10 @@ export async function cleanupAccounts(env: VisitorEnv) {
 }
 export function guardWrite(request: Request) {
   if (request.headers.get('Origin') !== new URL(request.url).origin || request.headers.get('X-NC-Request') !== '1') fail(403, '请从本站页面操作');
-  if (!(request.headers.get('Content-Type') ?? '').toLowerCase().startsWith('application/json')) fail(415, '请求格式不对');
+  guardPublicWrite(request);
 }
 export async function readAccountBody(request: Request) {
-  const reader = request.body?.getReader();
-  if (!reader) return fail(400, '请求为空');
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > 144 * 1024) { await reader.cancel(); fail(413, '请求太大，请缩小头像'); }
-    chunks.push(value);
-  }
-  const all = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) { all.set(chunk, offset); offset += chunk.length; }
-  try {
-    const payload = JSON.parse(new TextDecoder().decode(all));
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return fail(400, '请求格式不对');
-    return payload as Record<string, unknown>;
-  } catch { return fail(400, '请求格式不对'); }
+  return readJsonBody(request, 144 * 1024, '请求太大，请缩小头像');
 }
 export const accountJson = (body: unknown, status = 200, cookie?: string) => new Response(JSON.stringify(body), {
   status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...(cookie ? { 'Set-Cookie': cookie } : {}) },

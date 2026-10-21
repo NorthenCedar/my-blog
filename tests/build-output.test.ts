@@ -454,12 +454,12 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log(`判据 光标 对象 位图与 token 已删 + 跟手白点仍在 实测: /cursors/ 引用 ${refs.length} 条 · ${pages.length} 页有白点节点 · 死引用 ${offenders.length} 处`);
   });
 
-  it('导航：每一项都能点进去、两套外壳都有、移动端抽屉零 JS', () => {
+  it('导航：每一项都能点进去、两套外壳都有、移动端无 JS 仍能开合', () => {
     // 站主 2026-09-26：按参考站 blog.ayeez.cn 加了「友链 / 说说 / 留言 / 日志」四项，
     // 要求"每一个都要能点进去"，移动端要有导航菜单。这条按这个要求守四件事：
     //  ① **每个 nav 链接都真能打开**（产物里有对应 HTML）—— 这是"能点进去"的硬判据；
     //  ② 两套外壳（Brandline 深色带 / Topbar 浅色顶栏）渲染的是同一份清单，逐页都在；
-    //  ③ 移动端抽屉在每个页面里都有（≤1023px 才显示），且**不含任何脚本**（文章页 JS 预算是 4096，只有 3561 余量）；
+    //  ③ 无 JS 的 checkbox/label 与 checked 样式仍在；JS 可增强键盘操作，内联预算保持4096。
     //  ④ 新增的四个页面确实产出了。
     const pages = htmlFiles().filter((f) => !f.endsWith('404.html'));
     // 2026-09-26 修正：首页**也**要有导航。第一版按"console 外壳没有导航"的旧定案没加，
@@ -490,12 +490,14 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     }
     expect(missing, `这些页面缺导航项/抽屉：${missing.slice(0, 8).join(', ')}`).toEqual([]);
 
-    // ③ 抽屉必须零 JS：把带抽屉的页面里的内联脚本总量与文章页预算对齐（沿用既有预算断言的口径）
+    // ③ 原零JS实现遗漏键盘关闭与焦点隔离；增强后仍须保留无JS开合和原数值预算。
     const article = readFileSync(join(DIST, 'about', 'index.html'), 'utf8');
     const scripts = [...article.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
     const total = scripts.reduce((s, m) => s + Buffer.byteLength(m[1], 'utf8'), 0);
-    console.log(`判据 导航 对象 nav 链接可达性 + 每页清单 + 抽屉 实测: ${navHrefs.length} 项全部可达 · ${pages.length} 页清单完整 · 文章页内联脚本 ${total} 字节（抽屉零 JS）`);
-    expect(total, '抽屉引入了脚本（应该纯 CSS）').toBeLessThan(4096);
+    expect(article).toMatch(/<label[^>]+for="nav-toggle"[^>]+class="navbtn"/);
+    expect(allDistCss()).toMatch(/\.navtog[^{}]*:checked[^{}]*\.navpanel/);
+    console.log(`判据 导航 对象 nav 链接可达性 + 每页清单 + 抽屉 实测: ${navHrefs.length} 项全部可达 · ${pages.length} 页清单完整 · 内联脚本 ${total} 字节（无JS开合保留）`);
+    expect(total, '导航增强后内联脚本超过原4096字节预算').toBeLessThan(4096);
 
     // ④ 新增页面在位
     for (const p of ['links', 'talks', 'guestbook', 'log']) {

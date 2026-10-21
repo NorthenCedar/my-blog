@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "astro dev",
-    "build": "node scripts/gen-gallery-webp.mjs && astro build && node scripts/export-videos.mjs && node scripts/prune-draft-assets.mjs",
+    "postinstall": "node scripts/patch-http-cache-semantics.mjs",
+    "build": "node scripts/patch-http-cache-semantics.mjs && node scripts/gen-gallery-webp.mjs && astro build && node scripts/export-videos.mjs && node scripts/prune-draft-assets.mjs && node scripts/generate-comment-targets.mjs",
     "preview": "astro preview",
     "preview:note": "看效果请用 npm run preview（不要双击 dist/index.html）—— 本站资源全走 / 开头的绝对路径，file:// 下会解析到盘根目录，整站 CSS 与 DNA/logo 素材全部 404。",
     "test": "vitest run",
@@ -30,5 +31,14 @@
     "typegpu": "0.12.8",
     "unplugin-typegpu": "0.12.6",
     "wgpu-matrix": "3.4.2"
+  },
+  "overrides": {
+    "http-cache-semantics": "4.3.0",
+    "miniflare": {
+      "undici": "7.29.1"
+    },
+    "sharp": "0.35.5",
+    "source-map-js": "1.2.2",
+    "vite": "8.3.3"
   }
 }

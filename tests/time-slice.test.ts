@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { runInNewContext } from 'node:vm';
 import { tslTimeline, tslPath, tslHash, TSL, TSL_FRAMES } from '../src/scripts/time-slice';
 /* 翅膀掩膜是**纯函数**（无 DOM、无 three）⇒ 直接从 core 层 import 单测，
    不用绕控制器那一层的再导出（那是给页面用的公共面）。 */
@@ -778,8 +779,17 @@ describe('时间切片 · 相册页的交接（站主第九轮 ③：缓缓浮�
     expect(gal).toMatch(/transform:\s*translateY\(1\.1rem\)/);
     // ③ 交接标记必须在**首次绘制之前**挂上（<head> 里的同步脚本）
     const base = readFileSync('src/layouts/Base.astro', 'utf8');
-    expect(base).toContain("sessionStorage.getItem('tsl-nav')");
-    expect(base).toContain("classList.add('tsl-in')");
+    const bootstrap = base.match(/<script is:inline>([\s\S]*?)<\/script>/)?.[1];
+    expect(bootstrap, '首帧同步脚本缺失').toBeTruthy();
+    const added: string[] = [], removed: string[] = [];
+    runInNewContext(bootstrap!, {
+      document: { documentElement: { classList: { add: (...names: string[]) => added.push(...names) } } },
+      // localStorage 受限也不能阻断独立的相册交接标记。
+      localStorage: { getItem: () => { throw new Error('隐私模式'); } },
+      sessionStorage: { getItem: (key: string) => key === 'tsl-nav' ? '1' : null, removeItem: (key: string) => removed.push(key) },
+    });
+    expect(added).toEqual(['tsl-in']);
+    expect(removed).toEqual(['tsl-nav']);
     // 主页装置在跳转前写下同一个键
     expect(SRC).toContain("const NAV_HANDOFF_KEY = 'tsl-nav';");
     expect(SRC).toContain('sessionStorage.setItem(NAV_HANDOFF_KEY');

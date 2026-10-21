@@ -58,9 +58,11 @@ export async function getStaticPaths() {
 const albums = manifest.albums as Album[];
 const { albumId, no } = Astro.props as { albumId: string; no: number };
 const album = albums.find((a) => a.id === albumId)!;
+const shareFrame = album.frames[0];
+const shareImage = shareFrame?.files.reduce<File | undefined>((largest, file) => !largest || file.w > largest.w ? file : largest, undefined)?.url;
 ---
 
-<Base title={album.title} current="gallery" chrome="page" bodyClass="gallery-inf-plate" fullWidth>
+<Base title={album.title} description={`${album.title} · ${album.total} 张照片 · ${album.date}`} shareImage={shareImage} shareImageAlt={shareFrame?.alt} current="gallery" chrome="page" bodyClass="gallery-inf-plate" fullWidth>
   {/* 视口底纹 ∞ —— 与 `/gallery/`、`/gallery/spiral/` 同一份（站主 2026-10-08「三条路都换」）。 */}
   <Fragment slot="plate"><GalleryInf /></Fragment>
 

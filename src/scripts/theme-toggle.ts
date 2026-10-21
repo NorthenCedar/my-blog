@@ -55,6 +55,11 @@ function syncAria(root: HTMLElement): void {
 /** 无 WebGPU 时的降级：普通开关，主题照样切（样式极简，不伪装成果冻） */
 function mountFallback(root: HTMLElement): void {
   root.innerHTML = '';
+  // 降级按钮独自承担交互语义，避免 Tab 先落到一个没有事件的外层开关。
+  root.removeAttribute('role');
+  root.removeAttribute('aria-checked');
+  root.removeAttribute('aria-label');
+  root.removeAttribute('tabindex');
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'tt-fallback';

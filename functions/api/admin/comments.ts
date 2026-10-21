@@ -81,18 +81,20 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   // 回复只属于这一批顶层（`parent_id IN`）；id 在 comments 表里全局唯一 ⇒ 不需要再带 slug 条件。
   // 顺序 `ASC`：回复**旧的在上**（一段对话要顺着读）—— 与公开接口同一条口径，理由见 comments.ts。
   let replies: ReplyRow[] = [];
-  if (ids.length > 0) {
-    const marks = ids.map(() => '?').join(',');
+  for (let start = 0; start < ids.length; start += 100) {
+    const slice = ids.slice(start, start + 100);
+    const marks = slice.map(() => '?').join(',');
     const { results: rrows } = await env.COMMENTS_DB.prepare(
       `SELECT id, parent_id, reply_to, name, body, created_at
          FROM replies
         WHERE parent_id IN (${marks})
         ORDER BY created_at ASC, id ASC`
     )
-      .bind(...ids)
+      .bind(...slice)
       .all<ReplyRow>();
-    replies = rrows ?? [];
+    replies.push(...(rrows ?? []));
   }
+  replies.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id - b.id);
 
   // `limit` 一并回出去：写作台将来要提示"只显示了最近 200 条"时不必再写死这个数。
   return json({

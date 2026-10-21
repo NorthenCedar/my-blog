@@ -2,9 +2,8 @@
 /**
  * 移动端导航抽屉（≤1023px 显示；桌面隐藏）。
  *
- * **零 JS**：用「隐藏 checkbox + 两个 label」实现 —— 一个 label 是汉堡按钮，另一个是全屏遮罩
- * （点遮罩即关闭）。为什么不引脚本：文章页的内联脚本预算是 4096 字节、当前已用到 3561，
- * 一个抽屉脚本会把预算吃穿；而 checkbox 方案原生就能开合、还能用键盘（Space）操作。
+ * 无 JS 仍可用 checkbox + label 开合；共享外壳加载 nav-drawer.ts 后，
+ * 补齐关闭按钮、Esc、焦点恢复和背景隔离，不增加 HTML script 条数。
  *
  * 无障碍取舍（如实记）：
  *   · checkbox 本体 `opacity:0` 但仍可聚焦，带 `aria-label="导航菜单"` ⇒ 屏幕阅读器能念到并切换；
@@ -54,16 +53,17 @@ const id = 'nav-toggle';
       修前390→304· 768→320 · 1280→0
       修后 390→0 · 768→0 · 1280→0
     ⚠ 壳本身不能吃点击：mask/panel 各自恢复 pointer-events。 */}
-<div class="navshell">
+<dialog class="navshell" aria-label="导航菜单" open>
   <label for={id} class="navmask" aria-hidden="true"></label>
   <nav class="navpanel" aria-label="主导航（展开）">
+    <button type="button" class="navclose" data-nav-close hidden>关闭菜单</button>
     <p class="navpanel-title">导航菜单</p>
     {NAV_LINKS.map((l) => (
       <a href={l.href} aria-current={current === l.key ? 'page' : undefined}>{l.label}</a>
     ))}
     <a href="/rss.xml">RSS</a>
   </nav>
-</div>
+</dialog>
 
 <style>
   /* 桌面：整块不参与布局（PC 走 Brandline / Topbar 里那排横排链接） */
@@ -86,10 +86,21 @@ const id = 'nav-toggle';
       display: block;
       position: fixed;
       inset: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      max-height: none;
+      background: transparent;
+      color: inherit;
       z-index: 40;
       overflow: hidden;
       pointer-events: none;
     }
+    .navshell:not([open]) { display: none; }
+    .navshell::backdrop { background: transparent; }
     .navtog {
       /* 视觉上藏起来，但**保持可聚焦**（键盘 Space 开合） */
       position: absolute;
@@ -162,6 +173,16 @@ const id = 'nav-toggle';
       border-left: 3px solid var(--accent);
       padding-left: 0.6em;
     }
+    .navclose {
+      display: block;
+      margin: 0 0 var(--sp-3) auto;
+      padding: var(--sp-2) var(--sp-3);
+      border: 1px solid var(--hair);
+      background: var(--paper);
+      color: var(--ink);
+      font: inherit;
+    }
+    .navclose[hidden] { display: none; }
     .navpanel a {
       display: block;
       padding: 0.7em 0;

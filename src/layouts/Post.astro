@@ -16,6 +16,8 @@ const { entry, meta, adjacent } = Astro.props;
 // 标题树在渲染时才有（deferRender 的代价，也是它换来"草稿素材不产出"的原因）
 const { Content, headings } = await render(entry);
 const toc = headingTree(headings);
+// 封面由只枚举公开条目的静态端点生成，避免全目录图片 glob 把草稿素材带入产物。
+const shareCover = !entry.data.draft && entry.data.cover ? `/post-covers/${meta.slug}.jpg` : undefined;
 ---
 {
   /* 文章页迁移（2026-09-26）：外壳从 chrome='band' 换成 chrome='page'（浅色顶栏 + 切片档案背景）。
@@ -36,6 +38,9 @@ const toc = headingTree(headings);
 <Base
   title={meta.title}
   description={meta.summary}
+  pageType="article"
+  shareImage={shareCover}
+  shareImageAlt={entry.data.coverAlt}
   chrome="page"
   current="archive"
   bodyClass="post-plate"

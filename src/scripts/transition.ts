@@ -35,13 +35,10 @@ const STALE_MS = 1500;
 /** 站内、可整页跳转的普通左键点击才值得盖（其余一律放行，别影响正常浏览）。 */
 function precheck(e: MouseEvent, a: HTMLAnchorElement): boolean {
   if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
-  if (a.target === '_blank' || a.hasAttribute('download') || a.hasAttribute('data-no-transition')) return false;
-  const href = a.getAttribute('href') || '';
-  if (!href || href.startsWith('#')) return false;
-  const to = new URL(a.href, location.href);
-  if (to.origin !== location.origin) return false;
+  if (a.matches('[target="_blank"],[download],[data-no-transition]')) return false;
+  if (a.origin !== location.origin) return false;
   // 同页（只有 hash 或查询串不同）不整页跳转，别盖
-  return !(to.pathname === location.pathname && to.search === location.search);
+  return !(a.pathname === location.pathname && a.search === location.search);
 }
 
 // ---- 收尾：目标页播完就把标记摘掉 ----

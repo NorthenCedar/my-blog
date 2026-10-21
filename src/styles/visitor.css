@@ -16,6 +16,13 @@
 .visitor-dialog h2 { font-size: var(--fs-h3); margin: 0 var(--sp-8) var(--sp-3) 0; }
 .visitor-dialog h3 { font-size: var(--fs-lg); }
 .visitor-dialog p { margin-block: var(--sp-3); }
+.visitor-crop-preview { display: block; width: min(100%, calc(var(--sp-8) * 4)); aspect-ratio: 1; height: auto; margin: var(--sp-4) auto; border: 1px solid var(--accent-ink); border-radius: 50%; touch-action: none; cursor: pointer; }
+.visitor-crop-preview:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: var(--sp-1); }
+.visitor-crop-zoom { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-sm); }
+.visitor-crop-zoom input { flex: 1; min-width: 0; accent-color: var(--accent-ink); }
+.visitor-crop-zoom output { min-width: var(--sp-7); text-align: end; }
+.visitor-crop-position, .visitor-crop-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-block: var(--sp-3); }
+.visitor-crop-actions { justify-content: flex-end; }
 .visitor-close { position: absolute; top: var(--sp-4); right: var(--sp-4); border: 0; color: var(--muted); background: transparent; font: inherit; font-size: var(--fs-xs); cursor: pointer; }
 .visitor-tabs { display: flex; gap: var(--sp-4); padding: var(--sp-3) 0; border-bottom: 1px solid var(--hair); margin-bottom: var(--sp-4); }
 .visitor-tabs [aria-pressed="true"] { color: var(--ink); font-weight: 700; text-decoration: none; }

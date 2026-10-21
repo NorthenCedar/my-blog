@@ -1,4 +1,9 @@
 import { validateLikeSlug, parseSlugList, hashIp } from './_lib/reactions-core';
+import { AccountError } from './_lib/visitor-core';
+import { guardPublicWrite, readJsonBody, writeLimitStatements } from './_lib/public-write';
+import targets from './_generated/comment-targets.json';
+
+const publishedTalks = new Set(targets.talks);
 
 interface Env {
   COMMENTS_DB: D1Database;
@@ -39,34 +44,29 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  let payload: unknown;
   try {
-    payload = await request.json();
-  } catch {
-    return json({ error: '请求格式不对' }, 400);
-  }
+  guardPublicWrite(request);
+  const payload = await readJsonBody(request, 16 * 1024);
   const raw = (payload as { slug?: unknown } | null)?.slug;
   const check = validateLikeSlug(raw);
   if (!check.ok) return json({ error: check.error }, 400);
   const slug = check.slug;
+  if (!publishedTalks.has(slug)) return json({ error: '说说不存在或尚未发布' }, 400);
 
   const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
   const ipHash = await hashIp(ip);
 
-  // 同 IP 同一条只说一次：先尝试记票，冲突说明已经赞过（幂等）
-  const ins = await env.COMMENTS_DB.prepare(
-    'INSERT OR IGNORE INTO like_votes (slug, ip_hash) VALUES (?, ?)'
-  )
-    .bind(slug, ipHash)
-    .run();
-  const counted = (ins.meta?.changes ?? 0) > 0;
-
-  if (counted) {
-    await env.COMMENTS_DB.prepare(
-      'INSERT INTO likes (slug, count) VALUES (?, 1) ON CONFLICT(slug) DO UPDATE SET count = count + 1'
-    )
-      .bind(slug)
-      .run();
+  // 配额、唯一票与计数在同一事务；changes() 只承接紧邻上一条语句的实际写入。
+  // 已投票时不占额度，所以超过频率后重试仍保持幂等。
+  const result = await env.COMMENTS_DB.batch([
+    ...writeLimitStatements(env, 'likes:ip', ipHash, 30, Date.now(), 'SELECT 1 FROM like_votes WHERE slug = ? AND ip_hash = ?', [slug, ipHash]),
+    env.COMMENTS_DB.prepare('INSERT OR IGNORE INTO like_votes (slug, ip_hash) SELECT ?, ? WHERE changes() = 1 RETURNING slug').bind(slug, ipHash),
+    env.COMMENTS_DB.prepare('INSERT INTO likes (slug, count) SELECT ?, 1 WHERE changes() = 1 ON CONFLICT(slug) DO UPDATE SET count = count + 1').bind(slug),
+  ]);
+  const counted = Boolean(result[2].results?.length);
+  if (!counted) {
+    const vote = await env.COMMENTS_DB.prepare('SELECT 1 FROM like_votes WHERE slug = ? AND ip_hash = ?').bind(slug, ipHash).first();
+    if (!vote) return json({ error: '点赞太频繁，请等一分钟再试' }, 429);
   }
 
   const row = await env.COMMENTS_DB.prepare('SELECT count FROM likes WHERE slug = ?')
@@ -74,4 +74,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .first<{ count: number }>();
 
   return json({ slug, count: row?.count ?? 0, counted }, counted ? 201 : 200);
+  } catch (error) {
+    if (error instanceof AccountError) return json({ error: error.message }, error.status);
+    throw error;
+  }
 };

@@ -26,6 +26,10 @@ interface Props {
   /** 页面自己的标题（不含站名）。不传就是首页。 */
   title?: string;
   description?: string;
+  /** 分享图片必须来自当前公开页面或站点默认封面。 */
+  shareImage?: string;
+  shareImageAlt?: string;
+  pageType?: 'website' | 'article';
   /** 当前页在主导航里的位置（驱动 aria-current 高亮）。取值来源是 src/lib/nav.ts，不在这里另立一份。 */
   current?: NavKey;
   /** 404 这类错误页不该有 canonical —— 它不是真实内容页 */
@@ -61,7 +65,7 @@ interface Props {
    */
   chrome?: 'band' | 'console' | 'page';
 }
-const { title, description, current, noCanonical, noIndex, chrome, bodyClass, fullWidth = false } = Astro.props;
+const { title, description, shareImage, shareImageAlt, pageType = 'website', current, noCanonical, noIndex, chrome, bodyClass, fullWidth = false } = Astro.props;
 // 站名/简介/联系方式来自 content/site.md —— 主题不持有任何文案
 const site = await getSite();
 // 关于「Topbar 静态 import 的成本」：Astro 的样式图按 import 收集（不是按 render），
@@ -73,6 +77,9 @@ const docTitle = title ? `${title} — ${site.name}` : site.name;
 // canonical 指向 site 配置里的正式域名。即使有人从 personal-br4.pages.dev 访问，
 // 也告诉搜索引擎「正式地址是 northcedar.top」，把两个域名的权重合到一起。
 const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
+const summary = description?.trim() || site.metaDescription;
+const shareURL = new URL(shareImage || '/share.png', Astro.site ?? Astro.url);
+const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('/share.png', Astro.site ?? Astro.url).href;
 ---
 <!doctype html>
 <html lang="zh-CN">
@@ -120,8 +127,23 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
     <meta name="baidu-site-verification" content="codeva-5aPQf9LUnL" />
     <title>{docTitle}</title>
     {noIndex && <meta name="robots" content="noindex, nofollow" />}
-    {description && <meta name="description" content={description} />}
+    <meta name="description" content={summary} />
     {!noCanonical && <link rel="canonical" href={canonical} />}
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:type" content={pageType} />
+    <meta property="og:title" content={docTitle} />
+    <meta property="og:description" content={summary} />
+    {!noCanonical && <meta property="og:url" content={canonical} />}
+    <meta property="og:image" content={imageURL} />
+    <meta property="og:image:alt" content={shareImageAlt || site.wordmark} />
+    {!shareImage && <meta property="og:image:width" content="1200" />}
+    {!shareImage && <meta property="og:image:height" content="630" />}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={docTitle} />
+    <meta name="twitter:description" content={summary} />
+    <meta name="twitter:image" content={imageURL} />
+    <meta name="twitter:image:alt" content={shareImageAlt || site.wordmark} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="alternate" type="application/rss+xml" title={`${site.name} — RSS`} href="/rss.xml" />
     <link rel="preload" href="/fonts/plex-sans-400.woff2" as="font" type="font/woff2" crossorigin />
@@ -145,25 +167,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
            ⚠ 别为了看清楚再拆成两块 —— 那会撞那条预算，而且不是"预算太紧"，
              是这个页面上的脚本本来就该合并（5 条里已经有 4 条 module）。
         ⚠ 两块各自带 try/catch（隐私模式下 localStorage 会抛）：一块抛了不许拖累另一块。 */}
-    <script is:inline>
-      try {
-        var __th = localStorage.getItem('theme');
-        if (__th === 'dark' || (!__th && matchMedia('(prefers-color-scheme: dark)').matches)) {
-          document.documentElement.classList.add('dark');
-        }
-      } catch (e) {}
-
-      try {
-        if (sessionStorage.getItem('pt')) {
-          sessionStorage.removeItem('pt');
-          document.documentElement.classList.add('pt-on', 'pt-play');
-        }
-        if (sessionStorage.getItem('tsl-nav')) {
-          sessionStorage.removeItem('tsl-nav');
-          document.documentElement.classList.add('tsl-in');
-        }
-      } catch (e) {}
-    </script>
+    <script is:inline>try{var r=document.documentElement.classList,t=localStorage.getItem('theme');if(t==='dark'||!t&&matchMedia('(prefers-color-scheme: dark)').matches)r.add('dark')}catch{}try{for(var[k,c]of[['pt',['pt-on','pt-play']],['tsl-nav',['tsl-in']]])if(sessionStorage.getItem(k)){sessionStorage.removeItem(k);r.add(...c)}}catch{}</script>
   </head>
   <body
     class={[
@@ -220,6 +224,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
     <script>
       // 页面过渡的点击拦截（每一页都加载 ⇒ Astro 会抽成同源共享 chunk）。
       import '../scripts/transition';
+      import '../scripts/nav-drawer';
     </script>
   </body>
 </html>

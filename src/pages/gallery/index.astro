@@ -45,9 +45,11 @@ type Album = { id: string; title: string; date: string; total: number; frames: F
 
 const albums = manifest.albums as Album[];
 const total = albums.reduce((n, a) => n + a.total, 0);
+const shareFrame = albums[0]?.frames[0];
+const shareImage = shareFrame?.files.reduce<File | undefined>((largest, file) => !largest || file.w > largest.w ? file : largest, undefined)?.url;
 ---
 
-<Base title="相册" chrome="page" current="gallery" bodyClass="gallery-inf-plate">
+<Base title="相册" description={`${albums.map(album => album.title).join('、')} · ${total} 张照片`} shareImage={shareImage} shareImageAlt={shareFrame?.alt} chrome="page" current="gallery" bodyClass="gallery-inf-plate">
   {/* ① 视口底纹 ∞（站主 2026-10-08：「替换掉整个相册页的百褶无限符号」）。
       ★ 必须走 `plate` 具名槽：普通 slot 会落进 `.shell` 里，而页面过渡给它加 transform
         ⇒ 装饰层会跳位。三页共用一份，见 `GalleryInf.astro`。 */}

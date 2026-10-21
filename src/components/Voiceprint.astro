@@ -122,7 +122,7 @@
     stroke-linecap: round;
   }
   /* 回复小刻度：一排短竖线，密度 = 有多少人在回应。 */
-  .vp-replies line { stroke: var(--deco-orbit-inner); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  :global(.vp-replies line) { stroke: var(--deco-orbit-inner); stroke-width: 1; vector-effect: non-scaling-stroke; }
   .vp-axis { position: relative; height: 1.4em; margin-top: 2px; }
   /* 悬停游标：一根竖线，跟着指针落在对应的时间桶上。
      ★ 描边比波形再淡一档 —— 它是"你现在在看哪儿"的提示，不该抢波形的读数。

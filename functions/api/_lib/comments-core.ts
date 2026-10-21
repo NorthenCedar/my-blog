@@ -2,6 +2,7 @@ export const NAME_MAX = 40;
 export const BODY_MAX = 1000;
 export const RATE_WINDOW_MS = 60_000;
 export const RATE_MAX = 2;
+export const COMMENT_SLUG_MAX = 160;
 
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -55,7 +56,7 @@ export function validateComment(input: unknown): Validation {
   const name = str(o.name).trim();
   const body = str(o.body).trim();
 
-  if (!SLUG_RE.test(slug)) return { ok: false, error: '页面标识不合法' };
+  if (slug.length > COMMENT_SLUG_MAX || !SLUG_RE.test(slug)) return { ok: false, error: '页面标识不合法' };
   if (name.length === 0) return { ok: false, error: '名字没写' };
   if (name.length > NAME_MAX) return { ok: false, error: `名字不能超过 ${NAME_MAX} 字` };
   if (body.length === 0) return { ok: false, error: '留言为空' };
@@ -128,7 +129,7 @@ export function parseCommentSlugList(raw: string | null, max = 100): string[] {
   const out: string[] = [];
   for (const piece of raw.split(',')) {
     const s = piece.trim();
-    if (SLUG_RE.test(s) && !out.includes(s)) out.push(s);
+    if (s.length <= COMMENT_SLUG_MAX && SLUG_RE.test(s) && !out.includes(s)) out.push(s);
     if (out.length >= max) break;
   }
   return out;

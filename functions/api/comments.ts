@@ -1,17 +1,20 @@
 import {
   validateComment,
   honeypotTripped,
-  rateLimited,
   toRecord,
   toReplyRecord,
   parseCommentSlugList,
-  RATE_WINDOW_MS,
+  RATE_MAX,
   type CommentRecord,
   type ReplyRecord,
 } from './_lib/comments-core';
 import { commentIdentity, attachCommentAuthors, saveAuthoredComment } from './_lib/visitor-comments';
 import { AccountError } from './_lib/visitor-core';
 import { publicUser } from './_lib/visitor-store';
+import { guardPublicWrite, readJsonBody, writeLimitStatements } from './_lib/public-write';
+import targets from './_generated/comment-targets.json';
+
+const publishedTargets = new Set(targets.comments);
 
 interface Env {
   COMMENTS_DB: D1Database;
@@ -48,17 +51,21 @@ const countAll = async (raw: string | null, env: Env): Promise<Record<string, nu
   for (const s of slugs) counts[s] = 0; // 查不到也要回 0：让前端能分清"查过了，是 0"和"压根没查"
   if (slugs.length === 0) return counts;
 
-  const marks = slugs.map(() => '?').join(',');
-  const { results } = await env.COMMENTS_DB.prepare(
-    `SELECT slug, COUNT(*) AS n
-       FROM (SELECT slug FROM comments WHERE slug IN (${marks})
-             UNION ALL
-             SELECT slug FROM replies  WHERE slug IN (${marks}))
-      GROUP BY slug`
-  )
-    .bind(...slugs, ...slugs)
-    .all<{ slug: string; n: number }>();
-  for (const r of results ?? []) counts[r.slug] = r.n;
+  // 两张表各绑定一次，同条最多 50 个 slug（100 个参数）。
+  for (let start = 0; start < slugs.length; start += 50) {
+    const slice = slugs.slice(start, start + 50);
+    const marks = slice.map(() => '?').join(',');
+    const { results } = await env.COMMENTS_DB.prepare(
+      `SELECT slug, COUNT(*) AS n
+         FROM (SELECT slug FROM comments WHERE slug IN (${marks})
+               UNION ALL
+               SELECT slug FROM replies  WHERE slug IN (${marks}))
+        GROUP BY slug`
+    )
+      .bind(...slice, ...slice)
+      .all<{ slug: string; n: number }>();
+    for (const r of results ?? []) counts[r.slug] = r.n;
+  }
   return counts;
 };
 
@@ -88,15 +95,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   //   · parent_id IN 保证不把别的页面的回复带出来。
   // 孤儿回复（父不在这 200 条里）在前端 groupRepliesByParent 处丢弃。
   let replies: ReplyRecord[] = [];
-  if (ids.length > 0) {
-    const marks = ids.map(() => '?').join(',');
+  for (let start = 0; start < ids.length; start += 99) {
+    const slice = ids.slice(start, start + 99);
+    const marks = slice.map(() => '?').join(',');
     const { results: rrows } = await env.COMMENTS_DB.prepare(
       `SELECT id, parent_id, reply_to, name, body, created_at
          FROM replies
         WHERE slug = ? AND parent_id IN (${marks})
         ORDER BY created_at ASC, id ASC`
     )
-      .bind(slug, ...ids)
+      .bind(slug, ...slice)
       .all<{
         id: number;
         parent_id: number;
@@ -105,24 +113,22 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
         body: string;
         created_at: string;
       }>();
-    replies = (rrows ?? []).map(toReplyRecord);
+    replies.push(...(rrows ?? []).map(toReplyRecord));
   }
+  replies.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id);
 
   return json(await attachCommentAuthors(comments, replies, env));
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
-  let payload: unknown;
-  try {
-    payload = await request.json();
-  } catch {
-    return json({ error: '请求格式不对' }, 400);
-  }
+  guardPublicWrite(request);
+  const payload = await readJsonBody(request, 16 * 1024);
 
   const author = await commentIdentity(payload, request, env);
   const check = validateComment(author ? { ...(payload as Record<string, unknown>), name: author.nickname } : payload);
   if (!check.ok) return json({ error: check.error }, 400);
+  if (!publishedTargets.has(check.value.slug)) return json({ error: '页面不存在或尚未开放留言' }, 400);
 
   // 蜜罐命中：**假装成功**但不落库 —— 让机器人以为得手，不来重试。
   if (honeypotTripped(payload)) {
@@ -131,7 +137,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
   const ipHash = await hashIp(ip);
-  const since = new Date(Date.now() - RATE_WINDOW_MS).toISOString();
 
   // 回复：先确认父评论**存在且属于同一个 slug**，否则可以往任意 id / 别的页面塞回复。
   // 这个校验刻意排在**限流之前**：它属于"输入不合法"，应该直接回 400 说清楚，
@@ -150,15 +155,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  // 频率限制要**两表合计**：只有顶层评论计数的话，机器人可以靠"只发回复"绕过限流。
-  const { results: recent } = await env.COMMENTS_DB.prepare(
-    `SELECT (SELECT COUNT(*) FROM comments WHERE ip_hash = ? AND created_at > ?)
-          + (SELECT COUNT(*) FROM replies  WHERE ip_hash = ? AND created_at > ?) AS n`
-  )
-    .bind(ipHash, since, ipHash, since)
-    .all<{ n: number }>();
-
-  if (rateLimited(recent?.[0]?.n ?? 0)) {
+  // 主留言与回复、匿名与账户共用同一个 IP 额度；占额是原子 SQL。
+  const limits = await env.COMMENTS_DB.batch(writeLimitStatements(env, 'comments:ip', ipHash, RATE_MAX, Date.now()));
+  if (!limits[1].results?.length) {
     return json({ error: '发表太频繁，请等一分钟再试' }, 429);
   }
 

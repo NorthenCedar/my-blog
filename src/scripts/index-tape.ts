@@ -12,7 +12,7 @@
  * ★ 降级四态（照抄 develop.ts 的约定）：
  *   ① reduced-motion ⇒ 落到最终态：游标直接贴到目标（不跑 rAF、不过冲）。
  *   ② 无 JS ⇒ 装置不存在（[hidden] + aria-hidden），归档列表服务端已渲染完整。
- *   ③ 移动端 ≤767px ⇒ 不渲染（CSS 里 display:none，本脚本连门都不进）。
+ *   ③ 移动端 ≤767px ⇒ 不渲染；跨回桌面时重新测量，不缓存隐藏态的零高度。
  *   ④ 视口外 / 切标签 ⇒ 停帧（rl-core 的 activityGate）。
  *
  * ★ 时间/平滑约定：位置吃**真实 dt**（二阶弹簧半隐式欧拉），禁「每帧固定系数」；
@@ -41,13 +41,13 @@ import { startLoop, createSpring, createActivityGate, shouldAnimate, prefersRedu
      （同 develop.ts 的「必须先露面再量尺寸」。） */
   host.hidden = false;
 
-  /* 刻度在轨道里的**像素**位置：读构建期写好的 data-pos（0~100 百分比）× 轨道高。
-     刻度位置是静态的，缓存一次即可。 */
-  const trackH = track.clientHeight;
+  /* 高度随断点和视口变化；隐藏态的零高度不能用作除数。 */
+  let trackH = 0;
+  const desktop = matchMedia('(min-width: 768px)');
   const yearPos: { year: string; count: number; y: number }[] = ticks.map((el) => ({
     year: el.dataset.year!,
     count: Number(el.dataset.count ?? 0),
-    y: (parseFloat(el.dataset.pos!) / 100) * trackH,
+    y: 0,
   }));
 
   const reduce = prefersReducedMotion();
@@ -71,7 +71,7 @@ import { startLoop, createSpring, createActivityGate, shouldAnimate, prefersRedu
     return p * trackH;
   };
   const yearAt = (y: number) => {
-    const p = Math.min(1, Math.max(0, y / trackH));
+    const p = trackH > 0 ? Math.min(1, Math.max(0, y / trackH)) : 0;
     /* p → 最近的年份刻度索引（等距刻度 ⇒ 线性映射，确定函数） */
     const idx = Math.round(p * (yearPos.length - 1));
     return yearPos[idx];
@@ -93,6 +93,7 @@ import { startLoop, createSpring, createActivityGate, shouldAnimate, prefersRedu
   /* 单帧：推进弹簧 + 写游标 + 更新读数与留墨 */
   let lastYear = yearPos[0].year;
   const render = (dt: number) => {
+    if (trackH <= 0) return;
     const y = animate ? spring.step(dt) : targetFor(); // reduced-motion：直接贴目标
     setCursor(y);
     const cur = yearAt(y);
@@ -104,15 +105,28 @@ import { startLoop, createSpring, createActivityGate, shouldAnimate, prefersRedu
   };
 
   /* 滚动：把游标目标换成最新进度，弹簧自己追过去（松手后从当前速度继续 ⇒ 过冲） */
-  const onScroll = () => spring.retarget(targetFor());
-  window.addEventListener('scroll', onScroll, { passive: true });
-  window.addEventListener('resize', () => {
-    /* 轨道高可能变了（视口 resize 不改变 track.clientHeight，但保险起见重定位） */
+  const onScroll = () => {
+    if (trackH <= 0) return;
     spring.retarget(targetFor());
-  }, { passive: true });
+    if (!animate) render(0);
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  const measure = () => {
+    host.hidden = !desktop.matches;
+    trackH = desktop.matches ? track.clientHeight : 0;
+    for (let i = 0; i < ticks.length; i++) {
+      yearPos[i].y = (parseFloat(ticks[i].dataset.pos!) / 100) * trackH;
+    }
+    spring.snap(targetFor());
+    render(0);
+  };
+  window.addEventListener('resize', measure, { passive: true });
+  desktop.addEventListener('change', measure);
+  const sizeObserver = new ResizeObserver(measure);
+  sizeObserver.observe(track);
 
   /* 首帧：游标直接停在当前进度（入场不做滑行动画 —— 初始 scrollTop 在顶部，滑了也看不见） */
-  spring.snap(targetFor());
+  measure();
 
   /* ===== 交互：点击 / 拖动刻度 ⇒ 跳转到对应年份分组 ===== */
   const jumpTo = (year: string) => {
@@ -129,6 +143,7 @@ import { startLoop, createSpring, createActivityGate, shouldAnimate, prefersRedu
        重定向到 host、track 收不到 ⇒ jumpTo 永远不触发（实测踩过）。 */
   let dragging = false;
   const onPointerDown = (e: PointerEvent) => {
+    if (trackH <= 0) return;
     dragging = true;
     track.setPointerCapture(e.pointerId);
   };
@@ -165,12 +180,13 @@ import { startLoop, createSpring, createActivityGate, shouldAnimate, prefersRedu
     /* 正常：跑 rAF，每帧判门（视口外/切标签不推进弹簧，游标停在原处不闪）。
        gate 的 onTick（见 createActivityGate 传参）在滚回视口/切回标签页时把目标换成最新进度。 */
     const stop = startLoop((dt) => {
-      if (gate.onScreen && gate.visible) render(dt);
+      if (trackH > 0 && gate.onScreen && gate.visible) render(dt);
     });
     /* 页面卸载时清理（bfcache 回来不重跑脚本，这里只清 rAF 与 observer） */
     window.addEventListener('beforeunload', () => {
       stop();
       gate.dispose();
+      sizeObserver.disconnect();
     }, { once: true });
   } else {
     /* reduced-motion：不跑 rAF，直接画最终态 */

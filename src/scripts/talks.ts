@@ -111,6 +111,7 @@ const writeLiked = (list: string[]) => {
     fresh = false,
     openReply?: (li: HTMLElement, parentId: number, replyTo: string) => void
   ) => {
+    if (list.querySelector(`:scope > li[data-id="${c.id}"]`)) return;
     const li = document.createElement('li');
     li.dataset.id = String(c.id);
     const meta = document.createElement('p');
@@ -149,6 +150,14 @@ const writeLiked = (list: string[]) => {
     identityControls(form);
     const countSpan = document.querySelector<HTMLElement>(`[data-count-for="${CSS.escape(slug)}"]`);
     let loaded = false;
+    let loading = false;
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'reply-btn';
+    retry.dataset.commentRetry = '';
+    retry.textContent = '重试加载评论';
+    retry.hidden = true;
+    errorBox.after(retry);
 
     /** 按钮上的数字： > 0 才显示（一条都没有时按钮就写"评论"两个字） */
     const paintCount = (n: number) => {
@@ -177,12 +186,15 @@ const writeLiked = (list: string[]) => {
     };
 
     const load = () => {
-      if (loaded) return;
-      loaded = true;
+      if (loaded || loading) return;
+      loading = true;
+      errorBox.hidden = true;
+      retry.hidden = true;
       pulled.add(slug); // 自己会给 setCount 数一遍，别让批量回来的旧结果覆盖它
       fetch(`/api/comments?slug=${encodeURIComponent(slug)}`)
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('取评论失败'))))
         .then((data: { comments?: Comment[]; replies?: Reply[] }) => {
+          loaded = true;
           const items = data.comments ?? [];
           for (const c of items) render(list, c, false, openReply);
 
@@ -192,16 +204,20 @@ const writeLiked = (list: string[]) => {
             const li = list.querySelector<HTMLElement>(`li[data-id="${c.id}"]`)!;
             const box2 = li?.querySelector<HTMLElement>(':scope > .reply-list')!;
             for (const r of grouped.get(c.id) ?? []) {
+              if (box2.querySelector(`:scope > li[data-reply-id="${r.id}"]`)) continue;
               box2.append(replyLi(r, () => openReply(li, c.id, r.name)));
             }
           }
-          empty.hidden = items.length > 0;
+          empty.hidden = list.childElementCount > 0;
           setCount();
         })
         .catch(() => {
-          showError('评论没加载出来，刷新试试。');
-        });
+          showError('评论没加载出来，可以重试。已输入的内容会保留。');
+          retry.hidden = false;
+        })
+        .finally(() => { loading = false; });
     };
+    retry.addEventListener('click', load);
 
     toggle?.addEventListener('click', () => {
       const open = box.hidden;

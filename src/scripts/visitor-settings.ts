@@ -1,4 +1,4 @@
-import { accountRequest, loadViewer, node, portrait, setViewer, watchViewer, type Visitor } from './visitor-client';
+import { accountRequest, loadViewer, node, portrait, setViewer, viewerVersion, watchViewer, type Visitor } from './visitor-client';
 import { openLogin, recoveryPanel } from './visitor-dialog';
 import { DEFAULT_AVATARS } from '../lib/visitor-avatars';
 
@@ -19,6 +19,7 @@ function show(initial: Visitor | null) {
     root.append(node('p', '', '登录后可以修改昵称、头像和个性签名。'), login); return;
   }
   let user = initial;
+  let busy = false;
   const head = node('div', 'visitor-account-header'), avatarImage = portrait(user.avatarUrl, user.nickname), nicknameText = node('strong', '', user.nickname);
   const identity = node('div'); identity.append(nicknameText, node('p', 'visitor-hint', `身份标识 · ${user.id.slice(0, 8)}${user.isOwner ? ' · 站主' : ''}`));
   head.append(avatarImage, identity); root.append(head);
@@ -43,36 +44,40 @@ function show(initial: Visitor | null) {
   const sources = node('a', 'visitor-link', '头像素材来源'); sources.href = '/avatar-sources/'; form.append(sources);
   const save = actionButton('保存名片'), message = node('p', 'visitor-hint'); message.setAttribute('role', 'status'); form.append(save, message);
   form.addEventListener('submit', async event => {
-    event.preventDefault(); save.disabled = true; message.textContent = '';
+    event.preventDefault(); if (busy) return; busy = true; save.disabled = true; upload.disabled = true; message.textContent = '';
+    const startedAt = viewerVersion();
     try {
-      const result = await accountRequest('profile', { nickname: nickname.value, bio: bio.value, avatar: selectedAvatar }); user = result.user!;
+      const result = await accountRequest('profile', { nickname: nickname.value, bio: bio.value, avatar: selectedAvatar });
+      if (viewerVersion() !== startedAt) return;
+      user = result.user!;
       nickname.value = user.nickname; bio.value = user.bio; nicknameText.textContent = user.nickname; avatarImage.src = user.avatarUrl; selectedAvatar = ''; setViewer(user);
       message.textContent = '名片已保存，关联的历史留言也会显示新资料。';
     } catch (error) { message.textContent = error instanceof Error ? error.message : '保存失败，请重试'; }
-    finally { save.disabled = false; }
+    finally { busy = false; save.disabled = false; upload.disabled = false; }
   });
   section.append(form);
   const uploadForm = node('form', 'visitor-form');
   const upload = field(uploadForm, 'avatar', '或者上传自己的头像', 'file'); upload.accept = 'image/*'; upload.required = false;
-  uploadForm.append(node('p', 'visitor-hint', '图片上限 8 MiB。保存为静态正方形头像；动图只保留一帧，位置信息会移除。'));
+  const uploadMessage = node('p', 'visitor-hint'); uploadMessage.setAttribute('role', 'status');
+  uploadForm.append(node('p', 'visitor-hint', '图片上限 8 MiB。先预览、移动和缩放，确认后才上传；保存为静态头像，位置信息会移除。'), uploadMessage);
   upload.addEventListener('change', async () => {
     const file = upload.files?.[0]; if (!file) return;
-    if (file.size > 8 * 1024 * 1024) { message.textContent = '图片超过 8 MiB，请换一张小一点的图片。'; upload.value = ''; return; }
-    upload.disabled = true; save.disabled = true;
+    if (busy) { upload.value = ''; return; }
+    busy = true; upload.disabled = true; save.disabled = true; uploadMessage.textContent = '';
+    const startedAt = viewerVersion();
     try {
-      const bitmap = await createImageBitmap(file);
-      if (bitmap.width * bitmap.height > 40000000) { bitmap.close(); throw new Error('图片像素过大，请先缩小再上传。'); }
-      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
-      const ctx = canvas.getContext('2d')!; const side = Math.min(bitmap.width, bitmap.height);
-      ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 128, 128); bitmap.close();
-      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
-      if (!blob) throw new Error('图片没能转换，请换一张试试。');
+      const { cropAvatar } = await import('./visitor-avatar-crop');
+      const blob = await cropAvatar(file);
+      if (!blob) { uploadMessage.textContent = '已取消，原头像保持不变。'; return; }
+      if (viewerVersion() !== startedAt) return;
       const bytes = new Uint8Array(await blob.arrayBuffer()); const png = btoa(Array.from(bytes, n => String.fromCharCode(n)).join(''));
-      const result = await accountRequest('avatar', { png }); user = result.user!; avatarImage.src = user.avatarUrl;
+      const result = await accountRequest('avatar', { png });
+      if (viewerVersion() !== startedAt) return;
+      user = result.user!; avatarImage.src = user.avatarUrl;
       choices.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); selectedAvatar = ''; setViewer(user);
-      message.textContent = '自定义头像已保存。昵称和签名如有改动，请点击保存名片。';
-    } catch (error) { message.textContent = error instanceof Error ? error.message : '头像上传失败'; }
-    finally { upload.disabled = false; save.disabled = false; upload.value = ''; }
+      uploadMessage.textContent = '自定义头像已保存。昵称和签名如有改动，请点击保存名片。';
+    } catch (error) { uploadMessage.textContent = error instanceof Error ? error.message : '头像上传失败'; }
+    finally { busy = false; upload.disabled = false; save.disabled = false; upload.value = ''; upload.focus(); }
   });
   section.append(uploadForm); root.append(section);
 

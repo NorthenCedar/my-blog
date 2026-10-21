@@ -5,6 +5,8 @@ export type Authored = { id: number; name: string; author?: Visitor | null };
 let viewer: Visitor | null = null;
 let loading: Promise<Visitor | null> | undefined;
 let version = 0;
+/** 异步资料响应只能应用到发起时的账户状态，避免退出后旧响应复活界面。 */
+export const viewerVersion = () => version;
 const listeners = new Set<(user: Visitor | null) => void>();
 export function watchViewer(update: (user: Visitor | null) => void) { listeners.add(update); return () => listeners.delete(update); }
 export const node = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = '') => {
