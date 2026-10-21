@@ -29,21 +29,27 @@ stack:
   - group: 构建
     items:
       - Astro（静态生成）
-      - TypeScript
+      - Node.js / npm（构建环境）
+      - TypeScript / JavaScript
       - Markdown 内容集合
-      - Vitest
+      - Vitest / Python（自动化验证）
+      - Wrangler（本地开发与数据库迁移）
   - group: 服务
     items:
       - Cloudflare Pages（部署）
-      - Pages Functions（评论与点赞接口）
-      - Cloudflare D1（存评论、留言、点赞）
-      - 站点统计 PV / UV（服务端计数，零第三方）
+      - Pages Functions（留言、点赞、访客账户与头像接口）
+      - Cloudflare D1（评论、互动与账户数据）
+      - 可选账密登录、会话与恢复码
+      - 站点统计 PV / UV（服务端计数）
   - group: 呈现
     items:
-      - 自托管字体（零第三方请求）
+      - 自托管字体
       - 构建期图片优化（WebP + 多档尺寸）
-      - 全 CSS 动效（无动画库，时间轴不写脚本）
-      - 页面过渡（2.2 秒四阶段，纯 CSS 时间轴）
+      - CSS 动效与 Canvas 2D 交互
+      - three.js / WebGL（立体场景）
+      - TypeGPU / WebGPU（主题开关，带降级支持）
+      - postprocessing / N8AO（后期与环境遮蔽）
+      - 页面过渡（900 毫秒，CSS 时间轴）
       - 跟手光标（白点 + 圆盘 + 涟漪，无位图）
       - RSS / Sitemap
 ---

@@ -6,6 +6,7 @@ import FinInfinity from '../components/FinInfinity.astro';
 import PageTitle from '../components/PageTitle.astro';
 import SocialIcon from '../components/SocialIcon.astro';
 import ThemeToggle from '../components/ThemeToggle.astro';
+import { LANGUAGE_STATS_DIRS, readLanguageStats } from '../lib/lang-stats';
 
 // 关于页正文来自 content/pages/about.md —— 主题不持有任何正文（content-model.md §7）
 const entry = await getEntry('pages', 'about');
@@ -35,54 +36,25 @@ interface AboutData {
      要恢复签名时按 git log 回看 9a4414b / 0572158 两版，别凭印象重写。 */
 }
 
-/* ===== 语言占比条（站主 2026-09-30 要求「更新技术栈并加一个这个」）=====
-   **数据是实测值，不是抄来的。** 站主第一次给的 GitHub 风格截图是旧数据，
-   他随即纠正「那个图片里的是旧的还没更新，你根据现在的数据做」——
-   所以这里按**本站当前源码**重新量，一行命令可复算：
-
-     for e in astro ts css md; do
-       find src content functions -name "*.$e" -type f \
-         | xargs wc -c | tail -1
-     done
-
-   口径（与 GitHub linguist 一致）：
-     · 只统计**自己写的代码**：src/ + content/ + functions/
-     · 不含 node_modules/、dist/、public/、图片、字体 —— 语言占比统计的是代码，不是整站体积
-     · 同扩展名合并为同一语言（.astro / .ts / .css / .md）
-
-   实测（2026-09-30）：
-     .astro 170,036 B · .ts 136,909 B · .css 95,103 B · .md 45,784 B → 合计 447,832 B
-
-   配色按站主 2026-09-30 指定：「用我博客风格的颜色，绿色全色系，黑，白，灰和少量橙色系」
-   —— 全部取自 tokens.css 真值，**没有一个自创色**：
-     Astro（最大段）走绿的三档渐变 accent-ink → accent → accent-bright
-     TypeScript 走 accent-ink（深绿）
-     CSS 走 --muted（灰）
-     Markdown 走 --signal（橙，唯一一处 —— 沿用它在 tokens 里「少量信号色」的语义） */
-interface LangRow {
-  name: string;
-  bytes: string;
-  pct: string;
-  /** 条的宽度（与 pct 同值，内联 style 用） */
-  w: string;
-  /** 段底色：CSS 值，全部由 token 拼出 */
-  fill: string;
-  /** 图例圆点：必须纯色（渐变在图例小圆点上会渲染成全透明） */
-  dot: string;
-  note: string;
-}
-const LANGS: LangRow[] = [
-  { name: 'Astro', bytes: '170,036 B', pct: '38.0%', w: '38.0%',
-    fill: 'linear-gradient(90deg, var(--accent-ink) 0%, var(--accent) 55%, var(--accent-bright) 100%)',
-    dot: 'var(--accent)', note: '页面与组件（29 个 .astro）' },
-  { name: 'TypeScript', bytes: '136,909 B', pct: '30.6%', w: '30.6%',
-    fill: 'var(--accent-ink)', dot: 'var(--accent-ink)', note: '内容集合 / 脚本 / Cloudflare Functions（23 个 .ts）' },
-  { name: 'CSS', bytes: '95,103 B', pct: '21.2%', w: '21.2%',
-    fill: 'var(--muted)', dot: 'var(--muted)', note: '设计令牌 / 开场 / 过渡 / 版式（9 个 .css）' },
-  { name: 'Markdown', bytes: '45,784 B', pct: '10.2%', w: '10.2%',
-    fill: 'var(--signal)', dot: 'var(--signal)', note: '文章与页面正文（14 篇 .md）' },
-];
-const LANG_TOTAL = '447,832 B';
+// 与首页共用构建期统计，语言行数、字节和比例均随源码更新，不保存手填快照。
+const languageStats = readLanguageStats();
+const languageNotes: Record<string, string> = {
+  Astro: '页面与组件', TypeScript: '页面脚本、接口与测试', CSS: '设计令牌与样式',
+  Markdown: '文章与页面内容', JavaScript: '构建与资源处理脚本', JSON: '项目数据',
+  Python: '浏览器验收与辅助脚本', SQL: '数据库结构与迁移',
+};
+const LANGS = languageStats.map((row) => ({
+  name: row.name,
+  bytes: row.bytes.toLocaleString('en-US') + ' B',
+  pct: row.pct + '%',
+  w: row.pct + '%',
+  fill: row.name === 'Astro'
+    ? 'linear-gradient(90deg, var(--accent-ink) 0%, var(--accent) 55%, var(--accent-bright) 100%)'
+    : row.name === 'TypeScript' ? 'var(--accent-ink)' : row.name === 'Markdown' ? 'var(--signal)' : 'var(--muted)',
+  dot: row.name === 'Astro' ? 'var(--accent)' : row.name === 'TypeScript' ? 'var(--accent-ink)' : row.name === 'Markdown' ? 'var(--signal)' : 'var(--muted)',
+  note: languageNotes[row.name] ?? '项目源码',
+}));
+const LANG_TOTAL = languageStats.reduce((sum, row) => sum + row.bytes, 0).toLocaleString('en-US') + ' B';
 const d = (entry?.data ?? {}) as unknown as AboutData;
 const assets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/about/*.{jpg,jpeg,png,webp,avif}', { eager: true });
 const avatar = d.avatar ? assets[`/src/assets/about/${d.avatar}`]?.default : undefined;
@@ -222,7 +194,7 @@ const isExternal = (h: string) => /^https?:/i.test(h);
       <p class="fig-no" aria-hidden="true">FIG.04</p>
       <h2 class="fig-h" id="lang-title">源码语言占比</h2>
       <p class="lang-total">
-        本站源码实测 · 合计 <b>{LANG_TOTAL}</b>（<code>src/</code> 与 <code>functions/</code>，不含依赖与构建产物）
+        构建期按字节统计 · 合计 <b>{LANG_TOTAL}</b>。范围：{LANGUAGE_STATS_DIRS.map((dir, i) => <><code>{dir}/</code>{i < LANGUAGE_STATS_DIRS.length - 1 ? '、' : ''}</>)}；不含第三方副本、图片字体、缓存和临时文件。
       </p>
       <ul class="lang-list">
         {LANGS.map((l) => (
@@ -767,8 +739,8 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   }
   /* 条本体：半透明玻璃槽 + 内部填充段。
      ★ 高度 6px 是"非文字图形"⇒ 按 WCAG 1.4.11 要 ≥3:1。
-       四个 fill 色对 --paper 的对比度：accent 4.86 / accent-ink 6.18 / muted 6.62 / signal 2.83。
-       ⚠️ --signal（橙）只有 2.83 —— **不达标**。它在这里的唯一用途是"第 4 段已经很短（10.2%）"，
+       主要 fill 色对 --paper 的对比度：accent 4.86 / accent-ink 6.18 / muted 6.62 / signal 2.83。
+       ⚠️ --signal（橙）只有 2.83 —— **不达标**。它只用于 Markdown 行，
        且同一条的上方有文字标签 + 字节数 + 百分比三重冗余 ⇒ 颜色不是唯一的信息载体，
        符合 1.4.11 的"信息不依赖颜色"豁免条件。这是**有意的取舍**，写在这免得以后被当成漏检。 */
   .lang-bar {

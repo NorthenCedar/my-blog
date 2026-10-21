@@ -1,5 +1,5 @@
 /**
- * 首页「技术栈」那条语言占比的**唯一数据来源**（2026-09-30 加）。
+ * 首页与关于页语言占比的共同数据来源（构建期读取，不进入客户端脚本）。
  *
  * ── 为什么是构建期算，而不是写死数字 ──────────────────────────────
  * 原型里那段占比条的值是手抄的（而且当时抄的是另一套旧数据，站主当场纠正过：
@@ -9,23 +9,22 @@
  * 所以这里在构建时真去扫一遍磁盘：数字永远等于仓库此刻的真实构成。
  *
  * ── 统计口径（写死在注释里，改之前先读）─────────────────────────
- *   ① 只统计**代码与内容**：.astro / .ts / .css / .md / .js / .mjs / .json；
+ *   ① 只统计代码与内容：.astro / .ts / .css / .md / .js / .mjs / .json / .py / .sql；
  *      图片、字体、GLB、webp 一概不计 —— 语言占比统计的是"写了多少代码"，不是"站有多大"。
- *   ② 扫描范围：src / content / functions / scripts / tests 五个目录。
+ *   ② 扫描范围：src / content / functions / scripts / tests / migrations。
  *      不含 dist（构建产物，是本站代码的**副本**，计进去等于双倍）、
  *      不含 node_modules（依赖，不是本站代码）。
  *   ③ ★ 排除 src/vendor（three.js 与 GLTFLoader）：那是第三方库的 vendored 副本，
  *      它一个人就占 800 KB 量级，计进来会让 JavaScript 一项虚高到失真，
  *      这个占比条也就不再反映"这个站用什么写成"。
- *      （GitHub 的 linguist 同样有 vendor 排除规则，口径一致。）
- *   ④ 占比按**字节**，不是行数 —— 与 GitHub 的条形图同一口径。
+ *   ④ 占比按字节，不是行数；这是本站上述目录的统计，不等同于 GitHub Linguist 的全仓库规则。
  *
  * ── 为什么用 node:fs 而不是导入 Astro 的什么东西 ────────────────
- * 它只在本文件的 frontmatter（构建期）里跑一次，产物里只有几个数字，
+ * 它只在页面的 frontmatter（构建期）里运行，产物里只有几个数字，
  * 不进任何客户端 JS ⇒ 不占首页 7168 B 的内联预算。
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 import { extname, join } from 'node:path';
 
 /** 扩展名 → 展示用的语言名（未列出的扩展名一律不计） */
@@ -37,10 +36,12 @@ const EXT_LANG: Record<string, string> = {
   '.js': 'JavaScript',
   '.mjs': 'JavaScript',
   '.json': 'JSON',
+  '.py': 'Python',
+  '.sql': 'SQL',
 };
 
 /** 扫描的根目录（相对项目根）。dist 与 node_modules 都不在其中。 */
-const SCAN_DIRS = ['src', 'content', 'functions', 'scripts', 'tests'];
+export const LANGUAGE_STATS_DIRS = ['src', 'content', 'functions', 'scripts', 'tests', 'migrations'] as const;
 
 /** 这些目录整棵跳过：产物、依赖、缓存、探针脚本的临时文件 */
 const SKIP_DIRS = new Set([
@@ -50,6 +51,7 @@ const SKIP_DIRS = new Set([
   '.git',
   '_probe',
   '.workbuddy',
+  '__pycache__',
   'vendor', // ← 口径③：第三方 vendored 副本不计
 ]);
 
@@ -69,7 +71,7 @@ function walk(dir: string, out: string[] = []): string[] {
     return out; // 目录不存在（比如还没建 functions/）⇒ 跳过，不是错误
   }
   for (const name of entries) {
-    if (SKIP_DIRS.has(name)) continue;
+    if (SKIP_DIRS.has(name) || name.startsWith('_tmp')) continue;
     const full = join(dir, name);
     let st: ReturnType<typeof statSync>;
     try {
@@ -89,7 +91,7 @@ function walk(dir: string, out: string[] = []): string[] {
  * 而不是显示一条全是 0 的假条。
  */
 export function readLanguageStats(): LangSlice[] {
-  const files = SCAN_DIRS.flatMap((d) => walk(join(process.cwd(), d)));
+  const files = LANGUAGE_STATS_DIRS.flatMap((d) => walk(join(process.cwd(), d)));
   const acc = new Map<string, number>();
 
   for (const f of files) {
