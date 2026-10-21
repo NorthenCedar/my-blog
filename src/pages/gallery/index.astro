@@ -328,6 +328,8 @@ const shareImage = shareFrame?.files.reduce<File | undefined>((largest, file) =>
     }
     .bath {
       order: 2;
+      /* 板内手势用于涂抹，避免浏览器接管滑动后发出 pointercancel；板外照常滚动。 */
+      touch-action: none;
       /* ★ flex: 0 0 auto 必须写：flex 子项默认可收缩，不写的话标题一挤就把板压扁
          （实测 390 视口下被压到 133 px，而 CSS 写的是 179 px）。 */
       flex: 0 0 auto;

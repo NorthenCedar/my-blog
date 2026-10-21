@@ -1,0 +1,42 @@
+---
+interface Props { id: string; src: string; alt: string; width: number; height: number }
+const { id, src, alt, width, height } = Astro.props;
+---
+<!-- 独立于漂浮条目挂载；图片懒加载，说明来自同一条内容记录。 -->
+<dialog id={id} class="talk-image-dialog" aria-label="说说图片查看">
+  <form method="dialog"><button data-talk-image-close aria-label="关闭大图（Esc）" autofocus>关闭 ✕</button></form>
+  <figure>
+    <img src={src} alt={alt} width={width} height={height} loading="lazy" decoding="async" />
+    <figcaption><a href={src} target="_blank" rel="noopener">{alt}</a></figcaption>
+  </figure>
+</dialog>
+
+<style>
+  .talk-image-dialog {
+    box-sizing: border-box;
+    width: min(96vw, 1600px);
+    max-width: 96vw;
+    max-height: 94dvh;
+    padding: var(--sp-4);
+    border: 1px solid var(--hair);
+    background: var(--paper);
+    color: var(--ink);
+    overscroll-behavior: contain;
+  }
+  .talk-image-dialog::backdrop { background: var(--visitor-backdrop); opacity: 0.88; }
+  /* 直接跟随原生 open 状态，关闭与快速重开不需要另维护滚动锁。 */
+  :global(html:has(.talk-image-dialog[open])) { overflow: hidden; }
+  form { margin: 0; }
+  button {
+    display: block;
+    margin-left: auto;
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--hair);
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+  }
+  figure { margin: var(--sp-3) 0 0; text-align: center; }
+  img { display: block; width: auto; height: auto; max-width: 100%; max-height: 70dvh; margin: auto; object-fit: contain; }
+  figcaption { margin: var(--sp-3) 0 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+</style>

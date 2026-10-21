@@ -958,6 +958,26 @@
     pwT = 0;      // ⇒ 笔触收回去，收完自动停帧，板回到纯色
     sync();
   });
+  // 触屏没有持续悬停：从按下开始涂抹，抬起、系统取消或失去捕获后停止落笔。
+  let touchId: number | null = null;
+  host.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || !e.isPrimary || reduce.matches) return;
+    touchId = e.pointerId;
+    toLocal(e);
+    if (pw <= PW_EPS) { cx = mx; cy = my; }
+    pwT = 1;
+    host.setPointerCapture(e.pointerId);
+    sync();
+  });
+  const lift = (e: PointerEvent) => {
+    if (e.pointerId !== touchId) return;
+    touchId = null;
+    pwT = 0;
+    sync();
+  };
+  host.addEventListener('pointerup', lift);
+  host.addEventListener('pointercancel', lift);
+  host.addEventListener('lostpointercapture', lift);
 
   /* 与页面互动：划过素材池里任意一张 ⇒ 板里淡入那一张（松耦合 —— 只读 DOM）
      ★ 同 collect()：走 `[data-bath-src]`（相册入口条），不是 `.wf`（砖墙已经不在本页）。 */

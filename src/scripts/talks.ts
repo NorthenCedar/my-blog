@@ -8,7 +8,7 @@
 // 安全铁律同 comments.ts：**任何地方都不用 innerHTML**，用户输入一律 textContent。
 
 import { fmtTime, groupReplies, parentIdsOf, postComment, replyLi, toggleReplyForm, type Reply } from './reply-common';
-import { authorNode, identityControls, type Authored } from './visitor-client';
+import { authorNode, identityControls, node, type Authored } from './visitor-client';
 
 type Comment = Authored & { body: string; createdAt: string };
 
@@ -112,24 +112,18 @@ const writeLiked = (list: string[]) => {
     openReply?: (li: HTMLElement, parentId: number, replyTo: string) => void
   ) => {
     if (list.querySelector(`:scope > li[data-id="${c.id}"]`)) return;
-    const li = document.createElement('li');
+    const li = node('li');
     li.dataset.id = String(c.id);
-    const meta = document.createElement('p');
-    meta.className = 'cmeta';
+    const meta = node('p', 'cmeta');
     meta.append(authorNode(c), document.createTextNode(` · ${fmtTime(c.createdAt)}${fresh ? ' · 刚发表' : ''}`));
-    const body = document.createElement('p');
-    body.className = 'cbody';
-    body.textContent = c.body;
+    const body = node('p', 'cbody', c.body);
     li.append(meta, body);
 
     if (openReply) {
-      const btn = document.createElement('button');
+      const btn = node('button', 'reply-btn', '回复');
       btn.type = 'button';
-      btn.className = 'reply-btn';
-      btn.textContent = '回复';
       btn.addEventListener('click', () => openReply(li, c.id, ''));
-      const rl = document.createElement('ul');
-      rl.className = 'reply-list';
+      const rl = node('ul', 'reply-list');
       li.append(btn, rl);
     }
 
@@ -151,11 +145,9 @@ const writeLiked = (list: string[]) => {
     const countSpan = document.querySelector<HTMLElement>(`[data-count-for="${CSS.escape(slug)}"]`);
     let loaded = false;
     let loading = false;
-    const retry = document.createElement('button');
+    const retry = node('button', 'reply-btn', '重试加载评论');
     retry.type = 'button';
-    retry.className = 'reply-btn';
     retry.dataset.commentRetry = '';
-    retry.textContent = '重试加载评论';
     retry.hidden = true;
     errorBox.after(retry);
 
