@@ -1,5 +1,6 @@
 import { accountRequest, loadViewer, node, portrait, setViewer, watchViewer, type Visitor } from './visitor-client';
 import { openLogin, recoveryPanel } from './visitor-dialog';
+import { DEFAULT_AVATARS } from '../lib/visitor-avatars';
 
 const root = document.querySelector<HTMLElement>('[data-account-state]')!;
 const notices = document.querySelector<HTMLElement>('[data-account-notices]')!;
@@ -26,14 +27,20 @@ function show(initial: Visitor | null) {
   const username = field(form, 'username', '登录账号（仅自己可见）'); username.value = user.username ?? ''; username.readOnly = true; username.autocomplete = 'username';
   const nickname = field(form, 'nickname', '昵称'); nickname.maxLength = 40; nickname.value = user.nickname; nickname.autocomplete = 'nickname';
   const bioLabel = node('label', '', '个性签名'), bio = node('textarea'); bio.name = 'bio'; bio.maxLength = 160; bio.rows = 3; bio.value = user.bio; bioLabel.append(bio); form.append(bioLabel);
-  const choices = node('div', 'visitor-avatar-choices'); choices.setAttribute('role', 'group'); choices.setAttribute('aria-label', '默认头像');
+  const choices = node('div', 'visitor-avatar-groups'); choices.setAttribute('role', 'group'); choices.setAttribute('aria-label', '默认头像');
   let selectedAvatar = '';
-  for (const [id, title] of [['leaf', '叶脉'], ['helix', '双螺旋'], ['flask', '实验瓶'], ['crystal', '晶体'], ['orbit', '星轨'], ['infinity', '无限环']]) {
-    const button = node('button', 'visitor-avatar-choice'); button.type = 'button'; button.setAttribute('aria-pressed', String(user.avatarUrl === `/avatars/${id}.svg`));
-    button.append(portrait(`/avatars/${id}.svg`, title), node('span', '', title));
-    button.addEventListener('click', () => { selectedAvatar = id; choices.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button))); }); choices.append(button);
+  for (const group of new Set(DEFAULT_AVATARS.map(avatar => avatar.group))) {
+    const heading = node('h3', 'visitor-avatar-heading', group);
+    const row = node('div', 'visitor-avatar-choices'); row.setAttribute('role', 'group'); row.setAttribute('aria-label', group);
+    for (const { id, title, url } of DEFAULT_AVATARS.filter(avatar => avatar.group === group)) {
+      const button = node('button', 'visitor-avatar-choice'); button.type = 'button'; button.setAttribute('aria-label', `${title} · ${group}`); button.setAttribute('aria-pressed', String(user.avatarUrl === url));
+      button.append(portrait(url, title), node('span', '', title));
+      button.addEventListener('click', () => { selectedAvatar = id; choices.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button))); }); row.append(button);
+    }
+    choices.append(heading, row);
   }
   form.append(node('span', 'visitor-hint', '选择默认头像后，点击保存名片。'), choices);
+  const sources = node('a', 'visitor-link', '头像素材来源'); sources.href = '/avatar-sources/'; form.append(sources);
   const save = actionButton('保存名片'), message = node('p', 'visitor-hint'); message.setAttribute('role', 'status'); form.append(save, message);
   form.addEventListener('submit', async event => {
     event.preventDefault(); save.disabled = true; message.textContent = '';

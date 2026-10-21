@@ -36,10 +36,11 @@ export function loadViewer() {
   }).catch(() => viewer);
 }
 export function defaultAvatar(kind: string, id: number) {
-  const avatars = ['leaf', 'helix', 'flask', 'crystal', 'orbit', 'infinity'];
-  return `/avatars/${avatars[(Math.abs(id) + (kind === 'reply' ? 3 : 0)) % avatars.length]}.svg`;
+  // 保留六个槽位的顺序，匿名留言刷新后仍是同一个图案。
+  const avatars = ['dorothy-chibi.png', 'helix.svg', 'silence-chibi.png', 'muelsyse-chibi.png', 'orbit.svg', 'infinity.svg'];
+  return `/avatars/${avatars[(Math.abs(id) + (kind === 'reply' ? 3 : 0)) % avatars.length]}`;
 }
-export function portrait(url: string, name: string, fallback = '/avatars/leaf.svg') {
+export function portrait(url: string, name: string, fallback = '/avatars/helix.svg') {
   const image = node('img', 'visitor-avatar');
   image.src = url; image.alt = `${name}的头像`; image.width = 40; image.height = 40; image.loading = 'lazy';
   image.addEventListener('error', () => { if (!image.src.endsWith(fallback)) image.src = fallback; }, { once: true });

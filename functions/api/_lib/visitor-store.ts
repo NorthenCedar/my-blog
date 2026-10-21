@@ -1,4 +1,5 @@
 import { digest, fail, randomToken } from './visitor-core';
+import { defaultAvatarUrl } from '../../../src/lib/visitor-avatars';
 
 export interface VisitorEnv { COMMENTS_DB: D1Database; OWNER_USER_ID?: string }
 export type Account = {
@@ -20,7 +21,7 @@ export function sessionToken(request: Request) {
 }
 export const publicUser = (user: Account, env: VisitorEnv) => ({
   id: user.id, nickname: user.nickname, bio: user.bio,
-  avatarUrl: user.avatar_version ? `/api/avatars?id=${user.id}&v=${user.avatar_version}` : `/avatars/${user.avatar}.svg`,
+  avatarUrl: user.avatar_version ? `/api/avatars?id=${user.id}&v=${user.avatar_version}` : defaultAvatarUrl(user.avatar),
   isOwner: Boolean(env.OWNER_USER_ID && env.OWNER_USER_ID === user.id),
 });
 export const privateUser = (user: Account, env: VisitorEnv) => ({ ...publicUser(user, env), username: user.username });
