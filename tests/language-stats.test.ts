@@ -17,6 +17,7 @@ describe('源码语言统计使用实际文件字节并排除非项目源码', (
       'src/vendor/other.js': '第三方'.repeat(100), 'node_modules/other.js': '依赖'.repeat(100),
       'dist/other.js': '构建副本'.repeat(100), 'scripts/__pycache__/check.py': '缓存'.repeat(100),
       'scripts/_tmp-probe.js': '探针'.repeat(100), 'src/_tmp-fixture/file.ts': '临时夹具'.repeat(100),
+      'functions/api/_generated/comment-targets.json': '构建生成物'.repeat(100),
       'src/photo.png': '不是代码'.repeat(100),
     };
     for (const [file, value] of Object.entries(files)) {

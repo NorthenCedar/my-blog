@@ -993,7 +993,7 @@ npx wrangler d1 execute beishan-comments --remote --command "DELETE FROM comment
 
 挡不住的：**人工发的广告**。看到就用 14.2 的命令删掉。
 
-公开留言/点赞接口只接收 `Content-Type: application/json`。无 `Origin` 的非浏览器客户端可用，但不能声明 `Sec-Fetch-Site: cross-site`；携带来源时必须与请求站点同源，`Origin: null` 也会拒绝。账户操作继续要求同源与原有请求标记。页面白名单由构建最后一步 `scripts/generate-comment-targets.mjs` 从清理草稿后的 `dist/` 生成，新增文章/说说照常构建即可；不要手改生成的 JSON，也不要只构建 Astro 而跳过完整 `npm run build`。本次复用既有账户限流表，不需要额外数据库迁移。
+公开留言/点赞接口只接收 `Content-Type: application/json`。无 `Origin` 的非浏览器客户端可用，但不能声明 `Sec-Fetch-Site: cross-site`；携带来源时必须与请求站点同源，`Origin: null` 也会拒绝。账户操作继续要求同源与原有请求标记。页面白名单由构建最后一步 `scripts/generate-comment-targets.mjs` 从清理草稿后的 `dist/` 生成，新增文章/说说照常构建即可；不要手改生成的 JSON，也不要只构建 Astro 而跳过完整 `npm run build`。`functions/api/_generated/comment-targets.json` 是忽略提交的构建产物，首次构建会创建，Functions 打包时读取；新增内容不会再把它列为写作台工作区改动。它也不计入源码语言统计。本次复用既有账户限流表，不需要额外数据库迁移。
 
 ### 14.5 回复（2026-09-28 上线，像 QQ 动态的楼中楼）
 

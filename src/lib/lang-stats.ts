@@ -52,6 +52,7 @@ const SKIP_DIRS = new Set([
   '_probe',
   '.workbuddy',
   '__pycache__',
+  '_generated', // 构建生成的留言目标清单不属于源码，避免冷构建与重建读数不同。
   'vendor', // ← 口径③：第三方 vendored 副本不计
 ]);
 

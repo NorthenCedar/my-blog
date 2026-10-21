@@ -2,7 +2,7 @@ import { afterEach, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach(dir => rmSync(dir, { recursive: true, force: true })));
@@ -21,4 +21,28 @@ it('构建目标只从最终 HTML 的实际留言及点赞标记产生，排序�
   const output = join(root, 'generated', 'targets.json');
   execFileSync(process.execPath, ['scripts/generate-comment-targets.mjs', dist, output]);
   expect(JSON.parse(readFileSync(output, 'utf8'))).toEqual({ comments: ['guestbook', 'published', 'talk-real'], talks: ['talk-real'] });
+});
+
+it('首次生成及新增说说后重生成清单，不改变写作台可见的内容工作区快照', () => {
+  const root = mkdtempSync(join(tmpdir(), 'nc-targets-publish-')); dirs.push(root);
+  const git = (...args: string[]) => execFileSync('git', ['-c', 'core.autocrlf=false', '-c', 'commit.gpgsign=false', ...args], { cwd: root, encoding: 'utf8' });
+  git('init', '-q');
+  writeFileSync(join(root, '.gitignore'), readFileSync('.gitignore'));
+  mkdirSync(join(root, 'content', 'pages'), { recursive: true });
+  writeFileSync(join(root, 'content', 'pages', 'talks.md'), '原有内容\n');
+  git('add', '--', '.gitignore', 'content');
+  git('-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture');
+  writeFileSync(join(root, 'content', 'pages', 'talks.md'), '新增说说\n');
+  const before = git('status', '--porcelain=v1', '--untracked-files=all');
+  mkdirSync(join(root, 'dist'), { recursive: true });
+  const script = resolve('scripts/generate-comment-targets.mjs');
+  const target = join(root, 'functions', 'api', '_generated', 'comment-targets.json');
+  for (const id of ['talk-new', 'talk-another']) {
+    writeFileSync(join(root, 'dist', 'index.html'), `<section data-comments data-slug="guestbook"></section><button data-like="${id}"></button>`);
+    execFileSync(process.execPath, [script], { cwd: root });
+    expect(JSON.parse(readFileSync(target, 'utf8')).talks).toEqual([id]);
+    expect(git('status', '--porcelain=v1', '--untracked-files=all')).toBe(before);
+  }
+  git('add', '--', 'content');
+  expect(git('diff', '--cached', '--name-only').trim()).toBe('content/pages/talks.md');
 });
