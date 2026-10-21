@@ -12,7 +12,7 @@
 .visitor-identity select { font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--hair); padding: var(--sp-1) var(--sp-2); }
 .visitor-identity [hidden] { display: none !important; }
 .visitor-dialog { color: var(--ink); background: var(--paper); border: 1px solid var(--ink-2); padding: var(--sp-6); width: min(28rem, calc(100vw - var(--sp-6))); max-height: calc(100dvh - var(--sp-6)); overflow: auto; }
-.visitor-dialog::backdrop { background: var(--ink-deep); opacity: .65; }
+.visitor-dialog::backdrop { background: var(--visitor-backdrop); opacity: .65; }
 .visitor-dialog h2 { font-size: var(--fs-h3); margin: 0 var(--sp-8) var(--sp-3) 0; }
 .visitor-dialog h3 { font-size: var(--fs-lg); }
 .visitor-dialog p { margin-block: var(--sp-3); }

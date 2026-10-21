@@ -39,12 +39,13 @@ class LocalWebSocket:
 
 HERE = Path(__file__).resolve().parent.parent
 BASE = 'http://127.0.0.1:4337'
+CURSOR_ONLY = bool(os.environ.get('VISITOR_CURSOR_ONLY'))
 with socket.socket() as sock:
     sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
 profile = tempfile.mkdtemp(prefix='nc-visitor-chrome-')
 process = subprocess.Popen([
     r'C:\Program Files\Google\Chrome\Application\chrome.exe', '--headless=new', '--disable-gpu',
-    '--no-first-run', '--no-default-browser-check', '--force-prefers-reduced-motion',
+    '--no-first-run', '--no-default-browser-check', *([] if CURSOR_ONLY else ['--force-prefers-reduced-motion']),
     f'--remote-debugging-port={port}', '--remote-allow-origins=*', f'--user-data-dir={profile}', 'about:blank'
 ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=0x08000000)
 passed = []
@@ -89,6 +90,72 @@ try:
         data = cdp('Page.captureScreenshot', {'format': 'png', 'captureBeyondViewport': False})['data']; (HERE / name).write_bytes(base64.b64decode(data))
     cdp('Network.enable'); cdp('Network.setExtraHTTPHeaders', {'headers': {'CF-Connecting-IP': f'192.0.2.{port % 180 + 1}'}})
     cdp('Emulation.setDeviceMetricsOverride', {'width':1280,'height':1000,'deviceScaleFactor':1,'mobile':False})
+    if CURSOR_ONLY:
+        cdp('Page.enable')
+        cdp('Emulation.setEmulatedMedia', {'features':[{'name':'prefers-reduced-motion','value':'no-preference'}]})
+        failures = []
+        def cursor_check(label, condition):
+            (passed if condition else failures).append(label)
+            print('PASS' if condition else 'FAIL', label, flush=True)
+        def move(selector=None, x=None, y=None):
+            if selector:
+                point = js('(() => {const e=document.querySelector('+json.dumps(selector)+');e.scrollIntoView({block:"center"});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()')
+                x, y = point['x'], point['y']
+            cdp('Input.dispatchMouseEvent', {'type':'mouseMoved','x':x,'y':y})
+            wait('document.documentElement.classList.contains("cursor-live")')
+            time.sleep(.15)
+            return x, y
+        # 只替换本机测试页面的账户读取，不注册、不写库、不使用真实账户。
+        cdp('Page.addScriptToEvaluateOnNewDocument', {'source': '''
+          const originalFetch=window.fetch.bind(window);
+          window.fetch=(input,init)=>{
+            const url=new URL(typeof input==='string'?input:input.url,location.href);
+            if(url.pathname==='/api/account') return Promise.resolve(new Response(JSON.stringify({user:location.pathname==='/account/'&&!sessionStorage.getItem('cursor-anonymous')?{
+              id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',username:'cursor_fixture',nickname:'光标验收',bio:'',avatarUrl:'/avatars/leaf.svg',isOwner:false
+            }:null}),{headers:{'Content-Type':'application/json'}}));
+            return originalFetch(input,init);
+          };
+        '''})
+        goto('/account/'); wait('document.querySelector(".visitor-account summary")')
+        move('.visitor-account summary')
+        cursor_check('账户折叠标题不露出系统光标', js('[...document.querySelectorAll(".visitor-account summary")].every(e=>getComputedStyle(e).cursor==="none")'))
+        js('document.querySelector(".visitor-secondary").disabled=true')
+        cursor_check('禁用按钮不覆盖自定义光标', js('getComputedStyle(document.querySelector(".visitor-secondary")).cursor==="none"'))
+        shot('_tmp-visitor-cursor-summary.png')
+        js('sessionStorage.setItem("cursor-anonymous","1")')
+        goto('/account/'); wait('document.querySelector("[data-account-state] > button")'); click('[data-account-state] > button'); wait('document.querySelector("dialog[open]")')
+        move('dialog input')
+        cursor_check('弹窗内保持自定义光标', js('getComputedStyle(document.querySelector("dialog input")).cursor==="none"'))
+        cursor_check('遮罩区域不露出系统光标', js('getComputedStyle(document.querySelector("dialog"),"::backdrop").cursor==="none"'))
+        cursor_check('光标进入原生弹窗的顶层', js('[...document.querySelectorAll(".cr-dot,.cr-disc,.cr-ripple")].every(e=>e.closest("dialog:modal"))'))
+        shot('_tmp-visitor-cursor-light.png')
+        js('document.documentElement.classList.add("dark")')
+        point=move('dialog input')
+        cursor_check('弹窗内白点仍对准鼠标', js('(() => {const r=document.querySelector(".cr-dot").getBoundingClientRect();return Math.abs(r.left+r.width/2-'+str(point[0])+')<1&&Math.abs(r.top+r.height/2-'+str(point[1])+')<1})()'))
+        color=js('getComputedStyle(document.querySelector("dialog"),"::backdrop").backgroundColor')
+        channels=[int(part) for part in color.removeprefix('rgb(').removesuffix(')').split(',')]
+        cursor_check('暗色弹窗遮罩为中性灰黑', len(channels)==3 and max(channels)-min(channels)<=1)
+        shot('_tmp-visitor-cursor-dark.png')
+        point=move(x=36,y=80)
+        cursor_check('移动到遮罩区域白点仍在顶层', js('document.querySelector("dialog:modal").contains(document.querySelector(".cr-dot"))'))
+        shot('_tmp-visitor-cursor-backdrop.png')
+        js('document.querySelector("dialog").close()'); wait('!document.querySelector("dialog[open]")')
+        cursor_check('关闭后光标回到页面且不重复', js('document.querySelectorAll(".cr-dot,.cr-disc,.cr-ripple").length===3&&[...document.querySelectorAll(".cr-dot,.cr-disc,.cr-ripple")].every(e=>e.parentElement===document.body)'))
+        click('[data-account-state] > button'); wait('document.querySelector("dialog[open]")')
+        cursor_check('再次打开弹窗仍接管光标', js('document.querySelector("dialog:modal").contains(document.querySelector(".cr-dot"))'))
+        cdp('Emulation.setDeviceMetricsOverride', {'width':390,'height':844,'deviceScaleFactor':1,'mobile':False})
+        point=move('dialog input')
+        cursor_check('窄屏弹窗白点仍对准鼠标', js('(() => {const r=document.querySelector(".cr-dot").getBoundingClientRect();return Math.abs(r.left+r.width/2-'+str(point[0])+')<1&&Math.abs(r.top+r.height/2-'+str(point[1])+')<1})()'))
+        shot('_tmp-visitor-cursor-mobile.png')
+        cursor_check('窄屏弹窗保持视口内布局', js('(() => {const r=document.querySelector("dialog").getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&document.documentElement.scrollWidth<=innerWidth})()'))
+        js('document.querySelector("dialog").remove()'); time.sleep(.1)
+        cursor_check('弹窗直接移除也能恢复光标', js('document.querySelectorAll(".cr-dot,.cr-disc,.cr-ripple").length===3&&document.querySelector(".cr-dot").parentElement===document.body'))
+        cdp('Emulation.setEmulatedMedia', {'features':[{'name':'prefers-reduced-motion','value':'reduce'}]})
+        js('sessionStorage.removeItem("cursor-anonymous")')
+        goto('/account/'); wait('document.querySelector(".visitor-account summary")')
+        cursor_check('减少动态效果时保留系统光标', js('!document.documentElement.classList.contains("cursor-none")&&getComputedStyle(document.querySelector(".visitor-account summary")).cursor!=="none"'))
+        print(json.dumps({'passed':len(passed),'failed':failures},ensure_ascii=False),flush=True)
+        raise SystemExit(1 if failures else 0)
     goto('/guestbook/'); wait('document.querySelector(".visitor-identity")')
     if os.environ.get('VISITOR_LAYOUT_ONLY'):
         wait('document.querySelector(".visitor-author")')

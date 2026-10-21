@@ -118,6 +118,18 @@
     if (!matchMedia('(hover: hover)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     root.classList.add('cursor-none');
 
+    // 原生 modal 位于浏览器顶层，普通页面的 z-index 再高也不能覆盖它。
+    // 迁移同一组装饰节点，关闭/移除后归还 body；坐标仍由 fixed 定位指向视口。
+    const layers = [disc, dot, ripple];
+    const syncModalLayer = () => {
+      // 访客界面只允许同时打开一个弹窗。
+      const host = document.querySelector('dialog[open]') ?? document.body;
+      for (const layer of layers) if (layer.parentNode !== host) host.append(layer);
+    };
+    // attributeFilter 已使属性观察默认开启，不监听每一帧的 style 变化。
+    new MutationObserver(syncModalLayer).observe(document.body, { subtree: true, childList: true, attributeFilter: ['open'] });
+    syncModalLayer();
+
     const HOT = 'a,button,input,textarea,select,summary,[role="button"],[role="tab"],[data-rail]';
     let x = 0;
     let y = 0;

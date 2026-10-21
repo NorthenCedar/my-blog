@@ -1045,6 +1045,8 @@ npx wrangler d1 execute beishan-comments --remote --file=migrations/0004_visitor
 
 **浏览器回归：** 使用只含测试数据的本地库，以 `--persist-to _tmp-visitor-state` 初始化 0001–0004，并启动 `npx wrangler pages dev dist --ip 127.0.0.1 --port 4337 --persist-to _tmp-visitor-state` 后，运行 `python scripts/verify-visitor-accounts.py`。需要已安装 Chrome；脚本仅依赖 Python 标准库，创建独立浏览器资料目录，所有测试请求只发往本机 4337。它会注册、发测试留言和注销测试账户，不能指向真实用户库。`VISITOR_LAYOUT_ONLY=1` 可仅检查评论头像和说说表单布局，不注册或发表。
 
+**账户弹窗的光标与遮罩：** 支持鼠标且未开启“减少动态效果”时，账户折叠标题、按钮、登录弹窗及遮罩区域都保持本站白点和圆环。原生弹窗打开后光标进入同一顶层，关闭或移除后返回页面；触摸和减少动态效果的原生光标回退保留。暗色遮罩由 `--visitor-backdrop` 使用中性黑色，亮色保持原墨色。设置 `VISITOR_CURSOR_ONLY=1` 运行上述浏览器脚本，可检查这些行为及窄屏布局；此模式使用浏览器内的虚构账户资料，不注册、不写库。
+
 ---
 
 ## 15. 常见问题

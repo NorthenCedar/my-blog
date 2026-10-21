@@ -103,10 +103,12 @@ button {
    ⚠️ 这条**必须放全局样式**，不能写在组件的 `<style>` 里：Astro 会把组件样式作用域化成
    `html.cursor-none [data-astro-cid-…]`，于是只有组件自己那三个元素被隐藏，其余元素只能靠继承拿 `none` ——
    而链接有 UA 的 `a{cursor:pointer}` 声明，继承会被它压过 ⇒ 实测链接上原生箭头还在（与白点并存）。
-   即：`*` 这一步必须是不带作用域的全局选择器。 */
+   即：`*` 这一步必须是不带作用域的全局选择器。
+   !important 只在 JS 已确认启用自定义光标后生效，避免账户 summary、禁用按钮等
+   更具体的控件规则重新露出系统光标；减少动态效果与触摸设备不加此类。 */
 html.cursor-none,
 html.cursor-none * {
-  cursor: none;
+  cursor: none !important;
 }
 
 .skip {

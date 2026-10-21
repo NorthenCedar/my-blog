@@ -421,7 +421,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(existsSync(join(DIST, 'cursors')), 'dist/cursors/ 还在（位图没删干净）').toBe(false);
 
     // ③ 跟手白点接管原生的前提：这条全局规则必须在（且不能带作用域属性）
-    expect(flat, '缺 html.cursor-none 的全局接管规则（白点会与原生光标并存）').toContain('html.cursor-none,html.cursor-none *{cursor:none}');
+    expect(flat, '全局光标接管必须优先于具体控件规则（白点会与系统光标并存）').toContain('html.cursor-none,html.cursor-none *{cursor:none!important}');
     // ⚠️ 注意别写成 `!f.endsWith('index.html')` —— 那会把**所有**页面滤掉，
     //    断言在空数组上永远通过（第一版就是这么空转的）。只排 404，并要求页面数不为零。
     const pages = htmlFiles().filter((f) => !f.endsWith('404.html'));
@@ -441,7 +441,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     walkSrc('src');
     /** 扫描前必须剥掉注释：之前栽过 —— 在注释里为了解释 UA 那条规则写了 `a{cursor:pointer}` 被当成真声明。 */
     const stripComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, ' ');
-    const ALLOW = /^(none|auto|text|default|inherit|not-allowed|pointer)$/;
+    const ALLOW = /^(none(?: !important)?|auto|text|default|inherit|not-allowed|pointer)$/;
     const offenders: string[] = [];
     for (const f of srcFiles) {
       const text = stripComments(readFileSync(f, 'utf8'));

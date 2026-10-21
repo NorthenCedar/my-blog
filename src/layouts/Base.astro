@@ -215,7 +215,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
       <div class="pt-word">{site.name}<em>RHINE LAB</em>NOTES</div>
       <div class="pt-scan"></div>
     </div>
-    {/* 跟手光标环 + 点击涟漪：纯装饰，z-index 55（在内容与灯箱之上、开场覆盖层 60 之下） */}
+    {/* 跟手光标环与涟漪：普通层级 64/65/66，原生弹窗打开时由组件迁入顶层。 */}
     <CursorRing />
     <script>
       // 页面过渡的点击拦截（每一页都加载 ⇒ Astro 会抽成同源共享 chunk）。

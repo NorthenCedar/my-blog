@@ -10960,3 +10960,11 @@ Rolldown 将动态命名空间 helper 合到主题开关大文件，导致登录
 本机预览在 `http://127.0.0.1:4337`，使用 `_tmp-visitor-state/` 隔离本地库；迁移已重复执行。浏览器验收脚本 `scripts/verify-visitor-accounts.py` 使用独立无头 Chrome 资料目录，只访问本机 4337，覆盖注册、草稿、名片、回复、资料、头像、文章匿名、说说账户、过期重登、恢复与注销，截图包含 390px 亮暗设置页及评论头像。配置改动前备份在 `D:/router/work/visitor-accounts-before-20261020/`。未提交、未推送、未修改线上 D1 或环境变量；站主注册后仍需由服务端绑定 `OWNER_USER_ID`，操作见手册 §14.7。
 
 最终 `npm run verify`：56 个测试文件、931 项通过、1 项保留跳过。标准库浏览器脚本 22 项通过；头像正方形及说说身份入口对齐的独立布局检查通过。三项独立审查问题均有先失败、后通过的回归证据。日志 `_tmp-visitor-final-verify.log` / `_tmp-visitor-browser-final.log` / `_tmp-visitor-layout.log`，未执行线上部署。
+
+### 6.112 账户控件与原生弹窗的光标、暗色遮罩（2026-10-21）
+
+用户反馈账户设置折叠标题上系统箭头与自定义光标并存，登录原生弹窗把自定义光标压在下面，暗色打开弹窗后整页偏绿。控件的 cursor:pointer/default 选择器优先级高于旧全局接管；showModal 的浏览器顶层不受 body 中 64/65/66 的 z-index 影响；遮罩沿用了墨绿 --ink-deep。
+
+全局 cursor:none 增加 !important，但仍只在 JS 确认可用并添加 html.cursor-none 后生效。触摸与减少动态效果不会隐藏系统光标。CursorRing 观察弹窗 open 属性和节点增删，把同一组三个装饰节点迁入当前弹窗，关闭或直接移除后归还 body；只在父节点不匹配时移动，不克隆节点、不提高既有层级。fixed 坐标仍相对于视口。
+
+增加 --visitor-backdrop，亮色保持墨绿遮罩，暗色使用中性黑色，保留原 .65 透明度。浏览器脚本增加 VISITOR_CURSOR_ONLY=1 模式，通过浏览器内虚构的账户响应渲染真实设置界面，不注册、不写库。正常动态下先复现 6 项失败，修复后 14 项通过，包含 summary/禁用按钮、弹窗内与遮罩上的光标、关闭恢复、重复打开、直接移除、窄屏定位和减少动态效果回退。证据为 _tmp-visitor-cursor-red.log、_tmp-visitor-cursor-green.log 和 _tmp-visitor-cursor-*.png。
