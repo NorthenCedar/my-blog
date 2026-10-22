@@ -48,6 +48,7 @@ if (root) {
 
   const render = (c: Comment, fresh = false) => {
     const li = document.createElement('li');
+    li.id = `comment-${c.id}`; // 提醒面板跳过来的锚点
     li.dataset.id = String(c.id);
 
     const name = authorNode(c);
@@ -93,10 +94,14 @@ if (root) {
         const li = list.querySelector<HTMLElement>(`li[data-id="${c.id}"]`)!;
         const box = li?.querySelector<HTMLElement>(':scope > .reply-list')!;
         for (const r of grouped.get(c.id) ?? []) {
-          box.append(replyLi(r, () => toggleReplyForm(list, li, { ...replyCtx, parentId: c.id, replyTo: r.name })));
+          box.append(replyLi(r, () => toggleReplyForm(list, li, { ...replyCtx, parentId: c.id, replyTo: r.name, target: { kind: 'reply', id: r.id } })));
         }
       }
       setCount();
+
+      // 从提醒面板跳进来（地址里带 #comment-N）：评论是异步取回来的，浏览器自己滚不到 —— 这里补一下。
+      const anchor = location.hash.startsWith('#comment-') ? document.getElementById(location.hash.slice(1)) : null;
+      anchor?.scrollIntoView({ block: 'center' });
 
       /* ★ 通知留言页的声纹装置（全量，2026-10-14）。这是全站第一个装置↔业务的事件钩子。
          ★★★ 它派发的是**接口原样两张表**，不在这里做映射 —— 这不是洁癖，是**预算**：

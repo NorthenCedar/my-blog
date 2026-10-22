@@ -54,6 +54,16 @@ const { wordmark, current } = Astro.props;
       <a href={l.href} aria-current={current === l.key ? 'page' : undefined}>{l.label}</a>
     ))}
     <a href="/rss.xml">RSS</a>
+    {/* 回复提醒（2026-10-18 站主：别人回复我时要看得见）。
+        未登录时由 src/scripts/notices.ts 把 hidden 拿掉 —— 匿名访客看不到这枚铃铛。
+        ★ 为什么放在 nav 里面：它就是导航那一排的一个胶囊（形态照抄隔壁链接），
+          没有登录态时整排不占位，也不会把 space-between 的顶栏挤成四段。 */}
+    <button class="notices" type="button" data-notices aria-expanded="false" aria-label="回复提醒" hidden>
+      <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">
+        <path d="M8 1.6a4.1 4.1 0 0 0-4.1 4.1v3.1L2.6 11.2h10.8L12.1 8.8V5.7A4.1 4.1 0 0 0 8 1.6Zm0 12.9a1.75 1.75 0 0 0 1.75-1.75H6.25A1.75 1.75 0 0 0 8 14.5Z" fill="currentColor" />
+      </svg>
+      <span class="notices-count" data-notices-count hidden></span>
+    </button>
   </nav>
   {/* 主题开关（Jelly Slider）不在顶栏 —— 2026-10-17 站主拍板「按钮只放在关于页」⇒
       那 462 KB 的渲染器 chunk 只被 /about/ 引用。见 src/pages/about.astro 的 .theme-dock
@@ -252,6 +262,131 @@ const { wordmark, current } = Astro.props;
     background: var(--accent-wash);
     border-color: var(--accent-ink);
   }
+
+  /* ---------- 回复提醒铃铛 + 面板（2026-10-18） ----------
+     胶囊形态与隔壁链接逐条对齐（padding / 圆角 / 描边 / 悬停），
+     差别只有两处：它是个 `<button>`（所以字号行高要显式给），
+     以及未登录时带 `hidden`（匿名访客眼里这一格**完全不存在**）。
+     面板挂在 `.topbar` 上（不是 nav 里）—— 否则会变成 flex 的一项把导航挤走。 */
+  body.chrome-page .topbar > nav:not(.navpanel) .notices {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.42rem 0.66rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      color var(--dur-fast) var(--ease-interact),
+      background-color var(--dur-fast) var(--ease-interact),
+      border-color var(--dur-fast) var(--ease-interact),
+      transform var(--dur-fast) var(--ease-interact);
+  }
+  body.chrome-page .topbar > nav:not(.navpanel) .notices:hover,
+  body.chrome-page .topbar > nav:not(.navpanel) .notices:focus-visible,
+  body.chrome-page .topbar > nav:not(.navpanel) .notices[aria-expanded='true'] {
+    color: var(--ink);
+    background: var(--accent-wash);
+    border-color: var(--accent);
+    /* 同排链接悬停时上浮 2px，铃铛跟着抬 —— 否则一排胶囊里只有它不动，像失效控件。
+       （掠光那一道不加：那是给文字链的扫光，扫过一枚 13px 图标看不出来。） */
+    transform: translateY(-2px);
+  }
+  /* ⚠ `display:inline-flex` 会压过 UA 的 `[hidden]{display:none}` —— 不补这一条，
+     匿名访客也会看见一枚空铃铛（本站踩过一次同类：hidden 被组件自己的 display 顶掉）。 */
+  body.chrome-page .topbar > nav:not(.navpanel) .notices[hidden],
+  .notices-count[hidden] {
+    display: none;
+  }
+  body.chrome-page .topbar > nav:not(.navpanel) .notices:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px;
+  }
+  .notices-count {
+    min-width: 1.15rem;
+    padding: 0 0.26rem;
+    border-radius: 999px;
+    background: var(--accent-ink);
+    color: var(--paper);
+    /* 站内微字号那一档是 0.6rem（见 AlbumRow 的角标），对齐它，不另插 0.62 */
+    font-size: 0.6rem;
+    line-height: 1.15rem;
+    text-align: center;
+  }
+  body.chrome-page .notices-panel {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    right: var(--gutter);
+    z-index: 30;
+    width: min(22rem, calc(100vw - 2 * var(--gutter)));
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--glass-line);
+    /* ★ 直角，不是圆角：站内"内容面"一律 border-radius:0（评论卡片、表单输入框、
+       提交按钮都是），999px 只留给可点的胶囊。面板是内容面，跟着直角走。
+       阴影留着 —— 它是浮在正文之上的层，站内玻璃层用的也是 --glass-shadow。 */
+    border-radius: 0;
+    background: var(--paper);
+    box-shadow: var(--glass-shadow);
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    font-size: var(--fs-xs);
+    color: var(--ink);
+  }
+  .notices-list {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .notice {
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--glass-line);
+  }
+  .notice:first-child {
+    padding-top: 0;
+    border-top: 0;
+  }
+  .notice-actor {
+    margin-right: 0.35rem;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .notice-actor:hover,
+  .notice-actor:focus-visible {
+    text-decoration: underline;
+  }
+  /* ☆ 未读标记画成一个 5px 实心点，不再塞「· 新」两个字：
+     ① 站内没有文案式状态后缀的先例，且伪元素里的文字屏幕阅读器读得断断续续；
+     ② 「有几条未读」这件事由铃铛的 aria-label（"回复提醒，N 条未读"）负责播报，
+        这里的点纯装饰 ⇒ aria-hidden 意义上只走视觉。 */
+  .notice.is-new .notice-actor::after {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    margin-left: 0.35rem;
+    border-radius: 50%;
+    background: var(--accent-ink);
+    vertical-align: 0.15em;
+  }
+  .notice-time {
+    color: var(--muted);
+  }
+  .notice-body {
+    margin: 0.18rem 0 0;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+  .notices-empty {
+    margin: 0;
+    color: var(--muted);
+  }
   /* 窄屏隐藏站名，只留导航（站主 2026-09-26 定案）：
      390 下站名会折成两行、挤压导航，而顶栏的功能是导航、站名是装饰。
      （核对过：首页 390 下其实**是**带站名的，所以这条不是"跟首页一致"，
@@ -260,13 +395,30 @@ const { wordmark, current } = Astro.props;
     body.chrome-page .topbar .site {
       display: none;
     }
+
+    /* ★ 2026-10-18（回复提醒）：小屏没有站名字标，顶栏只剩「铃铛 + 抽屉按钮」两件时
+       space-between 会把铃铛甩到最左边、跟右边的汉堡隔着整屏 —— 顶栏就那么高，
+       视线自然落在右侧，所以把铃铛也推到右边、贴着汉堡。
+       ⚠️ 抽屉的 `.navbtn` 自带 `margin-left:auto`（原本负责把汉堡推到右边）——
+       两个 auto 会平分空隙，铃铛就卡在整屏中间（实测 x=145 / 390）。所以这里把
+       汉堡的 auto 收掉，让空隙全归铃铛，两者靠 0.5rem 间距挨着。 */
+    body.chrome-page .topbar > nav:not(.navpanel) {
+      margin-left: auto;
+      margin-right: 0.5rem;
+    }
+    body.chrome-page .topbar .navbtn {
+      margin-left: 0;
+    }
   }
 
   /* ≤1023px：横排链接换成移动端抽屉（站主 2026-09-26 追加导航四项后，9 项横排在平板上会挤）。
      ⚠️ 同样必须 `:not(.navpanel)`：抽屉的 `<nav>` 也是 .topbar 的直接子节点，
      漏了这一处会把**抽屉自己**按成 display:none（实测：面板 0×0、点开也看不见）。 */
   @media (max-width: 1023px) {
-    body.chrome-page .topbar > nav:not(.navpanel) {
+    /* ★ 2026-10-18（回复提醒）：原来这里是整条 nav 一起 display:none ——
+       但铃铛也住在这条 nav 里，结果手机上「别人回复我了」这件事**根本看不见**。
+       改成分开处理：文字链接仍然收起（抽屉接管导航），铃铛单独留在顶栏上。 */
+    body.chrome-page .topbar > nav:not(.navpanel) > a {
       display: none;
     }
   }

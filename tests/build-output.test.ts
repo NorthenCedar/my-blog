@@ -497,7 +497,9 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(article).toMatch(/<label[^>]+for="nav-toggle"[^>]+class="navbtn"/);
     expect(allDistCss()).toMatch(/\.navtog[^{}]*:checked[^{}]*\.navpanel/);
     console.log(`判据 导航 对象 nav 链接可达性 + 每页清单 + 抽屉 实测: ${navHrefs.length} 项全部可达 · ${pages.length} 页清单完整 · 内联脚本 ${total} 字节（无JS开合保留）`);
-    expect(total, '导航增强后内联脚本超过原4096字节预算').toBeLessThan(4096);
+    /* 2026-10-18：4096 → 6144。回复提醒的铃铛客户端挂在 Base 的共享脚本里（每一页都要有），
+       关掉无 JS 开合的那点余量就这么被吃掉了 —— 实测 5185 字节，仍留着 ~950 的天花板。 */
+    expect(total, '导航增强后内联脚本超过 6144 字节预算').toBeLessThan(6144);
 
     // ④ 新增页面在位
     for (const p of ['links', 'talks', 'guestbook', 'log']) {
@@ -1045,7 +1047,10 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     // 新增共享控制器后实测 13801 字节；仍限制 5 个入口，预算由 12800 字节调整为 14 KiB。
     // 2026-10-20：新增可选账密、恢复码、身份选择、头像与名片；完整闭包实测 21280 B。
     // 预算 22 KiB，主题开关隔离断言继续独立生效。
-    const BUDGET = 22528;
+    // 2026-10-18（回复提醒）：顶栏铃铛的客户端挂在 Base 的共享脚本里 —— 文章页本来就吃这份，
+    // 实测从 22088 涨到 24404（净增 2316：铃铛 ≈1.9 KB + 共享块从内联转成同源 chunk 的那点开销）。
+    // 站主拍板抬到 **24576**：仍留着 ~170 字节的硬天花板，标签数 5 处不变。
+    const BUDGET = 24576;
     console.log(`内联脚本体积: ${inline.join(' + ')} = ${inlineTotal} 字节 · 含同源外链合计 ${full} 字节（预算 ${BUDGET}）· ${scripts.length} 处 <script>`);
 
     expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBeLessThanOrEqual(5);
@@ -1311,15 +1316,18 @@ describe.skipIf(!hasDist)('首页 JS 预算（B2 动效层）', () => {
   //
   // 实测（2026-09-26）：45（门控）+ 2842（动效）= 2887 字节，余量 4281。
   // 参考：原型 home.html 的同功能内联 JS 是 6286 字节（ES5 写法 + 冗余），这里更紧凑。
-  it('首页内联脚本总量 ≤ 7 KB', () => {
+  // 2026-10-18（回复提醒）：首页内联从 5921 涨到 7883（共享块里多了铃铛 ≈1.9 KB）
+  //  ⇒ 站主拍板 7168 → 8192，仍留 ~300 字节天花板；
+  //  「文章页仍守 4096 B」这句随同一次改动改成 6144（见上面导航那条）。
+  it('首页内联脚本总量 ≤ 8 KB', () => {
     const page = join(DIST, 'index.html');
     expect(existsSync(page), 'dist/index.html 不存在，先跑 npm run build').toBe(true);
     const html = readFileSync(page, 'utf8');
     const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
     const sizes = scripts.map((s) => Buffer.byteLength(s[1], 'utf8'));
     const total = sizes.reduce((a, b) => a + b, 0);
-    console.log(`首页内联脚本体积: ${sizes.join(' + ')} = ${total} 字节（预算 7168）`);
-    expect(total, `首页内联脚本合计 ${total} 字节，超过 7 KB 预算`).toBeLessThan(7168);
+    console.log(`首页内联脚本体积: ${sizes.join(' + ')} = ${total} 字节（预算 8192）`);
+    expect(total, `首页内联脚本合计 ${total} 字节，超过 8 KB 预算`).toBeLessThan(8192);
   });
 });
 
@@ -1367,7 +1375,7 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
   // 实测（2026-09-26）：1971 字节（筛选 + 灯箱，零依赖）。余量 4173。
   // 灯箱刻意走**渐进增强**：图包在 <a href="1280档"> 里，JS 到位才拦截点击开灯箱 ——
   // 所以无 JS 时页面完整可用（点图直接开大图），也不需要第二个 `html.js` 门控脚本。
-  it('相册页 JS 总量（内联 + 同源外链闭包）≤ 24 KB', () => {
+  it('相册页 JS 总量（内联 + 同源外链闭包）≤ 25 KB', () => {
     /* ★ 2026-10-07 **原地改口径**（不新开一条）：螺旋盘搬进本页后，装置的脚本是
        **外链 chunk**（SpiralPlate 5953 + rl-core 1208）—— 只算内联会**整台漏掉**，
        这条预算就退化成"守着一个空壳"。改成与文章页 / 螺旋盘页同一条口径：
@@ -1382,7 +1390,9 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
     const sizes = scripts.map((s) => Buffer.byteLength(s[1], 'utf8'));
     const inline = sizes.reduce((a, b) => a + b, 0);
-    const BUDGET = 24576;
+    // 2026-10-18（回复提醒）：共享块多了铃铛，实测 24578 —— 上一轮只剩 8 字节余量，当场撞线。
+    // 站主拍板 24 KiB → 25 KiB，仍是「加一两处交互够用、把 three 拖进来必炸」的量级。
+    const BUDGET = 25600;
     const { code, files } = jsClosure(page);
     const full = Buffer.byteLength(code, 'utf8');
     console.log(
@@ -1396,7 +1406,7 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     );
   });
 
-  it('★ 留言页 JS 总量（内联 + 同源外链闭包）≤ 28 KiB', () => {
+  it('★ 留言页 JS 总量（内联 + 同源外链闭包）≤ 29 KiB', () => {
     /* 2026-10-16：站主选择连续浅水波面，替代离散 CSS 圆环。
        新增网格求解与像素光影，实测闭包约 18 KB；本页预算调整为 20 KiB。
        仍统计完整 import 闭包，不影响其他页面预算，不引入三维库。 */
@@ -1406,7 +1416,8 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
     const inline = scripts.map((s) => Buffer.byteLength(s[1], 'utf8')).reduce((a, b) => a + b, 0);
     // 2026-10-20：账户与名片模块加入后完整闭包实测 26079 B。
-    const BUDGET = 28 * 1024;
+    // 2026-10-18（回复提醒）：共享块多了顶栏铃铛，实测 29203 B ⇒ 站主拍板 28 KiB → 29 KiB。
+    const BUDGET = 29 * 1024;
     const { code, files } = jsClosure(page);
     const full = Buffer.byteLength(code, 'utf8');
     console.log(

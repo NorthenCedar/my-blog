@@ -63,7 +63,7 @@ export function authorNode(record: Authored, kind = 'comment') {
 }
 export function identityControls(form: HTMLFormElement) {
   const box = node('div', 'visitor-identity');
-  const status = node('span', 'visitor-hint', '可直接匿名发表');
+  const status = node('span', 'visitor-hint', '可直接匿名发表 · 登录后能收到回复提醒');
   const select = node('select'); select.name = 'identity'; select.setAttribute('aria-label', '发表身份');
   select.append(new Option('匿名发表', 'anonymous'), new Option('以账户发表', 'account')); select.hidden = true;
   const login = node('button', 'visitor-link', '登录 / 注册'); login.type = 'button';
@@ -77,7 +77,7 @@ export function identityControls(form: HTMLFormElement) {
     if (!explicit && user) select.value = 'account';
     select.hidden = !user && select.value !== 'account'; settings.hidden = !user; login.hidden = Boolean(user) && !expired;
     login.textContent = expired || (!user && select.value === 'account') ? '重新登录' : '登录 / 注册';
-    status.textContent = expired || (!user && select.value === 'account') ? '登录已过期，请重新登录或选择匿名' : user ? `已登录 · ${user.nickname}` : '可直接匿名发表';
+    status.textContent = expired || (!user && select.value === 'account') ? '登录已过期，请重新登录或选择匿名' : user ? `已登录 · ${user.nickname}` : '可直接匿名发表 · 登录后能收到回复提醒';
     input.readOnly = select.value === 'account';
     if (input.readOnly && user) input.value = user.nickname;
     else if (!input.readOnly) input.value = anonymousName;

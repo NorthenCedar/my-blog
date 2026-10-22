@@ -72,14 +72,19 @@ export async function postComment(payload: Record<string, unknown>): Promise<Rep
   return b.comment;
 }
 
+/** 「这条回复是回给谁的」—— 提醒功能靠它把提醒落到具体账户上（见 functions/api/_lib/notices.ts） */
+export type ReplyTarget = { kind: 'comment' | 'reply'; id: number };
+
 /**
  * 一条回复的 <li>：显示成「名字 回复 某人 · 时间」+ 正文。
  * 有 replyTo 才显示"回复 某人"（直接回复顶层时不显示）。
  * 层级永远**两层**（站主拍板）：回复一条回复时 parentId 仍指向顶层，只靠 replyTo 记名字
  * ⇒ 无论被回复多少次都不会缩进成第三层。
+ * `id="comment-N"` 是提醒面板跳过来的锚点（2026-10-18）。
  */
 export function replyLi(r: Reply, onReply: () => void, fresh = false): HTMLLIElement {
   const li = el('li', 'reply-item');
+  li.id = `comment-${r.id}`;
   li.dataset.replyId = String(r.id);
   // A / B 都是用户输入 ⇒ 用 textContent 写，绝不拼 HTML
   const meta = el('p', 'reply-meta');
@@ -99,7 +104,7 @@ export function replyLi(r: Reply, onReply: () => void, fresh = false): HTMLLIEle
 export function toggleReplyForm(
   list: HTMLElement,
   li: HTMLElement,
-  ctx: { slug: string; parentId: number; replyTo: string; name: () => string; onAdded: () => void }
+  ctx: { slug: string; parentId: number; replyTo: string; target?: ReplyTarget; name: () => string; onAdded: () => void }
 ): void {
   const open = li.querySelector(':scope > .reply-form');
   list.querySelectorAll('.reply-form').forEach(removeReplyForm);
@@ -156,10 +161,12 @@ export function toggleReplyForm(
       identity: String(new FormData(form).get('identity') ?? 'anonymous'),
       body: body.value,
       website: hpInput.value,
+      // 回的是哪一条（顶层评论 or 某条回复）—— 服务端据此把提醒落到被回复者账户上
+      replyTarget: ctx.target ?? { kind: 'comment', id: ctx.parentId },
     })
       .then((r) => {
         // 回复按**旧的在上**（站主 2026-09-28 拍板，对话要顺着读）⇒ append，不是 prepend
-        box.append(replyLi(r, () => toggleReplyForm(list, li, { ...ctx, replyTo: r.name })));
+        box.append(replyLi(r, () => toggleReplyForm(list, li, { ...ctx, replyTo: r.name, target: { kind: 'reply', id: r.id } })));
         removeReplyForm(form);
         ctx.onAdded();
       })

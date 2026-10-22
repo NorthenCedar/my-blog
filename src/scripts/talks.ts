@@ -109,10 +109,11 @@ const writeLiked = (list: string[]) => {
     list: HTMLOListElement,
     c: Comment,
     fresh = false,
-    openReply?: (li: HTMLElement, parentId: number, replyTo: string) => void
+    openReply?: (li: HTMLElement, parentId: number, replyTo: string, target?: { kind: 'comment' | 'reply'; id: number }) => void
   ) => {
     if (list.querySelector(`:scope > li[data-id="${c.id}"]`)) return;
     const li = node('li');
+    li.id = `comment-${c.id}`; // 提醒面板跳过来的锚点（2026-10-18）
     li.dataset.id = String(c.id);
     const meta = node('p', 'cmeta');
     meta.append(authorNode(c), document.createTextNode(` · ${fmtTime(c.createdAt)}${fresh ? ' · 刚发表' : ''}`));
@@ -164,11 +165,12 @@ const writeLiked = (list: string[]) => {
     };
 
     /** 打开回复表单的上下文（名字预填、发完重算条数）—— 交互本身在 reply-common 里，三处共用 */
-    const openReply = (li: HTMLElement, parentId: number, replyTo: string) =>
+    const openReply = (li: HTMLElement, parentId: number, replyTo: string, target?: { kind: 'comment' | 'reply'; id: number }) =>
       toggleReplyForm(list, li, {
         slug,
         parentId,
         replyTo,
+        target: target ?? { kind: 'comment', id: parentId },
         name: () => (form.elements.namedItem('name') as HTMLInputElement).value,
         onAdded: setCount,
       });
@@ -197,7 +199,7 @@ const writeLiked = (list: string[]) => {
             const box2 = li?.querySelector<HTMLElement>(':scope > .reply-list')!;
             for (const r of grouped.get(c.id) ?? []) {
               if (box2.querySelector(`:scope > li[data-reply-id="${r.id}"]`)) continue;
-              box2.append(replyLi(r, () => openReply(li, c.id, r.name)));
+              box2.append(replyLi(r, () => openReply(li, c.id, r.name, { kind: 'reply', id: r.id })));
             }
           }
           empty.hidden = list.childElementCount > 0;

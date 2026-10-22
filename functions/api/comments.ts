@@ -9,6 +9,7 @@ import {
   type ReplyRecord,
 } from './_lib/comments-core';
 import { commentIdentity, attachCommentAuthors, saveAuthoredComment } from './_lib/visitor-comments';
+import { parseNoticeTarget, recordReplyNotice, validNoticeTarget, type NoticeTarget } from './_lib/notices';
 import { AccountError } from './_lib/visitor-core';
 import { publicUser } from './_lib/visitor-store';
 import { guardPublicWrite, readJsonBody, writeLimitStatements } from './_lib/public-write';
@@ -155,6 +156,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
+  /* 「这条回复是回给谁的」—— 2026-10-18 新增，提醒功能的地基。
+     顶层评论不必问：目标是 parentId 本身。回复一条回复时前端会带 replyTarget，
+     服务端再核一遍它确实属于本线程（同 slug、同 parent_id），核不过就退回父评论 ——
+     **绝不按名字猜人**（0003 里的 reply_to 只是名字串）。 */
+  const noticeTarget: NoticeTarget | null =
+    parentId > 0
+      ? await validNoticeTarget(env, slug, parentId, parseNoticeTarget((payload as Record<string, unknown>).replyTarget))
+      : null;
+
   // 主留言与回复、匿名与账户共用同一个 IP 额度；占额是原子 SQL。
   const limits = await env.COMMENTS_DB.batch(writeLimitStatements(env, 'comments:ip', ipHash, RATE_MAX, Date.now()));
   if (!limits[1].results?.length) {
@@ -181,6 +191,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // ---- 回复（parentId > 0）----（父评论已在限流前校验过）
   if (author) {
     const id = await saveAuthoredComment(request, env, author, 'reply', [slug, parentId, replyTo, name, body, createdAt, ipHash]);
+    // 回复已经落库 ⇒ 再记提醒（失败不影响发表，见 _lib/notices.ts）
+    await recordReplyNotice(env, { slug, parentId, replyId: id, target: noticeTarget!, actorName: name, actorId: author.id, body });
     return json({ comment: { id, slug, name, body, createdAt, parentId, replyTo, author: publicUser(author, env) } }, 201);
   }
   const inserted = await env.COMMENTS_DB.prepare(
@@ -188,6 +200,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   )
     .bind(slug, parentId, replyTo, name, body, createdAt, ipHash)
     .first<{ id: number }>();
+
+  await recordReplyNotice(env, { slug, parentId, replyId: inserted?.id ?? 0, target: noticeTarget!, actorName: name, actorId: null, body });
 
   return json(
     { comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId, replyTo, author: null } },
