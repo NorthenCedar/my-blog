@@ -39,8 +39,8 @@ npm run dev          # http://localhost:4321
 | `npm run preview` | 预览 `dist/` |
 | `npm run test` | vitest |
 | `npm run verify` | build + test，**提交前跑这个** |
-| `npm run db:init` | 初始化**本地** D1（三次迁移） |
-| `npm run db:init:remote` | 迁移**线上** D1（会真改数据，慎用） |
+| `npm run db:init` | 初始化**本地** D1（依次跑 0001–0006，可重复执行） |
+| `npm run db:init:remote` | 迁移**线上** D1（跑 0002–0006，会真改数据，慎用） |
 | `npm run dev:cf` | 用 wrangler 本地跑 Pages Functions |
 
 > `npm run verify` 存在的理由：Cloudflare 只构建、不跑测试。测试留在本地，

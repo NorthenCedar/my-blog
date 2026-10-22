@@ -1059,6 +1059,32 @@ npx wrangler d1 execute beishan-comments --remote --file=migrations/0004_visitor
 
 维护依赖时保留 `vendor/http-cache-semantics/README.md` 的来源和 BSD-2-Clause 许可说明。该库相关安全公告被维护者争议，新版未改变所涉行为，本站采用有行为回归的本地保守加固；不要只改版本号或删除 override 让审计表面清零。补丁维护说明在该目录，升级后同时跑 `tests/dependency-cache.test.ts` 和整站验证。
 
+### 14.9 回复提醒（2026-10-18）
+
+别人回复我的评论、留言或说说评论时，顶栏铃铛亮起并带未读数；点开是「回复我的」列表，点条目跳到原文那条评论。只提醒被回复者本人：自己回复自己不算，匿名访客没有账户可挂也收不到；站上出现新留言、新评论不提醒。已登录就一直留着铃铛（读完也留着，它是回看历史回复的入口），角标最多显示 9+；小屏把文字链接收进抽屉，铃铛仍留在顶栏。打开铃铛即算读过，角标与未读圆点同时归零；未读行左侧一个 5px 实心圆点，未读条数写进读屏标签。
+
+数据落在两张新表：`reply_targets` 记「这条回复针对哪一条」，`reply_notices` 每行是一次「某人回复了你」，带 `read_at` 支持单条已读。提醒在写入评论时物化，不在页面加载时现算。回复表单照常只填名字与正文，目标由页面自己带上；伪造或指向不存在评论的目标会退回父评论，不会把提醒发给旁人。说说页评论区默认折叠，提醒落到那条说说（`#c-<slug>`）而不是看不见的评论行。
+
+**本地初始化：** `npm run db:init` 已包含 0005/0006。已有本地库只需依次执行：
+
+```powershell
+npx wrangler d1 execute beishan-comments --local --file=migrations/0005_reply_targets.sql
+npx wrangler d1 execute beishan-comments --local --file=migrations/0006_reply_notices.sql
+```
+
+两张表都是 `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`，可重复执行，不改旧表结构。
+
+**上线前：** 先备份线上 D1，再逐条执行（`npm run db:init:remote` 会把 0002–0006 一起跑，同样是可重跑的）：
+
+```powershell
+npx wrangler d1 export beishan-comments --remote --output=<工作区备份目录>/comments-before-notices.sql
+npx wrangler d1 execute beishan-comments --remote --file=migrations/0005_reply_targets.sql
+npx wrangler d1 execute beishan-comments --remote --file=migrations/0006_reply_notices.sql
+npx wrangler d1 execute beishan-comments --remote --command "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'reply_%'"
+```
+
+最后一条应返回 `reply_notices` 与 `reply_targets` 两行。**表没建就部署不会报错**——接口对缺表是容错的，只是铃铛永远不出现，所以这条验证不能跳。`wrangler d1 execute` 不加 `--remote` 打在本地库上，看着成功但线上没变（前面记过的坑）。
+
 ---
 
 ## 15. 常见问题
