@@ -1,6 +1,6 @@
 # 云端写作台：设置与验收
 
-代码已合入 `main` 并部署，入口为 <https://northcedar.top/write/>。2026-10-23 经站主当次授权，已导出并验证现有 D1 备份、应用 0007 增量迁移，并只读确认八张写作表齐全；Pages 发布密钥尚未设置，真实草稿保存和完整发布链路仍须验收。本地代码、SQLite/Git 测试和浏览器客户端测试不替代正式云端验收。
+代码已合入 `main` 并部署，入口为 <https://northcedar.top/write/>。2026-10-23 经站主当次授权，已导出并验证现有 D1 备份、应用 0007 增量迁移，并只读确认八张写作表齐全；站主已完成两个平台四处 Secret 设置，名称核对齐全，须经新部署验证有效值、真实草稿保存和完整发布链路。本地代码、SQLite/Git 测试和浏览器客户端测试不替代正式云端验收。
 
 ## 1. 使用范围
 
@@ -16,11 +16,11 @@
 | --- | --- | --- |
 | Pages 正式环境 | `OWNER_USER_ID` | 已绑定的站主 ID，沿用现有值 |
 | Pages 正式环境 | `COMMENTS_DB` | 现有 D1 数据库绑定 |
-| Pages 正式环境 Secret | `WRITER_GITHUB_TOKEN` | 仅 `NorthenCedar/personal`：Contents 读、Actions 读写、Checks 读，Metadata 读 |
+| Pages 正式环境 Secret | `WRITER_GITHUB_TOKEN` | 仅 `NorthenCedar/personal`：Contents 读、Actions 读写、Metadata 读 |
 | 仓库 Actions Secret | `WRITER_PUBLISH_TOKEN` | 仅本仓库：Contents 读写；仅最终推送步骤获得它 |
 | Pages 正式环境与 Actions Secret | `WRITER_RUNNER_SECRET` | 两处完全一致，至少 32 字节的随机秘密，用于运行器私密接口 |
 
-使用有有效期的细粒度令牌，限制到这一仓库。值直接填入平台受保护的 Secret 输入框，不发送到聊天、不写文档、不进 Git。GitHub 默认的运行器令牌仍保持只读；分支保护若拒绝内容推送，应保留保护并先确认发布策略。
+使用有有效期的细粒度令牌，限制到这一仓库。值直接填入平台受保护的 Secret 输入框，不发送到聊天、不写文档、不进 Git。细粒度 PAT 当前不能调用 Checks API，创建页没有 Checks 项；旧说明中要求选择该项是错误的。[GitHub 官方限制](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#fine-grained-personal-access-tokens-limitations)。部署结果由工作流自己的短时 `GITHUB_TOKEN` 以 Contents 读、Checks 读核对，经运行身份、任务租约和准确提交校验后回传；不增加长期令牌权限。分支保护若拒绝内容推送，应保留保护并先确认发布策略。
 
 正式环境不要设置 `WRITER_LOCAL_DEV`。它只允许显式本地回环 HTTP 开发；不能用于开放预览域名。仓库读取令牌或运行器秘密缺失时，发布不可用；完成数据库初始化和站主绑定后，新建草稿仍可保存及导出，导入已发布内容则需要仓库读取配置。
 
@@ -30,7 +30,7 @@ Pages 的变量变更须随一次新部署生效。不要只保存设置便声�
 
 先刷新 `/write/`，尝试新建自己的私密草稿并保存；出现“已保存到云端”后刷新重开，核对正文。新建、保存、导出草稿不要求 GitHub 令牌；“文章”“说说”中的已发布内容读取和导入要求读取令牌，发布要求上表配置齐全。
 
-1. 打开 [GitHub 细粒度令牌创建页](https://github.com/settings/personal-access-tokens/new)。Resource owner 选 `NorthenCedar`，Repository access 选 **Only select repositories**，只勾选 `personal`。分别创建两枚有有效期的令牌：`WRITER_GITHUB_TOKEN` 的 Repository permissions 为 **Contents: Read-only、Actions: Read and write、Checks: Read-only**；`WRITER_PUBLISH_TOKEN` 仅给 **Contents: Read and write**。Metadata 读为必需的附带权限。到期后更新对应 Secret。
+1. 打开 [GitHub 细粒度令牌创建页](https://github.com/settings/personal-access-tokens/new)。Resource owner 选 `NorthenCedar`，Repository access 选 **Only select repositories**，只勾选 `personal`。分别创建两枚有有效期的令牌：`WRITER_GITHUB_TOKEN` 的 Repository permissions 为 **Contents: Read-only、Actions: Read and write**；`WRITER_PUBLISH_TOKEN` 仅给 **Contents: Read and write**。Metadata 读为必需的附带权限。到期后更新对应 Secret。
 2. 在 [Cloudflare Pages 项目设置](https://dash.cloudflare.com/4bcfa9cf29fad54bd0ca74b90903a10c/pages/view/personal/settings) 的正式环境 **Variables and Secrets** 中，以 **Secret** 类型保存 `WRITER_GITHUB_TOKEN`。令牌值只粘贴到平台的受保护输入框。
 3. 在 [GitHub 仓库 Actions Secrets](https://github.com/NorthenCedar/personal/settings/secrets/actions) 中点 **New repository secret**，保存 `WRITER_PUBLISH_TOKEN`。
 4. 在普通 PowerShell 运行下面的命令，生成 32 字节的随机秘密并复制到剪贴板；不需要管理员，不写文件，也不打印秘密。把同一份值分别保存为 Pages 正式环境和 GitHub Actions 的 `WRITER_RUNNER_SECRET`：
@@ -46,6 +46,12 @@ Pages 的变量变更须随一次新部署生效。不要只保存设置便声�
 5. 在 Cloudflare 重试一次正式部署，让新 Secret 生效。完成后只需告诉代理“密钥已配”，不要发送密钥值或包含值的截图。由代理核对配置名称和准确部署，站主再选择真实内容做首次发布验收。
 
 平台操作参考：[GitHub 令牌](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)、[Actions Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)、[Pages 绑定与秘密](https://developers.cloudflare.com/pages/functions/bindings/)。不启用新计费服务，原有额度和支出限制仍须在平台核对。
+
+`WRITER_RUNNER_SECRET` 不用于日常登录，不必记忆；可选择在密码管理器留底。平台保存后无法直接读回，遗失时重新生成，同步替换两处并重新部署。复制名称或其他文字会覆盖剪贴板；生成时可先把值留在当前 PowerShell 变量，再次复制该变量，避免给两个平台生成不同值。
+
+配置核验：在 Actions 手动运行“云端写作”，jobId 填 32 个 `0`，勾选 `diagnostic`。只核验共享密钥、固定运行身份、D1 写作表、仓库读取和短时令牌的 Checks 读取，不创建草稿、不推送内容，也不能代替真实内容发布验收。正常发布保持 `diagnostic=false`。
+
+工作流最多等待约 5 分钟的本站部署结果。超时仍为待确认，页面“重新查询”只读取原任务；“重新检查上线”在上次运行停止后启动只读检查，不重新准备或提交正文。检查触发应答不确定时不自动重复派发，可从 Actions 手动运行相同 jobId（不勾选 diagnostic）恢复；已确认推送回执的任务只进入部署检查。检查在领取前失败时，查询会恢复可重新检查的状态。
 
 ## 3. 额度核对与数据库迁移
 

@@ -2,6 +2,7 @@ import { expect,it,vi } from 'vitest';
 import { readFileSync,writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { gitFixture } from './_writer-git';
 import { prepare,verifySnapshotCandidate,contentDigest } from '../scripts/writer/prepare.mjs';
 import { publish } from '../scripts/writer/publish.mjs';
@@ -9,6 +10,25 @@ import { verifyPrepared } from '../scripts/writer/validate.mjs';
 const value={fields:{title:'标题',date:'2026-10-23',summary:'简介',tags:['随笔']},body:'手机文章\n',assets:[]};
 const snapshot={id:'a'.repeat(32),kind:'post',key:'phone-a',revision:1,base:null,publishedRevision:0,value};
 const jobId='b'.repeat(32);
+it('Node 实际重查阶段跳过准备、verify 和推送，只读取准确部署并回传',()=>{
+  const s=gitFixture(),moduleUrl=pathToFileURL(join(process.cwd(),'scripts/writer/run.mjs')).href;
+  const code=`
+    import {runPhase} from ${JSON.stringify(moduleUrl)};
+    const calls=[],commit='3'.repeat(40);
+    globalThis.fetch=async(url,init)=>{
+      if(String(url).includes('/check-runs'))return Response.json({check_runs:[{head_sha:commit,app:{id:85455,slug:'cloudflare-workers-and-pages'},details_url:'https://dash.cloudflare.com/4bcfa9cf29fad54bd0ca74b90903a10c/pages/view/personal/deployments/example',status:'completed',conclusion:'success'}]});
+      const body=JSON.parse(init.body);calls.push(body.action);
+      if(body.action==='claim')return Response.json({deploymentOnly:true,commit,lease:'f'.repeat(64)});
+      if(body.action==='deployment'&&body.commit===commit&&body.state==='deployed')return Response.json({job:{state:'deployed'}});
+      throw Error('不应准备、校验或推送正文：'+body.action);
+    };
+    for(const phase of ['prepare','verify','publish','deployment'])await runPhase(phase);
+    if(JSON.stringify(calls)!==JSON.stringify(['claim','deployment']))throw Error('运行调用不对');
+  `;
+  const result=spawnSync(process.execPath,['--input-type=module','-e',code],{cwd:s.cloud,encoding:'utf8',env:{...process.env,RUNNER_TEMP:s.root,WRITER_JOB_ID:jobId,WRITER_RUN_ID:'1002',GITHUB_REPOSITORY:'NorthenCedar/personal',GITHUB_REF:'refs/heads/main',WRITER_RUNNER_SECRET:'s'.repeat(64),GITHUB_TOKEN:'只读临时令牌'}});
+  expect(result.status,result.stderr).toBe(0);expect(result.stdout).toContain('本次只重新检查上线');
+  expect(s.must(s.cloud,['status','--porcelain'])).toBe('');expect(s.must(s.remote,['rev-list','--count','main'])).toBe('1');
+});
 // 真实 Git 子进程在 Windows 与全量并发校验中会超过默认 5 秒；没有网络操作。
 vi.setConfig({testTimeout:30000});
 it('真正准备候选并普通推送，重复执行同一任务不产生第二次提交',async()=>{

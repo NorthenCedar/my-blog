@@ -7,6 +7,10 @@ on:
         description: 站主已确认的私密发布任务
         required: true
         type: string
+      diagnostic:
+        description: 只核验配置，不创建草稿或发布内容（jobId 填 32 个 0）
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -14,7 +18,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.repository == 'NorthenCedar/personal' && github.ref == 'refs/heads/main'
+    if: github.repository == 'NorthenCedar/personal' && github.ref == 'refs/heads/main' && !inputs.diagnostic
+    permissions:
+      contents: read
+      checks: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -45,6 +52,11 @@ jobs:
         env:
           WRITER_RUNNER_SECRET: ${{ secrets.WRITER_RUNNER_SECRET }}
           WRITER_PUBLISH_TOKEN: ${{ secrets.WRITER_PUBLISH_TOKEN }}
+      - name: 核对准确提交的本站部署并回传结果
+        run: node scripts/writer/run.mjs deployment
+        env:
+          WRITER_RUNNER_SECRET: ${{ secrets.WRITER_RUNNER_SECRET }}
+          GITHUB_TOKEN: ${{ github.token }}
       - name: 记录失败阶段
         if: failure()
         run: node scripts/writer/run.mjs failure
@@ -53,3 +65,27 @@ jobs:
       - name: 清理本次私密临时资料
         if: always()
         run: node scripts/writer/run.mjs cleanup
+  probe:
+    if: github.repository == 'NorthenCedar/personal' && github.ref == 'refs/heads/main' && inputs.diagnostic && inputs.jobId == '00000000000000000000000000000000'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - name: 检出固定主分支
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: main
+          persist-credentials: false
+      - name: 使用仓库指定的 Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version-file: .node-version
+      - name: 只读核验配置与 Checks 权限
+        run: node scripts/writer/run.mjs probe
+        env:
+          WRITER_JOB_ID: ${{ inputs.jobId }}
+          WRITER_RUN_ID: ${{ github.run_id }}
+          WRITER_RUNNER_SECRET: ${{ secrets.WRITER_RUNNER_SECRET }}
+          GITHUB_TOKEN: ${{ github.token }}

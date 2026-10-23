@@ -70,16 +70,6 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
       writerId(jobId);
       for(let page=1;page<=3;page++){const commits=await request(`/commits?sha=main&per_page=100&page=${page}`);if(!Array.isArray(commits)) writerFail(502,'repository_error','提交记录读取失败');const match=commits.find(c=>String(c.commit?.message??'').split('\n').includes(`Writer-Job: ${jobId}`));if(match)return revision(match.sha);if(commits.length<100)break;}return null;
     },
-    async deployment(commit:string):Promise<'pending'|'deployed'|'deployment_failed'>{
-      revision(commit);
-      // ID/slug 来自官方 GitHub App 元数据；还核对本站 Pages 项目，排除同仓库其他构建。
-      const result=await request(`/commits/${commit}/check-runs?filter=latest&per_page=100`),checks=(result.check_runs??[]).filter((r:any)=>{
-        if(r.head_sha!==commit||r.app?.id!==85455||r.app?.slug!=='cloudflare-workers-and-pages')return false;
-        try{const url=new URL(r.details_url),path=url.searchParams.get('to')??url.pathname;return url.origin==='https://dash.cloudflare.com'&&/^\/4bcfa9cf29fad54bd0ca74b90903a10c\/pages\/view\/personal\//.test(path);}catch{return false;}
-      });
-      if(!checks.length||checks.some((r:any)=>r.status!=='completed')) return 'pending';
-      return checks.every((r:any)=>r.conclusion==='success')?'deployed':'deployment_failed';
-    },
   };
 }
 export type WriterRepository=ReturnType<typeof createWriterRepository>;

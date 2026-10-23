@@ -1,5 +1,5 @@
 import { requireWriter,writerProof,writerJson,writerError,type WriterEnv } from '../_lib/writer-auth';
-import { createJob,readJob,listJobs,cancelJob,setDispatchUnknown,jobRow,reconcileJob,closeUnconfirmedJob } from '../_lib/writer-jobs';
+import { createJob,readJob,listJobs,cancelJob,setDispatchUnknown,jobRow,reconcileJob,closeUnconfirmedJob,requestDeploymentCheck } from '../_lib/writer-jobs';
 import { createWriterRepository } from '../_lib/writer-repository';
 import { readJsonBody } from '../_lib/public-write';
 import { writerFail } from '../../../src/lib/writer/model';
@@ -22,6 +22,7 @@ export const onRequestPost:PagesFunction<WriterEnv>=async({request,env})=>{
   try{
     const user=await requireWriter(request,env,true),p=await readJsonBody(request,4096),proof=await writerProof(request,user);
     if(p.action==='cancel') return writerJson({job:await cancelJob(env.COMMENTS_DB,proof,String(p.id))});
+    if(p.action==='check_deployment')return writerJson({job:await requestDeploymentCheck(env.COMMENTS_DB,proof,String(p.id),createWriterRepository(env.WRITER_GITHUB_TOKEN??''))},202);
     if(p.action==='close_unconfirmed'){
       if(p.confirm!==true)writerFail(400,'confirmation_required','请先确认已检查仓库及运行记录');
       return writerJson({job:await closeUnconfirmedJob(env.COMMENTS_DB,proof,String(p.id),createWriterRepository(env.WRITER_GITHUB_TOKEN??''))});

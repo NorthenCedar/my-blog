@@ -149,7 +149,7 @@ Cloudflare 构建失败时，Git 中仍保留已推送的提交，线上继续�
 
 第一版使用分离的服务端凭据：
 
-- Pages Secret `WRITER_GITHUB_TOKEN`：仅授权当前私有仓库；Contents 读取、Actions 读写、Checks 读取，用于读取内容、触发固定工作流和读状态。
+- Pages Secret `WRITER_GITHUB_TOKEN`：仅授权当前私有仓库；Contents 读取、Actions 读写，用于读取内容、触发固定工作流和读运行状态。2026-10-23 核实细粒度 PAT 不支持 Checks API：部署检查交给工作流自带的 Contents/Checks 只读临时令牌，再经运行身份、任务租约和准确提交核对后回传。等待超时保留未确认，提供只查原提交的重新检查，不再次提交正文。
 - GitHub Actions Secret `WRITER_PUBLISH_TOKEN`：仅当前仓库的 Contents 读写，供 runner 普通推送。使用受限凭据使这次推送正常触发现有 Git 集成，并在验收时实测。
 - Pages 与 Actions 各保存同一 `WRITER_RUNNER_SECRET`：至少 32 字节随机值，只供 runner 读取活动任务、申请发布许可及回传状态；不允许枚举私密草稿、任意文件写入或直接操作数据库。
 

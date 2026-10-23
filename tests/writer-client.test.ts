@@ -4,10 +4,17 @@ import type { WriterValue,WriterSave } from '../src/lib/writer/model';
 import { safeWriterLink,safeWriterImage } from '../src/scripts/writer/preview';
 import { createRecoveryStore,recoveryKey } from '../src/scripts/writer/recovery';
 import { writerApi } from '../src/scripts/writer/api';
+import { shouldPollJob } from '../src/scripts/writer/publish';
 const value=(body:string):WriterValue=>({fields:{title:'题'},body,assets:[]});
 const draft={id:'a'.repeat(32),kind:'post' as const,key:'example',revision:1,base:null,publishedRevision:0,value:value('初始')};
 const deferred=<T>()=>{let resolve!:(value:T)=>void,reject!:(error:unknown)=>void;const promise=new Promise<T>((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
+it('部署失败后显式重查会恢复轮询，检查完成后停止，不要求重发正文',()=>{
+  const job={id:'1'.repeat(32),draftId:draft.id,revision:1,state:'deployment_failed' as const,runId:'1001',commit:'3'.repeat(40),code:null};
+  expect(shouldPollJob(job)).toBe(false);
+  for(const code of ['deployment_check_queued','deployment_check_running','deployment_dispatch_unknown'])expect(shouldPollJob({...job,code})).toBe(true);
+  expect(shouldPollJob({...job,state:'deployed'})).toBe(false);expect(shouldPollJob({...job,code:'deployment_pending'})).toBe(false);
+});
 it('迟到响应不能把新输入标成已保存，新的保存使用已确认版本',async()=>{
   vi.useFakeTimers();const first=deferred<any>(),second=deferred<any>(),inputs:WriterSave[]=[],states:string[]=[];
   const c=createSaveController({load:()=>draft,save:(input:WriterSave)=>{inputs.push(input);return inputs.length===1?first.promise:second.promise;},recovery:{put:async()=>{}},onState:(state:string)=>states.push(state)});

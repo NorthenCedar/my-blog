@@ -358,7 +358,7 @@ npx wrangler pages functions build --compatibility-date 2026-09-01 --compatibili
 **文件：** 修改 docs/writing-guide.md、docs/rhinelab-spec.md 工程记录、content/pages/log.md；新增 docs/cloud-writer-setup.md。配置文件修改前备份，文档不写任何真实密钥。
 
 - [ ] 手册说明：云端已保存/本设备保存/未发布的区别、300 KiB 配图限制、恢复、冲突、导出和本地仓库同步；现有桌面应用不会自动同步。
-- [ ] 设置文档列明 WRITER_GITHUB_TOKEN（仅本仓库 Contents 读、Actions 读写、Checks 读）、WRITER_PUBLISH_TOKEN（仅本仓库 Contents 读写）、两处相同 WRITER_RUNNER_SECRET。用户在平台受保护输入框设置，禁止发到聊天或入库；代理能完成的部分自行完成。
+- [ ] 设置文档列明 WRITER_GITHUB_TOKEN（仅本仓库 Contents 读、Actions 读写）、WRITER_PUBLISH_TOKEN（仅本仓库 Contents 读写）、两处相同 WRITER_RUNNER_SECRET。2026-10-23 配置时核实：细粒度 PAT 不支持 Checks；改由工作流短时只读令牌检查准确部署、经任务租约回传，不能要求用户扩大长期凭据权限。用户在平台受保护输入框设置，禁止发到聊天或入库；代理能完成的部分自行完成。
 - [ ] 核对 D1 实际占用、GitHub Actions 现有额度及停止付费使用设置；不启用 R2 或升级套餐。没有必要配置时 UI 保存仍可用、发布明确不可用，不声称已经上线。
 - [ ] 得到生产变更授权后，导出 D1 至 work 的备份文件并验证可读，再执行 0007 增量迁移，确认重跑安全。不得清空评论、账户、通知或原表。
 - [ ] 得到当次 main 推送授权后普通推送。实际云端创建私密测试草稿，确认另一未登录浏览器无法读正文/图；站主发布一条可撤销的验收内容，核对 Actions 完整 verify、准确提交和 Cloudflare 部署、线上内容、本地 fetch 后素材字节。验收内容的发布及清理由站主明确选择，不擅自写线上测试文章。

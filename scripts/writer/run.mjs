@@ -34,6 +34,12 @@ function gitCredentials(token){
 }
 export async function runPhase(phase){
   const ctx=context();
+  if(phase==='probe'){
+    if(ctx.jobId!=='0'.repeat(32))writerFail(400,'invalid_probe','核验任务标识不对');
+    const result=await call(ctx,'probe'),{waitForDeployment}=await import('./deployment.mjs');
+    await waitForDeployment(result.commit,{token:process.env.GITHUB_TOKEN,attempts:1});
+    console.log('配置核验通过：共享密钥一致，仓库读取、运行身份及临时令牌 Checks 读取正常；未写草稿或推送内容');return;
+  }
   if(phase==='cleanup'){
     if(existsSync(ctx.directory)){
       const marker=JSON.parse(readFileSync(join(ctx.directory,'owner.json'),'utf8'));
@@ -44,7 +50,8 @@ export async function runPhase(phase){
   if(phase==='prepare'){
     if(existsSync(ctx.directory))writerFail(409,'job_claimed','本次运行已存在任务资料');
     mkdirSync(ctx.directory,{mode:0o700});writeFileSync(join(ctx.directory,'owner.json'),JSON.stringify({jobId:ctx.jobId,runId:ctx.runId}),{mode:0o600});
-    const claimed=await call(ctx,'claim'),state={lease:claimed.lease,snapshot:claimed.snapshot};saveState(ctx,state);
+    const claimed=await call(ctx,'claim'),state={lease:claimed.lease,snapshot:claimed.snapshot,...(claimed.deploymentOnly?{deploymentOnly:true,receipt:{commit:claimed.commit}}:{})};saveState(ctx,state);
+    if(state.deploymentOnly){console.log('已有准确推送回执，本次只重新检查上线，不再提交正文');return;}
     const assets=await assetsFor(ctx,state.snapshot,state.lease),{prepare}=await import('./prepare.mjs');
     gitCredentials(process.env.GITHUB_TOKEN);state.prepared=prepare({repoDir:process.cwd(),snapshot:state.snapshot,assets,jobId:ctx.jobId});saveState(ctx,state);console.log('已准备发布候选；私密正文和图片未写入日志');return;
   }
@@ -57,6 +64,16 @@ export async function runPhase(phase){
     await call(ctx,'record',{lease:state.lease,state:['content_conflict','remote_changed'].includes(code)?'conflict':'failed',code}).catch(()=>{});console.log('失败阶段已记录；草稿仍保留');return;
   }
   const state=JSON.parse(readFileSync(ctx.record,'utf8'));
+  if(state.deploymentOnly&&['verify','publish'].includes(phase))return;
+  if(phase==='deployment'){
+    if(!state.receipt?.commit)writerFail(409,'missing_receipt','尚无准确推送回执');
+    // 先恢复应答丢失的推送回执；已有回执时幂等，不重复写正文。
+    if(!state.deploymentOnly)await call(ctx,'record',{lease:state.lease,state:'pushed',commit:state.receipt.commit});
+    const {waitForDeployment}=await import('./deployment.mjs'),result=await waitForDeployment(state.receipt.commit,{token:process.env.GITHUB_TOKEN});
+    const event={lease:state.lease,commit:state.receipt.commit,state:result};
+    try{await call(ctx,'deployment',event);}catch(error){if([401,403].includes(error?.status))throw error;await call(ctx,'deployment',event);}
+    console.log(result==='deployed'?'准确提交的本站 Cloudflare 部署已成功':result==='deployment_failed'?'内容已推送，本站部署失败，请检查 Cloudflare 日志':'内容已推送，部署仍待确认；可单独重新检查，不必再发布正文');return;
+  }
   if(phase==='verify'){
     const {verifyPrepared}=await import('./validate.mjs');state.prepared=verifyPrepared({repoDir:process.cwd(),prepared:state.prepared});saveState(ctx,state);console.log('干净安装、完整构建与测试通过');return;
   }

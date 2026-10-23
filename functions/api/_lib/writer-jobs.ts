@@ -41,7 +41,15 @@ export async function createJob(db:D1Database,proof:WriterProof,input:{draftId:s
 }
 export async function claimJob(db:D1Database,id:string,runId:string){
   if(!/^\d{1,20}$/.test(runId)) writerFail(400,'invalid_run','运行标识不对');
-  const row=await jobRow(db,id),proof=jobProof(row),lease=randomToken(),hash=await digest(lease),now=Date.now();await assertWriterProof(db,proof);
+  const row=await jobRow(db,id),proof=jobProof(row),lease=randomToken(),hash=await digest(lease),now=Date.now();
+  // 已推送任务重新运行时只核对部署，不能再次准备或提交正文。
+  if(row.commit_sha&&['pushed','deployment_failed','deployed'].includes(row.state)){
+    if(BigInt(runId)<=BigInt(row.run_id??'0'))writerFail(409,'stale_run','旧运行不能重新领取部署检查');
+    const changed=await db.prepare("UPDATE writer_jobs SET run_id=?,lease_hash=?,lease_expires=?,code='deployment_check_running',version=version+1,updated_at=? WHERE id=? AND version=? RETURNING id").bind(runId,hash,now+10*60000,now,id,row.version).first();
+    if(!changed)writerFail(409,'job_claimed','任务已被其他运行领取');
+    return {job:await readJob(db,row.owner,id),lease,deploymentOnly:true,commit:row.commit_sha};
+  }
+  await assertWriterProof(db,proof);
   const changed=await db.prepare(`UPDATE writer_jobs SET state='validating',run_id=?,lease_hash=?,lease_expires=?,version=version+1,updated_at=? WHERE id=? AND version=? AND state IN ('queued','dispatch_unknown') AND ${LIVE_ACCOUNT_SQL} RETURNING id`).bind(runId,hash,now+10*60000,now,id,row.version,...proofValues(proof)).first();
   if(!changed) writerFail(409,'job_claimed','任务已被领取或已结束，请查询原任务');
   return {job:await readJob(db,row.owner,id),lease,snapshot:JSON.parse(row.snapshot_json) as WriterDraft};
@@ -50,6 +58,25 @@ export async function checkLease(db:D1Database,id:string,lease:string,runId:stri
   const row=await jobRow(db,id);
   if(!/^[a-f0-9]{64}$/.test(lease)||row.run_id!==runId||row.lease_hash!==await digest(lease)||!row.lease_expires||row.lease_expires<Date.now()) writerFail(409,'stale_lease','发布运行或许可已过期，请查询任务结果');
   return row;
+}
+export async function recordDeployment(db:D1Database,id:string,lease:string,runId:string,commit:string,state:string){
+  const row=await checkLease(db,id,lease,runId);
+  if(!['pending','deployed','deployment_failed'].includes(state)||!row.commit_sha||commit!==row.commit_sha||!['pushed','deployment_failed','deployed'].includes(row.state))writerFail(409,'invalid_deployment','部署回执与已确认的提交不符');
+  const changed=await db.prepare('UPDATE writer_jobs SET state=?,code=?,version=version+1,updated_at=? WHERE id=? AND version=? AND lease_hash=? AND run_id=? AND lease_expires>? RETURNING id').bind(state==='pending'?row.state:state,state==='pending'?'deployment_pending':null,Date.now(),id,row.version,row.lease_hash,runId,Date.now()).first();
+  if(!changed)writerFail(409,'stale_event','部署检查已被更新的运行取代');
+  return readJob(db,row.owner,id);
+}
+export async function requestDeploymentCheck(db:D1Database,proof:WriterProof,id:string,repo:WriterRepository){
+  await assertWriterProof(db,proof);await readJob(db,proof.owner,id);const row=await jobRow(db,id);
+  if(!row.commit_sha||!['pushed','deployment_failed'].includes(row.state)||!row.run_id)writerFail(409,'deployment_not_ready','请先等待内容推送完成');
+  if(['deployment_check_queued','deployment_dispatch_unknown'].includes(row.code??''))return publicJob(row);
+  const run=await repo.run(row.run_id);
+  if(!matchesWriterRun(run,id))writerFail(403,'invalid_run','运行不属于此发布任务');
+  if(run.status!=='completed')return publicJob(row);
+  const changed=await db.prepare(`UPDATE writer_jobs SET code='deployment_check_queued',version=version+1,updated_at=? WHERE id=? AND version=? AND ${LIVE_ACCOUNT_SQL} RETURNING id`).bind(Date.now(),id,row.version,...proofValues(proof)).first();
+  if(!changed)writerFail(409,'stale_event','任务已变化，请重新查询');
+  try{await repo.dispatch(id);}catch{await db.prepare("UPDATE writer_jobs SET code='deployment_dispatch_unknown' WHERE id=? AND code='deployment_check_queued' AND version=?").bind(id,row.version+1).run();}
+  return readJob(db,proof.owner,id);
 }
 export async function authorizePush(db:D1Database,id:string,lease:string,runId:string){
   const row=await checkLease(db,id,lease,runId),proof=jobProof(row);await assertWriterProof(db,proof);
@@ -104,6 +131,18 @@ async function observePush(db:D1Database,row:JobRow,commit:string,base:WriterBas
 export async function reconcileJob(db:D1Database,id:string,repo:WriterRepository){
   let row=await jobRow(db,id);
   if(row.state==='cancelled'||row.state==='conflict')return publicJob(row);
+  if(row.commit_sha&&row.code==='deployment_check_running'&&row.run_id){
+    const run=await repo.run(row.run_id);
+    if(!matchesWriterRun(run,id))writerFail(403,'invalid_run','运行不属于此发布任务');
+    if(run.status==='completed'){await db.prepare("UPDATE writer_jobs SET code='deployment_pending',version=version+1,updated_at=? WHERE id=? AND version=?").bind(Date.now(),id,row.version).run();row=await jobRow(db,id);}
+  }
+  if(row.commit_sha&&['deployment_check_queued','deployment_dispatch_unknown'].includes(row.code??'')){
+    const run=await repo.findRun(id);
+    // 新检查在领取前便失败时解除排队标记；派发应答不确定时不重复派发。
+    if(run&&matchesWriterRun(run,id)&&BigInt(String(run.id))>BigInt(row.run_id??'0')&&run.status==='completed'){
+      await db.prepare("UPDATE writer_jobs SET run_id=?,code='deployment_pending',version=version+1,updated_at=? WHERE id=? AND version=?").bind(String(run.id),Date.now(),id,row.version).run();row=await jobRow(db,id);
+    }
+  }
   if(!row.commit_sha){
     const run=row.run_id?await repo.run(row.run_id):await repo.findRun(id);
     if(!run)return publicJob(row);
@@ -117,10 +156,7 @@ export async function reconcileJob(db:D1Database,id:string,repo:WriterRepository
       row=await jobRow(db,id);
     }
   }
-  if(row.commit_sha&&['pushed','deployment_failed','deployed'].includes(row.state)){
-    const deployment=await repo.deployment(row.commit_sha);
-    if(deployment!=='pending'&&deployment!==row.state){await db.prepare("UPDATE writer_jobs SET state=?,version=version+1,updated_at=? WHERE id=? AND version=? AND commit_sha=? AND state IN ('pushed','deployment_failed','deployed')").bind(deployment,Date.now(),id,row.version,row.commit_sha).run();row=await jobRow(db,id);}
-  }
+  // Checks API 由工作流自带的短时令牌读取；细粒度 PAT 只读仓库和调度 Actions。
   return publicJob(row);
 }
 export async function closeUnconfirmedJob(db:D1Database,proof:WriterProof,id:string,repo:WriterRepository){
