@@ -18,3 +18,8 @@ it('未完成的草稿可以留空标题和图说，内容与视频等未知字�
   const value={fields:{title:'',videos:[{src:'/videos/existing.mp4',alt:'旧视频'}]},body:'未写完',assets:[{sha256:'a'.repeat(64),alt:''}]};
   expect(validateWriterValue('post',value)).toEqual(value);
 });
+it('已发布配图保留原引用，下一次编辑只对新配图计数',()=>{
+  const assets=Array.from({length:21},(_,n)=>({sha256:n.toString(16).padStart(64,'0'),alt:'图'})),base={commit:'1'.repeat(40),blobSha:'2'.repeat(40),text:'![已有图](./writer-'+assets[0].sha256+'.webp)'};
+  expect(validateWriterValue('post',{fields:{},body:'正文',assets},base).assets).toHaveLength(21);
+  expect(()=>validateWriterValue('post',{fields:{},body:'正文',assets})).toThrow();
+});

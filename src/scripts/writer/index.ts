@@ -3,6 +3,7 @@ import { createRecoveryStore } from './recovery';
 import { mountWriterEditor } from './editor';
 import { el,button,errorText } from './ui';
 import { getTheme,setTheme } from '../theme';
+import { mountPublish,jobStorageKey } from './publish';
 let themeMounted=false;
 export async function mountWriter(root:HTMLElement){
   if(!themeMounted){document.querySelector('[data-writer-theme]')?.addEventListener('click',()=>setTheme(getTheme()==='dark'?'light':'dark'));themeMounted=true;}
@@ -13,9 +14,11 @@ export async function mountWriter(root:HTMLElement){
   let factory:IDBFactory|undefined;try{factory=window.indexedDB;}catch{}
   const recovery=createRecoveryStore(factory);
   try{await recovery.clearOtherUsers(session.user.id);}catch{}
-  const editor=mountWriterEditor(root,writerApi,recovery,{user:session.user,publish:session.capabilities.publish});
+  const publicationRoot=el('section');publicationRoot.hidden=true;
+  const publication=mountPublish(publicationRoot,writerApi,{owner:session.user.id,onPublished:job=>editor.refreshPublished(job.draftId)});
+  const editor=mountWriterEditor(root,writerApi,recovery,{user:session.user,publish:session.capabilities.publish,onPublish:draft=>publication.open(draft),onJob:id=>publication.openJob(id)});root.prepend(publicationRoot);void publication.restore();
   let disposed=false;
-  async function clearIdentity(){if(disposed)return;disposed=true;window.removeEventListener('storage',identityChanged);document.removeEventListener('visibilitychange',visible);await editor.dispose();try{await recovery.clearUser(session.user.id);}catch{}await recovery.close();failure(Error('账户状态已改变，已清理本设备上的原账户编辑副本，请重新确认身份'));}
+  async function clearIdentity(){if(disposed)return;disposed=true;window.removeEventListener('storage',identityChanged);document.removeEventListener('visibilitychange',visible);publication.dispose();try{localStorage.removeItem(jobStorageKey(session.user.id));}catch{}await editor.dispose();try{await recovery.clearUser(session.user.id);}catch{}await recovery.close();failure(Error('账户状态已改变，已清理本设备上的原账户编辑副本，请重新确认身份'));}
   function identityChanged(event:StorageEvent){
     if(event.key!=='nc-account-change'||!event.newValue)return;
     try{const [action,userId]=JSON.parse(event.newValue);if(['logout','delete'].includes(action)||userId&&userId!==session.user.id)void clearIdentity();}catch{}

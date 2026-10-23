@@ -86,8 +86,8 @@ function replaceImages(body:string,resolve:(sha:string)=>string){
     return out+line.slice(position);
   }).join('');
 }
-export function validatePublish(kind:WriterDraft['kind'],value:WriterValue){
-  validateWriterValue(kind,value);
+export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:WriterDraft['base']=null){
+  validateWriterValue(kind,value,base);
   const fields=value.fields,date=fields.date;
   if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) bad('请填写有效日期');
   if(value.assets.some(a=>!a.alt.trim())) bad('请为每张新增配图填写说明');
@@ -95,7 +95,7 @@ export function validatePublish(kind:WriterDraft['kind'],value:WriterValue){
   if(!value.body.trim()&&!value.assets.length&&!Array.isArray(fields.images)&&!Array.isArray(fields.videos)) bad('请先填写正文或配图');
 }
 export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,currentText:string|null,assetBytes:Map<string,Uint8Array>):WriterChange[]{
-  const {kind,key}=validateTarget(draft.kind,draft.key),value=validateWriterValue(kind,draft.value);validatePublish(kind,value);
+  const {kind,key}=validateTarget(draft.kind,draft.key),value=validateWriterValue(kind,draft.value,draft.base);validatePublish(kind,value,draft.base);
   const changes:WriterChange[]=[],known=new Map(value.assets.map(a=>[a.sha256,a]));
   for(const asset of value.assets){
     const bytes=assetBytes.get(asset.sha256);if(!bytes||writerHash(bytes)!==asset.sha256) bad('配图缺失或摘要不一致，请重新上传');

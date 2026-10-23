@@ -9,7 +9,7 @@ const revision=(sha:string)=>/^[a-f0-9]{40}$/.test(sha)?sha:writerFail(400,'inva
 const runNumber=(id:string)=>/^\d{1,20}$/.test(id)?id:writerFail(400,'invalid_run','运行标识不对');
 export type WriterRun={id:number|string;display_title:string;head_branch:string;event:string;path:string;status:string;conclusion:string|null;repository:{full_name:string};html_url?:string;head_sha?:string};
 export function matchesWriterRun(run:WriterRun,jobId?:string){return run.repository?.full_name===WRITER_REPOSITORY&&run.event==='workflow_dispatch'&&run.head_branch==='main'&&run.path===WRITER_WORKFLOW&&(!jobId||run.display_title===`云端写作 ${jobId}`);}
-export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch,cloudflareAppId?:number){
+export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch){
   async function request(path:string,body?:unknown,missing=false):Promise<any>{
     if(!token) writerFail(503,'repository_unavailable','仓库读取和发布尚未配置，仍可保存私密草稿');
     for(let attempt=0;attempt<3;attempt++){
@@ -66,9 +66,17 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
       if(!String(data.commit?.message??'').split('\n').includes(`Writer-Job: ${jobId}`)||!['ahead','identical'].includes(comparison.status)) writerFail(409,'push_unconfirmed','尚未在 main 确认这次推送，请稍后查询');
       return {commit};
     },
+    async findCommit(jobId:string):Promise<string|null>{
+      writerId(jobId);
+      for(let page=1;page<=3;page++){const commits=await request(`/commits?sha=main&per_page=100&page=${page}`);if(!Array.isArray(commits)) writerFail(502,'repository_error','提交记录读取失败');const match=commits.find(c=>String(c.commit?.message??'').split('\n').includes(`Writer-Job: ${jobId}`));if(match)return revision(match.sha);if(commits.length<100)break;}return null;
+    },
     async deployment(commit:string):Promise<'pending'|'deployed'|'deployment_failed'>{
-      revision(commit);if(!cloudflareAppId) return 'pending';
-      const result=await request(`/commits/${commit}/check-runs?per_page=100`),checks=(result.check_runs??[]).filter((r:any)=>r.head_sha===commit&&r.app?.id===cloudflareAppId);
+      revision(commit);
+      // ID/slug 来自官方 GitHub App 元数据；还核对本站 Pages 项目，排除同仓库其他构建。
+      const result=await request(`/commits/${commit}/check-runs?filter=latest&per_page=100`),checks=(result.check_runs??[]).filter((r:any)=>{
+        if(r.head_sha!==commit||r.app?.id!==85455||r.app?.slug!=='cloudflare-workers-and-pages')return false;
+        try{const url=new URL(r.details_url),path=url.searchParams.get('to')??url.pathname;return url.origin==='https://dash.cloudflare.com'&&/^\/4bcfa9cf29fad54bd0ca74b90903a10c\/pages\/view\/personal\//.test(path);}catch{return false;}
+      });
       if(!checks.length||checks.some((r:any)=>r.status!=='completed')) return 'pending';
       return checks.every((r:any)=>r.conclusion==='success')?'deployed':'deployment_failed';
     },

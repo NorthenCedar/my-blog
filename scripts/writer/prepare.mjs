@@ -49,3 +49,12 @@ export function prepare({repoDir,snapshot,assets,jobId}){
   const prepared={jobId,kind:snapshot.kind,key:snapshot.key,baseHead,paths:changes.map(c=>c.path),contentDigest:contentDigest(repoDir,changes.map(c=>c.path))};
   assertCandidate(repoDir,prepared,run);return prepared;
 }
+/** 校验后从服务端重新取得快照，独立重算候选，不信任安装/测试可能改写的本地记录。 */
+export function verifySnapshotCandidate({repoDir,prepared,snapshot,assets}){
+  const run=gitRunner(repoDir),{kind,key}=validateTarget(snapshot.kind,snapshot.key);
+  if(kind!==prepared.kind||key!==prepared.key||!/^[a-f0-9]{40}$/.test(prepared.baseHead))writerFail(409,'candidate_changed','候选与发布快照不一致');
+  const path=kind==='post'?`content/posts/${key}/index.md`:'content/pages/talks.md',original=run(['show',`${prepared.baseHead}:${path}`]);
+  const changes=planChanges(snapshot,original.status===0?original.stdout:null,assets),expected=writerHash(JSON.stringify(changes.map(c=>[c.path,c.bytes.length,writerHash(c.bytes)]).sort((a,b)=>a[0].localeCompare(b[0]))));
+  if(JSON.stringify([...prepared.paths].sort())!==JSON.stringify(changes.map(c=>c.path).sort())||expected!==prepared.contentDigest)writerFail(409,'candidate_changed','候选摘要与服务端快照不一致');
+  assertCandidate(repoDir,prepared,run);
+}

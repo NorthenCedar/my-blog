@@ -3,7 +3,7 @@ import { readFileSync,writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { gitFixture } from './_writer-git';
-import { prepare } from '../scripts/writer/prepare.mjs';
+import { prepare,verifySnapshotCandidate,contentDigest } from '../scripts/writer/prepare.mjs';
 import { publish } from '../scripts/writer/publish.mjs';
 import { verifyPrepared } from '../scripts/writer/validate.mjs';
 const value={fields:{title:'标题',date:'2026-10-23',summary:'简介',tags:['随笔']},body:'手机文章\n',assets:[]};
@@ -14,10 +14,16 @@ vi.setConfig({testTimeout:30000});
 it('真正准备候选并普通推送，重复执行同一任务不产生第二次提交',async()=>{
   const s=gitFixture(),prepared=prepare({repoDir:s.cloud,snapshot,assets:new Map(),jobId});
   expect(prepared.paths).toEqual(['content/posts/phone-a/index.md']);
+  verifySnapshotCandidate({repoDir:s.cloud,prepared,snapshot,assets:new Map()});
   const result=await publish({repoDir:s.cloud,prepared,authorize:async()=>({expiresAt:Date.now()+30000})});
   expect(result.pushed).toBe(true);expect(s.must(s.remote,['show','main:content/posts/phone-a/index.md'])).toContain('手机文章');
   expect((await publish({repoDir:s.cloud,prepared,authorize:async()=>{throw Error('不应再次申请');}})).commit).toBe(result.commit);
   expect(s.must(s.remote,['log','-1','--format=%B'])).toContain(`Writer-Job: ${jobId}`);
+});
+it('本地候选与摘要同时被改，也必须与服务端不可变快照比对',()=>{
+  const s=gitFixture(),prepared=prepare({repoDir:s.cloud,snapshot,assets:new Map(),jobId});
+  writeFileSync(join(s.cloud,prepared.paths[0]),'替换了正文');prepared.contentDigest=contentDigest(s.cloud,prepared.paths);
+  expect(()=>verifySnapshotCandidate({repoDir:s.cloud,prepared,snapshot,assets:new Map()})).toThrow('快照不一致');
 });
 it('云端多篇内容与本地代码分叉，普通推送拒绝，合并后都保留',async()=>{
   const s=gitFixture();

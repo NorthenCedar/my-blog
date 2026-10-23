@@ -1,5 +1,5 @@
 import { guardWriterOrigin,writerJson,writerHeaders,writerError,type WriterEnv } from '../_lib/writer-auth';
-import { jobRow,claimJob,authorizePush,recordJob,checkLease,type JobEvent } from '../_lib/writer-jobs';
+import { jobRow,claimJob,authorizePush,recordJob,checkLease,publishedBase,type JobEvent } from '../_lib/writer-jobs';
 import { createWriterRepository,matchesWriterRun } from '../_lib/writer-repository';
 import { readAsset } from '../_lib/writer-assets';
 import { readTalks } from '../../../src/lib/writer/content';
@@ -22,6 +22,10 @@ export const onRequestPost:PagesFunction<WriterEnv>=async({request,env})=>{
     if(!matchesWriterRun(run,id)||run.status!=='in_progress') writerFail(403,'invalid_run','运行不属于此发布任务或已经结束');
     if(p.action==='claim') return writerJson(await claimJob(env.COMMENTS_DB,id,runId));
     const lease=String(p.lease);
+    if(p.action==='snapshot'){
+      const current=await checkLease(env.COMMENTS_DB,id,lease,runId);if(current.state!=='validating')writerFail(409,'job_ended','任务已结束或已取得许可');
+      return writerJson({snapshot:JSON.parse(current.snapshot_json)});
+    }
     if(p.action==='authorize') return writerJson(await authorizePush(env.COMMENTS_DB,id,lease,runId));
     if(p.action==='asset'){
       const current=await checkLease(env.COMMENTS_DB,id,lease,runId);
@@ -35,11 +39,7 @@ export const onRequestPost:PagesFunction<WriterEnv>=async({request,env})=>{
       const event={state:p.state,runId,commit:p.commit,code:p.code} as JobEvent;
       if(event.state==='pushed'){
         await checkLease(env.COMMENTS_DB,id,lease,runId);
-        await repo.commitReceipt(String(event.commit),id);
-        const snapshot=JSON.parse(row.snapshot_json),source=snapshot.kind==='post'?await repo.readPost(String(event.commit),snapshot.key):await repo.readTalks(String(event.commit));
-        const item=snapshot.kind==='talk'?readTalks(source.text).find(t=>t.key===snapshot.key):null;
-        if(snapshot.kind==='talk'&&!item) writerFail(409,'invalid_receipt','发布内容尚未确认');
-        event.publishedBase={commit:String(event.commit),blobSha:source.sha,text:source.text,...(item?{itemHash:item.itemHash}:{})};
+        event.publishedBase=await publishedBase(repo,row,String(event.commit));
       }
       return writerJson({job:await recordJob(env.COMMENTS_DB,id,lease,event)});
     }

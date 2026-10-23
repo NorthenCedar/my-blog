@@ -1,4 +1,4 @@
-import type { WriterDraft,WriterValue,WriterSave } from '../../lib/writer/model';
+import type { WriterDraft,WriterValue,WriterSave,WriterBase } from '../../lib/writer/model';
 export type SaveState='saved'|'unsaved'|'saving'|'device'|'error'|'conflict'|'reauth';
 export type RecoveryCopy={value:WriterValue;revision:number;pending:WriterSave|null;serial:number;pendingSerial:number;updatedAt:number};
 type Clock={now:()=>number;setTimeout:typeof setTimeout;clearTimeout:typeof clearTimeout};
@@ -51,6 +51,7 @@ export function createSaveController(options:Options){
     edit(value:WriterValue){if(disposed)return;latest=structuredClone(value);serial++;dirty=true;report('unsaved');void persist();schedule();},
     async saveNow(){await ready;clearTimers();if(flight) await flight;blocked=false;while(!disposed&&(dirty||pending)) await sendOnce();return this.current();},
     current():WriterDraft{return {...structuredClone(draft),revision,value:structuredClone(latest)};},
+    async advanceBase(base:WriterBase,publishedRevision:number){await ready;if(disposed)return;draft.base=structuredClone(base);draft.publishedRevision=Math.max(draft.publishedRevision,publishedRevision);await persist();report(state);},
     recoveryCopy:copy,
     isDirty:()=>dirty||Boolean(pending),
     dispose(){disposed=true;clearTimers();return persistQueue;},

@@ -1,14 +1,16 @@
 import type { writerApi } from './api';
 import type { WriterDraft,WriterValue,WriterKind,WriterAssetRef } from '../../lib/writer/model';
+import { publishedAssetHashes } from '../../lib/writer/model';
 import { createSaveController,type RecoveryCopy } from './save';
 import { createRecoveryStore,recoveryKey,type RecoveryRecord } from './recovery';
 import { prepareWriterImage } from './images';
 import { renderWriterMarkdown } from './preview';
 import { el,button,field,download,errorText,SAVE_LABELS } from './ui';
+import { JOB_LABELS } from './publish';
 type Api=typeof writerApi;
 type Store=ReturnType<typeof createRecoveryStore>;
 type PendingImage={id:string;blob:Blob;alt:string;url:string;width?:number;height?:number;originalSize?:number};
-type Options={user:{id:string;nickname:string};publish:boolean;onPublish?:(draft:WriterDraft,host:HTMLElement)=>Promise<void>};
+type Options={user:{id:string;nickname:string};publish:boolean;onPublish?:(draft:WriterDraft,host:HTMLElement)=>Promise<void>;onJob?:(id:string)=>Promise<void>};
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,options:Options){
   root.replaceChildren();const workspace=el('div','','writer-workspace'),sidebar=el('aside','','writer-sidebar'),catalog=el('details'),summary=el('summary','内容与草稿'),navigation=el('nav'),list=el('ul','','writer-list'),pane=el('section','','writer-editor'),notice=el('p','','writer-error');notice.hidden=true;notice.setAttribute('role','alert');
@@ -27,8 +29,8 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     if(mode==='drafts')data=await api('/drafts');else if(mode==='jobs')data=await api('/publish');else data=await api(`/content?kind=${mode}&page=${page}${commit?'&commit='+commit:''}`);
     if(disposed||ticket!==listGeneration)return;list.replaceChildren();
     const items=mode==='drafts'?data.drafts:mode==='jobs'?data.jobs:data.items;
-    for(const item of items){const row=el('li'),title=mode==='jobs'?`${item.state} · ${item.draftId.slice(0,8)}`:item.title||item.key||'未命名草稿';const b=button(title,()=>perform(async()=>{
-      await flush();if(mode==='jobs'){if(item.runId)window.open(`https://github.com/NorthenCedar/personal/actions/runs/${item.runId}`,'_blank','noopener');return;}
+    for(const item of items){const row=el('li'),title=mode==='jobs'?`${JOB_LABELS[item.state]??item.state} · ${item.draftId.slice(0,8)}`:item.title||item.key||'未命名草稿';const b=button(title,()=>perform(async()=>{
+      await flush();if(mode==='jobs'){await options.onJob?.(item.id);return;}
       const result=mode==='drafts'?await api('/drafts?id='+item.id):await api('/drafts',{method:'POST',body:JSON.stringify({action:'import',kind:mode,key:item.key})});await openDraft(result.draft);catalog.open=matchMedia('(min-width:768px)').matches;
     }));b.append(el('small',mode==='drafts'?`${item.kind==='post'?'文章':'说说'} · ${item.revision===item.publishedRevision?'已发布':'未发布修改'}`:item.date??''));row.append(b);list.append(row);}
     if(!items.length)list.append(el('li','这里还没有内容。'));
@@ -75,7 +77,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     }
     controller=createSaveController({load:()=>draft,initialRecovery:restore,save:async input=>(await api('/drafts',{method:'POST',body:JSON.stringify({action:'save',...input})})).draft,recovery:{put:storeCopy},onState:(state,info)=>{if(disposed||ticket!==generation)return;status.textContent=SAVE_LABELS[state]+(working.revision===working.publishedRevision?' · 已发布':' · 未发布');backup.textContent=info.backedUp?'':'本设备备份失败，请及时保存到云端或下载当前输入。';if(state==='conflict')void showConflict();}});
     const save=button('保存草稿',()=>perform(async()=>{await controller!.saveNow();await loadList('drafts');}),'primary'),toggle=button('预览',()=>{preview.hidden=!preview.hidden;bodyLabel.hidden=!preview.hidden;toggle.textContent=preview.hidden?'预览':'继续编辑';toggle.setAttribute('aria-pressed',String(!preview.hidden));if(!preview.hidden)renderPreview();});toggle.setAttribute('aria-pressed','false');
-    const publish=button('发布',()=>perform(async()=>{const current=await controller!.saveNow();if(options.onPublish)await options.onPublish(current,publishing);else showError(Error('发布暂不可用，草稿仍可保存和导出'));}),'primary');publish.disabled=!options.publish;
+    const publish=button('发布',()=>perform(async()=>{if(pending.length)throw Error('还有等待确认的配图，请先上传或放弃后再发布');const current=await controller!.saveNow();if(options.onPublish)await options.onPublish(current,publishing);else showError(Error('发布暂不可用，草稿仍可保存和导出'));}),'primary');publish.disabled=!options.publish;
     tools.append(save,toggle,button('下载 Markdown',markdownExport),button('导出完整草稿',()=>perform(async()=>{await flush();const data=await api('/drafts?id='+working.id+'&export=1');download(`${working.key}-draft.json`,JSON.stringify(data));})),publish);
     const setField=(name:string,title:string,type='text',wide=false)=>{const f=field(title,type,wide);f.input.name=name;f.input.value=String(working.value.fields[name]??'');f.input.addEventListener('input',()=>{working.value.fields[name]=f.input.value;edit();});fields.append(f.label);return f.input;};
     if(working.kind==='post'){setField('title','标题','text',true);const summary=setField('summary','摘要（80 字以内）','text',true);summary.maxLength=80;}
@@ -107,7 +109,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
         const alt=field('图片说明（上传前必填）');alt.input.value=image.alt;alt.input.addEventListener('input',()=>{image.alt=alt.input.value;edit();});card.append(alt.label,button('上传并添加',()=>perform(()=>upload(image)),'primary'),button('放弃这张',()=>{pending=pending.filter(p=>p!==image);URL.revokeObjectURL(image.url);urls.delete(image.url);edit();renderImages();}));images.append(card);}
     }
     const choose=el('input');choose.type='file';choose.accept='image/jpeg,image/png,image/webp';choose.multiple=true;choose.setAttribute('aria-label','选择配图');
-    async function files(input:File[]){for(const file of input){if(working.value.assets.length+pending.length>=(working.kind==='post'?20:9))throw Error('本篇新增图片数量已达上限');const result=await prepareWriterImage(file);if(ticket!==generation){URL.revokeObjectURL(result.previewUrl);return;}urls.add(result.previewUrl);pending.push({id:crypto.randomUUID(),blob:result.blob,url:result.previewUrl,alt:'',...result});edit();renderImages();}}
+    async function files(input:File[]){for(const file of input){const existing=publishedAssetHashes(working.base);if(working.value.assets.filter(a=>!existing.has(a.sha256)).length+pending.length>=(working.kind==='post'?20:9))throw Error('本篇新增图片数量已达上限');const result=await prepareWriterImage(file);if(ticket!==generation){URL.revokeObjectURL(result.previewUrl);return;}urls.add(result.previewUrl);pending.push({id:crypto.randomUUID(),blob:result.blob,url:result.previewUrl,alt:'',...result});edit();renderImages();}}
     choose.addEventListener('change',()=>{void perform(()=>files(Array.from(choose.files??[])));choose.value='';});body.addEventListener('paste',event=>{const images=Array.from(event.clipboardData?.files??[]).filter(f=>f.type.startsWith('image/'));if(images.length){event.preventDefault();void perform(()=>files(images));}});
     imageSection.append(el('h3','配图'),el('p','先预览压缩结果并填写说明，再上传。说说按下方顺序展示；文章内的位置由正文图片引用决定。','writer-note'),choose,images);
     const metadata=el('details'),metaSummary=el('summary','保留的原有资料');metadata.append(metaSummary,el('pre',JSON.stringify(working.value.fields,null,2),'writer-note'));
@@ -121,5 +123,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
   void perform(async()=>{tags=(await api('/content?mode=tags')).tags;await loadList('drafts');});
   const beforeUnload=(event:BeforeUnloadEvent)=>{if(controller?.isDirty()||pending.length){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',beforeUnload);
   const online=()=>{if(controller)void perform(()=>controller!.saveNow());};window.addEventListener('online',online);
-  return {getDraft:()=>controller?.current(),showError,async dispose(){disposed=true;generation++;listGeneration++;window.removeEventListener('beforeunload',beforeUnload);window.removeEventListener('online',online);await controller?.dispose();releaseUrls();root.replaceChildren();}};
+  return {getDraft:()=>controller?.current(),showError,
+    async refreshPublished(draftId:string){if(!active||active.id!==draftId||!controller)return;const id=active.id,result=await api('/drafts?id='+id);if(!active||active.id!==id||!controller)return;const oldKey=recoveryKey(options.user.id,active);active.base=result.draft.base;active.publishedRevision=result.draft.publishedRevision;await controller.advanceBase(active.base,active.publishedRevision);if(oldKey!==recoveryKey(options.user.id,active))await recovery.remove(oldKey);},
+    async dispose(){disposed=true;generation++;listGeneration++;window.removeEventListener('beforeunload',beforeUnload);window.removeEventListener('online',online);await controller?.dispose();releaseUrls();root.replaceChildren();}};
 }

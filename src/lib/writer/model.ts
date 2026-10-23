@@ -21,17 +21,20 @@ export function validateTarget(kind: unknown, key: unknown): { kind: WriterKind;
   if (typeof key !== 'string' || !(kind === 'post' ? /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) && key.length <= 60 : /^talk-[a-z0-9-]{1,120}$/.test(key))) writerFail(400,'invalid_key','内容网址或标识格式不对');
   return {kind,key};
 }
-export function validateWriterValue(kind: WriterKind, input: unknown): WriterValue {
+export const publishedAssetHashes=(base:WriterBase)=>new Set([...(base?.text??'').matchAll(/\bwriter-([a-f0-9]{64})\.webp\b/g)].map(m=>m[1]));
+export function validateWriterValue(kind: WriterKind, input: unknown,base:WriterBase=null): WriterValue {
   if (!input || typeof input !== 'object' || Array.isArray(input)) writerFail(400,'invalid_value','草稿内容格式不对');
   const v = input as Record<string,unknown>;
   if (!v.fields || typeof v.fields !== 'object' || Array.isArray(v.fields) || typeof v.body !== 'string' || !Array.isArray(v.assets)) writerFail(400,'invalid_value','草稿内容格式不对');
   if (utf8Length(v.body) > WRITER_LIMITS.body || utf8Length(JSON.stringify(v.fields)) > WRITER_LIMITS.body) writerFail(413,'content_too_large','草稿过长，请拆成几篇保存');
-  if (v.assets.length > (kind === 'post' ? 20 : 9)) writerFail(413,'too_many_images','这份草稿的新增配图过多');
+  if (utf8Length(JSON.stringify(v.assets))>WRITER_LIMITS.body) writerFail(413,'content_too_large','配图说明过长，请拆成几篇保存');
   const assets = v.assets.map((a: unknown) => {
     if (!a || typeof a !== 'object') return writerFail(400,'invalid_asset','配图信息不对');
     const image = a as Record<string,unknown>;
     if (typeof image.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(image.sha256) || typeof image.alt !== 'string' || utf8Length(image.alt) > 2048) writerFail(400,'invalid_asset','配图信息不对');
     return {sha256:image.sha256,alt:image.alt};
   });
+  const existing=publishedAssetHashes(base);
+  if(assets.filter(a=>!existing.has(a.sha256)).length>(kind==='post'?20:9)) writerFail(413,'too_many_images','这份草稿的新增配图过多');
   return {fields:structuredClone(v.fields) as Record<string,unknown>,body:v.body,assets};
 }

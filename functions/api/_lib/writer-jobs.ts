@@ -1,9 +1,11 @@
 import type { WriterProof } from './writer-auth';
 import { writerId,writerFail,utf8Length,type WriterJob,type WriterDraft,type WriterBase,type WriterJobState } from '../../../src/lib/writer/model';
-import { validatePublish } from '../../../src/lib/writer/content';
+import { validatePublish,readTalks } from '../../../src/lib/writer/content';
 import { digest,randomToken } from './visitor-core';
 import { LIVE_ACCOUNT_SQL } from './visitor-store';
 import { readDraft,assertWriterProof,proofValues,writerStoreError } from './writer-drafts';
+import type { WriterRepository } from './writer-repository';
+import { matchesWriterRun } from './writer-repository';
 export type JobRow={id:string;owner:string;draft_id:string;revision:number;request_id:string;state:WriterJobState;snapshot_json:string;owner_auth_version:number;owner_session_hash:string;lease_hash:string|null;lease_expires:number|null;run_id:string|null;commit_sha:string|null;code:string|null;version:number;created_at:number;updated_at:number};
 const active="'queued','dispatch_unknown','validating','ready','pushed'";
 const publicJob=(r:JobRow):WriterJob=>({id:r.id,draftId:r.draft_id,revision:r.revision,state:r.state,runId:r.run_id,commit:r.commit_sha,code:r.code});
@@ -19,7 +21,7 @@ export async function createJob(db:D1Database,proof:WriterProof,input:{draftId:s
   const old=await db.prepare('SELECT * FROM writer_jobs WHERE owner=? AND request_id=?').bind(proof.owner,input.requestId).first<JobRow>();
   if(old){if(old.draft_id!==input.draftId||old.revision!==input.revision) writerFail(409,'request_reused','发布请求已用于另一版本');return publicJob(old);}
   if(snapshot.revision!==input.revision) writerFail(409,'version_conflict','草稿已变化，请先重新保存');
-  validatePublish(snapshot.kind,snapshot.value);
+  validatePublish(snapshot.kind,snapshot.value,snapshot.base);
   const id=randomToken(16),marker=randomToken(16),text=JSON.stringify(snapshot),now=Date.now();
   try{
     const results=await db.batch([
@@ -82,3 +84,42 @@ export async function cancelJob(db:D1Database,proof:WriterProof,id:string){
   return readJob(db,proof.owner,id);
 }
 export async function setDispatchUnknown(db:D1Database,id:string){await db.prepare("UPDATE writer_jobs SET state='dispatch_unknown',version=version+1 WHERE id=? AND state='queued'").bind(writerId(id)).run();}
+export async function publishedBase(repo:WriterRepository,row:JobRow,commit:string):Promise<WriterBase>{
+  await repo.commitReceipt(commit,row.id);
+  const snapshot:WriterDraft=JSON.parse(row.snapshot_json),source=snapshot.kind==='post'?await repo.readPost(commit,snapshot.key):await repo.readTalks(commit),item=snapshot.kind==='talk'?readTalks(source.text).find(t=>t.key===snapshot.key):null;
+  if(snapshot.kind==='talk'&&!item)writerFail(409,'invalid_receipt','发布的说说尚未确认');
+  return {commit,blobSha:source.sha,text:source.text,...(item?{itemHash:item.itemHash}:{})};
+}
+async function observePush(db:D1Database,row:JobRow,commit:string,base:WriterBase){
+  const encoded=JSON.stringify(base),marker=randomToken(16);if(utf8Length(encoded)>262144)writerFail(413,'base_too_large','发布基线超限，请先导出并在本地处理');
+  try{
+    await db.batch([
+      db.prepare("INSERT INTO writer_requests(id,owner) SELECT ?,owner FROM writer_jobs WHERE id=? AND version=? AND state NOT IN ('cancelled','deployed')").bind(marker,row.id,row.version),
+      db.prepare("UPDATE writer_jobs SET state='pushed',commit_sha=?,code=NULL,reserve_bytes=0,version=version+1,updated_at=? WHERE id=? AND EXISTS(SELECT 1 FROM writer_requests WHERE id=?)").bind(commit,Date.now(),row.id,marker),
+      db.prepare('UPDATE writer_drafts SET base_json=?,published_revision=?,payload_bytes=length(CAST(value_json AS BLOB))+? WHERE id=? AND owner=? AND published_revision<? AND EXISTS(SELECT 1 FROM writer_requests WHERE id=?)').bind(encoded,row.revision,utf8Length(encoded),row.draft_id,row.owner,row.revision,marker),
+      db.prepare('DELETE FROM writer_requests WHERE id=?').bind(marker),
+    ]);
+  }catch(error){writerStoreError(error);}
+}
+export async function reconcileJob(db:D1Database,id:string,repo:WriterRepository){
+  let row=await jobRow(db,id);
+  if(row.state==='cancelled'||row.state==='conflict')return publicJob(row);
+  if(!row.commit_sha){
+    const run=row.run_id?await repo.run(row.run_id):await repo.findRun(id);
+    if(!run)return publicJob(row);
+    if(!matchesWriterRun(run,id))writerFail(403,'invalid_run','运行不属于此发布任务');
+    if(!row.run_id){await db.prepare('UPDATE writer_jobs SET run_id=?,version=version+1,updated_at=? WHERE id=? AND version=? AND run_id IS NULL').bind(String(run.id),Date.now(),id,row.version).run();row=await jobRow(db,id);}
+    if(run.status==='completed'){
+      const commit=await repo.findCommit(id);
+      if(commit)await observePush(db,row,commit,await publishedBase(repo,row,commit));
+      else if(row.state==='ready')await db.prepare("UPDATE writer_jobs SET code='push_unconfirmed',version=version+1,updated_at=? WHERE id=? AND version=? AND state='ready'").bind(Date.now(),id,row.version).run();
+      else await db.prepare("UPDATE writer_jobs SET state='failed',code=?,reserve_bytes=0,version=version+1,updated_at=? WHERE id=? AND version=? AND state IN ('queued','dispatch_unknown','validating') AND commit_sha IS NULL").bind(run.conclusion==='success'?'missing_receipt':'workflow_failed',Date.now(),id,row.version).run();
+      row=await jobRow(db,id);
+    }
+  }
+  if(row.commit_sha&&['pushed','deployment_failed','deployed'].includes(row.state)){
+    const deployment=await repo.deployment(row.commit_sha);
+    if(deployment!=='pending'&&deployment!==row.state){await db.prepare("UPDATE writer_jobs SET state=?,version=version+1,updated_at=? WHERE id=? AND version=? AND commit_sha=? AND state IN ('pushed','deployment_failed','deployed')").bind(deployment,Date.now(),id,row.version,row.commit_sha).run();row=await jobRow(db,id);}
+  }
+  return publicJob(row);
+}

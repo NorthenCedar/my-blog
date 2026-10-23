@@ -53,3 +53,8 @@ it('浏览器 HTTP 不缓存草稿、不把 401 当成功，固定同源路径',
   expect(requests[0].init?.cache).toBe('no-store');expect(new Headers(requests[0].init?.headers).get('X-NC-Request')).toBe('1');
   await expect(writerApi('https://other.example/')).rejects.toMatchObject({status:400});expect(requests).toHaveLength(1);
 });
+it('发布回执推进基线但保留后来输入，不误报已经发布',async()=>{
+  const c=createSaveController({load:()=>draft,save:async input=>({revision:input.expectedRevision+1}),recovery:{put:async()=>{}},onState:()=>{}});
+  await c.ready;c.edit(value('继续写'));await c.advanceBase({commit:'3'.repeat(40),blobSha:'4'.repeat(40),text:'已发布'},1);
+  expect(c.current().value.body).toBe('继续写');expect(c.current().base?.commit).toBe('3'.repeat(40));expect(c.isDirty()).toBe(true);await c.dispose();
+});

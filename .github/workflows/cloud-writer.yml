@@ -1,0 +1,55 @@
+name: 云端写作
+run-name: 云端写作 ${{ inputs.jobId }}
+on:
+  workflow_dispatch:
+    inputs:
+      jobId:
+        description: 站主已确认的私密发布任务
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: northcedar-cloud-writer-main
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'NorthenCedar/personal' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      WRITER_JOB_ID: ${{ inputs.jobId }}
+      WRITER_RUN_ID: ${{ github.run_id }}
+    steps:
+      - name: 检出固定主分支
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # 官方 v5，2026-10-23 核对
+        with:
+          ref: main
+          persist-credentials: false
+          fetch-depth: 0
+      - name: 使用仓库指定的 Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # 官方 v5，2026-10-23 核对
+        with:
+          node-version-file: .node-version
+      - name: 准备内容解析器依赖
+        run: npm ci --ignore-scripts
+      - name: 领取私密快照并准备候选
+        run: node scripts/writer/run.mjs prepare
+        env:
+          WRITER_RUNNER_SECRET: ${{ secrets.WRITER_RUNNER_SECRET }}
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: 干净安装、完整构建与测试
+        run: node scripts/writer/run.mjs verify
+      - name: 复核快照、申请许可并普通推送
+        run: node scripts/writer/run.mjs publish
+        env:
+          WRITER_RUNNER_SECRET: ${{ secrets.WRITER_RUNNER_SECRET }}
+          WRITER_PUBLISH_TOKEN: ${{ secrets.WRITER_PUBLISH_TOKEN }}
+      - name: 记录失败阶段
+        if: failure()
+        run: node scripts/writer/run.mjs failure
+        env:
+          WRITER_RUNNER_SECRET: ${{ secrets.WRITER_RUNNER_SECRET }}
+      - name: 清理本次私密临时资料
+        if: always()
+        run: node scripts/writer/run.mjs cleanup
