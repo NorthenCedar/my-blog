@@ -6,6 +6,7 @@ export interface WriterEnv extends VisitorEnv {
   WRITER_LOCAL_DEV?: string;
   WRITER_GITHUB_TOKEN?: string;
   WRITER_RUNNER_SECRET?: string;
+  WRITER_CF_APP_ID?: string;
 }
 export type WriterProof = { owner:string; authVersion:number; tokenHash:string; values:unknown[] };
 
