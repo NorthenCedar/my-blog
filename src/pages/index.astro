@@ -991,26 +991,13 @@ const titleLines: { ch: string; i: number }[][] = (() => {
       );
     isolation: isolate;
   }
-  /* ★★ 明度爬升层：**照搬原型** —— `flex:1` + `position:relative`（在文档流里）。
-     上一轮我加了 `position:absolute; inset:0; z-index:0`，让它「盖满整个首屏」，
-     于是那条 78%/100% 处的深墨绿洗色**真的生效了** —— 而原型里它是个**可伸缩的顶部留白块**：
-     `.band-inner` 的 `min-height:auto` 先吃掉内容高度（802 视口下是 761），
-     flex 把剩下的 41px 分给 `.band-core` ⇒ 原型的渐变只铺在顶部 41px ⇒ 几乎不可见。
-     实测证据（1258×802，英雄区最末 40px 平均亮度）：原型 112 / 本站 85
-     —— 站主截的「身份下面的过渡」就是这条。
-     ⇒ 恢复原型形态：① 首屏下半段不再多一层压暗；② topbar 会被这块留白往下推一点
-       （原型 41px，本站因真实简介更长、内容更高，实测约 34px）。 */
+  /* 顶部弹性留白保持在文档流中，导航位置随视口高度伸缩。
+     它和正文共用 .band 的整幅渐变；单独着色会在留白底边产生横向接缝。 */
   .band-core {
     flex: 1;
     position: relative;
     pointer-events: none;
-    background: linear-gradient(
-      180deg,
-      transparent 0%,
-      transparent 24%,
-      #1b26208c 78%,
-      #26332c66 100%
-    );
+    background: none;
   }
   .band-grid {
     position: absolute;

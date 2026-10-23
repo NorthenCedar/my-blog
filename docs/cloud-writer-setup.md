@@ -1,6 +1,6 @@
 # 云端写作台：设置与验收
 
-当前在独立 `cloud-writer` 分支开发。本地代码、SQLite/Git 测试和浏览器客户端测试不等于已上线；原生 Cloudflare 运行时验收、生产迁移、凭据设置、主分支发布和真实云端验收仍须逐项完成。
+代码已合入 `main` 并部署，入口为 <https://northcedar.top/write/>。2026-10-23 经站主当次授权，已导出并验证现有 D1 备份、应用 0007 增量迁移，并只读确认八张写作表齐全；Pages 发布密钥尚未设置，真实草稿保存和完整发布链路仍须验收。本地代码、SQLite/Git 测试和浏览器客户端测试不替代正式云端验收。
 
 ## 1. 使用范围
 
@@ -25,6 +25,27 @@
 正式环境不要设置 `WRITER_LOCAL_DEV`。它只允许显式本地回环 HTTP 开发；不能用于开放预览域名。仓库读取令牌或运行器秘密缺失时，发布不可用；完成数据库初始化和站主绑定后，新建草稿仍可保存及导出，导入已发布内容则需要仓库读取配置。
 
 Pages 的变量变更须随一次新部署生效。不要只保存设置便声称新实例已经获得配置。
+
+### 2.1 站主现在需要做什么
+
+先刷新 `/write/`，尝试新建自己的私密草稿并保存；出现“已保存到云端”后刷新重开，核对正文。新建、保存、导出草稿不要求 GitHub 令牌；“文章”“说说”中的已发布内容读取和导入要求读取令牌，发布要求上表配置齐全。
+
+1. 打开 [GitHub 细粒度令牌创建页](https://github.com/settings/personal-access-tokens/new)。Resource owner 选 `NorthenCedar`，Repository access 选 **Only select repositories**，只勾选 `personal`。分别创建两枚有有效期的令牌：`WRITER_GITHUB_TOKEN` 的 Repository permissions 为 **Contents: Read-only、Actions: Read and write、Checks: Read-only**；`WRITER_PUBLISH_TOKEN` 仅给 **Contents: Read and write**。Metadata 读为必需的附带权限。到期后更新对应 Secret。
+2. 在 [Cloudflare Pages 项目设置](https://dash.cloudflare.com/4bcfa9cf29fad54bd0ca74b90903a10c/pages/view/personal/settings) 的正式环境 **Variables and Secrets** 中，以 **Secret** 类型保存 `WRITER_GITHUB_TOKEN`。令牌值只粘贴到平台的受保护输入框。
+3. 在 [GitHub 仓库 Actions Secrets](https://github.com/NorthenCedar/personal/settings/secrets/actions) 中点 **New repository secret**，保存 `WRITER_PUBLISH_TOKEN`。
+4. 在普通 PowerShell 运行下面的命令，生成 32 字节的随机秘密并复制到剪贴板；不需要管理员，不写文件，也不打印秘密。把同一份值分别保存为 Pages 正式环境和 GitHub Actions 的 `WRITER_RUNNER_SECRET`：
+
+   ```powershell
+   $writerSecretBytes = New-Object byte[] 32
+   $writerSecretGenerator = [Security.Cryptography.RandomNumberGenerator]::Create()
+   $writerSecretGenerator.GetBytes($writerSecretBytes)
+   [Convert]::ToBase64String($writerSecretBytes) | Set-Clipboard
+   $writerSecretGenerator.Dispose()
+   ```
+
+5. 在 Cloudflare 重试一次正式部署，让新 Secret 生效。完成后只需告诉代理“密钥已配”，不要发送密钥值或包含值的截图。由代理核对配置名称和准确部署，站主再选择真实内容做首次发布验收。
+
+平台操作参考：[GitHub 令牌](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)、[Actions Secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)、[Pages 绑定与秘密](https://developers.cloudflare.com/pages/functions/bindings/)。不启用新计费服务，原有额度和支出限制仍须在平台核对。
 
 ## 3. 额度核对与数据库迁移
 
