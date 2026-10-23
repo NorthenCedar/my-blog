@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS writer_jobs (
   request_id TEXT NOT NULL,
   snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
   payload_bytes INTEGER NOT NULL CHECK(payload_bytes=length(CAST(snapshot_json AS BLOB))),
+  reserve_bytes INTEGER NOT NULL DEFAULT 0 CHECK(reserve_bytes BETWEEN 0 AND 262144),
   state TEXT NOT NULL CHECK(state IN ('queued','dispatch_unknown','validating','ready','pushed','deployed','conflict','failed','cancelled','deployment_failed')),
   owner_auth_version INTEGER NOT NULL,
   owner_session_hash TEXT NOT NULL,
@@ -101,8 +102,11 @@ CREATE TRIGGER IF NOT EXISTS writer_asset_removed AFTER DELETE ON writer_assets 
   UPDATE writer_usage SET image_bytes=image_bytes-OLD.size,total_bytes=total_bytes-OLD.size WHERE owner=OLD.owner;
 END;
 CREATE TRIGGER IF NOT EXISTS writer_job_added AFTER INSERT ON writer_jobs BEGIN
-  UPDATE writer_usage SET total_bytes=total_bytes+NEW.payload_bytes WHERE owner=NEW.owner;
+  UPDATE writer_usage SET total_bytes=total_bytes+NEW.payload_bytes+NEW.reserve_bytes WHERE owner=NEW.owner;
+END;
+CREATE TRIGGER IF NOT EXISTS writer_job_reserve_changed AFTER UPDATE OF reserve_bytes ON writer_jobs BEGIN
+  UPDATE writer_usage SET total_bytes=total_bytes+NEW.reserve_bytes-OLD.reserve_bytes WHERE owner=NEW.owner;
 END;
 CREATE TRIGGER IF NOT EXISTS writer_job_removed AFTER DELETE ON writer_jobs BEGIN
-  UPDATE writer_usage SET total_bytes=total_bytes-OLD.payload_bytes WHERE owner=OLD.owner;
+  UPDATE writer_usage SET total_bytes=total_bytes-OLD.payload_bytes-OLD.reserve_bytes WHERE owner=OLD.owner;
 END;

@@ -60,6 +60,12 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
       }return null;
     },
     async run(id:string):Promise<WriterRun>{const run=await request(`/actions/runs/${runNumber(id)}`);if(!matchesWriterRun(run)) writerFail(403,'invalid_run','运行不属于本站固定写作流程');return run;},
+    async commitReceipt(commit:string,jobId:string){
+      revision(commit);writerId(jobId);
+      const [data,comparison]=await Promise.all([request(`/commits/${commit}`),request(`/compare/${commit}...main`)]);
+      if(!String(data.commit?.message??'').split('\n').includes(`Writer-Job: ${jobId}`)||!['ahead','identical'].includes(comparison.status)) writerFail(409,'push_unconfirmed','尚未在 main 确认这次推送，请稍后查询');
+      return {commit};
+    },
     async deployment(commit:string):Promise<'pending'|'deployed'|'deployment_failed'>{
       revision(commit);if(!cloudflareAppId) return 'pending';
       const result=await request(`/commits/${commit}/check-runs?per_page=100`),checks=(result.check_runs??[]).filter((r:any)=>r.head_sha===commit&&r.app?.id===cloudflareAppId);
