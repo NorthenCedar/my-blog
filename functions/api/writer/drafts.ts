@@ -24,6 +24,11 @@ export const onRequestPost:PagesFunction<WriterEnv>=async({request,env})=>{
       return writerJson({draft:await createDraft(env.COMMENTS_DB,proof,{kind,key,base:null,value:p.value as never})},201);
     }
     if(p.action==='import') return writerJson({draft:await importPublished(createWriterRepository(env.WRITER_GITHUB_TOKEN??''),env.COMMENTS_DB,proof,p as never)},201);
+    if(p.action==='copy') {
+      const source=await readDraft(env.COMMENTS_DB,user.id,String(p.id));
+      if(p.baseCommit!==(source.base?.commit??null))writerFail(409,'base_changed','发布基线已变化，请先下载当前输入，再重新打开草稿对照');
+      return writerJson({draft:await createDraft(env.COMMENTS_DB,proof,{kind:source.kind,key:source.key,base:source.base,value:p.value as never})},201);
+    }
     if(p.action==='save') return writerJson({draft:await saveDraft(env.COMMENTS_DB,proof,p as unknown as WriterSave)});
     if(p.action==='delete') {await deleteDraft(env.COMMENTS_DB,proof,String(p.id),Number(p.revision));return writerJson({ok:true});}
     writerFail(400,'invalid_action','未知草稿操作');

@@ -1,4 +1,4 @@
-import { expect,it } from 'vitest';
+import { afterEach,expect,it,vi } from 'vitest';
 import { writerFixture } from './_writer';
 import { writerProof } from '../functions/api/_lib/writer-auth';
 import { createDraft } from '../functions/api/_lib/writer-drafts';
@@ -6,6 +6,8 @@ import { createJob,readJob,claimJob,authorizePush,recordJob,reconcileJob,setDisp
 import { createWriterRepository } from '../functions/api/_lib/writer-repository';
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
+import { onRequestPost } from '../functions/api/writer/publish';
+afterEach(()=>vi.unstubAllGlobals());
 const commit='3'.repeat(40),details='https://dash.cloudflare.com/4bcfa9cf29fad54bd0ca74b90903a10c/pages/view/personal/deployments/example';
 const json=(data:unknown)=>new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}});
 async function setup(){const s=await writerFixture(),proof=await writerProof(s.request(),{id:s.owner,auth_version:0} as never),draft=await createDraft(s.db,proof,{kind:'post',key:'example',base:null,value:{fields:{title:'标题',date:'2026-10-23',summary:'简介',tags:['随笔']},body:'正文',assets:[]}}),job=await createJob(s.db,proof,{draftId:draft.id,revision:1,requestId:'1'.repeat(32)});return {...s,proof,draft,job};}
@@ -44,6 +46,18 @@ it('已许可运行结束后仅一次没找到提交，不能误判没推送并�
   const s=await setup(),{lease}=await claimJob(s.db,s.job.id,'1001');await authorizePush(s.db,s.job.id,lease,'1001');
   const repo=createWriterRepository('测试凭据',async(url)=>String(url).includes('/actions/runs/')?json({...run(s.job.id),status:'completed',conclusion:'failure'}):json([]));
   const result=await reconcileJob(s.db,s.job.id,repo);expect(result.state).toBe('ready');expect(result.code).toBe('push_unconfirmed');expect(s.sqlite.prepare('SELECT reserve_bytes FROM writer_jobs').get()?.reserve_bytes).toBe(262144);
+});
+it('站主明确结束已停止运行的待确认任务后解除互斥，旧回调不能再改状态',async()=>{
+  const s=await setup(),{lease}=await claimJob(s.db,s.job.id,'1001');await authorizePush(s.db,s.job.id,lease,'1001');
+  s.sqlite.exec("UPDATE writer_jobs SET code='push_unconfirmed'");let completed=false;
+  vi.stubGlobal('fetch',async(url:unknown)=>String(url).includes('/actions/runs/')?json({...run(s.job.id),status:completed?'completed':'in_progress',conclusion:completed?'failure':null}):json([]));
+  const env={...s.env,WRITER_GITHUB_TOKEN:'测试凭据'},request=()=>s.request('/publish','POST',{action:'close_unconfirmed',id:s.job.id,confirm:true});
+  expect((await onRequestPost({request:request(),env} as never)).status).toBe(409);
+  completed=true;const response=await onRequestPost({request:request(),env} as never);expect(response.status).toBe(200);
+  const {job}=await response.json() as any;expect(job.state).toBe('failed');expect(job.code).toBe('owner_closed_unconfirmed');
+  expect(s.sqlite.prepare('SELECT reserve_bytes FROM writer_jobs').get()?.reserve_bytes).toBe(0);
+  await expect(recordJob(s.db,s.job.id,lease,{state:'failed',runId:'1001'})).rejects.toMatchObject({code:'invalid_transition'});
+  expect((await createJob(s.db,s.proof,{draftId:s.draft.id,revision:1,requestId:'2'.repeat(32)})).state).toBe('queued');
 });
 it('工作流只手动接收任务 ID，固定主分支及完整 Action SHA，验证阶段无发布凭据',()=>{
   const workflow=parse(readFileSync('.github/workflows/cloud-writer.yml','utf8'));

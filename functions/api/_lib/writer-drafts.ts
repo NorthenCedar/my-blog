@@ -91,7 +91,19 @@ export async function deleteDraft(db:D1Database,proof:WriterProof,id:string,revi
   if(!result) {await assertWriterProof(db,proof);writerFail(409,'draft_busy','草稿已变化或仍在发布，请稍后重新读取');}
 }
 export async function exportDraft(db:D1Database,owner:string,id:string) {
-  const draft=await readDraft(db,owner,id);
-  const images=await db.prepare('SELECT a.sha256,a.bytes,a.width,a.height FROM writer_assets a JOIN writer_draft_assets r ON r.owner=a.owner AND r.sha256=a.sha256 WHERE r.draft_id=? AND a.owner=? ORDER BY r.position').bind(id,owner).all<{sha256:string;bytes:number[];width:number;height:number}>();
-  return {format:'northcedar-writer-1',draft,images:images.results.map(image=>({...image,bytes:btoa(Array.from(new Uint8Array(image.bytes),b=>String.fromCharCode(b)).join(''))}))};
+  writerId(id);
+  // 同一批次读取正文及引用，避免导出期间自动保存混入另一版本的配图。
+  const [rows,images]=await db.batch([
+    db.prepare(`SELECT ${fields} FROM writer_drafts WHERE owner=? AND id=?`).bind(owner,id),
+    db.prepare('SELECT a.sha256,a.bytes,a.width,a.height FROM writer_assets a JOIN writer_draft_assets r ON r.owner=a.owner AND r.sha256=a.sha256 WHERE r.draft_id=? AND a.owner=? ORDER BY r.position').bind(id,owner),
+  ]);
+  if(!rows.results.length)writerFail(404,'draft_missing','这份草稿不存在，请返回草稿列表');
+  const draft=decode(rows.results[0] as unknown as DraftRow),encoded=[];
+  for(const row of images.results){
+    const image=row as unknown as {sha256:string;bytes:ArrayBuffer;width:number;height:number},bytes=new Uint8Array(image.bytes);
+    const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+    if(hash!==image.sha256)writerFail(500,'asset_corrupt','配图摘要不一致，本次未生成备份，请保留草稿并检查存储');
+    encoded.push({...image,bytes:btoa(Array.from(bytes,b=>String.fromCharCode(b)).join(''))});
+  }
+  return {format:'northcedar-writer-1',draft,images:encoded};
 }

@@ -4,7 +4,8 @@ export type RecoveryCopy={value:WriterValue;revision:number;pending:WriterSave|n
 type Clock={now:()=>number;setTimeout:typeof setTimeout;clearTimeout:typeof clearTimeout};
 type Options={load:()=>WriterDraft|Promise<WriterDraft>;save:(input:WriterSave)=>Promise<{revision:number}>;recovery:{put:(copy:RecoveryCopy)=>Promise<unknown>};clock?:Clock;onState:(state:SaveState,info:{backedUp:boolean;error?:unknown;revision:number})=>void;initialRecovery?:RecoveryCopy};
 export function createSaveController(options:Options){
-  const clock=options.clock??{now:Date.now,setTimeout,clearTimeout};
+  // 浏览器计时器不能以普通 clock 对象作为 this；包装后仍支持测试注入时钟。
+  const clock=options.clock??{now:()=>Date.now(),setTimeout:(run:()=>void,delay:number)=>setTimeout(run,delay),clearTimeout:(id:ReturnType<typeof setTimeout>)=>clearTimeout(id)};
   let draft:WriterDraft,latest:WriterValue,revision=0,serial=0,pendingSerial=0,dirty=false,pending:WriterSave|null=null,disposed=false,blocked=false,backedUp=true,state:SaveState='saved';
   let debounce:ReturnType<typeof setTimeout>|undefined,maximum:ReturnType<typeof setTimeout>|undefined,flight:Promise<void>|null=null,persistQueue=Promise.resolve();
   const report=(next:SaveState,error?:unknown)=>{state=next;if(!disposed) options.onState(next,{backedUp,error,revision});};

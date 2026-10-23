@@ -52,8 +52,13 @@ export async function readAsset(db:D1Database,owner:string,sha256:string):Promis
   if(!asset) writerFail(404,'asset_missing','图片不存在，请重新上传');
   return asset;
 }
-export async function listAssets(db:D1Database,owner:string){
-  return (await db.prepare('SELECT sha256,size,width,height,created_at AS createdAt,EXISTS(SELECT 1 FROM writer_draft_assets d WHERE d.owner=a.owner AND d.sha256=a.sha256) OR EXISTS(SELECT 1 FROM writer_job_assets j WHERE j.owner=a.owner AND j.sha256=a.sha256) AS referenced FROM writer_assets a WHERE owner=? ORDER BY created_at DESC LIMIT 500').bind(owner).all()).results;
+export async function listAssets(db:D1Database,owner:string,page=1){
+  if(!Number.isSafeInteger(page)||page<1||page>10000)writerFail(400,'invalid_page','配图页码不对');
+  const [rows,usage]=await db.batch([
+    db.prepare('SELECT sha256,size,width,height,created_at AS createdAt,EXISTS(SELECT 1 FROM writer_draft_assets d WHERE d.owner=a.owner AND d.sha256=a.sha256) OR EXISTS(SELECT 1 FROM writer_job_assets j WHERE j.owner=a.owner AND j.sha256=a.sha256) AS referenced FROM writer_assets a WHERE owner=? ORDER BY created_at DESC,sha256 LIMIT 51 OFFSET ?').bind(owner,(page-1)*50),
+    db.prepare('SELECT draft_count AS draftCount,image_bytes AS imageBytes,total_bytes AS totalBytes FROM writer_usage WHERE owner=?').bind(owner),
+  ]);
+  return {images:rows.results.slice(0,50),more:rows.results.length>50,page,usage:usage.results[0]??{draftCount:0,imageBytes:0,totalBytes:0}};
 }
 export async function deleteAsset(db:D1Database,proof:WriterProof,sha256:string){
   await assertWriterProof(db,proof);

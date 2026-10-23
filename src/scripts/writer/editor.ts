@@ -7,6 +7,7 @@ import { prepareWriterImage } from './images';
 import { renderWriterMarkdown } from './preview';
 import { el,button,field,download,errorText,SAVE_LABELS } from './ui';
 import { JOB_LABELS } from './publish';
+import { showWriterStorage } from './storage';
 type Api=typeof writerApi;
 type Store=ReturnType<typeof createRecoveryStore>;
 type PendingImage={id:string;blob:Blob;alt:string;url:string;width?:number;height?:number;originalSize?:number};
@@ -72,10 +73,10 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     }));};
     async function showConflict(){
       try{const result=await api('/drafts?id='+working.id);if(ticket!==generation)return;conflict.hidden=false;conflict.replaceChildren(el('h3','对照版本'));const comparison=el('div','','writer-compare');
-        for(const [name,text]of [['当前输入',JSON.stringify(controller!.current().value.fields,null,2)+'\n\n'+body.value],['云端版本',JSON.stringify(result.draft.value.fields,null,2)+'\n\n'+result.draft.value.body]]){const label=el('label',name,'writer-field'),area=el('textarea');area.value=text;area.readOnly=true;label.append(area);comparison.append(label);}conflict.append(comparison,button('将当前输入另存为新草稿',()=>perform(async()=>{const current=controller!.current();if(current.kind==='post'){showError(Error('请先下载当前输入，再用新的文章网址创建草稿'));return;}const result=await api('/drafts',{method:'POST',body:JSON.stringify({action:'create',kind:current.kind,value:current.value})});await openDraft(result.draft);await loadList('drafts');})),button('下载当前输入',markdownExport));
+        for(const [name,text]of [['当前输入',JSON.stringify(controller!.current().value.fields,null,2)+'\n\n'+body.value],['云端版本',JSON.stringify(result.draft.value.fields,null,2)+'\n\n'+result.draft.value.body]]){const label=el('label',name,'writer-field'),area=el('textarea');area.value=text;area.readOnly=true;label.append(area);comparison.append(label);}conflict.append(comparison,el('p','另存会保留当前输入和原内容网址，原草稿不变。发布前仍需对照仓库最新内容。','writer-note'),button('将当前输入另存为新草稿',()=>perform(async()=>{const current=controller!.current();const result=await api('/drafts',{method:'POST',body:JSON.stringify({action:'copy',id:current.id,baseCommit:current.base?.commit??null,value:current.value})});if(ticket!==generation)return;await openDraft(result.draft);await loadList('drafts');})),button('下载当前输入',markdownExport));
       }catch(error){showError(error);}
     }
-    controller=createSaveController({load:()=>draft,initialRecovery:restore,save:async input=>(await api('/drafts',{method:'POST',body:JSON.stringify({action:'save',...input})})).draft,recovery:{put:storeCopy},onState:(state,info)=>{if(disposed||ticket!==generation)return;status.textContent=SAVE_LABELS[state]+(working.revision===working.publishedRevision?' · 已发布':' · 未发布');backup.textContent=info.backedUp?'':'本设备备份失败，请及时保存到云端或下载当前输入。';if(state==='conflict')void showConflict();}});
+    controller=createSaveController({load:()=>draft,initialRecovery:restore,save:async input=>(await api('/drafts',{method:'POST',body:JSON.stringify({action:'save',...input})})).draft,recovery:{put:storeCopy},onState:(state,info)=>{if(disposed||ticket!==generation)return;status.textContent=SAVE_LABELS[state]+(state==='saved'&&info.revision===(controller?.current().publishedRevision??working.publishedRevision)?' · 已发布':' · 未发布修改');backup.textContent=info.backedUp?'':'本设备备份失败，请及时保存到云端或下载当前输入。';if(state==='conflict')void showConflict();}});
     const save=button('保存草稿',()=>perform(async()=>{await controller!.saveNow();await loadList('drafts');}),'primary'),toggle=button('预览',()=>{preview.hidden=!preview.hidden;bodyLabel.hidden=!preview.hidden;toggle.textContent=preview.hidden?'预览':'继续编辑';toggle.setAttribute('aria-pressed',String(!preview.hidden));if(!preview.hidden)renderPreview();});toggle.setAttribute('aria-pressed','false');
     const publish=button('发布',()=>perform(async()=>{if(pending.length)throw Error('还有等待确认的配图，请先上传或放弃后再发布');const current=await controller!.saveNow();if(options.onPublish)await options.onPublish(current,publishing);else showError(Error('发布暂不可用，草稿仍可保存和导出'));}),'primary');publish.disabled=!options.publish;
     tools.append(save,toggle,button('下载 Markdown',markdownExport),button('导出完整草稿',()=>perform(async()=>{await flush();const data=await api('/drafts?id='+working.id+'&export=1');download(`${working.key}-draft.json`,JSON.stringify(data));})),publish);
@@ -118,7 +119,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
   }
   navigation.setAttribute('aria-label','内容分类');for(const [mode,label]of [['drafts','草稿'],['post','文章'],['talk','说说'],['jobs','发布记录']])navigation.append(button(label,()=>perform(()=>loadList(mode))));
   const newButtons=el('div','','writer-toolbar');newButtons.append(button('新文章',()=>perform(()=>start('post')),'primary'),button('新说说',()=>perform(()=>start('talk'))));sidebar.prepend(newButtons);
-  const storage=el('div','','writer-storage');storage.append(button('配图占用与清理',()=>perform(async()=>{await flush();const data=await api('/assets');pane.append(el('p',`已读取 ${data.images.length} 张私密配图。被草稿或任务引用的图片会保留。`));})));sidebar.append(storage);
+  const storage=el('div','','writer-storage');storage.append(button('配图占用与清理',()=>perform(async()=>{await flush();await showWriterStorage(pane,api);})));sidebar.append(storage);
   pane.append(el('h2',`你好，${options.user.nickname}`),el('p','选择一份草稿，或写下新的文章与说说。保存只会留在你的私密空间里。'));
   void perform(async()=>{tags=(await api('/content?mode=tags')).tags;await loadList('drafts');});
   const beforeUnload=(event:BeforeUnloadEvent)=>{if(controller?.isDirty()||pending.length){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',beforeUnload);

@@ -123,3 +123,15 @@ export async function reconcileJob(db:D1Database,id:string,repo:WriterRepository
   }
   return publicJob(row);
 }
+export async function closeUnconfirmedJob(db:D1Database,proof:WriterProof,id:string,repo:WriterRepository){
+  await assertWriterProof(db,proof);await readJob(db,proof.owner,id);const row=await jobRow(db,id);
+  if(row.state!=='ready'||row.code!=='push_unconfirmed'||!row.run_id)writerFail(409,'job_cannot_close','请先查询任务，只有已停止运行的待确认任务可结束');
+  const run=await repo.run(row.run_id);
+  if(!matchesWriterRun(run,id)||run.status!=='completed')writerFail(409,'job_still_running','运行尚未结束，请继续查询；不能中断已获许可的推送');
+  const commit=await repo.findCommit(id);
+  if(commit){await observePush(db,row,commit,await publishedBase(repo,row,commit));return readJob(db,proof.owner,id);}
+  // 作者明确解除互斥；这不是“没有推送”的证明。保留快照供后续核对和恢复。
+  const changed=await db.prepare(`UPDATE writer_jobs SET state='failed',code='owner_closed_unconfirmed',reserve_bytes=0,version=version+1,updated_at=? WHERE id=? AND owner=? AND version=? AND state='ready' AND code='push_unconfirmed' AND ${LIVE_ACCOUNT_SQL} RETURNING id`).bind(Date.now(),id,proof.owner,row.version,...proofValues(proof)).first();
+  if(!changed){await assertWriterProof(db,proof);writerFail(409,'stale_event','任务已变化，请重新查询');}
+  return readJob(db,proof.owner,id);
+}

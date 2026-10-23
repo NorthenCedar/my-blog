@@ -11,10 +11,11 @@ export function mountPublish(root:HTMLElement,api:typeof writerApi,options:{owne
   function stopTimer(){if(timer!==undefined)clearTimeout(timer);timer=undefined;}
   function schedule(){stopTimer();if(disposed||document.hidden||!root.isConnected||current&&terminals.has(current.state))return;timer=setTimeout(()=>void query(),[2000,4000,8000,15000][Math.min(pollIndex++,3)]);}
   async function show(job:WriterJob){
-    if(disposed)return;current=job;root.hidden=false;root.replaceChildren(el('h2','本次发布'),status,message,actions);status.textContent=job.code==='push_unconfirmed'?'推送结果待确认，请查询运行记录':JOB_LABELS[job.state]??'正在查询';actions.replaceChildren();
+    if(disposed)return;current=job;root.hidden=false;root.replaceChildren(el('h2','本次发布'),status,message,actions);status.textContent=job.code==='push_unconfirmed'?'推送结果待确认，请查询运行记录':job.code==='owner_closed_unconfirmed'?'已结束待确认任务，请核对仓库内容':JOB_LABELS[job.state]??'正在查询';actions.replaceChildren();
     message.textContent=job.state==='deployment_failed'?'内容提交仍在仓库中，网站可能继续显示上次成功版本。查看部署日志后重新查询即可，不必再次提交正文。':job.state==='ready'?'任务已获推送许可，正在确认实际结果。此时不能保证取消尚未完成的跨服务操作。':job.state==='dispatch_unknown'?'触发应答尚未确定；查询会寻找已有运行，不会重复提交正文。':'';
     if(job.runId){const link=el('a','查看运行日志');link.href=`https://github.com/NorthenCedar/personal/actions/runs/${job.runId}`;link.target='_blank';link.rel='noopener noreferrer';actions.append(link);}
     actions.append(button('重新查询',()=>query()));
+    if(job.state==='ready'&&job.code==='push_unconfirmed')actions.append(button('结束已停止的待确认任务',async()=>{if(!confirm('请先检查运行日志和仓库。结束只会解除发布占用，不代表本次未推送，也不会撤销仓库提交。确认继续？'))return;try{const result=await api('/publish',{method:'POST',body:JSON.stringify({action:'close_unconfirmed',id:job.id,confirm:true})});await show(result.job);}catch(error){message.textContent=errorText(error);}}));
     if(['queued','dispatch_unknown','validating'].includes(job.state))actions.append(button('取消发布',async()=>{try{const result=await api('/publish',{method:'POST',body:JSON.stringify({action:'cancel',id:job.id})});await show(result.job);}catch(error){message.textContent=errorText(error);}}));
     if(job.commit&&!seenCommits.has(job.commit)){await options.onPublished?.(job);seenCommits.add(job.commit);}
     schedule();
