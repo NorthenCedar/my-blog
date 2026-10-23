@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { parseDocument,isMap,isSeq,isAlias,visit,type YAMLMap } from 'yaml';
-import { TAGS } from '../../tag-registry';
-import { writerFail,utf8Length,validateTarget,validateWriterValue,type WriterValue,type WriterDraft,type WriterChange } from './model';
+import { TAGS } from '../../tag-registry.ts';
+import { writerFail,utf8Length,validateTarget,validateWriterValue,type WriterValue,type WriterDraft,type WriterChange } from './model.ts';
 const bad=(message='原文格式暂不支持安全编辑，请在本地处理')=>writerFail(400,'invalid_content',message);
 const conflict=()=>writerFail(409,'content_conflict','这篇内容已在其他地方修改，请重新导入并对照当前草稿');
 export const writerHash=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');

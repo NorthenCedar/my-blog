@@ -9,7 +9,9 @@ export type WriterJob = { id: string; draftId: string; revision: number; state: 
 export type WriterChange = { path: string; bytes: Uint8Array };
 export const WRITER_LIMITS = { body:128*1024, upload:320*1024, image:300*1024, images:64*1024*1024, total:96*1024*1024, drafts:100 } as const;
 export class WriterError extends Error {
-  constructor(public status: number, public code: string, message: string) { super(message); }
+  status:number;
+  code:string;
+  constructor(status: number, code: string, message: string) { super(message);this.status=status;this.code=code; }
 }
 export const writerFail = (status: number, code: string, message: string): never => { throw new WriterError(status,code,message); };
 export const utf8Length = (value: string) => new TextEncoder().encode(value).byteLength;
