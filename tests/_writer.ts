@@ -11,6 +11,7 @@ export async function writerFixture(options: { owner?: boolean; configured?: boo
   for (const name of ['0005_reply_targets.sql', '0006_reply_notices.sql', '0007_cloud_writer.sql']) {
     if (existsSync(`migrations/${name}`)) sqlite.exec(readFileSync(`migrations/${name}`, 'utf8'));
   }
+  if (existsSync('migrations/0007_cloud_writer.sql')) sqlite.exec(readFileSync('migrations/0007_cloud_writer.sql','utf8'));
   closers.push(() => sqlite.close());
   const owner = 'b'.repeat(32), token = 'a'.repeat(64);
   sqlite.prepare('INSERT INTO visitor_accounts(id,username,nickname,password_hash,recovery_hash,created_at) VALUES(?,?,?,?,?,?)')

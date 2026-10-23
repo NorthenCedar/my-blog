@@ -1,5 +1,5 @@
 import { AccountError } from './visitor-core';
-import { requireAccount, sessionToken, writeProof, type Account, type VisitorEnv } from './visitor-store';
+import { requireAccount, writeProof, type Account, type VisitorEnv } from './visitor-store';
 import { WriterError,writerFail } from '../../../src/lib/writer/model';
 
 export interface WriterEnv extends VisitorEnv {
