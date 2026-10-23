@@ -16,7 +16,6 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
   <div class="scene-bar">
     <a class="scene-back" href="/gallery/">← 相册</a>
     <span class="scene-name">{album.title}</span>
-    <button type="button" data-scene-touch hidden aria-pressed="false">自由拖动</button>
     <button type="button" data-scene-toggle hidden aria-pressed="false">查看全部</button>
   </div>
   <div class="scene-viewport" data-scene-viewport role="group" aria-label={`${album.title}，互动照片陈列`} aria-describedby="scene-help" tabindex="-1">
@@ -85,9 +84,8 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
   .scene-on .scene-actions { pointer-events: auto; }
   .scene-on .scene-viewport {
     position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden;
-    touch-action: pan-y pinch-zoom; user-select: none;
+    touch-action: pinch-zoom; user-select: none;
   }
-  .scene-on.scene-free .scene-viewport { touch-action: none; }
   .scene-on .scene-world {
     position: absolute; left: 50%; top: 50%; width: 0; height: 0;
     transform: translate3d(var(--scene-pan-x, 0px), var(--scene-pan-y, 0px), 0) scale(var(--scene-scale, 1));
@@ -128,7 +126,7 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
   :global(.album-scene.scene-on .wf .plate-body figcaption) { text-align: right; max-width: 100%; margin-top: var(--sp-2); padding-left: var(--scene-caption-indent); }
   :global(.album-scene.scene-on .wf .plate-body figure:focus-within) { z-index: 2; }
 
-  .scene-on[data-layout='slices'] .scene-viewport { perspective: var(--scene-perspective); }
+  .scene-on[data-layout='slices'] .scene-viewport { perspective: var(--scene-perspective); touch-action: pan-y pinch-zoom; }
   .scene-on[data-layout='slices'] .scene-world { top: calc(50% + var(--scene-slice-center-shift)); transform: none; transform-style: preserve-3d; }
   .scene-on[data-layout='slices'] .scene-title { top: var(--sp-5); left: 50%; transform: translateX(-50%); width: min(var(--scene-title-width), calc(100vw - var(--gutter) * 2)); }
   .scene-on[data-layout='slices'] .scene-title h1 { font-size: var(--fs-title); }

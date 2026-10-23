@@ -17,7 +17,6 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
   const toggle = get<HTMLButtonElement>('toggle');
   const prev = get<HTMLButtonElement>('prev');
   const next = get<HTMLButtonElement>('next');
-  const touch = get<HTMLButtonElement>('touch');
   const controls = get('controls');
   const status = get('status');
   const hint = get('help');
@@ -29,7 +28,6 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
   let focus = 0;
   let target = 0;
   let active = false;
-  let free = false;
   let raf = 0;
   let lastTime = 0;
   let velocity = { x: 0, y: 0 };
@@ -179,7 +177,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
       if (!started) { started = true; home(); }
       else paint();
     } else {
-      root.classList.remove('scene-on', 'scene-free');
+      root.classList.remove('scene-on');
       viewport.prepend(title);
       viewport.after(wall);
       viewport.tabIndex = -1;
@@ -190,13 +188,11 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
         links[i].removeAttribute('tabindex');
       }
     }
-    touch.hidden = !on || slices || !matchMedia('(pointer: coarse)').matches;
-    if (!on) { free = false; touch.setAttribute('aria-pressed', 'false'); touch.textContent = '自由拖动'; }
     toggle.textContent = on ? '查看全部' : '返回展览';
     toggle.setAttribute('aria-pressed', String(!on));
   }
 
-  hint.textContent = slices ? '滚轮或左右拖动浏览 · 点击照片放大' : '拖动探索 · 滚轮或 ＋ − 缩放 · 点击照片放大';
+  hint.textContent = slices ? '滚轮或左右拖动浏览 · 点击照片放大' : '四向拖动探索 · 滚轮或 ＋ − 缩放 · 点击照片放大';
   toggle.hidden = reduce.matches;
   if (!reduce.matches) setActive(true);
   document.addEventListener('keydown', (event) => {
@@ -208,13 +204,6 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
   });
   toggle.addEventListener('click', () => setActive(!active));
   get('home').addEventListener('click', home);
-  touch.addEventListener('click', () => {
-    free = !free;
-    root.classList.toggle('scene-free', free);
-    touch.setAttribute('aria-pressed', String(free));
-    touch.textContent = free ? '结束自由拖动' : '自由拖动';
-    hint.textContent = free ? '四向拖动探索 · 查看全部可正常翻阅' : (slices ? '左右滑动浏览 · 点击照片放大' : '左右滑动浏览 · 自由拖动可四向探索');
-  });
   prev.addEventListener('click', () => { if (slices) goto(target - 1); else { camera.x += 200; paint(); } });
   next.addEventListener('click', () => { if (slices) goto(target + 1); else { camera.x -= 200; paint(); } });
   if (!slices) {
@@ -233,16 +222,17 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
     const dy = event.clientY - drag.y;
     if (!drag.moved) {
       if (Math.hypot(dx, dy) < (drag.touch ? 9 : 5)) return;
-      if (drag.touch && !free && Math.abs(dy) > Math.abs(dx)) { drag = null; return; }
+      // 切片只沿横向序列浏览；散片全屏时单指可直接四向探索。
+      if (drag.touch && slices && Math.abs(dy) > Math.abs(dx)) { drag = null; return; }
       drag.moved = true;
       viewport.setPointerCapture(event.pointerId);
       viewport.classList.add('dragging');
     }
     const dt = Math.max(0.008, (event.timeStamp - drag.time) / 1000);
     velocity.x = Math.max(-2400, Math.min(2400, (event.clientX - drag.lastX) / dt));
-    velocity.y = drag.touch && !free ? 0 : Math.max(-2400, Math.min(2400, (event.clientY - drag.lastY) / dt));
+    velocity.y = slices ? 0 : Math.max(-2400, Math.min(2400, (event.clientY - drag.lastY) / dt));
     if (slices) focus = target = clampFocus(drag.focus - dx / Math.min(390, viewport.clientWidth * 0.65), figures.length);
-    else { camera.x = drag.camera.x + dx; camera.y = drag.camera.y + (drag.touch && !free ? 0 : dy); }
+    else { camera.x = drag.camera.x + dx; camera.y = drag.camera.y + dy; }
     drag.lastX = event.clientX; drag.lastY = event.clientY; drag.time = event.timeStamp;
     if (event.cancelable) event.preventDefault();
     paint();
@@ -265,7 +255,12 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
   }
   window.addEventListener('pointerup', release);
   window.addEventListener('pointercancel', release);
-  viewport.addEventListener('lostpointercapture', () => { drag = null; viewport.classList.remove('dragging'); });
+  viewport.addEventListener('lostpointercapture', (event) => {
+    // 照片的隐式捕获交接给画布时也会冒泡，只有画布自身失去当前指针才结束。
+    if (event.target !== viewport || !drag || event.pointerId !== drag.id) return;
+    drag = null;
+    viewport.classList.remove('dragging');
+  });
   viewport.addEventListener('click', (event) => {
     if (!active) return;
     if (suppressClick && event.detail !== 0) {

@@ -60,7 +60,7 @@ function setup(layout = 'scatter', reduced = false, count = 2) {
   const win = new Element();
   doc.parent = win;
   const root = new Element(); doc.append(root);
-  const names = ['viewport', 'world', 'toggle', 'prev', 'next', 'touch', 'controls', 'status', 'help', 'home', 'zoom-in', 'zoom-out'];
+  const names = ['viewport', 'world', 'toggle', 'prev', 'next', 'controls', 'status', 'help', 'home', 'zoom-in', 'zoom-out'];
   const elements = Object.fromEntries(names.map((name) => [name, new Element()]));
   const title = new Element();
   root.append(...Object.values(elements));
@@ -120,6 +120,75 @@ function setup(layout = 'scatter', reduced = false, count = 2) {
 }
 
 describe('真实相册控制器事件回归', () => {
+  it('散片默认接受单指上下拖动，松手沿纵向继续滑行', () => {
+    for (const dy of [-120, 120]) {
+      const s = setup();
+      s.emit(s.elements.viewport, 'pointerdown', { pointerType: 'touch', clientX: 200, clientY: 400, timeStamp: 0 });
+      const move = s.emit(s.elements.viewport, 'pointermove', { pointerType: 'touch', clientX: 200, clientY: 400 + dy, timeStamp: 100 });
+      expect(move.defaultPrevented).toBe(true);
+      expect(s.elements.world.values.get('--scene-pan-y')).toBe(`${dy}px`);
+      expect(s.elements.world.values.get('--scene-pan-x')).toBe('0px');
+      s.emit(s.elements.viewport, 'pointerup', { pointerType: 'touch', timeStamp: 110 });
+      s.frame();
+      expect(Number.parseFloat(s.elements.world.values.get('--scene-pan-y')!) * Math.sign(dy)).toBeGreaterThan(120);
+    }
+  });
+  it('散片单指横拖和斜拖保留两个方向的实际位移', () => {
+    for (const [dx, dy] of [[120, 0], [-120, -60], [60, 120]]) {
+      const s = setup();
+      s.emit(s.elements.viewport, 'pointerdown', { pointerType: 'touch', clientX: 200, clientY: 400 });
+      s.emit(s.elements.viewport, 'pointermove', { pointerType: 'touch', clientX: 200 + dx, clientY: 400 + dy, timeStamp: 50 });
+      expect(s.elements.world.values.get('--scene-pan-x')).toBe(`${dx}px`);
+      expect(s.elements.world.values.get('--scene-pan-y')).toBe(`${dy}px`);
+    }
+  });
+  it('系统取消单指拖动后停止惯性，遗留点击不打开照片', () => {
+    const s = setup(); let opens = 0;
+    s.links[0].addEventListener('click', () => { opens++; });
+    s.emit(s.elements.viewport, 'pointerdown', { pointerType: 'touch', clientX: 200, clientY: 400 });
+    s.emit(s.elements.viewport, 'pointermove', { pointerType: 'touch', clientX: 200, clientY: 280, timeStamp: 50 });
+    expect(s.elements.world.values.get('--scene-pan-y')).toBe('-120px');
+    s.emit(s.elements.viewport, 'pointercancel', { pointerType: 'touch', timeStamp: 60 });
+    s.emit(s.elements.viewport, 'pointermove', { pointerType: 'touch', clientX: 200, clientY: 150, timeStamp: 80 });
+    for (let i = 0; i < 10; i++) s.frame();
+    expect(s.elements.world.values.get('--scene-pan-y')).toBe('-120px');
+    expect(s.elements.viewport.classes.has('dragging')).toBe(false);
+    expect(s.pendingFrames()).toBe(0);
+    expect(s.emit(s.links[0], 'click').defaultPrevented).toBe(true);
+    expect(opens).toBe(0);
+  });
+  it('轻触照片不平移画布或吞掉灯箱点击', () => {
+    const s = setup(); let opens = 0;
+    s.links[0].addEventListener('click', () => { opens++; });
+    s.emit(s.links[0], 'pointerdown', { pointerType: 'touch', clientX: 200, clientY: 400 });
+    s.emit(s.links[0], 'pointermove', { pointerType: 'touch', clientX: 202, clientY: 402, timeStamp: 50 });
+    s.emit(s.links[0], 'pointerup', { pointerType: 'touch', timeStamp: 60 });
+    expect(s.emit(s.links[0], 'click').defaultPrevented).toBe(false);
+    expect(opens).toBe(1);
+    expect(s.elements.world.values.get('--scene-pan-y')).toBe('0px');
+  });
+  it('触屏从照片交接指针捕获给画布时，子元素的失去捕获事件不会中断拖动', () => {
+    const s = setup();
+    s.emit(s.links[0], 'pointerdown', { pointerType: 'touch', clientX: 200, clientY: 400 });
+    s.emit(s.links[0], 'pointermove', { pointerType: 'touch', clientX: 200, clientY: 385, timeStamp: 50 });
+    s.emit(s.links[0], 'lostpointercapture', { pointerType: 'touch', timeStamp: 60 });
+    s.emit(s.elements.viewport, 'pointermove', { pointerType: 'touch', clientX: 200, clientY: 280, timeStamp: 100 });
+    expect(s.elements.world.values.get('--scene-pan-y')).toBe('-120px');
+    expect(s.elements.viewport.classes.has('dragging')).toBe(true);
+    s.emit(s.elements.viewport, 'pointercancel', { pointerType: 'touch', timeStamp: 110 });
+    expect(s.elements.viewport.classes.has('dragging')).toBe(false);
+  });
+  it('切片仍只响应单指横拖，纵向手势交还浏览器', () => {
+    const s = setup('slices', false, 10);
+    const before = s.figures[0].values.get('--scene-x');
+    s.emit(s.elements.viewport, 'pointerdown', { pointerType: 'touch', clientX: 200, clientY: 400 });
+    expect(s.emit(s.elements.viewport, 'pointermove', { pointerType: 'touch', clientX: 200, clientY: 280, timeStamp: 50 }).defaultPrevented).toBe(false);
+    expect(s.figures[0].values.get('--scene-x')).toBe(before);
+    s.emit(s.elements.viewport, 'pointerup', { pointerType: 'touch', timeStamp: 60 });
+    s.emit(s.elements.viewport, 'pointerdown', { pointerType: 'touch', clientX: 200, clientY: 400 });
+    expect(s.emit(s.elements.viewport, 'pointermove', { pointerType: 'touch', clientX: 80, clientY: 400, timeStamp: 100 }).defaultPrevented).toBe(true);
+    expect(Number.parseFloat(s.figures[0].values.get('--scene-x')!)).toBeLessThan(0);
+  });
   it('键盘平移后打开关闭灯箱，程序化归还焦点保持相机位置', () => {
     const s = setup();
     s.emit(s.elements.viewport, 'keydown', { key: 'Tab' }); s.links[0].focus();
