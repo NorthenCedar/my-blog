@@ -30,7 +30,8 @@
     "postprocessing": "^6.39.5",
     "typegpu": "0.12.8",
     "unplugin-typegpu": "0.12.6",
-    "wgpu-matrix": "3.4.2"
+    "wgpu-matrix": "3.4.2",
+    "yaml": "2.9.1"
   },
   "overrides": {
     "http-cache-semantics": "4.3.0",

@@ -46,4 +46,6 @@ export const RUNTIME_DEPS_ALLOWED = [
   'typegpu',
   'unplugin-typegpu',
   'wgpu-matrix',
+  // 云端写作：只在 Functions / runner 保留式解析内容，不进入访客脚本。
+  'yaml',
 ].sort();
