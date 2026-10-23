@@ -1,3 +1,4 @@
+import { jsClosure } from './_writer-output';
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -45,6 +46,8 @@ function walk(dir: string, filter: (name: string) => boolean): string[] {
 }
 
 const htmlFiles = () => (hasDist ? walk(DIST, (n) => n.endsWith('.html')) : []);
+// /write/ 是经批准的原生编辑外壳：公开页面仍完整检查光标、装饰、导航及统计。
+const publicHtmlFiles = () => htmlFiles().filter(f=>f.replaceAll('\\','/')!=='dist/write/index.html');
 
 /** dist 下全部 CSS 拼成一个字符串（多处断言都要用；名前加 dist 以免和各用例里的局部 cssFiles 混淆） */
 const allDistCss = () =>
@@ -57,30 +60,6 @@ const allDistCss = () =>
  * 只读页面 HTML（或只跟一层）会漏代码 —— 预算少算、端点找不到、产物被当成孤儿。
  * 凡是查"页面里的 JS"的地方都走这里。
  */
-function jsClosure(pagePath: string): { code: string; files: string[] } {
-  const html = readFileSync(pagePath, 'utf8');
-  const inline = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
-  const files: string[] = [];
-  const seen = new Set<string>();
-  const load = (href: string) => {
-    const rel = href.replace(/^\//, '').replace(/^\.\//, '');
-    const f = join(DIST, rel.startsWith('_astro/') ? rel : join('_astro', rel));
-    if (seen.has(f) || !existsSync(f)) return;
-    seen.add(f);
-    files.push(f);
-    const code = readFileSync(f, 'utf8');
-    // 2026-09-30 扩展：原来只认 `import"...js"` / `from"...js"` 这一种写法。
-    // 首页 DNA 用了**动态 import**（three 只在真要画的时候才下载），
-    // 而 Vite 对动态 import 的输出是 import(`./three.xxx.js`) —— **反引号**，
-    // 老正则一个都匹配不到 ⇒ three 与 GLTFLoader 两个 chunk 会被误判成「没页面引用的孤儿」。
-    // 现在三种引号（" ' `）与静态/动态两种写法都覆盖。
-    for (const m of code.matchAll(/(?:import|from)\s*\(?\s*(["'`])([^"'`]+?\.js)\1/g)) load(m[2]);
-  };
-  for (const m of html.matchAll(/<script[^>]+src="(\/_astro\/[^"]+\.js)"/g)) load(m[1]);
-  const code = inline + '\n' + files.map((f) => readFileSync(f, 'utf8')).join('\n');
-  return { code, files };
-}
-
 /** 页面实际加载的 JS 代码文本（见 jsClosure 的说明） */
 const jsLoadedBy = (pagePath: string) => jsClosure(pagePath).code;
 
@@ -256,7 +235,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     //  ② 触摸设备（没有指针）与 prefers-reduced-motion 下必须 display:none；
     //  ③ `cursor:none` 只能由 JS 加类（脚本没跑时不能把光标藏掉却没有替代品）；
     //  ④ 脚本不许用 innerHTML —— 本站的硬约束。
-    const pages = htmlFiles();
+    const pages = publicHtmlFiles();
     expect(pages.length, '产物里没有 HTML 页面').toBeGreaterThan(0);
     const missing = pages.filter((f) => {
       const h = readFileSync(f, 'utf8');
@@ -331,7 +310,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     //   首页是 .paper-inf，内页外壳（chrome='page'）是 .page-inf —— 同一张素材、同一套参数。
     //   守的东西反而更严了：所有页面都该引到它（23 页里没有"漏网"的），
     //   而不是"只有 1 页引到"。
-    const pages = htmlFiles();
+    const pages = publicHtmlFiles();
     const missingInf = pages.filter((f) => {
       const html = readFileSync(f, 'utf8');
       const hrefs = [...html.matchAll(/href="(\/_astro\/[^"]+\.css)"/g)].map((m) => m[1]);
@@ -424,7 +403,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(flat, '全局光标接管必须优先于具体控件规则（白点会与系统光标并存）').toContain('html.cursor-none,html.cursor-none *{cursor:none!important}');
     // ⚠️ 注意别写成 `!f.endsWith('index.html')` —— 那会把**所有**页面滤掉，
     //    断言在空数组上永远通过（第一版就是这么空转的）。只排 404，并要求页面数不为零。
-    const pages = htmlFiles().filter((f) => !f.endsWith('404.html'));
+    const pages = publicHtmlFiles().filter((f) => !f.endsWith('404.html'));
     expect(pages.length, '页面清单为空，断言会空转').toBeGreaterThan(10);
     const noDot = pages.filter((f) => !readFileSync(f, 'utf8').includes('cr-dot'));
     expect(noDot, `这些页面没有跟手光标的节点：${noDot.slice(0, 5).join(', ')}`).toEqual([]);
@@ -461,7 +440,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     //  ② 两套外壳（Brandline 深色带 / Topbar 浅色顶栏）渲染的是同一份清单，逐页都在；
     //  ③ 无 JS 的 checkbox/label 与 checked 样式仍在；JS 可增强键盘操作，内联预算保持4096。
     //  ④ 新增的四个页面确实产出了。
-    const pages = htmlFiles().filter((f) => !f.endsWith('404.html'));
+    const pages = publicHtmlFiles().filter((f) => !f.endsWith('404.html'));
     // 2026-09-26 修正：首页**也**要有导航。第一版按"console 外壳没有导航"的旧定案没加，
     // 站主打开首页（最自然的入口）就以为整件事没生效（"我手机电脑都没变化啊"）⇒ 现在首页
     // 的 HUD 里也有横排导航 + 同一个抽屉组件，所以这条不再排除首页。
@@ -644,7 +623,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     //   `data-stats` 是 SiteStats 容器**自己的**标记（`<div class="stats" data-stats …>`），
     //   它表达的正是这条断言要问的那件事。意图（内页有 / 首页没有）一个字没改。
     const HOME = `${DIST}/index.html`; // 只排除主页这一个（内页也各有 index.html，别误伤）
-    const pages = htmlFiles().filter((f) => !f.endsWith('404.html') && f.replace(/\\/g, '/') !== HOME);
+    const pages = publicHtmlFiles().filter((f) => !f.endsWith('404.html') && f.replace(/\\/g, '/') !== HOME);
     const missing = pages.filter((f) => !readFileSync(f, 'utf8').includes('data-stats'));
     expect(missing, `这些页面没有页脚统计：${missing.slice(0, 6).join(', ')}`).toEqual([]);
     const home = readFileSync(join(DIST, 'index.html'), 'utf8');
@@ -1200,7 +1179,7 @@ describe.skipIf(!hasDist)('首页：宽视口的接缝 / ∞ 淡入淡出 / 揭�
   //   用带 `{` 的正则而不是 indexOf：`.dusk[…]::before{` 也含 `.dusk[`，会被 indexOf 误取。
   const decls = (text: string, sel: string) => {
     const re = new RegExp(`${sel.replace(/\./g, '\\.')}\\[[^\\]]*\\]\\{([^}]*)\\}`, 'g');
-    return [...text.matchAll(re)].map((m) => m[1]).at(-1) ?? '';
+    return [...text.matchAll(re)].map((m) => m[1]).join(';');
   };
 
   it('① .dusk 必须和 .band / .paper-wrap 一样逃出 .shell（否则宽视口下晨昏带被框窄、上下硬切）', () => {
@@ -1549,3 +1528,4 @@ describe.skipIf(hasDist)('构建产物（未构建）', () => {
     expect(hasDist).toBe(false);
   });
 });
+

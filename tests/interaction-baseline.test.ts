@@ -258,7 +258,10 @@ describe.skipIf(!hasDist)('交互基线 · 产物里的 hover 与过渡', () => 
        ⇒ 断言必须查「`:root` 里有定义」+「规则里引用了」两件事。
        ⚠ 判值要接受**两种写法**：`260ms`（源码 tokens.css）与 `.26s`（构建期压缩）
          —— 产物里实测是 `--dur-hover:.26s`。只认一种会误报。 */
-    const root = css.match(/:root\{([^}]*)\}/)?.[1] ?? '';
+    // Vite 将与独立写作外壳共用的 token 拆为另一张样式表；核对页面实际加载的全部样式。
+    const html=readFileSync(join(DIST,'about/index.html'),'utf8');
+    const linked=[...html.matchAll(/href="(\/_astro\/[^\"]+\.css)"/g)].map(m=>readFileSync(join(DIST,m[1].slice(1)),'utf8')).join('\n');
+    const root = [...linked.matchAll(/:root\{([^}]*)\}/g)].map(m=>m[1]).join(';');
     expect(root, '产物 :root 里没有 --dur-hover（token 丢了）')
       .toMatch(/--dur-hover:\s*(?:260ms|\.26s)/);
     expect(root, '产物 :root 里没有 --ease-interact').toMatch(/--ease-interact:\s*cubic-bezier/);

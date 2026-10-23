@@ -1,4 +1,4 @@
-import { expect,it } from 'vitest';
+import { expect,it,vi } from 'vitest';
 import { readFileSync,writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -9,6 +9,8 @@ import { verifyPrepared } from '../scripts/writer/validate.mjs';
 const value={fields:{title:'标题',date:'2026-10-23',summary:'简介',tags:['随笔']},body:'手机文章\n',assets:[]};
 const snapshot={id:'a'.repeat(32),kind:'post',key:'phone-a',revision:1,base:null,publishedRevision:0,value};
 const jobId='b'.repeat(32);
+// 真实 Git 子进程在 Windows 与全量并发校验中会超过默认 5 秒；没有网络操作。
+vi.setConfig({testTimeout:30000});
 it('真正准备候选并普通推送，重复执行同一任务不产生第二次提交',async()=>{
   const s=gitFixture(),prepared=prepare({repoDir:s.cloud,snapshot,assets:new Map(),jobId});
   expect(prepared.paths).toEqual(['content/posts/phone-a/index.md']);

@@ -1,0 +1,25 @@
+---
+import '../styles/fonts.css';
+import '../styles/tokens.css';
+import '../styles/writer.css';
+import { getSite } from '../lib/site';
+const site=await getSite();
+---
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content={`${site.name}的站主云端写作台`} />
+    <link rel="canonical" href="https://northcedar.top/write/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>云端写作台 — {site.name}</title>
+    <script is:inline>try{const t=localStorage.getItem('theme');document.documentElement.classList.toggle('dark',t==='dark'||t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches)}catch{document.documentElement.classList.toggle('dark',matchMedia('(prefers-color-scheme: dark)').matches)}</script>
+  </head>
+  <body data-writer-shell>
+    <a class="writer-skip" href="#writer-main">跳到编辑区</a>
+    <header class="writer-header"><a class="writer-brand" href="/">{site.wordmark} <span>{site.name}</span></a><nav aria-label="写作台导航"><a href="/account/" target="_blank" rel="noopener">账户</a><button type="button" data-writer-theme>切换明暗</button></nav></header>
+    <main id="writer-main" tabindex="-1"><slot /></main>
+  </body>
+</html>

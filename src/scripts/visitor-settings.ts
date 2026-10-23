@@ -23,6 +23,7 @@ function show(initial: Visitor | null) {
   const head = node('div', 'visitor-account-header'), avatarImage = portrait(user.avatarUrl, user.nickname), nicknameText = node('strong', '', user.nickname);
   const identity = node('div'); identity.append(nicknameText, node('p', 'visitor-hint', `身份标识 · ${user.id.slice(0, 8)}${user.isOwner ? ' · 站主' : ''}`));
   head.append(avatarImage, identity); root.append(head);
+  if(user.isOwner){const writer=node('a','visitor-link','打开云端写作台');writer.href='/write/';root.append(writer);}
   const section = node('section', 'visitor-account-section'); section.append(node('h2', '', '你的公开名片'));
   const form = node('form', 'visitor-form');
   const username = field(form, 'username', '登录账号（仅自己可见）'); username.value = user.username ?? ''; username.readOnly = true; username.autocomplete = 'username';

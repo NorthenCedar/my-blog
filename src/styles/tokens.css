@@ -240,6 +240,13 @@
   /* 版心 */
   --wrap: 82rem;
   --measure: 34em;
+  /* 云端写作台：文字编辑的独立尺寸，不引入站点装置。 */
+  --writer-sidebar: 15rem;
+  --writer-editor-height: 28rem;
+  --writer-editor-mobile-height: 22rem;
+  --writer-compare-height: 14rem;
+  --writer-image-card: 13rem;
+  --writer-image-height: 9rem;
   --gutter: clamp(1rem, 4vw, 3rem);
   --band-h: min(74vh, 42rem);
 

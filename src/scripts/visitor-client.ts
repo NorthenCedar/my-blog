@@ -19,6 +19,8 @@ export async function accountRequest(action: string, data: Record<string, unknow
   const response = await fetch('/api/account', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-NC-Request': '1' }, body: JSON.stringify({ action, ...data }) });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || '账户操作失败，请稍后重试');
+  // 跨标签页主动退出/注销/切换账户时，写作台清理原账户私密副本。
+  try{if(['login','register','logout','delete','recover'].includes(action))localStorage.setItem('nc-account-change',JSON.stringify([action,result.user?.id,Date.now()]));}catch{}
   return result as { user?: Visitor; recoveryCode?: string; ok?: boolean };
 }
 export function setViewer(user: Visitor | null) {

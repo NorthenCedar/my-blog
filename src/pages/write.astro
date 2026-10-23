@@ -1,0 +1,9 @@
+---
+import WriterShell from '../layouts/WriterShell.astro';
+---
+<WriterShell>
+  <div class="writer-heading"><div><p class="writer-kicker">PRIVATE STUDIO / 私密写作</p><h1>云端写作台</h1></div><p>想法先留在这里，准备好了再发布。</p></div>
+  <div data-writer-root><p role="status">正在确认站主身份…</p></div>
+  <noscript><p>写作台需要 JavaScript。草稿保存在私密存储中，不会随此页面公开。</p></noscript>
+</WriterShell>
+<script>import { mountWriter } from '../scripts/writer/index';mountWriter(document.querySelector('[data-writer-root]')!);</script>
