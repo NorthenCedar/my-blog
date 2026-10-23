@@ -90,7 +90,7 @@ export type WriterChange = { path: string; bytes: Uint8Array };
 
 领域错误统一带数字 HTTP status 和稳定 code，页面映射成中文；错误消息不携带草稿全文、Cookie 或 token。`kind/key/base` 由创建/导入接口确立，普通保存不接受它们的覆盖。
 
-## 任务 1：站主边界、共享模型与真实测试夹具
+## Task 1：站主边界、共享模型与真实测试夹具
 
 **文件：** 新增 model.ts、writer-auth.ts、session.ts、tests/_writer.ts、tests/writer-auth.test.ts；读取现有 visitor-store.ts、public-write.ts、tests/_visitor-db.ts。不要改现有 admin 鉴权。
 
@@ -122,7 +122,7 @@ if (user.id !== env.OWNER_USER_ID) fail(403, '此处仅供站主使用');
 - [ ] 覆盖缺 owner、未登录、过期会话、重复 Cookie、Origin:null、跨站、预览域名；生产环境仅 https://northcedar.top，本地仅显式开关及 loopback。
 - [ ] 单测绿后完整 verify，按明确文件清单提交“建立云端写作台站主权限边界”。
 
-## 任务 2：D1 草稿、版本保存、幂等与额度
+## Task 2：D1 草稿、版本保存、幂等与额度
 
 **文件：** 新增 0007_cloud_writer.sql、writer-drafts.ts、drafts.ts、tests/writer-drafts.test.ts；扩展 _writer.ts 在内存库应用迁移两次验证可重跑。
 
@@ -145,7 +145,7 @@ expect((await readDraft(db, owner, id)).value.body).toBe('第一次保存');
 - [ ] 单份草稿记录按 UTF-8 字节计算额度；写入正文、基线均有边界。总额只允许增量不超过剩余额度，额度已满时仍允许不增长的保存、读取和导出。
 - [ ] 测试并发 CAS、请求 ID 重用不同内容、UTF-8 中文字节、100 草稿上限、事务中断回滚、删除级联、鉴权后撤销会话。绿后 verify 并提交“保存私密草稿并防止并发覆盖”。
 
-## 任务 3：图片接收、私有读取、去重和引用清理
+## Task 3：图片接收、私有读取、去重和引用清理
 
 **文件：** 新增 writer-assets.ts、assets.ts、tests/writer-assets.test.ts。
 
@@ -167,7 +167,7 @@ expect(sqlite.prepare('SELECT count(*) AS n FROM writer_assets').get()?.n).toBe(
 - [ ] 使用任务 2 的事务机制使去重和额度占用一致；引用检查覆盖草稿与不可变 job，删除被引用图片返回 409，不自动删除其他图片。
 - [ ] 测试并发上传临界额度、伪造文件类型、鉴权后改密、无 Cookie GET、清理后 BLOB 消失与额度恢复。绿后 verify 并提交“接入受限私有配图存储”。
 
-## 任务 4：保留式内容转换和发布路径限制
+## Task 4：保留式内容转换和发布路径限制
 
 **文件：** 新增 content.ts、tests/writer-content.test.ts；修改 package.json、package-lock.json、tests/_deps.ts。配置改动前备份原文件到 work，依赖安装在计划批准后才执行。
 
@@ -191,7 +191,7 @@ expect(readTalks(text).find(t => t.key === 'talk-old')?.value.body).toBe('这次
 - [ ] 图片名称由摘要生成。拒绝路径穿越、反斜线、NUL、URL 编码绕过、符号链接、未知摘要、任意 src/ 文件及删除操作；仅允许目标文章目录或 talks.md 加本次 talks 图片。
 - [ ] 覆盖同篇冲突、同说说冲突、CRLF 不变、YAML 冒号/引号、别名炸弹、代码片段不改、重复 slug 和二进制摘要不符。绿后 verify 并提交“安全转换云端内容且保留旧字段”。
 
-## 任务 5：固定仓库读取和内容导入
+## Task 5：固定仓库读取和内容导入
 
 **文件：** 新增 writer-repository.ts、content.ts 路由、tests/writer-repository.test.ts；连接 drafts.ts 的导入动作。
 
@@ -214,7 +214,7 @@ await expect(repo.readPost('main', '../../.github')).rejects.toMatchObject({ sta
 - [ ] 新草稿 base 为 null，导入的基线仅由服务端仓库读取建立，保存不能伪造。私有仓库配置缺失时新建本地云草稿仍可保存，导入和发布显示不可用。
 - [ ] GET 入口鉴权后读取，返回的错误不能带 GitHub 原始响应中的凭据或源码；正文、图片和标签只返回编辑所需内容。绿后 verify 并提交“读取确定版本的已发布内容”。
 
-## 任务 6：不可变发布快照、任务互斥、租约和撤销
+## Task 6：不可变发布快照、任务互斥、租约和撤销
 
 **文件：** 新增 writer-jobs.ts、publish.ts、runner.ts、tests/writer-jobs.test.ts。
 
@@ -239,7 +239,7 @@ expect(current.base?.commit).toBe(sha);
 - [ ] 状态只能沿规定路径转换；发布许可重查账户和 auth_version。注销级联清理数据，旧回调不能重建。超时任务查询实际 run 再判断失败，不仅凭本地计时清理。
 - [ ] 推送后的草稿只推进 base 与 publishedRevision，不覆盖新 value；旧事件幂等，冲突不丢输入。测试改密/注销/取消、错租约、旧 run 回调、素材清理受快照保护。绿后 verify 并提交“冻结发布快照并控制任务状态”。
 
-## 任务 7：临时 Git 候选、完整校验和普通推送
+## Task 7：临时 Git 候选、完整校验和普通推送
 
 **文件：** 新增 scripts/writer/prepare.mjs、publish.mjs、tests/writer-publish.test.ts、tests/_writer-git.ts。
 
@@ -267,7 +267,7 @@ expect(s.localPush().status).toBe(0);
 - [ ] Git 提交包含 `Writer-Job: <jobId>`，普通 push。网络结果不确定时 fetch 后核对提交是否在 main 祖先链，已存在则回传成功；不能创建重复提交。Git token 经临时进程环境配置传入，只在 push 步骤可读，不写 remote URL。
 - [ ] 覆盖 UTF-8/二进制、源码越界、真实删除拒绝、修改期间快照变更、空变更幂等、拒绝强推与可疑 Git 参数。绿后 verify 并提交“校验后以普通 Git 推送发布”。
 
-## 任务 8：浏览器保存调度、恢复、预览与登录状态
+## Task 8：浏览器保存调度、恢复、预览与登录状态
 
 **文件：** 新增 api.ts、save.ts、recovery.ts、preview.ts、tests/writer-client.test.ts。
 
@@ -293,7 +293,7 @@ expect(states.at(-1)).toBe('saved');
 - [ ] IndexedDB 被拒绝或配额满时显示本设备备份失败，提供即时复制/下载。注销和账户切换清理恢复副本、DOM 和 Object URL，不让新账户读上个账户内容。
 - [ ] 预览建立元素及 textContent，不注入原始 HTML；链接限制协议，图片使用批准的受控 resolver。覆盖 javascript URL、事件属性、嵌套代码块和脚本；绿后 verify 并提交“提供可靠的浏览器草稿恢复”。
 
-## 任务 9：手机图片选择、压缩确认和独立编辑界面
+## Task 9：手机图片选择、压缩确认和独立编辑界面
 
 **文件：** 新增 WriterShell.astro、write.astro、writer.css、images.ts、editor.ts、index.ts、tests/writer-output.test.ts；修改 astro.config.mjs 的 sitemap filter、必要的 writer token 和账户页站主入口。
 
@@ -314,7 +314,7 @@ expect(jsClosure(homePath).files).not.toContain(writerEntry);
 - [ ] 配图排序提供触摸拖动和上移/下移按钮；增删引用不擅自删 D1 图片。新图插入受控 Markdown 引用，旧图片和视频字段保留。
 - [ ] 运行浏览器 320/390/768/1280、亮暗主题、文件选择/粘贴和旋转照片用例；绿后 verify 并提交“加入适配手机的云端编辑界面”。
 
-## 任务 10：工作流连接与可恢复部署状态
+## Task 10：工作流连接与可恢复部署状态
 
 **文件：** 新增 cloud-writer.yml、src/scripts/writer/publish.ts、tests/writer-workflow.test.ts；连接 repository.ts、jobs.ts、publish.ts、runner.ts。
 
@@ -335,7 +335,7 @@ expect((await readJob(db, owner, pushed.id)).state).toBe('deployment_failed');
 - [ ] 工作流不对内容 push 再自动触发同一写作任务，避免递归。部署检查按准确 commit 和已核实的 Cloudflare App 身份匹配，不能拿其他检查的 success 当部署成功。
 - [ ] 轮询仅在页面可见时进行，间隔 2/4/8/15 秒，恢复页面时即时查询。提供日志链接与重新查询，不为刷新状态重复提交正文。绿后 verify 并提交“连接云端发布工作流与部署反馈”。
 
-## 任务 11：完整本地集成、导出清理与故障演练
+## Task 11：完整本地集成、导出清理与故障演练
 
 **文件：** 新增 scripts/verify-cloud-writer.py、tests/writer-integration.test.ts；完善 drafts/assets UI 的导出和清理。
 
@@ -353,7 +353,7 @@ npx wrangler pages functions build --compatibility-date 2026-09-01 --compatibili
 
 检查 clean install 与 Node 版本，不把本地测试冒充云端链路验证。提交“覆盖云端写作的完整本地交互”。
 
-## 任务 12：手册、凭据清单和生产验收
+## Task 12：手册、凭据清单和生产验收
 
 **文件：** 修改 docs/writing-guide.md、docs/rhinelab-spec.md 工程记录、content/pages/log.md；新增 docs/cloud-writer-setup.md。配置文件修改前备份，文档不写任何真实密钥。
 
