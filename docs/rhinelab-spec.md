@@ -11069,3 +11069,5 @@ Chrome 扩展读取返回 Debugger unattached，内置浏览器读取超时；�
 
 用户已完成两个平台四处 Secret 设置，只读核对名称齐全，尚不代表有效值及完整发布均已验证。工作流配置修改前备份于 D:/router/work/cloud-writer-checks-20261023/cloud-writer-before.yml。本次无数据库迁移、不扩长期令牌权限、不新增计费服务；完整校验和正式部署结果另行记录。
 最终完整 npm run verify 退出 0：76 个测试文件、1109 通过、1 保留跳过；日志 D:/router/work/cloud-writer-checks-20261023/verify-final.log。独立只读审查无 Critical/Important/Minor。另以真实 Node 子进程重查四阶段，调用仅 claim 与部署回传，真实裸 Git main 保持一条提交且工作区干净。生产配置探针、正式部署与站主选择的首次真实内容验收仍需分别取得实际证据。
+
+上线后的只读 diagnostic 首次失败，日志仅有 runner_request_failed，不能据此断定 Secret 值有误。补充非 JSON 错误的 HTTP 状态码（不打印远端正文），并为运行器请求添加明确的本站服务 User-Agent；单次 503 反馈有真实 Node 回归，错误只请求一次。正式核验结果保留待核对，不把本地测试当生产成功。

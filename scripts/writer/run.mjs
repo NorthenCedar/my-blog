@@ -15,8 +15,8 @@ function context(){
 function saveState(ctx,state){if(lstatSync(ctx.record,{throwIfNoEntry:false})?.isSymbolicLink())writerFail(400,'invalid_path','任务文件不安全');writeFileSync(ctx.record,JSON.stringify(state),{mode:0o600});}
 async function call(ctx,action,data={},binary=false){
   const secret=process.env.WRITER_RUNNER_SECRET??'';if(Buffer.byteLength(secret)<32)writerFail(503,'runner_unavailable','运行凭据未配置');
-  const response=await fetch(endpoint,{method:'POST',redirect:'error',signal:AbortSignal.timeout(8000),headers:{Authorization:'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify({action,jobId:ctx.jobId,runId:ctx.runId,...data})});
-  if(!response.ok){const result=await response.json().catch(()=>({}));writerFail(response.status,/^[a-z0-9_]{1,80}$/.test(result.code??'')?result.code:'runner_request_failed','运行服务未确认本次操作');}
+  const response=await fetch(endpoint,{method:'POST',redirect:'error',signal:AbortSignal.timeout(8000),headers:{Authorization:'Bearer '+secret,'Content-Type':'application/json','User-Agent':'northcedar-cloud-writer-runner'},body:JSON.stringify({action,jobId:ctx.jobId,runId:ctx.runId,...data})});
+  if(!response.ok){const result=await response.json().catch(()=>({}));writerFail(response.status,/^[a-z0-9_]{1,80}$/.test(result.code??'')?result.code:'runner_http_'+response.status,'运行服务未确认本次操作');}
   return binary?new Uint8Array(await response.arrayBuffer()):response.json();
 }
 async function assetsFor(ctx,snapshot,lease){
