@@ -11,6 +11,10 @@ on:
         description: 只核验配置，不创建草稿或发布内容（jobId 填 32 个 0）
         type: boolean
         default: false
+      verifySource:
+        description: 配置核验时额外运行已提交源码完整校验，不读取私密草稿、不发布
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -68,7 +72,7 @@ jobs:
   probe:
     if: github.repository == 'NorthenCedar/personal' && github.ref == 'refs/heads/main' && inputs.diagnostic && inputs.jobId == '00000000000000000000000000000000'
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 8
     permissions:
       contents: read
       checks: read
@@ -89,3 +93,6 @@ jobs:
           WRITER_RUN_ID: ${{ github.run_id }}
           WRITER_RUNNER_SECRET: ${{ secrets.WRITER_RUNNER_SECRET }}
           GITHUB_TOKEN: ${{ github.token }}
+      - name: 只读完整校验已提交源码
+        if: ${{ inputs.verifySource }}
+        run: npm ci && npm run verify

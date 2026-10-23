@@ -69,7 +69,7 @@ it('站主明确结束已停止运行的待确认任务后解除互斥，旧回�
 });
 it('工作流只手动接收任务 ID，固定主分支及完整 Action SHA，验证阶段无发布凭据',()=>{
   const workflow=parse(readFileSync('.github/workflows/cloud-writer.yml','utf8'));
-  expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch']);expect(Object.keys(workflow.on.workflow_dispatch.inputs)).toEqual(['jobId','diagnostic']);
+  expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch']);expect(Object.keys(workflow.on.workflow_dispatch.inputs)).toEqual(['jobId','diagnostic','verifySource']);
   expect(workflow.permissions).toEqual({contents:'read'});expect(workflow.jobs.publish['timeout-minutes']).toBe(10);
   expect(workflow.jobs.publish.permissions).toEqual({contents:'read',checks:'read'});
   const steps=workflow.jobs.publish.steps;expect(steps.filter((s:any)=>s.uses).every((s:any)=>/@[a-f0-9]{40}$/.test(s.uses))).toBe(true);
@@ -81,6 +81,9 @@ it('工作流只手动接收任务 ID，固定主分支及完整 Action SHA，�
   const deployment=steps.find((s:any)=>s.run==='node scripts/writer/run.mjs deployment');expect(deployment.env.GITHUB_TOKEN).toBe('${{ github.token }}');expect(deployment.env.WRITER_PUBLISH_TOKEN).toBeUndefined();
   expect(steps.indexOf(deployment)).toBeGreaterThan(steps.findIndex((s:any)=>s.env?.WRITER_PUBLISH_TOKEN));
   expect(workflow.jobs.probe.steps.some((s:any)=>s.env?.WRITER_PUBLISH_TOKEN)).toBe(false);
+  const sourceCheck=workflow.jobs.probe.steps.find((s:any)=>s.name==='只读完整校验已提交源码');
+  expect(sourceCheck).toMatchObject({if:'${{ inputs.verifySource }}',run:'npm ci && npm run verify'});
+  expect(sourceCheck.env).toBeUndefined();expect(workflow.on.workflow_dispatch.inputs.verifySource.default).toBe(false);
 });
 it('待确认不算上线，成功回执幂等，旧租约、其他提交与未推送回执均拒绝',async()=>{
   const s=await setup(),{lease}=await claimJob(s.db,s.job.id,'1001');
