@@ -4,6 +4,17 @@ import { writerProof } from '../functions/api/_lib/writer-auth';
 import { createWriterRepository,importPublished } from '../functions/api/_lib/writer-repository';
 const commit='1'.repeat(40),sha='2'.repeat(40),text='---\ntitle: 标题\ndate: 2026-10-23\nsummary: 简介\ntags: [随笔]\ndraft: false\n---\n正文\n';
 const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
+it('Cloudflare 不支持 redirect:error，使用 manual 并拒绝重定向且不转发令牌',async()=>{
+  let calls=0;
+  const repo=createWriterRepository('私密测试凭据',async(_url,init)=>{
+    calls++;if(init?.redirect!=='manual')throw new TypeError('Invalid redirect value, must be one of follow or manual');
+    return json({object:{sha:commit,type:'commit'}});
+  });
+  expect(await repo.head()).toBe(commit);expect(calls).toBe(1);
+  calls=0;
+  const redirected=createWriterRepository('私密测试凭据',async(_url,init)=>{calls++;expect(init?.redirect).toBe('manual');return new Response(null,{status:302,headers:{Location:'https://unrelated.example/credential-trap'}});});
+  await expect(redirected.head()).rejects.toMatchObject({code:'repository_http_302'});expect(calls).toBe(1);
+});
 it('导入固定提交的内容，服务端基线和正文真实落库，不接受路径或 ref 注入',async()=>{
   const s=await writerFixture(),seen:string[]=[];
   const transport:typeof fetch=async(url,init)=>{seen.push(String(url));expect(init?.headers).toMatchObject({Authorization:'Bearer 私密测试凭据'});return String(url).endsWith('/git/ref/heads/main')?json({object:{sha:commit,type:'commit'}}):json({type:'file',sha,encoding:'base64',size:Buffer.byteLength(text),content:Buffer.from(text).toString('base64')});};

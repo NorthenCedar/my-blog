@@ -11073,3 +11073,5 @@ Chrome 扩展读取返回 Debugger unattached，内置浏览器读取超时；�
 上线后的只读 diagnostic 首次失败，日志仅有 runner_request_failed，不能据此断定 Secret 值有误。补充非 JSON 错误的 HTTP 状态码（不打印远端正文），并为运行器请求添加明确的本站服务 User-Agent；单次 503 反馈有真实 Node 回归，错误只请求一次。正式核验结果保留待核对，不把本地测试当生产成功。
 
 进一步把受保护只读 probe 的依赖错误与外层网关 502 区分：专用认证通过后，诊断失败返回 424，保留安全的应用错误码及原状态；未认证仍为 401，固定运行身份核对不省略。仓库 API 非成功状态保留 repository_http_<status>，只报告数字、不记录上游正文。真实生产首次与第二次 diagnostic 均未成功，第二次明确为 runner_http_502；尚未证明原因，也未重复内容发布。上游 401 单次、无凭据零上游请求的 Node/D1 回归先 RED 后 GREEN。
+
+第三次真实受保护 probe 返回 repository_error，命令开始到失败约 0.415 秒；已排除等待超时和明确 GitHub HTTP 拒绝。Cloudflare 官方 workerd 源码 Request 构造器明确拒绝 redirect:error（src/workerd/api/http.c++），原服务器仓库适配器恰使用该模式；Node 与测试替身支持/忽略它掩盖了此差异。修为 manual，由已有非 2xx 分支拒绝所有 3xx，不跟随重定向、不转发凭据。按平台契约拒绝 error 的回归先复现同一 repository_error，再加入 302 只请求一次的保护；不运行已被拒绝的本地 workerd、不换环境绕过权限。运行器 Node 自身仍可使用标准 error 模式；只改 Pages 服务器适配器。来源 https://github.com/cloudflare/workerd/blob/main/src/workerd/api/http.c%2B%2B 。

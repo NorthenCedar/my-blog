@@ -15,7 +15,8 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
     for(let attempt=0;attempt<3;attempt++){
       const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
       try{
-        const response=await fetchImpl(root+path,{method:body===undefined?'GET':'POST',redirect:'error',signal:controller.signal,headers:{Authorization:`Bearer ${token}`,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'northcedar-cloud-writer',...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});
+        // workerd 只实现 follow/manual；manual 将 3xx 留给下方失败检查，不外传凭据。
+        const response=await fetchImpl(root+path,{method:body===undefined?'GET':'POST',redirect:'manual',signal:controller.signal,headers:{Authorization:`Bearer ${token}`,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'northcedar-cloud-writer',...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});
         if(body===undefined&&(response.status===429||response.status>=500)&&attempt<2){await response.body?.cancel();continue;}
         if(missing&&response.status===404){await response.body?.cancel();return null;}
         if(!response.ok){await response.body?.cancel();writerFail(502,'repository_http_'+response.status,'仓库服务暂时不可用，请检查配置或稍后重试');}
