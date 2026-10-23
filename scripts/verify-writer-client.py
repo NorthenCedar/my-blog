@@ -24,6 +24,7 @@ images = {hashlib.sha256(image_bytes).hexdigest(): dict(size=len(image_bytes),wi
 lock = threading.RLock()
 results = {}
 expire = False
+block_saves = False
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw): super().__init__(*a, directory=str(ROOT / 'dist'), **kw)
@@ -64,6 +65,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not route.path.endswith('/drafts'): return self.reply(dict(error='夹具未定义此接口'), 404)
             action = body.get('action')
             if action == 'save':
+                if block_saves: return self.reply(dict(error='测试暂停保存',code='temporary_unavailable'),503)
                 d = drafts[body['id']]
                 if d['revision'] != body['expectedRevision']: return self.reply(dict(error='云端已有更新', code='version_conflict'), 409)
                 d['revision'] += 1; d['value'] = body['value']; return self.reply(dict(draft=d))
@@ -122,6 +124,7 @@ with TemporaryDirectory(prefix='nc-writer-client-chrome-') as profile:
             click('草稿'); wait('document.querySelector(".writer-list button")'); js('document.querySelector(".writer-list button").click()'); wait('document.querySelector(".writer-body")')
         cdp('Network.enable'); cdp('Page.enable')
         cdp('Page.addScriptToEvaluateOnNewDocument', dict(source='window.__writerErrors=[];addEventListener("error",e=>__writerErrors.push(e.message));addEventListener("unhandledrejection",e=>__writerErrors.push(String(e.reason)))'))
+        cdp('Page.addScriptToEvaluateOnNewDocument',dict(source='window.__writerLoadId=crypto.randomUUID()'))
         cdp('Browser.setDownloadBehavior', dict(behavior='allow', downloadPath=str(OUTPUT)))
         cdp('Emulation.setDeviceMetricsOverride', dict(width=390, height=844, deviceScaleFactor=1, mobile=True))
         cdp('Page.navigate', dict(url=BASE + '/write/')); wait('document.querySelector(".writer-list button")'); open_draft()
@@ -130,15 +133,33 @@ with TemporaryDirectory(prefix='nc-writer-client-chrome-') as profile:
         check('实际输入与自动保存请求一致', drafts[ID]['value']['body'] == '仅客户端测试的自动保存')
         # 用真实离线网络和 IndexedDB 检查恢复，不用内存替身假冒设备备份。
         cdp('Network.emulateNetworkConditions', dict(offline=True, latency=0, downloadThroughput=0, uploadThroughput=0))
+        js('(()=>{const dt=new DataTransfer();dt.items.add(new File([Uint8Array.from(atob('+json.dumps(base64.b64encode(image_bytes).decode())+'),c=>c.charCodeAt(0))],"pending.webp",{type:"image/webp"}));const p=document.querySelector("input[type=file]");p.files=dt.files;p.dispatchEvent(new Event("change",{bubbles:true}))})()')
+        wait('document.querySelector(".writer-image .writer-field input")')
+        js('(()=>{const a=document.querySelector(".writer-image .writer-field input");a.value="旧基线待传图片";a.dispatchEvent(new Event("input",{bubbles:true}))})()')
         fill('离线后仍要保留的输入'); time.sleep(2.4)
         check('断网保留输入且不显示云端保存成功', js('document.querySelector(".writer-body").value==="离线后仍要保留的输入" && !document.querySelector(".writer-status").textContent.includes("已保存到云端")'))
+        # 发布在窗口关闭期间完成：服务器基线改变，但旧 key 下还有本设备输入和待上传 Blob。
+        pending_bytes=base64.b64decode(js('(async()=>{const d=await new Promise((ok,no)=>{const r=indexedDB.open("northcedar-writer-recovery",1);r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});const r=d.transaction("copies").objectStore("copies").get('+json.dumps(OWNER+'/'+ID+'/new')+'),v=await new Promise((ok,no)=>{r.onsuccess=()=>ok(r.result);r.onerror=no});const b=await v.pendingImages[0].blob.arrayBuffer();d.close();return btoa(String.fromCharCode(...new Uint8Array(b)))})()'))
+        with lock:
+            drafts[ID]['base']=dict(commit='3'*40,blobSha='4'*40,text='已发布的原文');drafts[ID]['publishedRevision']=drafts[ID]['revision'];block_saves=True
+        previous_load=js('window.__writerLoadId')
         cdp('Network.emulateNetworkConditions', dict(offline=False, latency=0, downloadThroughput=-1, uploadThroughput=-1))
         # 不等待在线事件自动保存，刷新后从真实 IDB 读取恢复选项。
-        cdp('Page.reload'); wait('document.querySelector(".writer-list button")'); click('草稿'); wait('document.querySelector(".writer-list button")'); js('document.querySelector(".writer-list button").click()')
+        cdp('Page.reload'); wait('window.__writerLoadId!=='+json.dumps(previous_load)+' && document.readyState==="complete" && document.querySelector(".writer-list button")'); click('草稿'); wait('document.querySelector(".writer-list button")'); js('document.querySelector(".writer-list button").click()')
         wait('document.body.innerText.includes("发现本设备恢复副本") || document.querySelector(".writer-body")')
         has_recovery = js('document.body.innerText.includes("发现本设备恢复副本")')
+        check('发布基线变化后重开仍发现旧基线设备副本',has_recovery)
+        block_saves=False
+        click('下载恢复副本')
+        recovery_file=OUTPUT/('c'*60+'-recovery.json')
+        for _ in range(50):
+            if recovery_file.exists(): break
+            time.sleep(.1)
+        exported_recovery=json.loads(recovery_file.read_text(encoding='utf8'))
+        check('设备副本导出保留待上传图片实际字节',exported_recovery.get('format')=='northcedar-writer-recovery-1' and base64.b64decode(exported_recovery['copy']['pendingImages'][0]['bytes'])==pending_bytes)
         if has_recovery: click('恢复本设备版本')
         wait('document.querySelector(".writer-body")'); check('刷新后真实设备副本或已确认云端保存恢复输入', js('document.querySelector(".writer-body").value==="离线后仍要保留的输入"'))
+        check('旧基线待上传 Blob 同样可恢复',js('document.querySelector(".writer-image .writer-field input").value==="旧基线待传图片"'));click('放弃这张')
         click('保存草稿'); wait('document.querySelector(".writer-status").textContent.includes("已保存到云端")')
         with lock: drafts[ID]['revision'] += 1; drafts[ID]['value']['body'] = '另一设备的新版本'
         fill('冲突时手机输入'); click('保存草稿'); wait('document.body.innerText.includes("对照版本")')

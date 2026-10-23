@@ -24,6 +24,10 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
   const imageUrl=(sha:string)=>'/api/writer/assets?sha256='+sha;
   const newValue=(kind:WriterKind):WriterValue=>({fields:kind==='post'?{title:'',date:today(),summary:'',tags:[],draft:false}:{date:today()},body:'',assets:[]});
   function markdownExport(){if(!controller)return;const d=controller.current();const text=d.kind==='post'?`---\n${Object.entries(d.value.fields).map(([k,v])=>JSON.stringify(k)+': '+JSON.stringify(v)).join('\n')}\n---\n${d.value.body}`:d.value.body;download(`${d.key}.md`,text,'text/markdown;charset=utf-8');}
+  async function recoveryExport(name:string,copy:RecoveryRecord){
+    const pendingImages=await Promise.all((copy.pendingImages??[]).map(async image=>{const bytes=new Uint8Array(await image.blob.arrayBuffer()),hash=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes));return {id:image.id,alt:image.alt,mime:image.blob.type,sha256:Array.from(hash,b=>b.toString(16).padStart(2,'0')).join(''),bytes:btoa(Array.from(bytes,b=>String.fromCharCode(b)).join(''))};}));
+    download(`${name}-recovery.json`,JSON.stringify({format:'northcedar-writer-recovery-1',copy:{...copy,pendingImages}}));
+  }
   async function flush(){if(controller?.isDirty())await controller.saveNow();}
   async function loadList(mode=currentMode,commit?:string,page=1){
     currentMode=mode;const ticket=++listGeneration;list.replaceChildren(el('li','正在读取…'));let data:any;
@@ -47,13 +51,17 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     if(kind==='talk')form.requestSubmit();
   }
   async function openDraft(draft:WriterDraft){
-    await controller?.dispose();releaseUrls();active=structuredClone(draft);const ticket=++generation,key=recoveryKey(options.user.id,draft);let restore:RecoveryRecord|undefined;
-    try{restore=await recovery.get(key);}catch{backup.textContent='本设备备份不可用，请及时保存或下载';}
+    await controller?.dispose();releaseUrls();active=structuredClone(draft);const ticket=++generation;let copies:RecoveryRecord[]=[];
+    try{copies=await recovery.findDraft(options.user.id,draft.id);}catch{backup.textContent='本设备备份不可用，请及时保存或下载';}
     if(disposed||ticket!==generation)return;
-    if(restore&&(JSON.stringify(restore.value)!==JSON.stringify(draft.value)||restore.pendingImages?.length)){
-      pane.replaceChildren(el('h2','发现本设备恢复副本'),el('p','选择要继续编辑的版本。恢复旧副本后仍会检查云端版本，不会覆盖其他设备的新内容。'));
-      const compare=el('div','','writer-compare');for(const [name,value]of [['本设备',restore.value.body],['云端',draft.value.body]]){const label=el('label',name,'writer-field'),area=el('textarea');area.value=value;area.readOnly=true;label.append(area);compare.append(label);}pane.append(compare);
-      pane.append(button('恢复本设备版本',()=>renderDraft(draft,restore)),button('使用云端版本',()=>perform(async()=>{await recovery.remove(key);renderDraft(draft);})),button('下载恢复副本',()=>download(`${draft.key}-recovery.json`,JSON.stringify(restore))));return;
+    const candidates=copies.filter(copy=>JSON.stringify(copy.value)!==JSON.stringify(draft.value)||copy.pendingImages?.length);
+    if(candidates.length){
+      pane.replaceChildren(el('h2','发现本设备恢复副本'),el('p','选择要继续编辑的版本。其他发布基线的副本也列在这里；恢复后仍会检查云端版本，不会覆盖其他设备的新内容。'));
+      const cloud=el('label','当前云端正文','writer-field'),area=el('textarea');area.value=draft.value.body;area.readOnly=true;cloud.append(area);pane.append(cloud);
+      for(const restore of candidates){
+        const section=el('section'),base=restore.key.split('/').at(-1)??'new',label=el('label',`本设备 · ${new Date(restore.updatedAt).toLocaleString()} · 基线 ${base==='new'?'未发布':base.slice(0,12)}`,'writer-field'),body=el('textarea');body.value=restore.value.body;body.readOnly=true;label.append(body);section.append(label,el('p',`${restore.pendingImages?.length??0} 张待上传配图`,'writer-note'),button('恢复本设备版本',()=>renderDraft(draft,restore)),button('下载恢复副本',()=>perform(()=>recoveryExport(draft.key,restore))));pane.append(section);
+      }
+      pane.append(el('p','选择使用云端版本会清理本设备上此草稿的上述恢复副本，请先下载需要保留的版本。','writer-note'),button('使用云端版本',()=>perform(async()=>{for(const copy of copies)await recovery.remove(copy.key);renderDraft(draft);})));return;
     }
     renderDraft(draft);
   }
@@ -62,7 +70,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     const ticket=++generation,working=active;pane.replaceChildren(el('h2',`${working.kind==='post'?'文章':'说说'} · ${working.key}`));
     const tools=el('div','','writer-toolbar'),fields=el('div','','writer-fields'),bodyLabel=el('label','正文（Markdown）','writer-field'),body=el('textarea'),preview=el('article','','writer-preview'),images=el('div','','writer-images'),imageSection=el('section'),publishing=el('section'),conflict=el('section','','writer-conflict');
     body.className='writer-body';body.value=working.value.body;body.spellcheck=false;bodyLabel.append(body);preview.hidden=true;conflict.hidden=true;
-    const storeCopy=async(copy:RecoveryCopy)=>{await recovery.put({...copy,key:recoveryKey(options.user.id,working),user:options.user.id,draftId:working.id,pendingImages:pending.map(({id,blob,alt})=>({id,blob,alt}))});};
+    const storeCopy=async(copy:RecoveryCopy)=>{const key=recoveryKey(options.user.id,working);await recovery.put({...copy,key,user:options.user.id,draftId:working.id,pendingImages:pending.map(({id,blob,alt})=>({id,blob,alt}))});if(restore&&restore.key!==key)await recovery.remove(restore.key);};
     const edit=()=>{if(controller){working.value.body=body.value;controller.edit(working.value);if(!preview.hidden)renderPreview();}};
     const renderPreview=()=>{preview.replaceChildren(renderWriterMarkdown(body.value,source=>{
       if(source.startsWith('writer-asset:')){const sha=source.slice(13);return working.value.assets.some(a=>a.sha256===sha)?imageUrl(sha):null;}

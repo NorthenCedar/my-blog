@@ -1,6 +1,6 @@
 import { expect,it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync,readdirSync,existsSync } from 'node:fs';
 import sharp from 'sharp';
 import { readPost,readTalks,planChanges } from '../src/lib/writer/content';
 import type { WriterDraft } from '../src/lib/writer/model';
@@ -54,8 +54,15 @@ it('路径越界、无摘要图、别名炸弹、重复 ID 被拒绝',()=>{
   expect(()=>readTalks(talks.replace('talk-neighbor','talk-old'))).toThrow();
 });
 it('仓库真实文章和说说可无损读取，视频元数据保留',()=>{
-  expect(readPost(readFileSync('content/posts/two-ai-built-this-blog/index.md','utf8')).fields.title).toContain('莱茵生命');
-  expect(readTalks(readFileSync('content/pages/talks.md','utf8'))).toHaveLength(10);
+  for(const entry of readdirSync('content/posts',{withFileTypes:true})){
+    const path=`content/posts/${entry.name}/index.md`;
+    if(entry.isDirectory()&&existsSync(path))expect(readPost(readFileSync(path,'utf8')).fields.title).toBeTypeOf('string');
+  }
+  const rows=readTalks(readFileSync('content/pages/talks.md','utf8'));
+  expect(new Set(rows.map(row=>row.key)).size).toBe(rows.length);
+  for(const row of rows){expect(row.value.body).toBeTypeOf('string');expect(row.value.fields.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);}
+  // 固定期望只用于夹具，不能把实际文章标题或现有条目数变成内容发布限制。
+  expect(readTalks(talks)[0].value.fields.videos).toEqual([{src:'old.mp4',alt:'旧视频'}]);
 });
 it('引用块中的代码围栏与参考式代码示例保持原样',()=>{
   const value=readPost(post),ref='writer-asset:'+'e'.repeat(64);

@@ -18,6 +18,10 @@ export function createRecoveryStore(factory:IDBFactory|undefined){
   }
   return {
     get:(key:string)=>transact<RecoveryRecord|undefined>('readonly',(s,done)=>{const r=s.get(key);r.onsuccess=()=>done(r.result);}),
+    findDraft:(user:string,draftId:string)=>transact<RecoveryRecord[]>('readonly',(s,done)=>{
+      const found:RecoveryRecord[]=[],request=s.index('user').openCursor(IDBKeyRange.only(user));
+      request.onsuccess=()=>{const cursor=request.result;if(!cursor){done(found.sort((a,b)=>b.updatedAt-a.updatedAt));return;}const copy=cursor.value as RecoveryRecord;if(copy.draftId===draftId&&copy.key.startsWith(`${user}/${draftId}/`))found.push(copy);cursor.continue();};
+    }),
     put:(record:RecoveryRecord)=>transact<void>('readwrite',(s,done)=>{s.put(record);done();}),
     remove:(key:string)=>transact<void>('readwrite',(s,done)=>{s.delete(key);done();}),
     clearUser:(user:string)=>transact<void>('readwrite',(s,done)=>{const r=s.index('user').openCursor(IDBKeyRange.only(user));r.onsuccess=()=>{const c=r.result;if(c){c.delete();c.continue();}else done();};}),
