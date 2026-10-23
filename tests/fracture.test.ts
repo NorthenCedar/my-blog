@@ -118,6 +118,8 @@ const PLATE_DIR = join(ROOT, 'src/assets/404/plates');
    变异脚本改为把坏素材写到 `_probe/` 下的新文件，再用这个变量把测试指过去。
    日常/CI 不设该变量 ⇒ 目标就是站内那一张，行为与普通测试完全一致。 */
 const PLATE = process.env.BV_PLATE ?? join(PLATE_DIR, 'inf-frac.webp');
+// 负向对照随仓库携带，干净克隆和云端校验不能依赖某台电脑的原图目录。
+const SOURCE_PLATE = join(ROOT, 'tests/fixtures/404/source-infinity.jpg');
 
 const HTML = hasDist ? readFileSync(PAGE_HTML, 'utf8') : '';
 
@@ -291,7 +293,7 @@ describe('404 · 底纹 ∞ 素材契约', () => {
       return { n, best };
     };
 
-    const src = await run('D:/传图/pic_20261005000502_0.jpg');
+    const src = await run(SOURCE_PLATE);
     const out = await run(PLATE);
     expect(src.n, '源图该区域应有大量近黑笔画 —— 数据变了，这条负向对照要重做').toBeGreaterThan(2000);
     /* ★ 收紧到 0：抠图已从「按面积分类」换成「局部对比种子 + 精确孔洞填充」，
@@ -378,7 +380,7 @@ describe('404 · 底纹 ∞ 素材契约', () => {
       return rows;
     };
 
-    const src = await measure('D:/传图/pic_20261005000502_0.jpg');
+    const src = await measure(SOURCE_PLATE);
     const out = await measure(PLATE);
     const sum = (r: typeof src) => r.reduce((a, b) => a + b.n, 0);
     expect(sum(src), '源图这五处应共有上千个近黑笔画像素 —— 数据变了，这张 ROI 表要重做').toBeGreaterThan(1000);
@@ -420,7 +422,7 @@ describe('404 · 底纹 ∞ 素材契约', () => {
       return { n, avg: [sumR / n, sumG / n, sumB / n] as const, chroma, over60, over100 };
     };
 
-    const src = await stats('D:/传图/pic_20261005000502_0.jpg');
+    const src = await stats(SOURCE_PLATE);
     expect(src.chroma, '源图出现了强色内容 ⇒ "源图近单色所以可去饱和"这个前提不成立了').toBeLessThanOrEqual(100);
     expect(src.over100, '源图有色差 >100 的像素 ⇒ 那是真彩内容，去饱和会丢东西').toBe(0);
 

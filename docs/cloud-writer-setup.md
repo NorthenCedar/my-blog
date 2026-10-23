@@ -53,6 +53,19 @@ Pages 的变量变更须随一次新部署生效。不要只保存设置便声�
 
 工作流最多等待约 5 分钟的本站部署结果。超时仍为待确认，页面“重新查询”只读取原任务；“重新检查上线”在上次运行停止后启动只读检查，不重新准备或提交正文。检查触发应答不确定时不自动重复派发，可从 Actions 手动运行相同 jobId（不勾选 diagnostic）恢复；已确认推送回执的任务只进入部署检查。检查在领取前失败时，查询会恢复可重新检查的状态。
 
+### 2.2 令牌到期更换
+
+在 GitHub 的 Fine-grained tokens 列表核对两枚发布令牌的 Expiration，建议提前 3–7 天更新。到期日从每枚令牌实际创建时间计算，Secret 保存在平台中不会为令牌自动续期。
+
+推荐先创建两枚新令牌，仍仅授权 `NorthenCedar/personal`：读取/调度令牌使用 Contents 读、Actions 读写；推送令牌使用 Contents 读写；Metadata 保持默认读。令牌显示名称可加日期，平台 Secret 名称保持不变。
+
+1. Pages `personal` → Settings → Production → Variables and Secrets，编辑已有 `WRITER_GITHUB_TOKEN`，替换为新的读取/调度令牌，保持 Secret/Encrypt 类型。
+2. GitHub `personal` → Settings → Secrets and variables → Actions，编辑已有 `WRITER_PUBLISH_TOKEN`，粘贴新的推送令牌并保存。
+3. Pages → Deployments，重试最新正式部署，让新的 Pages Secret 生效。GitHub Actions 的新运行读取更新后的仓库 Secret。
+4. 正式部署成功后运行只读配置核验：`jobId` 填 32 个零、`diagnostic=true`；核验不会发布文章，也不能替代推送令牌实际写权限的验收。需要排查运行环境时可额外选 `verifySource=true`，只校验已提交源码，不读取私密草稿。确认新配置正常，再删除旧令牌。
+
+`WRITER_RUNNER_SECRET` 是自建共享随机秘密，没有 GitHub PAT 的 30 天到期机制，不必随这两枚令牌每月更换；`OWNER_USER_ID` 也保持原值。令牌值只粘贴到平台受保护的输入框，不发聊天或截图。
+
 ## 3. 额度核对与数据库迁移
 
 生产变更前，由站主确认执行。先在控制台核对 D1 实际数据库大小、账号用量、Actions 可用时长和支出上限；本地测试不能读取或证明这些额度。设置免费额度耗尽后停止，不能自动购买或放开支出限制。
