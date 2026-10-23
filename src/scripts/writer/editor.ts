@@ -8,6 +8,8 @@ import { renderWriterMarkdown } from './preview';
 import { el,button,field,download,errorText,SAVE_LABELS } from './ui';
 import { JOB_LABELS } from './publish';
 import { showWriterStorage } from './storage';
+import { mountWriterBody } from './body-editor';
+import { restoreImageAssets } from './markdown';
 type Api=typeof writerApi;
 type Store=ReturnType<typeof createRecoveryStore>;
 type PendingImage={id:string;blob:Blob;alt:string;url:string;width?:number;height?:number;originalSize?:number};
@@ -17,10 +19,11 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
   root.replaceChildren();const workspace=el('div','','writer-workspace'),sidebar=el('aside','','writer-sidebar'),catalog=el('details'),summary=el('summary','内容与草稿'),navigation=el('nav'),list=el('ul','','writer-list'),pane=el('section','','writer-editor'),notice=el('p','','writer-error');notice.hidden=true;notice.setAttribute('role','alert');
   catalog.open=matchMedia('(min-width:768px)').matches;catalog.append(summary,navigation,list);sidebar.append(catalog);workspace.append(sidebar,pane);root.append(notice,workspace);
   let active:WriterDraft|null=null,controller:ReturnType<typeof createSaveController>|null=null,generation=0,listGeneration=0,disposed=false,currentMode='drafts',pending:PendingImage[]=[],urls=new Set<string>(),tags:string[]=[];
+  let bodyEditor:ReturnType<typeof mountWriterBody>|null=null;
   const status=el('p','','writer-status'),backup=el('p','','writer-backup');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
   const showError=(error:unknown)=>{notice.hidden=false;notice.textContent=errorText(error);};
   const perform=async(action:()=>Promise<unknown>)=>{notice.hidden=true;try{await action();}catch(error){showError(error);}};
-  const releaseUrls=()=>{for(const url of urls)URL.revokeObjectURL(url);urls.clear();pending=[];};
+  const releaseUrls=()=>{bodyEditor?.destroy();bodyEditor=null;for(const url of urls)URL.revokeObjectURL(url);urls.clear();pending=[];};
   const imageUrl=(sha:string)=>'/api/writer/assets?sha256='+sha;
   const newValue=(kind:WriterKind):WriterValue=>({fields:kind==='post'?{title:'',date:today(),summary:'',tags:[],draft:false}:{date:today()},body:'',assets:[]});
   function markdownExport(){if(!controller)return;const d=controller.current();const text=d.kind==='post'?`---\n${Object.entries(d.value.fields).map(([k,v])=>JSON.stringify(k)+': '+JSON.stringify(v)).join('\n')}\n---\n${d.value.body}`:d.value.body;download(`${d.key}.md`,text,'text/markdown;charset=utf-8');}
@@ -68,20 +71,22 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
   function renderDraft(draft:WriterDraft,restore?:RecoveryRecord){
     active=structuredClone(draft);if(restore){active.value=structuredClone(restore.value);active.revision=restore.revision;pending=(restore.pendingImages??[]).map(p=>{const url=URL.createObjectURL(p.blob);urls.add(url);return {...p,url};});}
     const ticket=++generation,working=active;pane.replaceChildren(el('h2',`${working.kind==='post'?'文章':'说说'} · ${working.key}`));
-    const tools=el('div','','writer-toolbar'),fields=el('div','','writer-fields'),bodyLabel=el('label','正文（Markdown）','writer-field'),body=el('textarea'),preview=el('article','','writer-preview'),images=el('div','','writer-images'),imageSection=el('section'),publishing=el('section'),conflict=el('section','','writer-conflict');
-    body.className='writer-body';body.value=working.value.body;body.spellcheck=false;bodyLabel.append(body);preview.hidden=true;conflict.hidden=true;
+    const knownImages=new Map(working.value.assets.map(asset=>[asset.sha256,asset]));
+    const tools=el('div','','writer-toolbar'),fields=el('div','','writer-fields'),bodyLabel=el('section','','writer-composer'),preview=el('article','','writer-preview'),images=el('div','','writer-images'),imageSection=el('section'),publishing=el('section'),conflict=el('section','','writer-conflict');
+    preview.hidden=true;conflict.hidden=true;
     const storeCopy=async(copy:RecoveryCopy)=>{const key=recoveryKey(options.user.id,working);await recovery.put({...copy,key,user:options.user.id,draftId:working.id,pendingImages:pending.map(({id,blob,alt})=>({id,blob,alt}))});if(restore&&restore.key!==key)await recovery.remove(restore.key);};
-    const edit=()=>{if(controller){working.value.body=body.value;controller.edit(working.value);if(!preview.hidden)renderPreview();}};
-    const renderPreview=()=>{preview.replaceChildren(renderWriterMarkdown(body.value,source=>{
-      if(source.startsWith('writer-asset:')){const sha=source.slice(13);return working.value.assets.some(a=>a.sha256===sha)?imageUrl(sha):null;}
+    const edit=()=>{if(controller){working.value.body=bodyEditor!.getMarkdown();const restored=restoreImageAssets(working.value.body,working.value.assets,knownImages);if(restored.length!==working.value.assets.length){working.value.assets=restored;renderImages();}controller.edit(working.value);if(!preview.hidden)renderPreview();}};
+    const resolveImage=(source:string)=>{
+      if(source.startsWith('writer-asset:')){const sha=source.slice(13);return knownImages.has(sha)?imageUrl(sha):null;}
       if(!working.base)return null;let path:string;
       if(source.startsWith('./'))path=`content/posts/${working.key}/${source.slice(2)}`;
       else if(working.kind==='talk')path='src/assets/talks/'+source;else return null;
       return `/api/writer/content?commit=${working.base.commit}&image=${encodeURIComponent(path)}`;
-    }));};
+    };
+    const renderPreview=()=>{preview.replaceChildren(renderWriterMarkdown(bodyEditor!.getMarkdown(),resolveImage));};
     async function showConflict(){
       try{const result=await api('/drafts?id='+working.id);if(ticket!==generation)return;conflict.hidden=false;conflict.replaceChildren(el('h3','对照版本'));const comparison=el('div','','writer-compare');
-        for(const [name,text]of [['当前输入',JSON.stringify(controller!.current().value.fields,null,2)+'\n\n'+body.value],['云端版本',JSON.stringify(result.draft.value.fields,null,2)+'\n\n'+result.draft.value.body]]){const label=el('label',name,'writer-field'),area=el('textarea');area.value=text;area.readOnly=true;label.append(area);comparison.append(label);}conflict.append(comparison,el('p','另存会保留当前输入和原内容网址，原草稿不变。发布前仍需对照仓库最新内容。','writer-note'),button('将当前输入另存为新草稿',()=>perform(async()=>{const current=controller!.current();const result=await api('/drafts',{method:'POST',body:JSON.stringify({action:'copy',id:current.id,baseCommit:current.base?.commit??null,value:current.value})});if(ticket!==generation)return;await openDraft(result.draft);await loadList('drafts');})),button('下载当前输入',markdownExport));
+        for(const [name,text]of [['当前输入',JSON.stringify(controller!.current().value.fields,null,2)+'\n\n'+bodyEditor!.getMarkdown()],['云端版本',JSON.stringify(result.draft.value.fields,null,2)+'\n\n'+result.draft.value.body]]){const label=el('label',name,'writer-field'),area=el('textarea');area.value=text;area.readOnly=true;label.append(area);comparison.append(label);}conflict.append(comparison,el('p','另存会保留当前输入和原内容网址，原草稿不变。发布前仍需对照仓库最新内容。','writer-note'),button('将当前输入另存为新草稿',()=>perform(async()=>{const current=controller!.current();const result=await api('/drafts',{method:'POST',body:JSON.stringify({action:'copy',id:current.id,baseCommit:current.base?.commit??null,value:current.value})});if(ticket!==generation)return;await openDraft(result.draft);await loadList('drafts');})),button('下载当前输入',markdownExport));
       }catch(error){showError(error);}
     }
     controller=createSaveController({load:()=>draft,initialRecovery:restore,save:async input=>(await api('/drafts',{method:'POST',body:JSON.stringify({action:'save',...input})})).draft,recovery:{put:storeCopy},onState:(state,info)=>{if(disposed||ticket!==generation)return;status.textContent=SAVE_LABELS[state]+(state==='saved'&&info.revision===(controller?.current().publishedRevision??working.publishedRevision)?' · 已发布':' · 未发布修改');backup.textContent=info.backedUp?'':'本设备备份失败，请及时保存到云端或下载当前输入。';if(state==='conflict')void showConflict();}});
@@ -94,14 +99,14 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     if(working.kind==='post'){
       setField('updated','更新日期（可选）','date');const tagLabel=el('label','标签（按住 Ctrl 或在手机列表中选择，最多 3 个）','writer-field wide'),select=el('select');select.multiple=true;select.size=4;for(const tag of tags){const option=el('option',tag);option.value=tag;option.selected=Array.isArray(working.value.fields.tags)&&working.value.fields.tags.includes(tag);select.append(option);}select.addEventListener('change',()=>{if(select.selectedOptions.length>3){showError(Error('标签最多选择 3 个'));return;}working.value.fields.tags=Array.from(select.selectedOptions,o=>o.value);edit();});tagLabel.append(select);fields.append(tagLabel);
     }
-    body.addEventListener('input',edit);
+    bodyEditor=mountWriterBody(bodyLabel,working.value.body,{onChange:edit,resolveImage,onImageFiles:input=>void perform(()=>files(input)),onError:showError});
     const move=(from:number,to:number)=>{if(to<0||to>=working.value.assets.length)return;const [item]=working.value.assets.splice(from,1);working.value.assets.splice(to,0,item);edit();renderImages();};
-    const escapedAlt=(text:string)=>text.replace(/[\\\[\]]/g,'\\$&');
     async function upload(image:PendingImage){
       if(!image.alt.trim())throw Error('请先填写图片说明');
       const result=await api<{sha256:string}>('/assets',{method:'POST',headers:{'Content-Type':'image/webp'},body:image.blob});if(ticket!==generation)return;
       if(!working.value.assets.some(a=>a.sha256===result.sha256))working.value.assets.push({sha256:result.sha256,alt:image.alt});
-      if(working.kind==='post'){body.value+=(body.value.endsWith('\n')?'':'\n')+`\n![${escapedAlt(image.alt)}](writer-asset:${result.sha256})\n`;}
+      knownImages.set(result.sha256,working.value.assets.find(a=>a.sha256===result.sha256)!);
+      if(working.kind==='post'&&!bodyEditor!.insertImage('writer-asset:'+result.sha256,image.alt))throw Error('图片已上传，请完成当前文字输入后再次点击“上传并添加”；待添加图片会保留。');
       pending=pending.filter(p=>p!==image);URL.revokeObjectURL(image.url);urls.delete(image.url);edit();renderImages();
     }
     function renderImages(){
@@ -111,7 +116,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
         const actions=el('div','','writer-toolbar'),handle=button('按住拖动',()=>{});handle.dataset.imageHandle='';handle.setAttribute('aria-label',`拖动第 ${index+1} 张配图`);
         handle.addEventListener('pointerdown',event=>{if(event.button!==0)return;handle.setPointerCapture(event.pointerId);card.dataset.dragging='';});
         handle.addEventListener('pointerup',event=>{if(!handle.hasPointerCapture(event.pointerId))return;delete card.dataset.dragging;handle.releasePointerCapture(event.pointerId);const target=document.elementFromPoint(event.clientX,event.clientY)?.closest<HTMLElement>('[data-image-id]');const to=working.value.assets.findIndex(a=>a.sha256===target?.dataset.imageId);if(to>=0)move(index,to);});handle.addEventListener('pointercancel',()=>delete card.dataset.dragging);
-        actions.append(handle,button('上移',()=>move(index,index-1)),button('下移',()=>move(index,index+1)),button('移除',()=>{working.value.assets.splice(index,1);if(working.kind==='post')body.value=body.value.replace(new RegExp(`!\\[(?:\\\\.|[^\\]\\\\])*\\]\\(writer-asset:${asset.sha256}\\)`,'g'),'');if(working.value.fields.cover===`writer-asset:${asset.sha256}`){working.value.fields.cover='';working.value.fields.coverAlt='';}edit();renderImages();}));
+        actions.append(handle,button('上移',()=>move(index,index-1)),button('下移',()=>move(index,index+1)),button('移除',()=>{if(working.kind==='post'&&!bodyEditor!.removeImage('writer-asset:'+asset.sha256))return;working.value.assets.splice(index,1);if(working.value.fields.cover===`writer-asset:${asset.sha256}`){working.value.fields.cover='';working.value.fields.coverAlt='';}edit();renderImages();}));
         if(working.kind==='post')actions.append(button('设为封面',()=>{working.value.fields.cover='writer-asset:'+asset.sha256;working.value.fields.coverAlt=asset.alt;edit();showError(Error('已设为封面，请保存草稿后发布'));}));card.append(actions);images.append(card);
       });
       for(const image of pending){const card=el('div','','writer-image'),previewImage=el('img');previewImage.src=image.url;previewImage.alt=image.alt||'上传前的压缩预览';card.append(previewImage,el('p',`${image.width??''} × ${image.height??''} · 压缩后 ${Math.ceil(image.blob.size/1024)} KiB${image.originalSize?' / 原图 '+Math.ceil(image.originalSize/1024)+' KiB':''}`,'writer-note'));
@@ -119,7 +124,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     }
     const choose=el('input');choose.type='file';choose.accept='image/jpeg,image/png,image/webp';choose.multiple=true;choose.setAttribute('aria-label','选择配图');
     async function files(input:File[]){for(const file of input){const existing=publishedAssetHashes(working.base);if(working.value.assets.filter(a=>!existing.has(a.sha256)).length+pending.length>=(working.kind==='post'?20:9))throw Error('本篇新增图片数量已达上限');const result=await prepareWriterImage(file);if(ticket!==generation){URL.revokeObjectURL(result.previewUrl);return;}urls.add(result.previewUrl);pending.push({id:crypto.randomUUID(),blob:result.blob,url:result.previewUrl,alt:'',...result});edit();renderImages();}}
-    choose.addEventListener('change',()=>{void perform(()=>files(Array.from(choose.files??[])));choose.value='';});body.addEventListener('paste',event=>{const images=Array.from(event.clipboardData?.files??[]).filter(f=>f.type.startsWith('image/'));if(images.length){event.preventDefault();void perform(()=>files(images));}});
+    choose.addEventListener('change',()=>{void perform(()=>files(Array.from(choose.files??[])));choose.value='';});
     imageSection.append(el('h3','配图'),el('p','先预览压缩结果并填写说明，再上传。说说按下方顺序展示；文章内的位置由正文图片引用决定。','writer-note'),choose,images);
     const metadata=el('details'),metaSummary=el('summary','保留的原有资料');metadata.append(metaSummary,el('pre',JSON.stringify(working.value.fields,null,2),'writer-note'));
     const deleteDraft=button('删除这份云端草稿',()=>perform(async()=>{if(!confirm(`删除「${working.value.fields.title??working.key}」草稿及其已结束任务？网站上已发布的内容会保留。建议先导出。`))return;await api('/drafts',{method:'POST',body:JSON.stringify({action:'delete',id:working.id,revision:controller!.current().revision})});await controller!.dispose();controller=null;active=null;generation++;releaseUrls();pane.replaceChildren(el('p','草稿已删除，已发布内容仍在网站上。'));await loadList('drafts');}));

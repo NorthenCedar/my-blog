@@ -25,6 +25,8 @@ lock = threading.RLock()
 results = {}
 expire = False
 block_saves = False
+hold_asset_upload = False
+upload_gate = threading.Event()
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw): super().__init__(*a, directory=str(ROOT / 'dist'), **kw)
@@ -54,6 +56,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self.reply(dict(draft=drafts[key]))
             self.reply(dict(error='夹具未定义此接口'), 404)
     def do_POST(self):
+        if self.path.startswith('/api/writer/assets') and hold_asset_upload: upload_gate.wait(5)
         with lock:
             route = urllib.parse.urlparse(self.path); raw = self.rfile.read(int(self.headers.get('Content-Length', 0)))
             if route.path.endswith('/assets'):
@@ -119,7 +122,9 @@ with TemporaryDirectory(prefix='nc-writer-client-chrome-') as profile:
                 time.sleep(.1)
             raise AssertionError('等待超时: ' + code)
         def click(label): js('Array.from(document.querySelectorAll("button")).find(b=>b.textContent===' + json.dumps(label) + ').click()')
-        def fill(body): js('(()=>{const e=document.querySelector(".writer-body");e.value=' + json.dumps(body) + ';e.dispatchEvent(new Event("input",{bubbles:true}));})()')
+        def fill(body):
+            if js('document.querySelector(".writer-body").hidden'): click('Markdown 源码')
+            js('(()=>{const e=document.querySelector(".writer-body");e.value=' + json.dumps(body) + ';e.dispatchEvent(new Event("input",{bubbles:true}));})()')
         def open_draft():
             click('草稿'); wait('document.querySelector(".writer-list button")'); js('document.querySelector(".writer-list button").click()'); wait('document.querySelector(".writer-body")')
         cdp('Network.enable'); cdp('Page.enable')
@@ -128,6 +133,39 @@ with TemporaryDirectory(prefix='nc-writer-client-chrome-') as profile:
         cdp('Browser.setDownloadBehavior', dict(behavior='allow', downloadPath=str(OUTPUT)))
         cdp('Emulation.setDeviceMetricsOverride', dict(width=390, height=844, deviceScaleFactor=1, mobile=True))
         cdp('Page.navigate', dict(url=BASE + '/write/')); wait('document.querySelector(".writer-list button")'); open_draft()
+        check('手机默认使用可视化正文编辑',js('!!document.querySelector(".ProseMirror[contenteditable=true]") && document.querySelector(".writer-body").hidden'))
+        js('document.querySelector(".ProseMirror").focus()')
+        cdp('Input.insertText',dict(text='可视化中文输入'))
+        js('(()=>{const e=document.querySelector(".writer-block-type");e.value="2";e.dispatchEvent(new Event("change",{bubbles:true}))})()')
+        check('章节标题按钮产生实际 H2',js('document.querySelector(".ProseMirror h2").textContent.includes("可视化中文输入")'))
+        click('Markdown 源码')
+        check('标题操作生成目录所需的 Markdown',js('document.querySelector(".writer-body").value.startsWith("## ")'))
+        click('可视化编辑');click('撤销')
+        check('工具栏撤销保留输入但撤销标题',js('!document.querySelector(".ProseMirror h2") && document.querySelector(".ProseMirror").textContent.includes("可视化中文输入")'))
+        click('重做')
+        check('工具栏重做标题',js('!!document.querySelector(".ProseMirror h2")'))
+        check('手机编辑器无横向溢出',js('document.documentElement.scrollWidth<=innerWidth'))
+        fill('## 配图测试\n\n![受控以外的图](https://tracking.example.invalid/a.png)\n\n普通正文')
+        click('可视化编辑')
+        check('可视化不请求正文中的外部图片',js('!Array.from(document.querySelectorAll(".writer-visual img")).some(i=>i.src.includes("tracking.example")) && document.querySelector(".writer-visual").textContent.includes("受控以外的图")'))
+        js('(()=>{const e=document.querySelector(".ProseMirror"),p=e.querySelector("p:last-child"),r=document.createRange();e.focus();r.selectNodeContents(p);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);const dt=new DataTransfer();dt.setData("text/plain","粘贴第一段\\n粘贴第二段");dt.setData("text/html","<img src=https://tracking.example.invalid/b.png onerror=window.__xss=1>");e.dispatchEvent(new ClipboardEvent("paste",{clipboardData:dt,bubbles:true,cancelable:true}))})()')
+        check('富文本粘贴只取文字并保留段落',js('!window.__xss && !document.querySelector(".writer-visual [onerror]") && Array.from(document.querySelector(".writer-visual").children).filter(p=>p.textContent.includes("粘贴")).length===2'),js('document.querySelector(".writer-visual").innerHTML'))
+        special='## 旧文章\r\n\r\n<video controls src="./keep.mp4"></video>\r\n\r\n| A | B |\r\n| --- | --- |\r\n| 1 | 2 |\r\n'
+        fill(special)
+        check('特殊旧文章明确禁止有损切换',js('Array.from(document.querySelectorAll("button")).find(b=>b.textContent==="可视化编辑").disabled && document.querySelector(".writer-note").textContent!==null'))
+        click('保存草稿');wait('document.querySelector(".writer-status").textContent.includes("已保存到云端")')
+        check('旧文视频和表格保存不丢失',drafts[ID]['value']['body']==special.replace('\r\n','\n'))
+        fill('中文输入法测试');click('可视化编辑')
+        js('document.querySelector(".ProseMirror").focus()')
+        cdp('Input.imeSetComposition',dict(text='输入中',selectionStart=3,selectionEnd=3))
+        cdp('Input.insertText',dict(text='输入完成'))
+        check('输入法组合文本可完成输入',js('document.querySelector(".ProseMirror").textContent.includes("输入完成")'))
+        for width in [390,1280]:
+            cdp('Emulation.setDeviceMetricsOverride',dict(width=width,height=1000,deviceScaleFactor=1,mobile=width<768))
+            for dark in [False,True]:
+                js('document.documentElement.classList.toggle("dark",'+str(dark).lower()+');document.querySelector(".writer-composer").scrollIntoView({block:"start"})')
+                (OUTPUT/f'visual-{width}-{"dark" if dark else "light"}.png').write_bytes(base64.b64decode(cdp('Page.captureScreenshot',dict(format='png'))['data']))
+        cdp('Emulation.setDeviceMetricsOverride',dict(width=390,height=844,deviceScaleFactor=1,mobile=True))
         check('客户端首个私密读取为身份接口', next(p for p in requests if p[1].startswith('/api/writer/'))[1] == '/api/writer/session')
         fill('仅客户端测试的自动保存'); wait('document.querySelector(".writer-status").textContent.includes("已保存到云端")')
         check('实际输入与自动保存请求一致', drafts[ID]['value']['body'] == '仅客户端测试的自动保存')
@@ -205,6 +243,26 @@ with TemporaryDirectory(prefix='nc-writer-client-chrome-') as profile:
                 js('document.documentElement.classList.toggle("dark",' + str(dark).lower() + ')')
                 check(f'{width}宽度/{"暗" if dark else "亮"}无横向溢出', js('document.documentElement.scrollWidth<=innerWidth+1'), js('({width:innerWidth,scroll:document.documentElement.scrollWidth})'))
                 if width in [390,1280]: (OUTPUT / f'client-{width}-{"dark" if dark else "light"}.png').write_bytes(base64.b64decode(cdp('Page.captureScreenshot',dict(format='png'))['data']))
+        # 上传应答到达时正在中文组词，保留待处理卡片，完成输入后可再次插入。
+        fill('上传期间继续输入');click('可视化编辑')
+        js('(()=>{const dt=new DataTransfer();dt.items.add(new File([Uint8Array.from(atob('+json.dumps(base64.b64encode(image_bytes).decode())+'),c=>c.charCodeAt(0))],"composition.webp",{type:"image/webp"}));document.querySelector(".ProseMirror").dispatchEvent(new ClipboardEvent("paste",{clipboardData:dt,bubbles:true,cancelable:true}))})()')
+        wait('Array.from(document.querySelectorAll("button")).some(b=>b.textContent==="上传并添加")')
+        js('(()=>{const e=Array.from(document.querySelectorAll(".writer-image .writer-field input")).at(-1);e.value="组词期间的图片";e.dispatchEvent(new Event("input",{bubbles:true}))})()')
+        hold_asset_upload=True;upload_gate.clear();click('上传并添加')
+        js('document.querySelector(".ProseMirror").focus()');cdp('Input.imeSetComposition',dict(text='输入中',selectionStart=3,selectionEnd=3));upload_gate.set()
+        wait('document.querySelector(".writer-error").textContent.includes("再次")')
+        check('上传撞上输入法时保留待添加图片',js('Array.from(document.querySelectorAll("button")).some(b=>b.textContent==="上传并添加") && document.querySelector(".ProseMirror").textContent.includes("输入中")'))
+        cdp('Input.insertText',dict(text='输入完成'));hold_asset_upload=False;click('上传并添加')
+        wait('!Array.from(document.querySelectorAll("button")).some(b=>b.textContent==="上传并添加")')
+        check('完成组词后重试插图成功',js('!!document.querySelector(".writer-visual .writer-inline-image img")'))
+        first=js('document.querySelector(".writer-body").value.match(/writer-asset:([0-9a-f]{64})/)[1]')
+        time.sleep(.6)
+        js('Array.from(Array.from(document.querySelectorAll("[data-image-id]")).find(e=>e.dataset.imageId==='+json.dumps(first)+').querySelectorAll("button")).find(b=>b.textContent==="移除").click()');click('撤销');click('保存草稿')
+        wait('document.querySelector(".writer-status").textContent.includes("已保存到云端")')
+        # 第一张可能只在配图列表中，选择真正恢复的正文引用与元数据作一致性检查。
+        copy_id=next(key for key in drafts if key!=ID)
+        restored_refs=__import__('re').findall(r'writer-asset:([0-9a-f]{64})',drafts[copy_id]['value']['body'])
+        check('移除配图后撤销不会留下悬空正文引用',first in restored_refs and all(a in {i['sha256'] for i in drafts[copy_id]['value']['assets']} for a in restored_refs),dict(first=first,refs=restored_refs,assets=drafts[copy_id]['value']['assets']))
         fill('[不执行](javascript:alert(1))\n\n<img src=x onerror="window.__xss=1">'); click('预览')
         check('真实预览 DOM 不建立脚本链接或事件标签', js('!window.__xss && !document.querySelector(".writer-preview [onerror],.writer-preview script") && !Array.from(document.querySelectorAll(".writer-preview a")).some(a=>a.protocol==="javascript:")'))
         click('继续编辑'); expire = True; fill('过期登录仍保留的输入'); click('保存草稿'); wait('document.querySelector(".writer-status").textContent.includes("登录已过期")')

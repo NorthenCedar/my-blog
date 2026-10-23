@@ -1,5 +1,5 @@
 import { expect,it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync,readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { jsClosure } from './_writer-output';
 it('写作台静态外壳无私密内容、不索引，独立脚本不进入访客页闭包',()=>{
@@ -12,4 +12,10 @@ it('写作台静态外壳无私密内容、不索引，独立脚本不进入访�
   expect(home.code).not.toContain('northcedar-writer-recovery');expect(home.code).not.toContain('maxAliasCount');
   expect(writer.code).not.toContain('maxAliasCount');expect(writer.code).not.toContain('WebGPURenderer');
   expect(html).not.toContain('cr-disc');
+});
+it('可视化内核只进入写作台，不进入任何公开页面脚本闭包',()=>{
+  const writer=jsClosure('dist/write/index.html');expect(writer.code).toContain('ProseMirror');
+  for(const name of readdirSync('dist',{recursive:true}).filter(name=>String(name).endsWith('.html')&&!String(name).replaceAll('\\','/').startsWith('write/'))){
+    expect(jsClosure(join('dist',String(name))).code,String(name)).not.toContain('ProseMirror');
+  }
 });
