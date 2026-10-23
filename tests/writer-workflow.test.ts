@@ -128,5 +128,12 @@ it('配置核验必须有共享密钥和准确在运行的固定工作流，不�
   let active=true;vi.stubGlobal('fetch',async(url:unknown)=>String(url).includes('/actions/runs/')?json({...run(id),status:active?'in_progress':'completed'}):json({object:{type:'commit',sha:commit}}));
   expect((await runner({request:request(),env} as never)).status).toBe(200);
   expect(s.sqlite.prepare('SELECT count(*) AS n FROM writer_drafts').get()?.n).toBe(0);expect(s.sqlite.prepare('SELECT count(*) AS n FROM writer_jobs').get()?.n).toBe(0);
-  active=false;expect((await runner({request:request(),env} as never)).status).toBe(403);
+  active=false;expect((await runner({request:request(),env} as never)).status).toBe(424);
+});
+it('受保护配置核验保留上游认证失败状态，未授权请求仍为 401',async()=>{
+  const s=await writerFixture(),env={...s.env,WRITER_GITHUB_TOKEN:'测试凭据',WRITER_RUNNER_SECRET:'s'.repeat(64)},body={action:'probe',jobId:'0'.repeat(32),runId:'1001'};let calls=0;
+  vi.stubGlobal('fetch',async()=>{calls++;return new Response('不应泄露的上游正文',{status:401});});
+  expect((await runner({request:s.request('/runner','POST',body),env} as never)).status).toBe(401);expect(calls).toBe(0);
+  const response=await runner({request:s.request('/runner','POST',body,{Authorization:'Bearer '+env.WRITER_RUNNER_SECRET}),env} as never);
+  expect(response.status).toBe(424);expect(await response.json()).toMatchObject({code:'repository_http_401',upstreamStatus:502});expect(calls).toBe(1);
 });

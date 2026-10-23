@@ -17,14 +17,19 @@ export const onRequestPost:PagesFunction<WriterEnv>=async({request,env})=>{
   try{
     await requireRunner(request,env);
     const p=await readJsonBody(request,8192),id=writerId(p.jobId),runId=String(p.runId);
-    const repo=createWriterRepository(env.WRITER_GITHUB_TOKEN??''),run=await repo.run(runId);
-    if(!matchesWriterRun(run,id)||run.status!=='in_progress') writerFail(403,'invalid_run','运行不属于此发布任务或已经结束');
+    const repo=createWriterRepository(env.WRITER_GITHUB_TOKEN??'');
+    const verifyRun=async()=>{const run=await repo.run(runId);if(!matchesWriterRun(run,id)||run.status!=='in_progress')writerFail(403,'invalid_run','运行不属于此发布任务或已经结束');};
     if(p.action==='probe'&&id==='0'.repeat(32)){
-      if(!env.OWNER_USER_ID)writerFail(503,'owner_missing','尚未完成站主配置');
-      const schema=await env.COMMENTS_DB.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('writer_assets','writer_draft_assets','writer_drafts','writer_job_assets','writer_jobs','writer_requests','writer_save_receipts','writer_usage')").first<{n:number}>();
-      if(schema?.n!==8)writerFail(503,'writer_schema_missing','写作数据库尚未初始化');
-      return writerJson({ok:true,commit:await repo.head()});
+      // 认证仍在外层；只读诊断用依赖失败响应保留应用错误，避免混同网关 502。
+      try{
+        await verifyRun();
+        if(!env.OWNER_USER_ID)writerFail(503,'owner_missing','尚未完成站主配置');
+        const schema=await env.COMMENTS_DB.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('writer_assets','writer_draft_assets','writer_drafts','writer_job_assets','writer_jobs','writer_requests','writer_save_receipts','writer_usage')").first<{n:number}>();
+        if(schema?.n!==8)writerFail(503,'writer_schema_missing','写作数据库尚未初始化');
+        return writerJson({ok:true,commit:await repo.head()});
+      }catch(error){const response=writerError(error);return writerJson({...await response.json() as object,upstreamStatus:response.status},424);}
     }
+    await verifyRun();
     const row=await jobRow(env.COMMENTS_DB,id);
     if(!env.OWNER_USER_ID||row.owner!==env.OWNER_USER_ID) writerFail(404,'job_missing','发布任务不存在');
     if(p.action==='claim') return writerJson(await claimJob(env.COMMENTS_DB,id,runId));

@@ -18,7 +18,7 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
         const response=await fetchImpl(root+path,{method:body===undefined?'GET':'POST',redirect:'error',signal:controller.signal,headers:{Authorization:`Bearer ${token}`,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'northcedar-cloud-writer',...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});
         if(body===undefined&&(response.status===429||response.status>=500)&&attempt<2){await response.body?.cancel();continue;}
         if(missing&&response.status===404){await response.body?.cancel();return null;}
-        if(!response.ok){await response.body?.cancel();writerFail(502,'repository_error','仓库服务暂时不可用，请检查配置或稍后重试');}
+        if(!response.ok){await response.body?.cancel();writerFail(502,'repository_http_'+response.status,'仓库服务暂时不可用，请检查配置或稍后重试');}
         if(response.status===204) return null;
         const reader=response.body?.getReader(),chunks:Uint8Array[]=[];let size=0;
         if(!reader) writerFail(502,'repository_error','仓库返回为空');

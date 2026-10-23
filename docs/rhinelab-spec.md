@@ -11071,3 +11071,5 @@ Chrome 扩展读取返回 Debugger unattached，内置浏览器读取超时；�
 最终完整 npm run verify 退出 0：76 个测试文件、1109 通过、1 保留跳过；日志 D:/router/work/cloud-writer-checks-20261023/verify-final.log。独立只读审查无 Critical/Important/Minor。另以真实 Node 子进程重查四阶段，调用仅 claim 与部署回传，真实裸 Git main 保持一条提交且工作区干净。生产配置探针、正式部署与站主选择的首次真实内容验收仍需分别取得实际证据。
 
 上线后的只读 diagnostic 首次失败，日志仅有 runner_request_failed，不能据此断定 Secret 值有误。补充非 JSON 错误的 HTTP 状态码（不打印远端正文），并为运行器请求添加明确的本站服务 User-Agent；单次 503 反馈有真实 Node 回归，错误只请求一次。正式核验结果保留待核对，不把本地测试当生产成功。
+
+进一步把受保护只读 probe 的依赖错误与外层网关 502 区分：专用认证通过后，诊断失败返回 424，保留安全的应用错误码及原状态；未认证仍为 401，固定运行身份核对不省略。仓库 API 非成功状态保留 repository_http_<status>，只报告数字、不记录上游正文。真实生产首次与第二次 diagnostic 均未成功，第二次明确为 runner_http_502；尚未证明原因，也未重复内容发布。上游 401 单次、无凭据零上游请求的 Node/D1 回归先 RED 后 GREEN。
