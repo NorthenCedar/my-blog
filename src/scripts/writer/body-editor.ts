@@ -7,6 +7,7 @@ import { keymap } from 'prosemirror-keymap';
 import { wrapInList,splitListItem,liftListItem,sinkListItem } from 'prosemirror-schema-list';
 import { parseWriterMarkdown,serializeWriterMarkdown,visualMarkdownIssue,writerSchema as schema } from './markdown';
 import { safeWriterImage,safeWriterLink } from './preview';
+import { codeBlockCommand,codeLanguageCommand,markdownCodeBlock,markdownCodeLanguage } from './code-block';
 import { el,button,field } from './ui';
 
 type Options={onChange:()=>void;onImageFiles:(files:File[])=>void;resolveImage:(source:string)=>string|null;onError:(error:Error)=>void};
@@ -18,9 +19,21 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
   const modes=el('div','','writer-toolbar'),toolbar=el('div','','writer-toolbar writer-format'),visual=el('div'),source=el('textarea'),note=el('p','','writer-note');
   source.className='writer-body';source.value=raw;source.spellcheck=false;source.setAttribute('aria-label','正文 Markdown 源码');
   const visualButton=button('可视化编辑',()=>switchMode(false)),sourceButton=button('Markdown 源码',()=>switchMode(true));
-  modes.append(visualButton,sourceButton);host.append(el('p','正文','writer-body-label'),modes,note,toolbar,visual,source);
+  const codeTools=el('div','','writer-toolbar'),language=el('select');language.className='writer-code-language';language.setAttribute('aria-label','代码语言');
+  for(const [value,label]of [['python','Python'],['javascript','JavaScript'],['typescript','TypeScript'],['json','JSON'],['bash','Bash / Shell'],['text','纯文本']]){const option=el('option',label);option.value=value;language.append(option);}
+  let preferredLanguage='python';
+  function showLanguage(value:string){
+    if(!Array.from(language.options).some(option=>option.value===value)){const option=el('option',value);option.value=value;language.append(option);}
+    language.value=value;
+  }
+  const codeButton=button('代码块',()=>{if(sourceMode)editSourceCode('insert');else run(codeBlockCommand(language.value));});
+  codeButton.addEventListener('mousedown',event=>event.preventDefault());
+  const sourceParagraph=button('转为正文',()=>editSourceCode('paragraph'));
+  sourceParagraph.addEventListener('mousedown',event=>event.preventDefault());
+  const languageLabel=el('label','代码语言','writer-block-label');languageLabel.append(language);codeTools.append(codeButton,languageLabel,sourceParagraph);
+  modes.append(visualButton,sourceButton);host.append(el('p','正文','writer-body-label'),modes,note,codeTools,toolbar,visual,source);
   const block=el('select');block.className='writer-block-type';block.setAttribute('aria-label','正文与标题级别');
-  for(const [value,label]of [['0','正文'],['2','章节标题（进入目录）'],['3','小标题（进入目录）']]){const option=el('option',label);option.value=value;block.append(option);}
+  for(const [value,label]of [['0','正文'],['2','章节标题（进入目录）'],['3','小标题（进入目录）'],['code','代码块']]){const option=el('option',label);option.value=value;block.append(option);}
   const blockLabel=el('label','段落格式','writer-block-label');blockLabel.append(block);toolbar.append(blockLabel);
   const controls:{button:HTMLButtonElement;command:Command;mark?:string}[]=[];
   function run(command:Command){
@@ -47,7 +60,35 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
   });
   add('移除链接',(state,dispatch)=>{dispatch?.(state.tr.removeMark(state.selection.from,state.selection.to,schema.marks.link));return !state.selection.empty;});
   add('撤销',undo);add('重做',redo);
-  block.addEventListener('change',()=>run(setBlockType(block.value==='0'?schema.nodes.paragraph:schema.nodes.heading,block.value==='0'?undefined:{level:Number(block.value)})));
+  block.addEventListener('change',()=>run(block.value==='code'?codeBlockCommand(language.value):setBlockType(block.value==='0'?schema.nodes.paragraph:schema.nodes.heading,block.value==='0'?undefined:{level:Number(block.value)})));
+  language.addEventListener('change',()=>{
+    preferredLanguage=language.value;
+    if(sourceMode)editSourceCode('language');else if(codeLanguageCommand(language.value)(view.state))run(codeLanguageCommand(language.value));
+  });
+  let sourceComposing=false;
+  source.addEventListener('compositionstart',()=>{sourceComposing=true;});source.addEventListener('compositionend',()=>{sourceComposing=false;});
+  function updateSourceControls(){
+    if(!sourceMode)return;
+    const current=markdownCodeLanguage(source.value,source.selectionStart,source.selectionEnd);
+    codeButton.setAttribute('aria-pressed',String(current!==null));sourceParagraph.disabled=current===null;
+    showLanguage(current??preferredLanguage);
+  }
+  for(const event of ['select','keyup','click'])source.addEventListener(event,updateSourceControls);
+  function editSourceCode(action:'insert'|'language'|'paragraph'){
+    if(sourceComposing){options.onError(Error('请先完成当前文字输入，再设置代码格式。'));return;}
+    try{
+      const result=markdownCodeBlock(source.value,source.selectionStart,source.selectionEnd,language.value,action);
+      if(result.body===source.value)return;
+      const before=source.value;let from=0,to=before.length,tail=result.body.length;
+      while(from<to&&from<tail&&before[from]===result.body[from])from++;
+      while(to>from&&tail>from&&before[to-1]===result.body[tail-1]){to--;tail--;}
+      source.focus();source.setSelectionRange(from,to);
+      // 原生编辑命令保留 textarea 的撤销记录；输入事件继续走现有草稿保存流程。
+      document.execCommand('insertText',false,result.body.slice(from,tail));
+      if(source.value!==result.body)throw Error('当前浏览器未能完成代码格式操作，请保留正文后重试。');
+      source.setSelectionRange(result.start,result.end);
+    }catch(error){options.onError(error instanceof Error?error:Error(String(error)));}
+  }
 
   const plugins=()=>[history(),keymap({
     'Mod-z':undo,'Mod-y':redo,'Mod-Shift-z':redo,'Mod-b':toggleMark(schema.marks.strong),'Mod-i':toggleMark(schema.marks.em),
@@ -87,13 +128,20 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
   });
   function updateControls(){
     const state=view.state,{$from,$to}=state.selection;
-    block.value=$from.parent=== $to.parent&&$from.parent.type===schema.nodes.heading?String($from.parent.attrs.level):'0';
+    const inCode=$from.sameParent($to)&&$from.parent.type===schema.nodes.code_block;
+    block.value=inCode?'code':$from.parent=== $to.parent&&$from.parent.type===schema.nodes.heading?String($from.parent.attrs.level):'0';
+    codeButton.disabled=!sourceMode&&!codeBlockCommand(preferredLanguage)(state);codeButton.setAttribute('aria-pressed',String(!sourceMode&&inCode));
+    const current=inCode?String($from.parent.attrs.params??'').split(/\s/)[0]||'text':preferredLanguage;
+    if(!sourceMode)showLanguage(current);
     for(const control of controls){control.button.disabled=!control.command(state);if(control.mark)control.button.setAttribute('aria-pressed',String(state.selection.empty?!!schema.marks[control.mark].isInSet(state.storedMarks??$from.marks()):state.doc.rangeHasMark(state.selection.from,state.selection.to,schema.marks[control.mark])));}
+    updateSourceControls();
   }
   function updateMode(){
     const issue=visualMarkdownIssue(raw);source.hidden=!sourceMode;visual.hidden=sourceMode;toolbar.hidden=sourceMode;linkForm.hidden=true;
+    sourceParagraph.hidden=!sourceMode;
+    updateSourceControls();
     visualButton.disabled=!!issue;visualButton.setAttribute('aria-pressed',String(!sourceMode));sourceButton.setAttribute('aria-pressed',String(sourceMode));
-    note.textContent=issue?`正文包含${issue}，请在源码模式编辑；原始内容会完整保留。`:'选中正文后设置格式。章节标题和小标题会自动进入发布页的本文目录。';
+    note.textContent=issue?`正文包含${issue}，请在源码模式编辑；原始内容会完整保留。`:'选中正文后设置格式。代码块可直接输入或粘贴代码，Ctrl / ⌘ + Enter 继续正文；章节标题和小标题会进入本文目录。';
   }
   function switchMode(next:boolean){
     if(next===sourceMode)return;
