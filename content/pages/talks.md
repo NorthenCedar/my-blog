@@ -15,10 +15,19 @@
 title: 说说
 intro: 短的、没成为文章的东西。碎碎念、随手拍的、看到的一句话，都放这儿。
 items:
-  - "date": "2026-10-23"
-    "id": "talk-9938de10146519f5953085a8c5ed0e27"
-    "text": "**苏苏可以看到啦！**最近在做一个小机器人（车），能走，能看到，能听到，能说话。不过制作周期应该会挺长的，毕竟是我第一次做嘛，可以来催更我的进度哈：）"
-    "images": [{"src":"writer-f896922ac8669c8cf7da9ad397b436d3cb46251f16c8dace2c2977db6fb2948a.webp","alt":"新生"},{"src":"writer-0764967e1d40cd384354d3ffd91d55d1aa0c0ed17b71a263bce502f1b093e459.webp","alt":"第二次睁眼"},{"src":"writer-e52d67d785cbc313e5d35e707b50dbc781c10cea953fe9ee255553ad5fddc95c.webp","alt":"看世界的第三眼"}]
+  - date: 2026-10-25
+    id: talk-fd5ebd4e-8787-489d-b6fa-80d8d6bd2a70
+    text: 为什么GPT老是在我上课和玩游戏的时候来抢我电脑。。
+  - date: 2026-10-23
+    id: talk-9938de10146519f5953085a8c5ed0e27
+    text: "**苏苏可以看到啦！**最近在做一个小机器人（车），能走，能看到，能听到，能说话。不过制作周期应该会挺长的，毕竟是我第一次做嘛，可以来催更我的进度哈：）"
+    images:
+      - src: writer-f896922ac8669c8cf7da9ad397b436d3cb46251f16c8dace2c2977db6fb2948a.webp
+        alt: 新生
+      - src: writer-0764967e1d40cd384354d3ffd91d55d1aa0c0ed17b71a263bce502f1b093e459.webp
+        alt: 第二次睁眼
+      - src: writer-e52d67d785cbc313e5d35e707b50dbc781c10cea953fe9ee255553ad5fddc95c.webp
+        alt: 看世界的第三眼
   - date: 2026-10-21
     id: talk-21f2065c-0abc-4df5-ae64-3f2b74e9c19d
     text: "赛博朋克2观后感be like:"
