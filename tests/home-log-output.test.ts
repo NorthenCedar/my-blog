@@ -27,4 +27,11 @@ describe('首页版本详情真实内容', () => {
     expect(links).toHaveLength(items.length);
     for (const link of links) expect(link[1]).toMatch(/href="\/log\/#day-\d{4}-\d{2}-\d{2}"/);
   });
+
+  it('详情由模态层承载，卡面与正文分层，顶部提供全部版本入口', () => {
+    expect(page).toMatch(/<dialog\b[^>]*data-log-panel\b/);
+    for (const marker of ['data-log-sheet', 'data-log-surface', 'data-log-content', 'data-log-shade']) expect(page).toContain(marker);
+    const versions = [...page.matchAll(/<button\b[^>]*data-log-version\b[^>]*>([\s\S]*?)<\/button>/g)].map(match => text(match[1]));
+    expect(versions).toEqual(items.map(item => item.version));
+  });
 });

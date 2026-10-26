@@ -15,9 +15,15 @@ const { items } = Astro.props;
       </div>
     ))}
   </div>
-  <div class="log-detail" id="home-log-detail" data-log-panel role="region" aria-label="完整版本更新" hidden>
-    <div class="log-sheet">
+  <dialog class="log-detail" id="home-log-detail" data-log-panel aria-label="完整版本更新" hidden>
+    <div class="log-shade" data-log-shade></div>
+    <div class="log-sheet" data-log-sheet>
+      <div class="log-surface" data-log-surface aria-hidden="true"></div>
+      <div class="log-content" data-log-content>
       <button class="log-close" type="button" data-log-close aria-label="收起版本详情">收起 <span aria-hidden="true">×</span></button>
+      <nav class="log-versions" aria-label="选择更新版本">
+        {items.map(it => <button type="button" data-log-version aria-pressed="false">{it.version ?? isoDate(it.date)}</button>)}
+      </nav>
       {items.map((it, i) => (
         <section class="log-entry" data-log-entry aria-labelledby={`home-log-title-${i}`} hidden>
           <header>
@@ -27,8 +33,9 @@ const { items } = Astro.props;
           <ul class="log-changes">{it.changes?.map(change => <li>{change}</li>)}</ul>
         </section>
       ))}
+      </div>
     </div>
-  </div>
+  </dialog>
   <a class="home-log-more" href="/log/">查看全部日志 <span aria-hidden="true">↗</span></a>
 </div>
 
@@ -66,7 +73,6 @@ const { items } = Astro.props;
   }
   .card:hover,
   .card:focus-within {
-    transform: translateY(-4px);
     background: var(--glass-bg-hot);
     border-color: var(--accent-ink);
     box-shadow: var(--glass-shadow);
@@ -74,6 +80,7 @@ const { items } = Astro.props;
   .card:hover::after,
   .card:focus-within::after { opacity: 1; }
   .card:has([aria-expanded="true"]) { border-color: var(--accent-ink); background: var(--glass-bg-hot); }
+  .card[data-log-origin-hidden] { visibility: hidden; }
   .card h3 { font-size: 1.15rem; margin: 0 0 0.5rem; font-weight: 600; }
   .card p { margin: 0; color: var(--muted); font-size: var(--fs-sm); }
   .card .k {
@@ -89,18 +96,66 @@ const { items } = Astro.props;
   .card:has([data-log-trigger]:focus-visible) { outline: 2px solid var(--accent-ink); outline-offset: var(--sp-1); }
   [data-log-trigger]:focus-visible { outline: none; }
   .home-log-more { display: none; }
-  .log-detail { overflow: hidden; }
+  .log-detail {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    overflow: hidden;
+  }
+  .log-detail[open] { display: grid; place-items: center; }
+  .log-detail[hidden] { display: none; }
+  .log-detail::backdrop { background: transparent; }
+  .log-shade {
+    position: absolute;
+    inset: 0;
+    background: color-mix(in srgb, var(--visitor-backdrop) 28%, transparent);
+    opacity: 0;
+  }
   .log-sheet {
     position: relative;
-    margin-top: var(--sp-5);
+    width: min(52rem, calc(100vw - var(--gutter) * 2));
+    max-height: min(74dvh, 48rem);
+    isolation: isolate;
+  }
+  .log-surface {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
     border: 1px solid var(--glass-line);
     border-radius: 16px;
-    background: var(--glass-bg-hot);
-    backdrop-filter: blur(var(--glass-blur));
-    -webkit-backdrop-filter: blur(var(--glass-blur));
+    background: color-mix(in srgb, var(--paper) 96%, transparent);
+    backdrop-filter: blur(var(--glass-blur-hot));
+    -webkit-backdrop-filter: blur(var(--glass-blur-hot));
     box-shadow: var(--glass-shadow);
+    transform-origin: top left;
+    pointer-events: none;
   }
-  .log-entry { padding: var(--sp-6); }
+  .log-detail[data-animating] .log-surface { will-change: transform; }
+  .log-content { display: flex; flex-direction: column; max-height: inherit; padding: var(--sp-6); opacity: 0; }
+  .log-versions { display: flex; flex-wrap: wrap; gap: var(--sp-2); padding-right: var(--sp-8); margin-bottom: var(--sp-5); flex-shrink: 0; }
+  .log-versions button {
+    min-height: 44px;
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--glass-line);
+    border-radius: var(--sp-2);
+    background: transparent;
+    color: var(--muted);
+    font: var(--fs-sm) 'IBM Plex Mono', monospace;
+    cursor: pointer;
+    transition: color var(--dur-fast), background var(--dur-fast), border-color var(--dur-fast);
+  }
+  .log-versions button:hover,
+  .log-versions button[aria-pressed="true"] { background: var(--accent-wash); border-color: var(--accent-ink); color: var(--accent-ink); }
+  .log-entry { min-height: 0; display: flex; flex-direction: column; }
+  .log-entry[hidden] { display: none; }
   .log-entry header { padding-right: var(--sp-8); margin-bottom: var(--sp-5); }
   .log-meta { margin: 0 0 var(--sp-2); font: var(--fs-sm) 'IBM Plex Mono', monospace; color: var(--muted); }
   .log-entry h3 { margin: 0; font-size: var(--fs-lg); line-height: var(--lh-title); }
@@ -109,6 +164,7 @@ const { items } = Astro.props;
     padding-left: var(--sp-5);
     padding-right: var(--sp-4);
     max-height: min(50vh, 26rem);
+    min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-color: var(--muted) transparent;
@@ -121,7 +177,7 @@ const { items } = Astro.props;
     position: absolute;
     z-index: 1;
     right: var(--sp-5);
-    top: var(--sp-4);
+    top: var(--sp-6);
     display: inline-flex;
     gap: var(--sp-2);
     align-items: center;

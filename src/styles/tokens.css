@@ -486,6 +486,9 @@
   /* 玻璃层的动效时长 —— 与上面的 --dur-fast(120ms)/--dur-enter(640ms) **刻意分开**：
      玻璃浮起要"慢半拍"，太快就没有"重量感"，这是 v10.6 的观感来源之一。 */
   --dur-hover: 260ms;
+  --dur-card-expand: 420ms;
+  --dur-card-collapse: 280ms;
+  --dur-card-switch: 180ms;
   --ease-glass: cubic-bezier(0.32, 0.72, 0, 1);  /* 起步快、收尾极缓 —— 玻璃位移专用 */
 
   /* ===== 全站 hover 统一基线（2026-10-03 站主：「把本站所有鼠标悬停的效果
