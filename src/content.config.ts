@@ -2,6 +2,7 @@ import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
 import { gallerySchema, postSchema } from './lib/schema';
+import { projectSchema } from './lib/project-schema';
 
 const posts = defineCollection({
   loader: glob({
@@ -63,4 +64,10 @@ const gallery = defineCollection({
   schema: gallerySchema,
 });
 
-export const collections = { posts, pages, site, gallery };
+// 公开项目与手工作品，文案、配图和动效选择均留在内容层。
+const projects = defineCollection({
+  loader: glob({ pattern: '**/index.md', base: './content/projects', generateId: ({entry}) => entry.replace(/\/index\.md$/, '') }),
+  schema: ({image}) => projectSchema(image),
+});
+
+export const collections = { posts, pages, site, gallery, projects };

@@ -820,3 +820,84 @@ html.dark body.tags-plate {
   --deco-crosshair-line: #ed8c3b66;
   --deco-crosshair-dot: #ffb570b3;
 }
+
+/* 造物台与项目预览：亮暗状态在此统一定义。 */
+:root {
+  --forge-preview-paper: #fbfcf7;
+  --forge-preview-ink: #273d2f;
+  --forge-preview-mat: #dce2d5;
+  --forge-preview-line: #dce3d9;
+  --forge-preview-muted: #65735b;
+  --forge-preview-symbol: #c1cbb6;
+  --forge-editor-sidebar: #17251e;
+  --forge-editor-sidebar-ink: #dce7d9;
+  --forge-editor-active: #2d4737;
+  --forge-preview-code: #e9eee6;
+  --forge-preview-code-ink: #41634b;
+  --forge-preview-code-key: #80613b;
+  --forge-paper: #f5f4ef;
+  --forge-paper-clean: #fafaf7;
+  --forge-ink: #252b27;
+  --forge-muted: #687062;
+  --forge-line: #3948392b;
+  --forge-glass: #fafaf7a6;
+  --forge-panel: #eeeee8;
+  --forge-shadow: #1e2a201a;
+  --forge-etch: #33523526;
+  --forge-object-shadow: #28372c24;
+  --forge-button: #fafaf4d6;
+  --forge-button-hot: #fafaf4f2;
+  --forge-button-line: #ffffff4d;
+  --forge-model-shadow: #1a351d26;
+  --forge-editor-shadow: #11181338;
+  --forge-model-line: #243f2426;
+  --forge-dialog-backdrop: #0f140f66;
+  --forge-dialog-shadow: #00000040;
+  --forge-metal: #bfc5be;
+  --forge-metal-edge: #e8ede6;
+  --forge-chain: #8a948b;
+  --forge-rim: #69a575;
+  --forge-light-key: #ffffff;
+  --forge-light-fill: #f4f6ef;
+  --forge-studio-top: #d5d7d3;
+  --forge-studio-upper: #8c918b;
+  --forge-studio-lower: #474f48;
+  --forge-studio-bottom: #161d18;
+  --forge-studio-panel: #e8eae6;
+}
+html.dark {
+  --forge-preview-paper: #171914;
+  --forge-preview-ink: #e6e9de;
+  --forge-preview-mat: #24251d;
+  --forge-preview-line: #36392e;
+  --forge-preview-muted: #abb39c;
+  --forge-preview-symbol: #484d37;
+  --forge-editor-sidebar: #0d110e;
+  --forge-editor-sidebar-ink: #e2e6dc;
+  --forge-editor-active: #383322;
+  --forge-preview-code: #242920;
+  --forge-preview-code-ink: #b7ca9c;
+  --forge-preview-code-key: #d2a66e;
+  --forge-paper: #100d0b;
+  --forge-paper-clean: #15120f;
+  --forge-ink: #ede9df;
+  --forge-muted: #aaa398;
+  --forge-line: #d8c5aa29;
+  --forge-glass: #1d1814b3;
+  --forge-panel: #1b1713;
+  --forge-shadow: #0000004d;
+  --forge-etch: #ce90512e;
+  --forge-object-shadow: #000000cc;
+  --forge-button: #27251fe8;
+  --forge-button-hot: #343128f2;
+  --forge-button-line: #eee4d929;
+  --forge-model-shadow: #00000066;
+  --forge-editor-shadow: #00000080;
+  --forge-model-line: #d8c5aa29;
+  --forge-dialog-backdrop: #07060599;
+  --forge-dialog-shadow: #00000080;
+  --forge-metal: #636563;
+  --forge-metal-edge: #c8c6be;
+  --forge-chain: #77746c;
+  --forge-rim: #ff7b00;
+}

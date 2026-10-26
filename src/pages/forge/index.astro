@@ -1,0 +1,33 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection, getEntry, render } from 'astro:content';
+import ForgeProject from '../../components/ForgeProject.astro';
+import '../../styles/forge.css';
+const entry = await getEntry('pages', 'forge');
+if (!entry) throw new Error('缺少造物台页面文案');
+const page = entry.data;
+const projects = await Promise.all((await getCollection('projects')).sort((a,b)=>a.data.order-b.data.order || a.id.localeCompare(b.id)).map(async project=>({project, ...await render(project)})));
+---
+<Base title={page.title} description={page.description} chrome="page" current="forge" fullWidth bodyClass="forge-page">
+  <div class="forge-tools"><a href="#works">看作品 ↗</a><button class="motion-toggle" type="button" aria-pressed="false" aria-label="减少动态">动态 <span class="status-dot"></span></button><button class="theme-toggle" type="button" aria-label="切换明暗主题"><svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.5A8.6 8.6 0 0 1 8.5 3.8 8.7 8.7 0 1 0 20.2 15.5Z"/></svg><svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button></div>
+  <section class="hero" id="forge-top" aria-labelledby="hero-title">
+    <div class="hero-stage">
+      <div class="etched-surface" aria-hidden="true"><svg class="etch etch-left" viewBox="0 0 1000 1000"><g fill="none" stroke="currentColor"><ellipse cx="135" cy="490" rx="600" ry="490"/><ellipse cx="135" cy="490" rx="608" ry="498"/><ellipse cx="135" cy="490" rx="642" ry="532"/><ellipse cx="135" cy="490" rx="648" ry="538"/></g></svg><svg class="etch etch-right" viewBox="0 0 1000 1000"><g fill="none" stroke="currentColor"><ellipse cx="850" cy="600" rx="540" ry="570"/><ellipse cx="850" cy="600" rx="549" ry="579"/><ellipse cx="850" cy="600" rx="582" ry="612"/></g></svg><div class="surface-grain"></div></div>
+      <div class="hero-topline"><span>{page.topline}</span></div>
+      <div class="hero-heading"><p class="eyebrow"><span class="tiny-line"></span>{page.eyebrow}</p><h1 id="hero-title">{page.title}<span class="heading-dot">.</span></h1><p class="hero-subtitle">{page.tagline}</p></div>
+      <div class="object-caption" aria-hidden="true"><span class="mono">{page.objectLabel}</span><span>{page.objectNote}</span></div>
+      <div class="connection-copy" aria-hidden="true"><p>{page.connectionTitle}</p><span>{page.connectionNote}</span></div>
+      <div class="scene-wrap" id="scene-wrap" role="img" aria-label="两条铁链穿过拉丝金属无限环，随滚动连接作品，链条始终延伸至画面之外">
+        <canvas id="forge-scene" aria-hidden="true"></canvas>
+        <svg class="scene-fallback" viewBox="0 0 800 400" aria-hidden="true"><path d="M400 200C300-40 90 40 90 200s210 240 310 0C500-40 710 40 710 200s-210 240-310 0" stroke="currentColor" stroke-width="42" fill="none"/></svg>
+      </div>
+      <div class="arrival-note arrival-note-left" inert><span class="eyebrow">{page.arrivalLabel}</span><p>{page.arrivalFirst}<br />{page.arrivalSecond}</p><a href="#works">去看看做成了什么 <span>↗</span></a></div>
+      <div class="arrival-note arrival-note-right" inert><p>{page.arrivalEndFirst}<br />{page.arrivalEndSecond}</p></div>
+      <div class="hero-bottom"><p class="scroll-cue"><span class="scroll-icon">↓</span><span id="stage-caption" data-captions={JSON.stringify(page.stages)}>{page.stages[0]}</span></p><div class="stage-nav" aria-label="滚动演出阶段"><button type="button" data-stage="0" aria-current="step"><span>01</span> 构想</button><button type="button" data-stage="0.48"><span>02</span> 连接</button><button type="button" data-stage="0.94"><span>03</span> 成形</button><div class="stage-progress" aria-hidden="true"><i></i></div></div></div>
+    </div>
+  </section>
+  <section class="works section-wrap" id="works" aria-labelledby="works-title"><div class="section-heading reveal"><div><p class="eyebrow">{page.worksEyebrow}</p><h2 id="works-title">{page.worksTitle}<span class="heading-dot">.</span></h2></div><p class="section-aside">{page.worksNote}</p></div>{projects.map(({project, Content},index)=><ForgeProject project={project} index={index}><Content /></ForgeProject>)}</section>
+  <section class="notebook section-wrap" id="notes" aria-labelledby="notebook-title"><div class="notebook-heading reveal"><p class="eyebrow">工作手记</p><h2 id="notebook-title">{page.notesTitle}</h2><span class="notebook-loop" aria-hidden="true">∞</span></div><div class="notebook-list">{page.notes.map((note,index)=><details class="reveal" open={index===0}><summary><span class="mono">{String(index+1).padStart(2,'0')}</span><span>{note.title}</span><i>+</i></summary><p>{note.text}</p></details>)}</div></section>
+  <a class="forge-back" href="#forge-top">回到造物台顶部 ↑</a>
+  <script>import '../../scripts/forge';</script>
+</Base>

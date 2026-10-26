@@ -1,0 +1,26 @@
+---
+import { Image } from 'astro:assets';
+import type { CollectionEntry } from 'astro:content';
+import { chooseProjectEffect } from '../lib/project-effects';
+interface Props { project: CollectionEntry<'projects'>; open?: boolean; }
+const {project, open = true} = Astro.props;
+const p = project.data, preview = p.preview;
+const effect = chooseProjectEffect(project.id, p.effect, p.images.length);
+---
+<a class:list={['work-visual', `${p.visual}-visual`]} href={`/forge/${project.id}/`} data-project-open={open ? project.id : undefined} data-effect={effect} aria-label={`查看${p.title}的制作思路`}>
+  {p.visual === 'site' && <div class="visual-object mini-site" aria-hidden="true">
+    <div class="mini-nav"><span>{preview.wordmark}</span><span>{preview.nav}</span></div>
+    <div class="mini-site-body"><span class="mini-date mono">{preview.date}</span><h3>{preview.title}<br />{preview.subtitle}</h3><p>{preview.description}</p><div class="mini-infinity">∞</div><div class="mini-posts"><span>{preview.first}</span><span>{preview.second}</span></div></div>
+  </div>}
+  {p.visual === 'desk' && <div class="visual-object mini-editor" aria-hidden="true">
+    <aside><span class="editor-logo">{preview.name}</span><span class="editor-active">✎　{preview.write}</span><span>↑　{preview.publish}</span><span>◎　{preview.talks}</span><span>▤　{preview.gallery}</span></aside>
+    <div class="mini-editor-main"><div class="editor-top"><span>{preview.label}</span><i></i></div><div class="editor-paper"><span class="mono editor-date">{preview.date}</span><h3>{preview.title}</h3><p>{preview.description}</p><div class="code-sample"><span>python</span><code>{preview.code}</code></div><div class="editor-save">{preview.saved} <span>✓</span></div></div></div>
+  </div>}
+  {p.visual === 'image' && <div class="visual-object project-images">
+    {p.images.slice(0, effect === 'stack' ? 3 : 1).map((image, i) => <div class="project-shot" data-layer={i}>
+      <Image class:list={['project-photo', {'has-dark': !!image.darkSrc}]} src={image.src} alt={image.alt} widths={[480, 800, 1200]} sizes="(max-width: 760px) 90vw, 50vw" loading="lazy" decoding="async" />
+      {image.darkSrc && <Image class="project-photo project-photo-dark" src={image.darkSrc} alt={image.alt} widths={[480, 800, 1200]} sizes="(max-width: 760px) 90vw, 50vw" loading="lazy" decoding="async" />}
+    </div>)}
+  </div>}
+  <span class="effect-light" aria-hidden="true"></span><span class="visual-open">展开看看 <span>↗</span></span>
+</a>

@@ -1,0 +1,13 @@
+---
+import { Image } from 'astro:assets';
+import type { CollectionEntry } from 'astro:content';
+interface Props { images: CollectionEntry<'projects'>['data']['images']; }
+const {images} = Astro.props;
+---
+{images.length > 0 && <div class="dialog-gallery">
+  {images.map(image => <figure>
+    <Image class:list={{'has-dark':!!image.darkSrc}} src={image.src} alt={image.alt} widths={[480,800,1200]} sizes="(max-width: 760px) 90vw, 760px" loading="lazy" decoding="async" />
+    {image.darkSrc && <Image class="gallery-image-dark" src={image.darkSrc} alt={image.alt} widths={[480,800,1200]} sizes="(max-width: 760px) 90vw, 760px" loading="lazy" decoding="async" />}
+    <figcaption>{image.alt}</figcaption>
+  </figure>)}
+</div>}
