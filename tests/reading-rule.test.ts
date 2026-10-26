@@ -254,12 +254,13 @@ describe('文章页阅读尺 · 装置契约', () => {
 });
 
 describe('文章页右栏目录 · 版式契约', () => {
-  it('窄屏不排两栏（目录仍在正文之前、通栏）；≥960px 才排栅格', () => {
-    const mqAt = ACSS.indexOf('@media (min-width: 960px)');
+  it('容纳不下双栏时优先单栏阅读；≥1120px 才排正文与定宽侧栏', () => {
+    const mqAt = ACSS.indexOf('@media (min-width: 1120px)');
     const gridAt = ACSS.indexOf('display: grid');
-    expect(mqAt, '没找到 960px 断点').toBeGreaterThan(-1);
+    expect(mqAt, '没找到 1120px 断点').toBeGreaterThan(-1);
     expect(gridAt, 'display:grid 必须在媒体查询之内（窄屏不得排两栏）').toBeGreaterThan(mqAt);
-    expect(ACSS).toMatch(/grid-template-columns:\s*minmax\(0, var\(--measure\)\) minmax\(0, 1fr\)/);
+    expect(ACSS).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, var\(--post-rail-width\)\)/);
+    expect(ACSS).toContain('max-width: calc(var(--post-measure) + var(--post-rail-width) + var(--post-rail-gap))');
   });
 
   it('目录栏 sticky 且排在第二列；DOM 顺序仍是目录在前（无 JS/窄屏都可读）', () => {
@@ -282,13 +283,13 @@ describe('文章页右栏目录 · 版式契约', () => {
     const toc = readFileSync(join(ROOT, 'src/components/Toc.astro'), 'utf8');
     expect(toc, 'Toc 的 1440 规则改名了？契约要跟着看').toMatch(/min-width: 1440px/);
     expect(ACSS).toMatch(/\.post-rail :global\(\.toc \.label\)\s*\{\s*display:\s*block/);
-    expect(ACSS).toMatch(/\.post-rail :global\(\.toc ol\)\s*\{\s*columns:\s*1/);
+    expect(ACSS).toMatch(/\.post-rail :global\(\.toc ol\)\s*\{\s*columns:\s*auto/);
     // 压得住的实测证据：编译后的选择器权重必须是 (0,3,0) 级别
     expect(DIST_CSS).toMatch(/\.post-rail\[[^\]]+\] \.toc \.label\{display:block\}/);
-    expect(DIST_CSS).toMatch(/\.post-rail\[[^\]]+\] \.toc ol\{columns:1\}/);
+    expect(DIST_CSS).toMatch(/\.post-rail\[[^\]]+\] \.toc ol\{[^}]*columns:auto(?:;|\})/);
   });
 
-  it('★ 正文排版一行未改（红线）：本文件只给 .prose 分配栅格列', () => {
+  it('正文保留字体、行高、段落与代码排版，只通过父级分配列宽', () => {
     const block = ACSS.match(/\.post-body > \.prose\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(block, '没找到给 .prose 分配列的规则').not.toBe('');
     for (const banned of ['font-size', 'line-height', 'max-width', 'margin', 'padding', 'letter-spacing']) {

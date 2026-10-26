@@ -1,0 +1,65 @@
+/** 阅读侧栏的增强：目录原生锚点照常可用，脚本只负责当前位置与复制反馈。 */
+export function initPostRail(doc: Document): () => void {
+  const win = doc.defaultView;
+  if (!win) return () => {};
+  const pairs = [...doc.querySelectorAll<HTMLAnchorElement>('.post-rail .toc a')]
+    .map(link => ({ link, heading: doc.getElementById(link.getAttribute('href')!.slice(1)) }))
+    .filter((pair): pair is { link: HTMLAnchorElement; heading: HTMLElement } => !!pair.heading);
+  let frame = 0;
+  let current = -1;
+  let live = true;
+  const update = () => {
+    frame = 0;
+    if (!live || !pairs.length) return;
+    let next = 0;
+    pairs.forEach(({ heading }, i) => { if (heading.getBoundingClientRect().top <= win.innerHeight * 0.2) next = i; });
+    if (next === current) return;
+    current = next;
+    pairs.forEach(({ link }, i) => {
+      if (i === next) link.setAttribute('aria-current', 'location');
+      else link.removeAttribute('aria-current');
+    });
+  };
+  const schedule = () => { if (live && !frame && pairs.length) frame = win.requestAnimationFrame(update); };
+  win.addEventListener('scroll', schedule, { passive: true });
+  win.addEventListener('resize', schedule, { passive: true });
+  const prose = doc.querySelector('.prose');
+  const observer = prose && win.ResizeObserver ? new win.ResizeObserver(schedule) : null;
+  if (observer && prose) observer.observe(prose);
+  doc.fonts?.ready.then(schedule);
+  schedule();
+
+  const button = doc.querySelector<HTMLButtonElement>('[data-copy-link]');
+  const status = doc.querySelector<HTMLElement>('[data-copy-status]');
+  const canonical = doc.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href;
+  let timer = 0;
+  const copy = async () => {
+    if (!button || button.disabled || !canonical) return;
+    button.disabled = true;
+    win.clearTimeout(timer);
+    try {
+      await win.navigator.clipboard.writeText(canonical);
+      if (!live) return;
+      button.textContent = '已复制';
+      if (status) status.textContent = '文章链接已复制';
+      timer = win.setTimeout(() => { button.textContent = '复制链接'; if (status) status.textContent = ''; }, 1600);
+    } catch {
+      if (live && status) status.textContent = '未能复制，请复制浏览器地址栏中的地址。';
+    } finally {
+      if (live) button.disabled = false;
+    }
+  };
+  if (button && canonical && win.navigator.clipboard?.writeText) {
+    button.hidden = false;
+    button.addEventListener('click', copy);
+  }
+  return () => {
+    live = false;
+    win.cancelAnimationFrame(frame);
+    win.clearTimeout(timer);
+    observer?.disconnect();
+    win.removeEventListener('scroll', schedule);
+    win.removeEventListener('resize', schedule);
+    button?.removeEventListener('click', copy);
+  };
+}

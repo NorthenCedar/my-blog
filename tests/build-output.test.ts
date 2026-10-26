@@ -1029,7 +1029,9 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     // 2026-10-18（回复提醒）：顶栏铃铛的客户端挂在 Base 的共享脚本里 —— 文章页本来就吃这份，
     // 实测从 22088 涨到 24404（净增 2316：铃铛 ≈1.9 KB + 共享块从内联转成同源 chunk 的那点开销）。
     // 站主拍板抬到 **24576**：仍留着 ~170 字节的硬天花板，标签数 5 处不变。
-    const BUDGET = 24576;
+    // 2026-10-26：新增目录当前位置、复制正式链接及反馈；净增1599 B，实测26147 B。
+    // 本次功能的上限调整为26 KiB，仍统计完整同源闭包且最多5个入口；首页预算不变。
+    const BUDGET = 26624;
     console.log(`内联脚本体积: ${inline.join(' + ')} = ${inlineTotal} 字节 · 含同源外链合计 ${full} 字节（预算 ${BUDGET}）· ${scripts.length} 处 <script>`);
 
     expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBeLessThanOrEqual(5);

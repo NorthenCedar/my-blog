@@ -30,10 +30,11 @@ import { getEntry } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import BootIntro from '../components/BootIntro.astro';
 import NavDrawer from '../components/NavDrawer.astro';
+import HomeLog from '../components/HomeLog.astro';
 import { NAV_LINKS } from '../lib/nav';
 import { getVisiblePosts } from '../lib/posts';
 import { getSite } from '../lib/site';
-import { isoDate, sortLogItems } from '../lib/log-order';
+import { sortLogItems } from '../lib/log-order';
 import { readLanguageStats } from '../lib/lang-stats';
 import { tslWindow } from '../scripts/time-slice-core';
 import '../styles/home-dark.css';
@@ -326,30 +327,17 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     <section class="section" id="s3">
       <div class="section-head"><h2>最近改了什么</h2><span>SECTOR 03</span></div>
       {logItems.length > 0 ? (
-        <div class="cards">
-          {logItems.map((it) => {
-            const first = (it.changes ?? [])[0] ?? '';
-            const more = (it.changes?.length ?? 0) > 1 ? `（共 ${it.changes!.length} 项）` : '';
-            return (
-              <div class="card">
-                <span class="k">{isoDate(it.date)}</span>
-                <h3>{it.version ?? isoDate(it.date)}</h3>
-                <p>{first}{more}</p>
-              </div>
-            );
-          })}
-        </div>
+        <HomeLog items={logItems} />
       ) : (
         <p class="empty">更新日志还是空的 —— 往 content/pages/log.md 加一条就会出现在这一屏。</p>
       )}
-      <a class="home-log-more" href="/log/">查看全部日志 <span aria-hidden="true">↗</span></a>
     </section>
 
     {/* ===== 技术栈 · 语言占比（原型 #s5 那条 GitHub 风格条形图）=====
          数字一律构建期实测。结构与动效照抄原型：条本体 scaleX 生长（错开 90ms）+ 图例 + 明细。 */}
     {langSlices.length > 0 && (
       <section class="section" id="s5">
-        <div class="section-head"><h2>技术栈</h2><span>SECTOR 05</span></div>
+        <div class="section-head"><h2>源码语言占比</h2><span>SECTOR 05</span></div>
 
         <div class="langbar" aria-labelledby="langbar-hd">
           <div class="langbar-hd" id="langbar-hd">
@@ -402,8 +390,8 @@ const titleLines: { ch: string; i: number }[][] = (() => {
               <dl> 里 <div> 只允许包 dt/dd。 */}
           <details class="langbar-disclosure" open>
             <summary>
-              <span class="langbar-show">展开技术栈明细</span>
-              <span class="langbar-hide">收起技术栈明细</span>
+              <span class="langbar-show">展开语言占比明细</span>
+              <span class="langbar-hide">收起语言占比明细</span>
             </summary>
             <dl class="langbar-detail">
               {langSlices.map((s, i) => (
@@ -626,6 +614,12 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     import '../scripts/dna3d';
     import '../scripts/rhgrid';
     import '../scripts/time-slice';
+    import { initHomeLog } from '../scripts/home-log';
+    const logRoot = document.querySelector<HTMLElement>('[data-home-log]');
+    if (logRoot) {
+      const disposeLog = initHomeLog(logRoot);
+      addEventListener('pagehide', event => { if (!event.persisted) disposeLog(); });
+    }
   </script>
 </Base>
 
@@ -1588,69 +1582,9 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     color: var(--accent-ink);
   }
 
-  /* 卡片（S3）：玻璃底 + 顶部高光 + 悬停抬升 4px（原型定值） */
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 1.2rem;
-  }
-  .card {
-    position: relative;
-    padding: 1.7rem;
-    border-radius: 16px;
-    overflow: hidden;
-    border: 1px solid var(--glass-line);
-    background: var(--glass-bg);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.05);
-    backdrop-filter: blur(var(--glass-blur)) saturate(1.05);
-    box-shadow: var(--glass-shadow);
-    transition:
-      transform var(--dur-hover) var(--ease-interact),
-      background-color var(--dur-hover) var(--ease-interact),
-      border-color var(--dur-hover) var(--ease-interact),
-      box-shadow var(--dur-hover) var(--ease-interact);
-  }
-  .card::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    background: radial-gradient(46% 46% at 50% 0%, #ffffffb0, transparent 72%);
-    opacity: 0;
-    transition: opacity var(--dur-hover) var(--ease-interact);
-  }
-  .card:hover {
-    transform: translateY(-4px);
-    background: var(--glass-bg-hot);
-    border-color: #2d7d4630;
-    box-shadow: 0 2px 4px #1a1a1a0a, 0 18px 44px -18px #1a1a1a33;
-  }
-  .card:hover::after { opacity: 1; }
-  .card h3 {
-    font-size: 1.15rem;
-    margin: 0 0 0.5rem;
-    font-weight: 600;
-  }
-  .card p {
-    margin: 0;
-    color: var(--muted);
-    font-size: var(--fs-sm);
-  }
-  .card .k {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: var(--fs-mono);
-    color: var(--accent-ink);
-    letter-spacing: 0.1em;
-    margin-bottom: 0.9rem;
-    display: block;
-  }
   .empty {
     margin: 0;
     color: var(--muted);
-  }
-  .home-log-more {
-    display: none;
   }
 
   /* ====================== 技术栈 · 语言占比 ======================
@@ -1964,15 +1898,6 @@ const titleLines: { ch: string; i: number }[][] = (() => {
   }
 
   @media (max-width: 767px) {
-    #s3 .card:nth-child(n + 3) { display: none; }
-    .home-log-more {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--sp-2);
-      margin-top: var(--sp-4);
-      color: var(--accent-ink);
-      font-size: var(--fs-sm);
-    }
     .langbar-disclosure > summary {
       display: list-item;
       width: fit-content;

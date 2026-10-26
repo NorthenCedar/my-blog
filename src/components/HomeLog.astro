@@ -1,0 +1,157 @@
+---
+import { isoDate, type LogItem } from '../lib/log-order';
+
+interface Props { items: LogItem[] }
+const { items } = Astro.props;
+---
+
+<div class="home-log" data-home-log>
+  <div class="cards">
+    {items.map((it) => (
+      <div class="card">
+        <span class="k">{isoDate(it.date)}</span>
+        <h3><a data-log-trigger href={`/log/#day-${isoDate(it.date)}`}>{it.version ?? isoDate(it.date)}</a></h3>
+        <p>{it.changes?.[0]}{(it.changes?.length ?? 0) > 1 ? `（共 ${it.changes!.length} 项）` : ''}</p>
+      </div>
+    ))}
+  </div>
+  <div class="log-detail" id="home-log-detail" data-log-panel role="region" aria-label="完整版本更新" hidden>
+    <div class="log-sheet">
+      <button class="log-close" type="button" data-log-close aria-label="收起版本详情">收起 <span aria-hidden="true">×</span></button>
+      {items.map((it, i) => (
+        <section class="log-entry" data-log-entry aria-labelledby={`home-log-title-${i}`} hidden>
+          <header>
+            <p class="log-meta">{isoDate(it.date)} · 共 {it.changes?.length ?? 0} 项更新</p>
+            <h3 id={`home-log-title-${i}`}>{it.version ?? isoDate(it.date)}</h3>
+          </header>
+          <ul class="log-changes">{it.changes?.map(change => <li>{change}</li>)}</ul>
+        </section>
+      ))}
+    </div>
+  </div>
+  <a class="home-log-more" href="/log/">查看全部日志 <span aria-hidden="true">↗</span></a>
+</div>
+
+<style>
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1.2rem;
+  }
+  .card {
+    position: relative;
+    padding: 1.7rem;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--glass-line);
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.05);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.05);
+    box-shadow: var(--glass-shadow);
+    transition:
+      transform var(--dur-hover) var(--ease-interact),
+      background-color var(--dur-hover) var(--ease-interact),
+      border-color var(--dur-hover) var(--ease-interact),
+      box-shadow var(--dur-hover) var(--ease-interact);
+  }
+  .card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(46% 46% at 50% 0%, var(--glass-bg-hot), transparent 72%);
+    opacity: 0;
+    transition: opacity var(--dur-hover) var(--ease-interact);
+  }
+  .card:hover,
+  .card:focus-within {
+    transform: translateY(-4px);
+    background: var(--glass-bg-hot);
+    border-color: var(--accent-ink);
+    box-shadow: var(--glass-shadow);
+  }
+  .card:hover::after,
+  .card:focus-within::after { opacity: 1; }
+  .card:has([aria-expanded="true"]) { border-color: var(--accent-ink); background: var(--glass-bg-hot); }
+  .card h3 { font-size: 1.15rem; margin: 0 0 0.5rem; font-weight: 600; }
+  .card p { margin: 0; color: var(--muted); font-size: var(--fs-sm); }
+  .card .k {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: var(--fs-mono);
+    color: var(--accent-ink);
+    letter-spacing: 0.1em;
+    margin-bottom: 0.9rem;
+    display: block;
+  }
+  [data-log-trigger] { color: inherit; text-decoration: none; }
+  [data-log-trigger]::before { content: ''; position: absolute; inset: 0; }
+  .card:has([data-log-trigger]:focus-visible) { outline: 2px solid var(--accent-ink); outline-offset: var(--sp-1); }
+  [data-log-trigger]:focus-visible { outline: none; }
+  .home-log-more { display: none; }
+  .log-detail { overflow: hidden; }
+  .log-sheet {
+    position: relative;
+    margin-top: var(--sp-5);
+    border: 1px solid var(--glass-line);
+    border-radius: 16px;
+    background: var(--glass-bg-hot);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-shadow);
+  }
+  .log-entry { padding: var(--sp-6); }
+  .log-entry header { padding-right: var(--sp-8); margin-bottom: var(--sp-5); }
+  .log-meta { margin: 0 0 var(--sp-2); font: var(--fs-sm) 'IBM Plex Mono', monospace; color: var(--muted); }
+  .log-entry h3 { margin: 0; font-size: var(--fs-lg); line-height: var(--lh-title); }
+  .log-changes {
+    margin: 0;
+    padding-left: var(--sp-5);
+    padding-right: var(--sp-4);
+    max-height: min(50vh, 26rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: var(--muted) transparent;
+    line-height: var(--lh-body);
+  }
+  .log-changes li { max-width: 76ch; padding-left: var(--sp-2); }
+  .log-changes li + li { margin-top: var(--sp-3); }
+  .log-changes li::marker { color: var(--accent-ink); }
+  .log-close {
+    position: absolute;
+    z-index: 1;
+    right: var(--sp-5);
+    top: var(--sp-4);
+    display: inline-flex;
+    gap: var(--sp-2);
+    align-items: center;
+    min-height: 44px;
+    padding: var(--sp-2) var(--sp-3);
+    background: transparent;
+    border: 1px solid var(--glass-line);
+    border-radius: var(--sp-2);
+    color: var(--muted);
+    font: inherit;
+    cursor: pointer;
+    transition: color var(--dur-fast), background var(--dur-fast);
+  }
+  .log-close:hover { color: var(--ink); background: var(--glass-bg); }
+  .log-close:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: var(--sp-1); }
+  @media (max-width: 767px) {
+    .card:nth-child(n + 3) { display: none; }
+    .log-detail { display: none; }
+    .home-log-more {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--sp-2);
+      margin-top: var(--sp-4);
+      color: var(--accent-ink);
+      font-size: var(--fs-sm);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card { transition: none; }
+    .card:hover,
+    .card:focus-within { transform: none; }
+  }
+</style>

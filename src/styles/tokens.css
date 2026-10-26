@@ -240,6 +240,10 @@
   /* 版心 */
   --wrap: 82rem;
   --measure: 34em;
+  /* 文章桌面双栏：约1100px内容组，正文约43个中文字符，侧栏256px。 */
+  --post-measure: 46rem;
+  --post-rail-width: 16rem;
+  --post-rail-gap: 4rem;
   /* 云端写作台：文字编辑的独立尺寸，不引入站点装置。 */
   --writer-sidebar: 15rem;
   --writer-editor-height: 28rem;
@@ -583,8 +587,12 @@ html.dark {
   --talks-plate-dark-opacity: 0.16;
   --gallery-inf-dark-opacity: 0.16;
   --log-inf-dark-opacity: 0.16;
-  /* 时间切片的出口与相册交接幕共用此色板，切页前后保持同色。 */
-  --gallery-bath-bg: linear-gradient(178deg, #f56800 0%, #f37309 45%, #e65d00 100%);
+  /* 首页主场、相册显影板和交接幕共用同一组橙色与停靠点。 */
+  --home-hero-1: #eb6100;
+  --home-hero-2: #f56800;
+  --home-hero-3: #ef6100;
+  --home-hero-4: #e85c00;
+  --gallery-bath-bg: linear-gradient(178deg, var(--home-hero-1) 0%, var(--home-hero-2) 34%, var(--home-hero-3) 62%, var(--home-hero-4) 100%);
   --gallery-entry-bg: var(--gallery-bath-bg);
   --cursor-disc-line: #ffb570a6;
   --cursor-disc-fill: #ed8c3b14;
@@ -738,10 +746,6 @@ html.dark body.chrome-console {
   --deco-orbit-strong: #e8924938;
   --deco-orbit-soft: #e8924917;
   --deco-orbit-inner: #e892492e;
-  --home-hero-1: #eb6100;
-  --home-hero-2: #f56800;
-  --home-hero-3: #ef6100;
-  --home-hero-4: #e85c00;
   --home-hero-ink: #21150d;
   --home-hero-sub: #21150d;
   --home-hero-meta: #21150d;

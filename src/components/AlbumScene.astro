@@ -49,15 +49,17 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
   .scene-back { color: var(--muted); text-decoration: none; }
   .scene-name { flex: 1; color: var(--muted); font-size: var(--fs-sm); }
   .scene-bar button, .scene-actions button {
-    border: 1px solid var(--hair); border-radius: var(--scene-button-radius);
-    background: var(--paper); color: var(--ink); padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--dark-glass-line-low); border-radius: var(--scene-button-radius);
+    background: var(--dark-glass-bg); color: var(--on-band); padding: var(--sp-2) var(--sp-3);
     min-height: var(--scene-control-size); min-width: var(--scene-control-size);
     font: inherit; font-size: var(--fs-sm);
-    transition: border-color var(--dur-fast) var(--ease-interact), color var(--dur-fast) var(--ease-interact);
+    transition: border-color var(--dur-hover) var(--ease-interact), background-color var(--dur-hover) var(--ease-interact);
   }
-  .scene-bar button:hover, .scene-bar button:focus-visible,
-  .scene-actions button:hover, .scene-actions button:focus-visible { color: var(--accent-ink); border-color: var(--accent); }
-  .scene-actions button:disabled { color: var(--muted); opacity: var(--scene-disabled-opacity); }
+  .scene-bar button:hover, .scene-actions button:hover { border-color: var(--dark-glass-line); }
+  .scene-actions button:hover:not(:disabled) { background: var(--dark-glass-bg-hot); }
+  .scene-on .scene-back:focus-visible, .scene-bar button:focus-visible,
+  .scene-actions button:focus-visible { outline: 2px solid var(--on-band); outline-offset: calc(-1 * var(--sp-1)); }
+  .scene-actions button:disabled { color: var(--on-band-sub); opacity: var(--scene-disabled-opacity); }
   .scene-bar [hidden], .scene-controls[hidden] { display: none; }
   .scene-title { text-align: center; padding: var(--sp-7) 0; }
   .scene-title h1 { margin: 0; font-family: Archivo, 'IBM Plex Sans', sans-serif; font-size: var(--fs-title); font-weight: 600; letter-spacing: var(--ls-title); line-height: var(--lh-title); overflow-wrap: anywhere; }
@@ -73,15 +75,40 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
   :global(body.album-scene-active > .topbar), :global(body.album-scene-active > footer) { display: none; }
   .album-scene.scene-on { position: fixed; inset: 0; max-width: none; margin: 0; padding: 0; z-index: 2; }
   .scene-on .scene-bar { position: absolute; top: var(--sp-4); left: var(--sp-5); right: var(--sp-5); z-index: 4; }
-  .scene-on .scene-back, .scene-on .scene-name { padding: var(--sp-2); background: var(--scene-hud-paper); }
+  /* 画布控件共用暗玻璃，浅色照片和暗色底上都保留浅字；不支持模糊时用实底兜底。 */
+  .scene-on .scene-back, .scene-on .scene-name,
+  .scene-bar button, .scene-on .scene-controls p, .scene-on .scene-actions {
+    border: 1px solid var(--dark-glass-line-low);
+    border-top-color: var(--dark-glass-line);
+    border-radius: var(--scene-button-radius);
+    background: var(--code-bg); color: var(--on-band);
+    -webkit-backdrop-filter: blur(var(--dark-glass-blur)) saturate(var(--dark-glass-sat));
+    backdrop-filter: blur(var(--dark-glass-blur)) saturate(var(--dark-glass-sat));
+    box-shadow: inset 0 1px 0 var(--dark-glass-line-low),
+      inset 0 var(--sp-3) var(--sp-5) calc(-1 * var(--sp-3)) var(--dark-glass-glow),
+      0 var(--sp-1) var(--sp-3) var(--dark-glass-drop);
+  }
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .scene-on .scene-back, .scene-on .scene-name,
+    .scene-bar button, .scene-on .scene-controls p, .scene-on .scene-actions {
+      background: linear-gradient(var(--dark-glass-bg), var(--dark-glass-bg)),
+        color-mix(in srgb, var(--code-bg) 72%, transparent);
+    }
+  }
+  .scene-on .scene-back, .scene-on .scene-name {
+    display: inline-flex; align-items: center;
+    min-height: var(--scene-control-size); padding: var(--sp-2) var(--sp-3);
+  }
   .scene-on .scene-name { flex: 0; white-space: nowrap; }
   .scene-on [data-scene-toggle] { margin-left: auto; }
   .scene-on .scene-controls {
     position: absolute; left: var(--sp-5); right: var(--sp-5); bottom: var(--sp-4);
     z-index: 4; border: 0; padding: 0; pointer-events: none;
   }
-  .scene-on .scene-controls p, .scene-on .scene-actions { padding: var(--sp-2); background: var(--scene-hud-paper); border-radius: var(--scene-button-radius); }
+  .scene-on .scene-controls p, .scene-on .scene-actions { padding: var(--sp-2); }
+  .scene-on .scene-controls p { min-width: 0; color: var(--on-band-sub); }
   .scene-on .scene-actions { pointer-events: auto; }
+  .scene-on .scene-status { color: var(--on-band-sub); }
   .scene-on .scene-viewport {
     position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden;
     touch-action: pinch-zoom; user-select: none;
@@ -138,7 +165,7 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
   :global(.album-scene.scene-on[data-layout='slices'] .wf .plate-body > figure[aria-hidden='true']) { pointer-events: none; }
   :global(.album-scene.scene-on[data-layout='slices'] .wf .plate-body > figure:focus-within) { z-index: auto; }
   @media (max-width: 680px) {
-    .scene-name { display: none; }
+    .scene-name, .scene-on .scene-name { display: none; }
     .scene-bar { flex-wrap: wrap; }
     .scene-back { flex: 1; }
     .scene-controls { flex-direction: column; align-items: stretch; }
