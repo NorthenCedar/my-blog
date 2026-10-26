@@ -5,6 +5,7 @@ import { Image, getImage } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
 import TalkImageViewer from '../components/TalkImageViewer.astro';
+import { renderTalkText } from '../lib/talk-text';
 import { validateTalkVideos } from '../lib/video-assets.mjs';
 // 回复区样式（2026-09-28）：全局引入。本页 <style> 是 scoped，
 // 而回复元素是 JS 运行时创建的（没有 data-astro-cid）⇒ 写在本页 style 里不会生效。
@@ -143,7 +144,7 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
       <li class="talk">
         <time datetime={iso(t.date)}>{fmt(t.date)}</time>
         <p class="body">
-          {t.text}
+          <Fragment set:html={renderTalkText(t.text)} />
           {t.href && <> <a href={t.href}>链接</a></>}
         </p>
         {t.images && t.images.length > 0 && (

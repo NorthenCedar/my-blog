@@ -26,7 +26,7 @@ async function run() {
   const scene = state.scene = {
     // 这个返回值代表场景按当前可见几何给出的命中结果。
     hitTest: vi.fn(() => false), pulse: vi.fn(), resize: vi.fn(),
-    setDenied: vi.fn(), setPalette: vi.fn(), setPointer() {}, playAssemble() {}, dispose() {},
+    setDenied: vi.fn(), setPalette: vi.fn(), render: vi.fn(), setPointer() {}, playAssemble() {}, dispose() {},
   };
   let selection = '';
   vi.stubGlobal('document', { querySelector: () => null, documentElement: { classList: { contains: () => false } },

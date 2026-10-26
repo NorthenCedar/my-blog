@@ -342,6 +342,7 @@ const titleLines: { ch: string; i: number }[][] = (() => {
       ) : (
         <p class="empty">更新日志还是空的 —— 往 content/pages/log.md 加一条就会出现在这一屏。</p>
       )}
+      <a class="home-log-more" href="/log/">查看全部日志 <span aria-hidden="true">↗</span></a>
     </section>
 
     {/* ===== 技术栈 · 语言占比（原型 #s5 那条 GitHub 风格条形图）=====
@@ -399,15 +400,24 @@ const titleLines: { ch: string; i: number }[][] = (() => {
 
           {/* 明细：语言 / 字节 / 占比。占比用第二个 dd（不是原型那个裸 span）——
               <dl> 里 <div> 只允许包 dt/dd。 */}
-          <dl class="langbar-detail">
-            {langSlices.map((s, i) => (
-              <div style={`--i:${i}`}>
-                <dt>{s.name}</dt>
-                <dd>{s.bytes.toLocaleString('en-US')} B</dd>
-                <dd class="pct">{s.pct}%</dd>
-              </div>
-            ))}
-          </dl>
+          <details class="langbar-disclosure" open>
+            <summary>
+              <span class="langbar-show">展开技术栈明细</span>
+              <span class="langbar-hide">收起技术栈明细</span>
+            </summary>
+            <dl class="langbar-detail">
+              {langSlices.map((s, i) => (
+                <div style={`--i:${i}`}>
+                  <dt>{s.name}</dt>
+                  <dd>{s.bytes.toLocaleString('en-US')} B</dd>
+                  <dd class="pct">{s.pct}%</dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+          {/* 紧邻明细同步执行，首次布局前收起；无 JS 时保留服务端展开内容。
+              内联脚本压缩以遵守首页总字节预算。 */}
+          <script is:inline data-home-stack-init>(()=>{const details=document.currentScript.previousElementSibling,mobile=matchMedia('(max-width:767px)'),sync=()=>{details.open=!mobile.matches};sync();mobile.addEventListener('change',sync)})();</script>
         </div>
       </section>
     )}
@@ -1639,6 +1649,9 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     margin: 0;
     color: var(--muted);
   }
+  .home-log-more {
+    display: none;
+  }
 
   /* ====================== 技术栈 · 语言占比 ======================
      ★★ 必须给 reduced-motion 终态（见文件末尾）：条本体初值 scaleX(0)、
@@ -1728,6 +1741,9 @@ const titleLines: { ch: string; i: number }[][] = (() => {
   }
   .langbar-legend .nm {
     color: var(--ink);
+  }
+  .langbar-disclosure > summary {
+    display: none;
   }
   .langbar-detail {
     margin: 1.1rem 0 0;
@@ -1948,6 +1964,27 @@ const titleLines: { ch: string; i: number }[][] = (() => {
   }
 
   @media (max-width: 767px) {
+    #s3 .card:nth-child(n + 3) { display: none; }
+    .home-log-more {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--sp-2);
+      margin-top: var(--sp-4);
+      color: var(--accent-ink);
+      font-size: var(--fs-sm);
+    }
+    .langbar-disclosure > summary {
+      display: list-item;
+      width: fit-content;
+      margin-top: var(--sp-4);
+      padding-block: var(--sp-2);
+      color: var(--accent-ink);
+      font-size: var(--fs-sm);
+      cursor: pointer;
+    }
+    .langbar-disclosure .langbar-hide,
+    .langbar-disclosure[open] .langbar-show { display: none; }
+    .langbar-disclosure[open] .langbar-hide { display: inline; }
     .entry a { grid-template-columns: 1fr; gap: 0.4rem; }
     .entry .s { grid-column: 1; }
     .dna-stack { display: none; }        /* 手机上 3D 太重且挤 */

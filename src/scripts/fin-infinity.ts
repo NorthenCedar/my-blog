@@ -16,15 +16,18 @@ import { mixThemeColor, type ThemePreviewFrame } from './theme-preview';
 
 /** 脚本可跑的最严条件：过不了就只留静态层。 */
 const ok = () =>
+  !matchMedia('(max-width: 767px)').matches &&
   !matchMedia('(prefers-reduced-motion: reduce)').matches &&
   typeof WebGLRenderingContext !== 'undefined';
 
 export function initFinInfinity(root: HTMLElement): void {
   const host = root.querySelector<HTMLElement>('[data-fin-infinity]');
   const view = root.querySelector<HTMLElement>('[data-fin-view]');
-  const canvas = root.querySelector<HTMLCanvasElement>('[data-fin-cv]');
+  const initialCanvas = root.querySelector<HTMLCanvasElement>('[data-fin-cv]');
   const staticLayer = root.querySelector<HTMLElement>('[data-fin-static]');
-  if (!host || !view || !canvas) return;
+  if (!host || !view || !initialCanvas) return;
+  let canvas = initialCanvas;
+  let canvasUsed = false;
 
   /* ── 取色：与站内其它装置同一套写法（6 位 hex + 独立 alpha）── */
   const cs = getComputedStyle(host);
@@ -70,16 +73,20 @@ export function initFinInfinity(root: HTMLElement): void {
   let stopLoop: (() => void) | null = null;
   let gate: ReturnType<typeof createActivityGate> | null = null;
   let disposed = false;
+  let generation = 0;
 
   const resize = () => {
     const r = host.getBoundingClientRect();
     scene?.resize(r.width, r.height, devicePixelRatio || 1);
   };
 
-  const boot = async () => {
+  const boot = async (ticket: number) => {
     const mod = await import('./fin-scene');
-    const s = await mod.createFinScene(canvas, themePreview ? previewPalette(themePreview) : buildPalette());
-    if (disposed || !stopLoop) {
+    if (disposed || ticket !== generation || !stopLoop || !ok()) return;
+    const frameCanvas = canvas;
+    canvasUsed = true;
+    const s = await mod.createFinScene(frameCanvas, themePreview ? previewPalette(themePreview) : buildPalette());
+    if (disposed || ticket !== generation || frameCanvas !== canvas || !stopLoop || !ok()) {
       s.dispose();
       return;
     }
@@ -89,38 +96,51 @@ export function initFinInfinity(root: HTMLElement): void {
     resize();
     s.resize(host.getBoundingClientRect().width, host.getBoundingClientRect().height, devicePixelRatio || 1);
     s.playAssemble();
+    s.render(0);
+    // 场景真正有一帧后再交接；加载期间仍可看到静态背景。
+    host.classList.add('fin-on');
+    staticLayer?.setAttribute('hidden', '');
   };
 
   const enable = () => {
-    if (stopLoop) return;
+    if (disposed || stopLoop) return;
     if (!ok()) return; // reduced-motion / 无 WebGL ⇒ 只留静态层
-    host.classList.add('fin-on');
+    if (canvasUsed) {
+      // dispose 已主动丢失旧上下文；保留属性与作用域标记，用新画布恢复桌面场景。
+      const next = canvas.cloneNode(false) as HTMLCanvasElement;
+      canvas.replaceWith(next);
+      canvas = next;
+      canvasUsed = false;
+      bindContext(canvas);
+    }
+    const ticket = ++generation;
     view.hidden = false;
-    staticLayer?.setAttribute('hidden', '');
-    boot().catch((err) => {
-      console.warn('[fin] 场景启动失败，退回静态层', err);
-      disable();
-      staticLayer?.removeAttribute('hidden');
-    });
     gate = createActivityGate(view, {});
     stopLoop = startLoop((dt) => {
       if (gate && !(gate.onScreen && gate.visible)) return; // 视口外 / 切标签 ⇒ 停帧
       scene?.render(dt);
     });
+    boot(ticket).catch((err) => {
+      if (ticket !== generation || disposed) return;
+      console.warn('[fin] 场景启动失败，退回静态层', err);
+      disable();
+      staticLayer?.removeAttribute('hidden');
+    });
   };
 
   const disable = () => {
+    generation++;
     stopLoop?.();
     stopLoop = null;
     gate?.dispose();
     gate = null;
     view.hidden = true;
     host.classList.remove('fin-on');
-    scene?.dispose();
+    staticLayer?.removeAttribute('hidden');
+    const previous = scene;
     scene = null;
+    previous?.dispose();
   };
-
-  enable();
 
   /* ── 尺寸：容器变了要跟着变（窄屏 / 旋转 / 侧栏开合）── */
   const ro = new ResizeObserver(() => resize());
@@ -188,22 +208,28 @@ export function initFinInfinity(root: HTMLElement): void {
 
   /* ── 断点切换：窄屏不再跑（对齐站内约定）── */
   const mq = matchMedia('(max-width: 767px)');
-  const onMq = () => (mq.matches ? disable() : enable());
+  const motion = matchMedia('(prefers-reduced-motion: reduce)');
+  const onMq = () => (ok() ? enable() : disable());
   mq.addEventListener('change', onMq);
+  motion.addEventListener('change', onMq);
+  bindContext(canvas);
   onMq();
 
 /* ── WebGL 上下文丢失（切GPU / 驱动重置 / 长时间隐藏）──
      与 pleated-infinity.ts 同一套处理：丢 ⇒ 停帧 + 退回静态层（不留黑画布）；
      恢复 ⇒ 重建场景。⚠ 必须 preventDefault，否则浏览器**不会**再派发 restored。── */
-  canvas.addEventListener('webglcontextlost', (e) => {
-    e.preventDefault();
-    disable();
-    staticLayer?.removeAttribute('hidden');
-  }, { passive: false });
-  canvas.addEventListener('webglcontextrestored', () => {
-    staticLayer?.setAttribute('hidden', '');
-    enable();
-  });
+  function bindContext(target: HTMLCanvasElement) {
+    target.addEventListener('webglcontextlost', (e) => {
+      if (disposed || target !== canvas) return;
+      e.preventDefault();
+      disable();
+      staticLayer?.removeAttribute('hidden');
+    }, { passive: false });
+    target.addEventListener('webglcontextrestored', () => {
+      if (disposed || target !== canvas) return;
+      onMq();
+    });
+  }
 
   /* ── 页面级清理：bfcache 回来时别留孤儿 rAF ── */
 addEventListener('pagehide', () => {
@@ -212,6 +238,7 @@ addEventListener('pagehide', () => {
     mo.disconnect();
     document.removeEventListener('themepreview', onThemePreview);
     mq.removeEventListener('change', onMq);
+    motion.removeEventListener('change', onMq);
     removeEventListener('pointerdown', onDown);
     removeEventListener('pointermove', onMove);
     stopLoop?.();
