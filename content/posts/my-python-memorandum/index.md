@@ -1,7 +1,7 @@
 ---
 title: 我的Python备忘录
 date: 2026-10-25
-updated: 2026-10-25
+updated: 2026-10-27
 summary: 本人写代码经常会忘，所以新建一篇文章专门用来记录代码，此文会持续更新，日期是第一次发布日期
 tags: [个人, 备忘]
 draft: false

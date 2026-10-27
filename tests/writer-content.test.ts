@@ -1,4 +1,4 @@
-import { expect,it } from 'vitest';
+import { expect,it,vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readFileSync,readdirSync,existsSync } from 'node:fs';
 import sharp from 'sharp';
@@ -69,4 +69,53 @@ it('引用块中的代码围栏与参考式代码示例保持原样',()=>{
   value.body=`> \`\`\`md\n> ![示例](${ref})\n> \`\`\`\n`;
   const text=decode(planChanges({kind:'post',key:'example',base:base(post),value},post,new Map()),'content/posts/example/index.md');
   expect(text).toContain(`> ![示例](${ref})`);
+});
+// updated 是手填字段，编辑正文的人不会记得同步它 ⇒ 页面印着过期的「更新于」。
+// 判据取北京日期（Cloudflare 跑 UTC，早八点前直接取 UTC 会退一天）。
+const dated='---\ndate: 2026-10-25\nupdated: 2026-10-25\ntitle: 题\nsummary: 简介\ntags: [随笔]\ndraft: false\n---\n原正文\n';
+const write=(text:string,value:ReturnType<typeof readPost>,baseText=text)=>decode(planChanges({kind:'post',key:'example',base:base(baseText),value},text,new Map()),'content/posts/example/index.md');
+it('正文改过就把 updated 推进到北京日期，并跨过 UTC 与北京的日期差',()=>{
+  vi.useFakeTimers();
+  try{
+    vi.setSystemTime(new Date('2026-10-27T04:00:00Z'));  // 北京 10-27 12:00
+    const value=readPost(dated);value.body='改过的正文\n';
+    expect(readPost(write(dated,value)).fields.updated).toBe('2026-10-27');
+    vi.setSystemTime(new Date('2026-10-27T20:00:00Z'));  // UTC 还是 27 日，北京已是 28 日
+    expect(readPost(write(dated,value)).fields.updated).toBe('2026-10-28');
+  }finally{vi.useRealTimers();}
+});
+it('updated 的三种例外：手动值不覆盖、没变化不动、更晚的日期不往回改',()=>{
+  vi.useFakeTimers();
+  try{
+    vi.setSystemTime(new Date('2026-10-27T04:00:00Z'));
+    const manual=readPost(dated);manual.body='改过的正文\n';manual.fields.updated='2026-11-02';
+    expect(readPost(write(dated,manual)).fields.updated).toBe('2026-11-02');
+    expect(readPost(write(dated,readPost(dated))).fields.updated).toBe('2026-10-25');
+    const future=dated.replace('updated: 2026-10-25','updated: 2026-11-30'),later=readPost(future);later.body='改过的正文\n';
+    expect(readPost(write(future,later)).fields.updated).toBe('2026-11-30');
+    const fresh={fields:{title:'新题',date:'2026-10-27',summary:'简介',tags:['随笔']},body:'正文\n',assets:[]};
+    const created=decode(planChanges({kind:'post',key:'fresh',base:null,value:fresh},null,new Map()),'content/posts/fresh/index.md');
+    expect(readPost(created).fields.updated).toBeUndefined();
+  }finally{vi.useRealTimers();}
+});
+it('updated 只进不退：客户端滞后不会顶回去，没有该字段的文章也不被加上',()=>{
+  vi.useFakeTimers();
+  try{
+    vi.setSystemTime(new Date('2026-10-27T04:00:00Z'));
+    // 原文已推进到 11-30，编辑器还拿着旧值 10-25 ⇒ 必须保持 11-30，不能倒回去
+    const ahead=dated.replace('updated: 2026-10-25','updated: 2026-11-30'),stale=readPost(ahead);
+    stale.body='又改一段\n';stale.fields.updated='2026-10-25';
+    expect(readPost(write(ahead,stale)).fields.updated).toBe('2026-11-30');
+    // 可选字段：原文没有 updated 就不主动添加（加不加是排版选择）
+    const plain=dated.replace('updated: 2026-10-25\n',''),edit=readPost(plain);edit.body='改过的正文\n';
+    expect(readPost(write(plain,edit)).fields.updated).toBeUndefined();
+  }finally{vi.useRealTimers();}
+});
+it('说说正文含换行、引号、制表符与反斜杠时仍是无损的合法 YAML',()=>{
+  const text='---\ntitle: 说说\nitems:\n  - id: talk-old\n    date: 2026-10-23\n    text: 原文\n---\n';
+  const body='第一行\n第二行带"引号"\n\t制表符与\\反斜杠\n# 不是注释';
+  const out=decode(planChanges({kind:'talk',key:'talk-new',base:null,value:{fields:{date:'2026-10-24'},body,assets:[]}},text,new Map()),'content/pages/talks.md');
+  // 云端写入走 JSON.stringify ⇒ 换行落成转义序列；裸换行会让严格解析器报 Missing closing "quote。
+  expect(out).toContain('\\n');expect(out).toContain('\\t');
+  expect(readTalks(out).find(t=>t.key==='talk-new')!.value.body).toBe(body);
 });

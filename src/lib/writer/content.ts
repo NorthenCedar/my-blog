@@ -41,6 +41,31 @@ function talkNodes(text:string){
 export function readTalks(text:string):{key:string;value:WriterValue;itemHash:string}[]{
   return talkNodes(text).rows.map(({key,fields,body,itemHash})=>({key,value:{fields,body,assets:[]},itemHash}));
 }
+// ── updated 自动推进（与桌面端 lib/content.py 的 sync_updated 同一套规则）──
+// `updated` 是手填字段，编辑正文的人不会记得同步它 ⇒ 文章改了、页面还印着旧的「更新于」。
+// 规则：原文没有该字段就不主动添加；手动清空就尊重；没有实质变化不动；
+//       目标值 = max(今天, 当前值)，不晚于原文值就不写（「更新于」只进不退）。
+// ★ 不区分"手填"是有意的：编辑器可能还停在上一次推进之前的日期，把"提交值早于原文"
+//   当成手填，会把刚写好的日期顶回去（27→25→27 来回跳）。手填更晚的日期照样尊重。
+// 站点主时区是北京时间，Cloudflare 跑在 UTC 上 ⇒ 用 Asia/Shanghai 取日期，否则早八点前会退一天。
+function shanghaiToday(){
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+}
+// 比较用的规范形：键排序、忽略 updated、正文行尾归一。
+function shapeOf(fields:Record<string,unknown>,body:string,updated:unknown){
+  const rest=Object.keys(fields).filter(key=>key!=='updated').sort().map(key=>[key,fields[key]??null]);
+  return JSON.stringify([rest,body.replace(/\r\n/g,'\n'),updated==null?'':String(updated)]);
+}
+function advanceUpdated(fields:Record<string,unknown>,body:string,original:WriterValue,today=shanghaiToday()){
+  const before=String(original.fields.updated??'');let current=String(fields.updated??'');
+  if(!before||!current) return fields;
+  // 「更新于」只进不退：客户端可能还停在上一次推进之前的日期，把原文值写回去。
+  if(current<before){fields={...fields,updated:before};current=before;}
+  if(shapeOf(fields,body,current)===shapeOf(original.fields,original.body,before)) return fields;
+  // 钳位保证 current >= before，所以目标值只会前进或不变 —— 不需要再判"小于原文就不动"。
+  const target=current>today?current:today;
+  return {...fields,updated:target};
+}
 type Patch={start:number;end:number;text:string};
 function apply(text:string,patches:Patch[]){
   for(const p of patches.sort((a,b)=>b.start-a.start)) text=text.slice(0,p.start)+p.text+text.slice(p.end);
@@ -105,13 +130,15 @@ export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,
   let text:string;
   if(kind==='post'){
     if(draft.base?currentText!==draft.base.text:currentText!==null) return conflict();
-    const fields={...value.fields,draft:false};
-    if(draft.base){const original=readPost(draft.base.text);if(fields.slug!==original.fields.slug) bad('旧文章网址标识不能修改');}
+    const fields={...value.fields,draft:false},original=draft.base?readPost(draft.base.text):null;
+    if(original){if(fields.slug!==original.fields.slug) bad('旧文章网址标识不能修改');}
     else if(fields.slug!==undefined&&fields.slug!==key) bad('文章网址标识与目录不一致');
     if(typeof fields.cover==='string'&&fields.cover.startsWith('writer-asset:')) fields.cover=resolve(fields.cover.slice(13));
     const body=replaceImages(value.body,resolve);
-    if(currentText!==null){const s=split(currentText);text=currentText.slice(0,s.offset)+apply(s.header,updateMap(s.header,s.doc.contents as YAMLMap,fields,s.newline))+`---${s.newline}`+body.replace(/\r?\n/g,s.newline);}
-    else text=`---\n${jsonFields(fields,'\n')}---\n${body}`;
+    // 正文/字段真的变了才把 updated 推到今天；用户手填的值（含手动清空）一律不动。
+    const synced=original?advanceUpdated(fields,body,original):fields;
+    if(currentText!==null){const s=split(currentText);text=currentText.slice(0,s.offset)+apply(s.header,updateMap(s.header,s.doc.contents as YAMLMap,synced,s.newline))+`---${s.newline}`+body.replace(/\r?\n/g,s.newline);}
+    else text=`---\n${jsonFields(synced,'\n')}---\n${body}`;
     changes.unshift({path:`content/posts/${key}/index.md`,bytes:new TextEncoder().encode(text)});
   }else{
     if(currentText===null) return bad('说说原文件不存在');

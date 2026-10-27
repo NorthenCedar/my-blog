@@ -1,8 +1,12 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+// 这条用例要真起 git init/add/commit 一串子进程，全量并发校验时超过默认 5 秒
+// （2026-10-27 实测在 19:40 那次全量里报 Test timed out in 5000ms）。
+// testTimeout 在 it() 注册时读取，所以必须写在用例前面。
+vi.setConfig({testTimeout:30000});
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach(dir => rmSync(dir, { recursive: true, force: true })));
