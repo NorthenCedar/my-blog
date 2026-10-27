@@ -7,6 +7,9 @@ import { gitFixture } from './_writer-git';
 import { prepare,verifySnapshotCandidate,contentDigest } from '../scripts/writer/prepare.mjs';
 import { publish } from '../scripts/writer/publish.mjs';
 import { verifyPrepared } from '../scripts/writer/validate.mjs';
+// 真实 Git 子进程在 Windows 与全量并发校验中会超过默认 5 秒；没有网络操作。
+// ★ 必须落在文件最前面：testTimeout 是在 it() 注册时读取的，写在用例之后只对后面注册的用例生效。
+vi.setConfig({testTimeout:30000});
 const value={fields:{title:'标题',date:'2026-10-23',summary:'简介',tags:['随笔']},body:'手机文章\n',assets:[]};
 const snapshot={id:'a'.repeat(32),kind:'post',key:'phone-a',revision:1,base:null,publishedRevision:0,value};
 const jobId='b'.repeat(32);
@@ -35,8 +38,6 @@ it('Node 实际重查阶段跳过准备、verify 和推送，只读取准确部�
   expect(result.status,result.stderr).toBe(0);expect(result.stdout).toContain('本次只重新检查上线');
   expect(s.must(s.cloud,['status','--porcelain'])).toBe('');expect(s.must(s.remote,['rev-list','--count','main'])).toBe('1');
 });
-// 真实 Git 子进程在 Windows 与全量并发校验中会超过默认 5 秒；没有网络操作。
-vi.setConfig({testTimeout:30000});
 it('真正准备候选并普通推送，重复执行同一任务不产生第二次提交',async()=>{
   const s=gitFixture(),prepared=prepare({repoDir:s.cloud,snapshot,assets:new Map(),jobId});
   expect(prepared.paths).toEqual(['content/posts/phone-a/index.md']);
