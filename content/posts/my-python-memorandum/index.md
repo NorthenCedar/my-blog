@@ -8,6 +8,30 @@ draft: false
 ---
 如果忘了想要捡起来，就照着下面自己去编译器里面敲，运行看结果！
 
+## 需要注意的点：
+### 输入的值
+输入得到的值都是字符串，想要得到整数需加 num = int(input("请输入一个整数："))
+接收多个整数输入：
+```python
+inputs = input("请输入多个整数，用空格隔开：")
+
+# split()按空格切分成列表，map()将每一个元素转换成int
+a, b, c = map(int, input.split())
+
+print(f"a={a}, b={b}, c={c}")
+```
+如果输入小数就先转换成float再转换成整型
+
+处理异常情况就用try-except 语句
+```python
+try:
+    num = int(input("请输入一个整数："))
+    print(f"输入的数字是{num}")
+except ValueError:
+    ptint("输入有误！请输入纯数字，且不包含小数")
+```
+
+
 ## range语句
 1.range(num) 是从0开始到num-1结束。如range(5)取得的数据是:[0,1,2,3,4]
 
@@ -245,4 +269,85 @@ while True:
 
 ```
 
-ok,今天终于把列表部分敲完了，睡觉了  10.26晚
+## 元组
+### 元组的概念
+元组可以看成一个只读的列表，不可更改里面的内容
+定义元组字面量用小括号  （元素, 元素, ..., 元素）
+定义空元组可用以下两个方法：
+    变量名称 = ()
+    变量名称 = tuple()
+
+*注意：元组里面只有一个数据，这个数据后要加逗号，不写的话就不是元组类型
+```python
+t1 = ("hello")
+print(f"t1的类型是:{type(t1)},t1的内容是{t1}")    # 输出结果是 <class 'str'>   hello
+```
+
+### 元组的常用操作方法
+1.下标索引去取出内容
+```python
+t2 = ((1, 2, 3), (4, 5, 6))
+num = t2[1][2]
+print(num)   #结果是第二个元素（因为第一个元素是元组）里面的第三个元素   6
+```
+
+2.index，count，len的用法都和列表一样，去列表里面看看
+
+*注意：元组不可修改，但是如果元组里面嵌套了一个列表，里面的列表可以修改
+```python
+t3 = (1, 2, ["north", "cedar"])
+t3[2][0] = "northen"
+print(t3)   #结果是(1, 2, ["northen", "cedar"])
+```
+
+## 字符串
+尽管字符串看起来并不像列表那样是存放了许多数据的容器，但字符串同样也是数据容器的一员。同元组一样，是不可修改的数据容器，同样可以用下标索引取值
+```python
+my_str = "north cedar top"
+value = my_str[-1]   # 得到的值是"p"
+```
+### index的用法和列表相同，去找列表
+
+### 字符串的替换
+语法：字符串.replace("字符串1", "字符串2")
+功能：将字符串内的全部 字符串1，替换为 字符串2
+注意：不是修改字符串本身，而是得到了一个新的字符串
+```python
+my_str = "north cedar top"
+new_str = my_str.replace("north", "south")
+print(new_str)   # 结果是  "south cedar top"
+```
+
+### 字符串的分割
+语法：字符串.split("分隔符字符串")
+功能：按照指定的分隔符字符串，将字符串分割为多个字符串，并存入列表对象中
+注意：字符串本身不变，只是得到了一个列表对象
+```python
+my_str = "north cedar top"
+new_str = my_str.split(" ")
+print(new_str)   # 结果是  ['north', 'cedar', 'top']
+```
+
+### 字符串的规整操作
+1.前后去空格
+语法：字符串.strip()
+
+2.去前后指定字符串
+语法：字符串.strip("字符串")
+```python
+my_str = "122*2north cedar top1*121"
+new_str = my_str.strip("12")
+print(new_str)   # 结果是  "*2north cedar top1*"
+# 注意！！！！去除字符串“12”并不是必需符合顺序12，而是去除前后的一个个小字符串"1"和"2",遇到不是这两个的就停,所以顺序不重要
+```
+
+3.count和len的用法和列表一样
+
+4.和列表元组一样可用while/for循环
+```python
+my_str = "north cedar top"
+for i in my_str:
+    print(i)
+```
+
+ok，先到这，马上要上课了  10.27
