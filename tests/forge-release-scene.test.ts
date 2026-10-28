@@ -24,10 +24,10 @@ async function fixture(mobile=false,width=mobile?390:1440,height=900){
   vi.stubGlobal('IntersectionObserver',class{observe(){}disconnect(){}});
   const canvas=new EventTarget() as any;canvas.clientWidth=width;canvas.clientHeight=height;canvas.dataset={};canvas.parentElement={dataset:{}};
   const {createForgeScene}=await import('../src/scripts/forge-scene.js');
-  const scene=createForgeScene(canvas,()=>{});teardown=()=>scene.dispose();
+  const onFrame=vi.fn();const scene=createForgeScene(canvas,onFrame);teardown=()=>scene.dispose();
   const tick=(count=1)=>{for(let i=0;i<count;i++){now+=1000/60;const queued=[...frames.values()];frames.clear();queued.forEach(callback=>callback(now));}};
   const named=(name:string)=>rendered.scene.getObjectByName(name);
-  return {scene,canvas,tick,named,frames,document};
+  return {scene,canvas,tick,named,frames,document,onFrame};
 }
 
 describe('真实场景接线与资源生命周期',()=>{
@@ -46,6 +46,7 @@ describe('真实场景接线与资源生命周期',()=>{
     const f=await fixture(true);f.scene.setProgress(0);f.tick(100);f.scene.setProgress(1);
     for(let i=0;i<120&&Number(f.canvas.dataset.chainRelease||0)<.35;i++)f.tick();
     expect(Number(f.canvas.dataset.chainRelease)).toBeGreaterThan(.2);expect(f.named('forge-broken-links').visible).toBe(true);
+    expect(f.onFrame.mock.lastCall?.[1]).toBeCloseTo(Number(f.canvas.dataset.chainRelease),3);
     expect(f.named('forge-broken-links').count).toBe(8);expect(f.frames.size).toBe(1);
     f.scene.setReduced(true);f.tick(2);
     expect(f.canvas.dataset.chainRelease).toBe('1.000');expect(f.named('forge-broken-links').visible).toBe(false);expect(f.frames.size).toBe(0);

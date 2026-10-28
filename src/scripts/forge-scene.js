@@ -251,7 +251,7 @@ export function createForgeScene(canvas, onFrame) {
     drawChains(p, burst.amount);
     canvas.dataset.chainRelease = burst.amount.toFixed(3);
     rim.intensity = (dark ? 3.4 : 2.0) + Math.sin(p * Math.PI) * .7;
-    renderer.render(scene, camera); onFrame(current);
+    renderer.render(scene, camera); onFrame(current, burst.amount);
 
     if (!settled || burst.active) raf = requestAnimationFrame(renderFrame); else last = 0;
   }

@@ -1,4 +1,5 @@
 import { getTheme, setTheme } from './theme';
+import { createForgeScrollLock } from './forge-scroll-lock';
 
 /** 本页控制器只读取构建好的正文，不接收 HTML 字符串，也不执行发布。 */
 export function initForge(body: HTMLElement): () => void {
@@ -16,10 +17,12 @@ export function initForge(body: HTMLElement): () => void {
   try { motionChoice=sessionStorage.getItem('forge-motion'); } catch { motionChoice=body.dataset.motion || null; }
   let reduced = motionChoice ? motionChoice === 'reduce' : reducedQuery.matches;
   let disposed = false, scene: any, start = 0, distance = 1, pending = 0, activeStage = -1;
+  const scrollLock=createForgeScrollLock(body,()=>({start,end:start+distance}));
   const clamp = (v:number) => Math.min(1,Math.max(0,v));
   const ease = (a:number,b:number,x:number) => { const t=clamp((x-a)/(b-a));return t*t*(3-2*t); };
-  const draw = (progress:number) => {
+  const draw = (progress:number,release=1) => {
     if (!stage || disposed) return;
+    scrollLock.frame(release);
     if (reduced) progress=0;
     stage.style.setProperty('--progress', String(progress));
     stage.style.setProperty('--leave', String(ease(.22,.47,progress)));
@@ -34,6 +37,7 @@ export function initForge(body: HTMLElement): () => void {
   const measure = () => { if(!hero||!stage)return;start=hero.getBoundingClientRect().top+scrollY;distance=Math.max(1,hero.offsetHeight-stage.offsetHeight);update(); };
   const theme = () => { const value=document.documentElement.classList.contains('dark')?'dark':'light';themeButton?.setAttribute('aria-label',value==='dark'?'切换为亮色':'切换为暗色');scene?.setTheme(value); };
   const motion = (value:boolean) => {
+    scrollLock.setReady(Boolean(scene)&&!value);
     reduced=value;body.dataset.motion=value?'reduce':'full';motionButton?.setAttribute('aria-pressed',String(value));motionButton?.setAttribute('aria-label',value?'启用动态':'减少动态');
     if(motionButton?.firstChild)motionButton.firstChild.textContent=value?'静态 ':'动态 ';scene?.setReduced(value);measure();
   };
@@ -43,6 +47,8 @@ export function initForge(body: HTMLElement): () => void {
   reducedQuery.addEventListener('change',event=>{if(!motionChoice)motion(event.matches);},options);
   window.addEventListener('scroll',()=>{if(!pending)pending=requestAnimationFrame(update);},{...options,passive:true});
   window.addEventListener('resize',measure,{...options,passive:true});
+  canvas?.addEventListener('webglcontextlost',()=>scrollLock.setReady(false),options);
+  canvas?.addEventListener('webglcontextrestored',()=>scrollLock.setReady(Boolean(scene)&&!reduced),options);
   window.addEventListener('pointermove',event=>{if(event.pointerType==='mouse'&&!reduced&&scrollY<start+distance+100)scene?.setPointer(event.clientX/innerWidth*2-1,event.clientY/innerHeight*2-1);},{...options,passive:true});
   document.documentElement.addEventListener('pointerleave',()=>scene?.setPointer(0,0),options);
   stages.forEach(button=>button.addEventListener('click',()=>scrollTo({top:start+distance*Number(button.dataset.stage),behavior:reduced?'instant':'smooth'}),options));
@@ -50,7 +56,7 @@ export function initForge(body: HTMLElement): () => void {
   body.querySelectorAll('.reveal').forEach(element=>observer.observe(element));body.classList.add('js-ready');
   if(canvas) import('./forge-scene.js').then(({createForgeScene})=>{
     if(disposed)return;scene=createForgeScene(canvas,draw);theme();motion(reduced);measure();
-  }).catch(()=>{if(!disposed)canvas.parentElement!.dataset.ready='false';});
+  }).catch(()=>{scrollLock.setReady(false);if(!disposed)canvas.parentElement!.dataset.ready='false';});
   theme();motion(reduced);measure();
 
   // 同一模板适用于真实照片、网页模型和后续的手工作品，触摸设备不绑定跟手倾斜。
@@ -83,7 +89,7 @@ export function initForge(body: HTMLElement): () => void {
     dialog.addEventListener('close',()=>{if(current===dialog&&!dialog.open)restore();},options);
     dialog.addEventListener('click',event=>{if(event.target!==dialog)return;const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)close();},options);
   });
-  return ()=>{if(disposed)return;disposed=true;events.abort();observer.disconnect();if(pending)cancelAnimationFrame(pending);scene?.dispose();animation?.cancel();if(current){current.close();body.style.overflow=previousOverflow;}body.classList.remove('js-ready');};
+  return ()=>{if(disposed)return;disposed=true;events.abort();scrollLock.dispose();observer.disconnect();if(pending)cancelAnimationFrame(pending);scene?.dispose();animation?.cancel();if(current){current.close();body.style.overflow=previousOverflow;}body.classList.remove('js-ready');};
 }
 let cleanup = () => {};
 function mount(){cleanup();if(document.body.classList.contains('forge-page'))cleanup=initForge(document.body);}
