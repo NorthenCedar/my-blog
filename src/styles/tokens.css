@@ -856,6 +856,7 @@ html.dark body.tags-plate {
   --forge-metal: #bfc5be;
   --forge-metal-edge: #e8ede6;
   --forge-chain: #8a948b;
+  --forge-break-glint: var(--forge-light-key);
   --forge-rim: #69a575;
   --forge-light-key: #ffffff;
   --forge-light-fill: #f4f6ef;
@@ -899,5 +900,6 @@ html.dark {
   --forge-metal: #636563;
   --forge-metal-edge: #c8c6be;
   --forge-chain: #77746c;
+  --forge-break-glint: var(--accent);
   --forge-rim: #ff7b00;
 }

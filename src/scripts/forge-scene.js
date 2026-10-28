@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import { extendChainToEdges } from '../lib/forge-geometry';
+import { createChainRelease, recoilChainArm, chainFragmentPose } from '../lib/forge-release';
 const palette = name => getComputedStyle(document.body).getPropertyValue('--forge-' + name).trim();
 
 const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
@@ -51,6 +52,12 @@ function edgeGeometry(side, segments) {
 class LinkCurve extends THREE.Curve {
   getPoint(t, out = new THREE.Vector3()) {
     const a = t * Math.PI * 2;
+    return out.set(.138 * Math.cos(a), .073 * Math.sin(a), 0);
+  }
+}
+class BrokenLinkCurve extends THREE.Curve {
+  getPoint(t, out = new THREE.Vector3()) {
+    const a = .48 + t * (Math.PI * 2 - .96);
     return out.set(.138 * Math.cos(a), .073 * Math.sin(a), 0);
   }
 }
@@ -111,32 +118,69 @@ export function createForgeScene(canvas, onFrame) {
   ];
   // 中段跟随雕塑变换，左右端点则在摄像机坐标中延伸到屏幕外。
   const curves = paths.map(() => new THREE.CatmullRomCurve3([], false, 'centripetal'));
-  const chains = curves.map(() => {
+  const chains = curves.map((_, index) => {
     const mesh = new THREE.InstancedMesh(linkGeometry, chainMaterial, 1024);
+    mesh.name = 'forge-whole-chain-' + index;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); mesh.frustumCulled = false; scene.add(mesh); return mesh;
   });
+  const arms = Array.from({length:4}, (_, index) => {
+    const mesh = new THREE.InstancedMesh(linkGeometry, chainMaterial, 1024);
+    mesh.name = 'forge-chain-arm-' + index; mesh.visible = false;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); mesh.frustumCulled = false; scene.add(mesh);
+    return {mesh, curve:new THREE.CatmullRomCurve3([], false, 'centripetal')};
+  });
+  const brokenGeometry = new THREE.TubeGeometry(new BrokenLinkCurve(), mobile ? 14 : 22, .021, mobile ? 5 : 8, false);
+  const fragmentMaterial = chainMaterial.clone(); fragmentMaterial.emissive.set(palette('break-glint'));
+  const fragments = new THREE.InstancedMesh(brokenGeometry, fragmentMaterial, 16);
+  fragments.name = 'forge-broken-links'; fragments.visible = false; fragments.frustumCulled = false;
+  fragments.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(fragments);
+  const tips = new THREE.InstancedMesh(brokenGeometry, chainMaterial, 4);
+  tips.name = 'forge-chain-break-tips'; tips.visible = false; tips.frustumCulled = false;
+  tips.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(tips);
+  const filingMaterial = new THREE.MeshBasicMaterial({color:palette('break-glint'),transparent:true,opacity:.72,depthWrite:false});
+  const filings = new THREE.InstancedMesh(new THREE.SphereGeometry(.009, 4, 3), filingMaterial, 32);
+  filings.visible = false; filings.frustumCulled = false; filings.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(filings);
+  const flashMaterial = new THREE.MeshStandardMaterial({color:palette('break-glint'),emissive:palette('break-glint'),metalness:.8,roughness:.2,transparent:true,depthWrite:false});
+  const flashes = new THREE.InstancedMesh(brokenGeometry, flashMaterial, 4);
+  flashes.visible = false; flashes.frustumCulled = false; flashes.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(flashes);
+  const release = createChainRelease();
   const temp = new THREE.Object3D(), xAxis = new THREE.Vector3(1, 0, 0), axisQ = new THREE.Quaternion(), zero = new THREE.Vector3(0, 0, 0);
   let target = 0, current = 0, pointerX = 0, pointerY = 0, currentX = 0, currentY = 0;
-  let dark = false, reduced = false, active = true, disposed = false, contextLost = false, raf = 0, last = 0, viewHeight = 8, viewWidth = 16, smallScreen = mobile;
+  let dark = false, reduced = false, active = true, disposed = false, contextLost = false, raf = 0, last = 0, viewHeight = 8, viewWidth = 16, smallScreen = mobile, receivedProgress = false;
   const events = new AbortController();
 
-  function drawChains(progress) {
+  function writeLinks(mesh, curve) {
+    const count = Math.min(1024, Math.ceil(curve.getLength() / .205) + 1); mesh.count = count;
+    for (let i = 0; i < count; i++) {
+      const u = i / count; temp.position.copy(curve.getPointAt(u));
+      temp.quaternion.setFromUnitVectors(xAxis, curve.getTangentAt(u));
+      axisQ.setFromAxisAngle(xAxis, (i % 2) * Math.PI * .5 + .17); temp.quaternion.multiply(axisQ);
+      temp.scale.setScalar(1); temp.updateMatrix(); mesh.setMatrixAt(i, temp.matrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+  function drawChains(progress, amount) {
     const build = smooth(.07, .59, progress);
+    const cracked = amount >= .15, anchors = [], views = [];
+    tips.visible = cracked;
+    const strain = Math.sin(smooth(0, .15, amount) * Math.PI) * .035;
     root.updateMatrixWorld(true);
     for (let n = 0; n < chains.length; n++) {
       const inner = paths[n].map(p => new THREE.Vector3(...p).applyMatrix4(root.matrixWorld).toArray());
       const mesh = chains[n], curve = curves[n];
       curve.points = extendChainToEdges(inner, viewWidth / 2).map(p => new THREE.Vector3(...p));
       curve.updateArcLengths();
+      mesh.visible = !cracked;
       const count = Math.min(1024, Math.ceil(curve.getLength() / .205) + 1);
       mesh.count = count;
-      for (let i = 0; i < count; i++) {
+      for (let i = 0; !cracked && i < count; i++) {
         const entry = i / (count - 1) - (1 - build) * 1.03;
         if (entry < 0) { temp.position.copy(zero); temp.scale.setScalar(0); }
         else {
           const u = clamp(n === 1 ? 1 - entry : entry), point = curve.getPointAt(u), tangent = curve.getTangentAt(u);
           const tension = Math.sin(progress * Math.PI) * .07 * Math.sin(u * Math.PI * 2 + n);
           point.y += tension;
+          point.x += Math.sign(point.x) * strain * (1 - smooth(viewWidth * .3, viewWidth * .5, Math.abs(point.x)));
           temp.position.copy(point); temp.quaternion.setFromUnitVectors(xAxis, tangent);
           axisQ.setFromAxisAngle(xAxis, (i % 2) * Math.PI * .5 + .17); temp.quaternion.multiply(axisQ);
           temp.scale.setScalar(smooth(0, .018, entry));
@@ -144,6 +188,49 @@ export function createForgeScene(canvas, onFrame) {
         temp.updateMatrix(); mesh.setMatrixAt(i, temp.matrix);
       }
       mesh.instanceMatrix.needsUpdate = true;
+      // 断口取原路径的真实锚点；采样弧长后重新铺链环，回弹时不会压成重叠的一团。
+      const lengths = curve.getLengths(), total = lengths.at(-1);
+      const arcAt = t => {
+        const offset = t * (lengths.length - 1), index = Math.floor(offset);
+        return (lengths[index] + (lengths[Math.min(index + 1, lengths.length - 1)] - lengths[index]) * (offset - index)) / total;
+      };
+      for (const side of [-1, 1]) {
+        const index = n * 2 + (side > 0 ? 1 : 0), upper = (n === 0 ? -side : side);
+        const cut = arcAt((side < 0 ? 4 : 8) / (curve.points.length - 1));
+        const anchor = curve.getPointAt(cut).toArray(), view = {side,upper,halfWidth:viewWidth / 2,height:viewHeight};
+        anchors[index] = anchor; views[index] = view;
+        const arm = arms[index]; arm.mesh.visible = cracked;
+        if (!cracked) continue;
+        const points = Array.from({length:17}, (_, i) => curve.getPointAt(side < 0 ? cut * i / 16 : 1 - (1 - cut) * i / 16).toArray());
+        arm.curve.points = recoilChainArm(points, amount, view).map(p => new THREE.Vector3(...p)); arm.curve.updateArcLengths();
+        writeLinks(arm.mesh, arm.curve);
+        temp.position.copy(arm.curve.getPointAt(1)); temp.quaternion.setFromUnitVectors(xAxis, arm.curve.getTangentAt(1));
+        axisQ.setFromAxisAngle(xAxis, (arm.mesh.count % 2) * Math.PI * .5 + .17); temp.quaternion.multiply(axisQ);
+        temp.scale.setScalar(1); temp.updateMatrix(); tips.setMatrixAt(index, temp.matrix);
+      }
+    }
+    tips.instanceMatrix.needsUpdate = true;
+    const pulse = smooth(.11, .15, amount) * (1 - smooth(.18, .27, amount));
+    fragments.visible = filings.visible = amount > .12 && amount < .95;
+    fragments.count = smallScreen ? 8 : 16; filings.count = smallScreen ? 12 : 32;
+    fragmentMaterial.emissiveIntensity = pulse * .8;
+    for (const [mesh, fine] of [[fragments, false], [filings, true]]) {
+      if (!mesh.visible) continue;
+      for (let i = 0; i < mesh.count; i++) {
+        const corner = Math.floor(i / (mesh.count / 4));
+        const pose = chainFragmentPose(anchors[corner], i + (fine ? 37 : 0), amount, views[corner]);
+        temp.position.fromArray(pose.position); temp.rotation.set(...pose.rotation); temp.scale.setScalar(pose.scale * (fine ? 1.4 : 1.25));
+        temp.updateMatrix(); mesh.setMatrixAt(i, temp.matrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+    flashes.visible = pulse > 0; flashMaterial.opacity = pulse * .72; flashMaterial.emissiveIntensity = pulse * 1.5;
+    if (flashes.visible) {
+      for (let i = 0; i < 4; i++) {
+        temp.position.fromArray(anchors[i]); temp.rotation.set(.2, .1, views[i].side * .5); temp.scale.setScalar(1.16);
+        temp.updateMatrix(); flashes.setMatrixAt(i, temp.matrix);
+      }
+      flashes.instanceMatrix.needsUpdate = true;
     }
   }
   function renderFrame(time) {
@@ -155,16 +242,18 @@ export function createForgeScene(canvas, onFrame) {
     currentX += (pointerX - currentX) * blend; currentY += (pointerY - currentY) * blend;
     const settled = Math.abs(target - current) < .00012 && Math.abs(pointerX - currentX) < .0002 && Math.abs(pointerY - currentY) < .0002;
     if (settled) { current = target; currentX = pointerX; currentY = pointerY; }
-    const p = reduced ? .62 : current, finish = smooth(.64, 1, p);
+    const p = reduced ? 1 : current, finish = smooth(.64, .94, p), burst = release.advance(p, dt, reduced);
     root.rotation.set(-.1 + p * .17 + currentY * .025, -.12 + p * .22 + currentX * .03, .105 - p * .055);
     root.position.y = -viewHeight * (smallScreen ? .058 : .065) + finish * viewHeight * (smallScreen ? .015 : .08);
     root.scale.setScalar(1 - finish * (smallScreen ? .08 : .22));
     ribbonGroup.rotation.y = Math.sin(p * Math.PI) * .08;
-    drawChains(p);
+    ribbonGroup.scale.setScalar(1 + Math.sin(smooth(.15, .5, burst.amount) * Math.PI) * .015);
+    drawChains(p, burst.amount);
+    canvas.dataset.chainRelease = burst.amount.toFixed(3);
     rim.intensity = (dark ? 3.4 : 2.0) + Math.sin(p * Math.PI) * .7;
     renderer.render(scene, camera); onFrame(current);
 
-    if (!settled) raf = requestAnimationFrame(renderFrame); else last = 0;
+    if (!settled || burst.active) raf = requestAnimationFrame(renderFrame); else last = 0;
   }
   function wake() { if (disposed || contextLost) return; if (!raf && active && !document.hidden) raf = requestAnimationFrame(renderFrame); }
   function resize() {
@@ -187,12 +276,15 @@ export function createForgeScene(canvas, onFrame) {
     dispose() {
       if (disposed) return; disposed = true; events.abort();
       if (raf) cancelAnimationFrame(raf); resizeObserver.disconnect(); observer.disconnect();
-      const geometries = new Set(); scene.traverse(object => { if (object.geometry) geometries.add(object.geometry); });
+      const geometries = new Set(); scene.traverse(object => {
+        if (object.geometry) geometries.add(object.geometry);
+        if (object.isInstancedMesh) object.dispose();
+      });
       geometries.forEach(geometry => geometry.dispose());
-      [metal,edgeMaterial,chainMaterial].forEach(material => material.dispose());
+      [metal,edgeMaterial,chainMaterial,fragmentMaterial,filingMaterial,flashMaterial].forEach(material => material.dispose());
       brush.dispose(); environment.dispose(); renderer.dispose();
     },
-    setProgress(v) { target = clamp(v); if(contextLost)onFrame(target); wake(); },
+    setProgress(v) { target = clamp(v); if(!receivedProgress){current=target;receivedProgress=true;} if(contextLost)onFrame(target); wake(); },
     setPointer(x, y) { pointerX = reduced ? 0 : x; pointerY = reduced ? 0 : y; wake(); },
     setReduced(value) { reduced = value; pointerX = pointerY = 0; wake(); },
     setTheme(value) {
@@ -200,6 +292,8 @@ export function createForgeScene(canvas, onFrame) {
       metal.color.set(palette('metal')); metal.envMapIntensity = dark ? 1.65 : 1.35;
       edgeMaterial.color.set(palette('metal-edge'));
       chainMaterial.color.set(palette('chain'));
+      fragmentMaterial.color.set(palette('chain')); fragmentMaterial.emissive.set(palette('break-glint'));
+      filingMaterial.color.set(palette('break-glint')); flashMaterial.color.set(palette('break-glint')); flashMaterial.emissive.set(palette('break-glint'));
       rim.color.set(palette('rim'));
       key.intensity = dark ? 2.0 : 3.2; fill.intensity = dark ? 1.7 : 2.4;
       renderer.toneMappingExposure = dark ? 1.15 : 1.12; wake();
