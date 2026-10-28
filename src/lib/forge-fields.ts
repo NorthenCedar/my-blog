@@ -1,0 +1,21 @@
+/** 造物台文案的编辑标签与长度限制共用一份定义，实际文案仍由 content 提供。 */
+export const FORGE_TEXT_FIELDS = [
+  {key:'title',label:'页面标题',maxLength:60},
+  {key:'description',label:'页面简介',maxLength:240,multiline:true},
+  {key:'eyebrow',label:'开场引言',maxLength:160},
+  {key:'tagline',label:'标题下说明',maxLength:160},
+  {key:'topline',label:'左上角短句',maxLength:160},
+  {key:'objectLabel',label:'无限环标记',maxLength:100},
+  {key:'objectNote',label:'无限环说明',maxLength:240,multiline:true},
+  {key:'connectionTitle',label:'连接阶段标题',maxLength:160},
+  {key:'connectionNote',label:'连接阶段说明',maxLength:240,multiline:true},
+  {key:'arrivalLabel',label:'成形阶段引言',maxLength:160},
+  {key:'arrivalFirst',label:'成形左侧第一行',maxLength:160},
+  {key:'arrivalSecond',label:'成形左侧第二行',maxLength:160},
+  {key:'arrivalEndFirst',label:'成形右侧第一行',maxLength:160},
+  {key:'arrivalEndSecond',label:'成形右侧第二行',maxLength:160},
+  {key:'worksEyebrow',label:'作品区引言',maxLength:160},
+  {key:'worksTitle',label:'作品区标题',maxLength:160},
+  {key:'worksNote',label:'作品区说明',maxLength:320,multiline:true},
+  {key:'notesTitle',label:'工作手记标题',maxLength:160},
+] as const;

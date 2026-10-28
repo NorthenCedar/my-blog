@@ -12,6 +12,11 @@ export async function writerFixture(options: { owner?: boolean; configured?: boo
     if (existsSync(`migrations/${name}`)) sqlite.exec(readFileSync(`migrations/${name}`, 'utf8'));
   }
   if (existsSync('migrations/0007_cloud_writer.sql')) sqlite.exec(readFileSync('migrations/0007_cloud_writer.sql','utf8'));
+  if (existsSync('migrations/0008_writer_forge.sql')) {
+    sqlite.exec('BEGIN IMMEDIATE');
+    try { sqlite.exec(readFileSync('migrations/0008_writer_forge.sql', 'utf8')); sqlite.exec('COMMIT'); }
+    catch (error) { sqlite.exec('ROLLBACK'); throw error; }
+  }
   closers.push(() => sqlite.close());
   const owner = 'b'.repeat(32), token = 'a'.repeat(64);
   sqlite.prepare('INSERT INTO visitor_accounts(id,username,nickname,password_hash,recovery_hash,created_at) VALUES(?,?,?,?,?,?)')

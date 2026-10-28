@@ -21,6 +21,7 @@ export const onRequestPost:PagesFunction<WriterEnv>=async({request,env})=>{
     const user=await requireWriter(request,env,true),p=await readJsonBody(request,300*1024),proof=await writerProof(request,user);
     if(p.action==='create') {
       const {kind,key}=validateTarget(p.kind,p.kind==='talk'?`talk-${randomToken(16)}`:p.key);
+      if(kind==='forge')writerFail(400,'import_required','请从页面文案列表导入现有造物台');
       return writerJson({draft:await createDraft(env.COMMENTS_DB,proof,{kind,key,base:null,value:p.value as never})},201);
     }
     if(p.action==='import') return writerJson({draft:await importPublished(createWriterRepository(env.WRITER_GITHUB_TOKEN??''),env.COMMENTS_DB,proof,p as never)},201);

@@ -1,7 +1,7 @@
 import { z } from 'astro/zod';
-import { PROJECT_EFFECTS } from './project-effects';
+import { PROJECT_EFFECTS } from './project-effects.ts';
 
-const safeLink = z.string().refine(value => {
+export const safeLink = z.string().refine(value => {
   if (/[\\\u0000-\u0020]/.test(value)) return false;
   if (/^\/(?!\/)/.test(value)) return true;
   if (!value.startsWith('https://')) return false;

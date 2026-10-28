@@ -1,5 +1,6 @@
 import type { writerApi } from './api';
 import type { WriterDraft,WriterJob } from '../../lib/writer/model';
+import { writerKindLabel } from '../../lib/writer/model';
 import { el,button,errorText } from './ui';
 export const JOB_LABELS:Record<string,string>={queued:'等待运行',dispatch_unknown:'正在查询触发结果',validating:'完整校验中',ready:'已取得推送许可',pushed:'已推送，网站部署中',deployed:'已上线',conflict:'内容冲突，草稿仍保留',failed:'发布未完成，草稿仍保留',cancelled:'已取消',deployment_failed:'已推送，网站部署失败'};
 const terminals=new Set(['deployed','conflict','failed','cancelled','deployment_failed']);
@@ -31,7 +32,8 @@ export function mountPublish(root:HTMLElement,api:typeof writerApi,options:{owne
   document.addEventListener('visibilitychange',visible);
   return {
     async open(draft:WriterDraft){
-      stopTimer();current=null;root.hidden=false;root.replaceChildren(el('h2','确认发布'),el('p',`${draft.kind==='post'?'文章':'说说'} · ${String(draft.value.fields.title??draft.key)}`),el('p',`${draft.value.body.slice(0,160)}${draft.value.body.length>160?'…':''}`),el('p',`${draft.value.assets.length} 张已上传配图 · 本次只发布当前已保存版本`,'writer-note'),status,message,actions);status.textContent='请确认本次内容';message.textContent='发布后会在云端完整构建与测试，通过后推送到网站。';actions.replaceChildren();
+      const summary=String((draft.kind==='project'?draft.value.fields.summary:draft.kind==='forge'?draft.value.fields.description:undefined)??draft.value.body);
+      stopTimer();current=null;root.hidden=false;root.replaceChildren(el('h2','确认发布'),el('p',`${writerKindLabel(draft.kind)} · ${String(draft.value.fields.title??draft.key)}`),el('p',`${summary.slice(0,160)}${summary.length>160?'…':''}`),el('p',`${draft.value.assets.length} 张已上传配图 · 本次只发布当前已保存版本`,'writer-note'),status,message,actions);status.textContent='请确认本次内容';message.textContent='发布后会在云端完整构建与测试，通过后推送到网站。';actions.replaceChildren();
       let requestId=crypto.randomUUID().replaceAll('-','');
       const confirm=button('确认发布',async()=>{
         if(busy)return;busy=true;confirm.disabled=true;record={requestId,draftId:draft.id,revision:draft.revision};saveRecord();

@@ -47,9 +47,12 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
     async head():Promise<string>{const result=await request('/git/ref/heads/main');return revision(result?.object?.sha??'');},
     async listPosts(commit:string){revision(commit);const data=await request(`/contents/content/posts?ref=${commit}`);if(!Array.isArray(data)) writerFail(502,'repository_error','文章列表读取失败');return data.filter(d=>d.type==='dir'&&/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(d.name)).map(d=>({key:d.name as string}));},
     async readPost(commit:string,key:string){validateTarget('post',key);return textFile(commit,`content/posts/${key}/index.md`);},
+    async listProjects(commit:string){revision(commit);const data=await request(`/contents/content/projects?ref=${commit}`);if(!Array.isArray(data))writerFail(502,'repository_error','项目列表读取失败');return data.filter(d=>d.type==='dir'&&/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(d.name)&&d.name.length<=60).map(d=>({key:d.name as string}));},
+    async readProject(commit:string,key:string){validateTarget('project',key);return textFile(commit,`content/projects/${key}/index.md`);},
+    async readForge(commit:string){return textFile(commit,'content/pages/forge.md');},
     async readTalks(commit:string){return textFile(commit,'content/pages/talks.md');},
     async readImage(commit:string,path:string){
-      if(!/^(?:content\/posts\/[a-z0-9]+(?:-[a-z0-9]+)*\/|src\/assets\/talks\/)[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(path)||path.includes('..')) writerFail(400,'invalid_path','配图路径不在内容范围内');
+      if(!/^(?:content\/(?:posts|projects)\/[a-z0-9]+(?:-[a-z0-9]+)*\/|src\/assets\/talks\/)[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(path)||path.includes('..')) writerFail(400,'invalid_path','配图路径不在内容范围内');
       return file(commit,path);
     },
     async dispatch(jobId:string){writerId(jobId);await request('/actions/workflows/cloud-writer.yml/dispatches',{ref:'main',inputs:{jobId}});},
@@ -74,8 +77,12 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
   };
 }
 export type WriterRepository=ReturnType<typeof createWriterRepository>;
+export function readPublishedSource(repo:WriterRepository,commit:string,kind:WriterKind,key:string){
+  validateTarget(kind,key);
+  return kind==='post'?repo.readPost(commit,key):kind==='project'?repo.readProject(commit,key):kind==='forge'?repo.readForge(commit):repo.readTalks(commit);
+}
 export async function importPublished(repo:WriterRepository,db:D1Database,proof:WriterProof,target:{kind:WriterKind;key:string}){
-  const {kind,key}=validateTarget(target.kind,target.key),commit=await repo.head(),source=kind==='post'?await repo.readPost(commit,key):await repo.readTalks(commit);
+  const {kind,key}=validateTarget(target.kind,target.key),commit=await repo.head(),source=await readPublishedSource(repo,commit,kind,key);
   const item=kind==='talk'?readTalks(source.text).find(t=>t.key===key):null;
   if(kind==='talk'&&!item) writerFail(404,'content_missing','这条说说不存在');
   return createDraft(db,proof,{kind,key,base:{commit,blobSha:source.sha,text:source.text,...(item?{itemHash:item.itemHash}:{})},value:item?.value??readPost(source.text)});

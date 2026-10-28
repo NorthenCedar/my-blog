@@ -5,7 +5,7 @@ import { digest,randomToken } from './visitor-core';
 import { LIVE_ACCOUNT_SQL } from './visitor-store';
 import { readDraft,assertWriterProof,proofValues,writerStoreError } from './writer-drafts';
 import type { WriterRepository } from './writer-repository';
-import { matchesWriterRun } from './writer-repository';
+import { matchesWriterRun,readPublishedSource } from './writer-repository';
 export type JobRow={id:string;owner:string;draft_id:string;revision:number;request_id:string;state:WriterJobState;snapshot_json:string;owner_auth_version:number;owner_session_hash:string;lease_hash:string|null;lease_expires:number|null;run_id:string|null;commit_sha:string|null;code:string|null;version:number;created_at:number;updated_at:number};
 const active="'queued','dispatch_unknown','validating','ready','pushed'";
 const publicJob=(r:JobRow):WriterJob=>({id:r.id,draftId:r.draft_id,revision:r.revision,state:r.state,runId:r.run_id,commit:r.commit_sha,code:r.code});
@@ -113,7 +113,7 @@ export async function cancelJob(db:D1Database,proof:WriterProof,id:string){
 export async function setDispatchUnknown(db:D1Database,id:string){await db.prepare("UPDATE writer_jobs SET state='dispatch_unknown',version=version+1 WHERE id=? AND state='queued'").bind(writerId(id)).run();}
 export async function publishedBase(repo:WriterRepository,row:JobRow,commit:string):Promise<WriterBase>{
   await repo.commitReceipt(commit,row.id);
-  const snapshot:WriterDraft=JSON.parse(row.snapshot_json),source=snapshot.kind==='post'?await repo.readPost(commit,snapshot.key):await repo.readTalks(commit),item=snapshot.kind==='talk'?readTalks(source.text).find(t=>t.key===snapshot.key):null;
+  const snapshot:WriterDraft=JSON.parse(row.snapshot_json),source=await readPublishedSource(repo,commit,snapshot.kind,snapshot.key),item=snapshot.kind==='talk'?readTalks(source.text).find(t=>t.key===snapshot.key):null;
   if(snapshot.kind==='talk'&&!item)writerFail(409,'invalid_receipt','发布的说说尚未确认');
   return {commit,blobSha:source.sha,text:source.text,...(item?{itemHash:item.itemHash}:{})};
 }

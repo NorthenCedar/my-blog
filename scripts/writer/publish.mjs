@@ -1,4 +1,4 @@
-import { writerFail,writerId } from '../../src/lib/writer/model.ts';
+import { writerFail,writerId,writerKindLabel } from '../../src/lib/writer/model.ts';
 import { assertCandidate } from './prepare.mjs';
 import { gitRunner,gitText,remoteHead } from './git.mjs';
 /** 调用方必须先在候选目录完成 npm ci 和 npm run verify；工作流严格分步隔离凭据。 */
@@ -18,7 +18,7 @@ export async function publish({repoDir,prepared,authorize,runGit=gitRunner(repoD
   if(remoteHead(run)!==prepared.baseHead) writerFail(409,'remote_changed','申请许可期间 main 已更新，请重新校验');
   assertCandidate(repoDir,prepared,run);
   gitText(run,['add','--',...prepared.paths]);
-  gitText(run,['-c','user.name=North_Cedar','-c','user.email=cloud-writer@users.noreply.github.com','commit','--allow-empty','-m',`云端写作：${prepared.kind==='post'?'文章':'说说'} ${prepared.key}\n\nWriter-Job: ${prepared.jobId}`]);
+  gitText(run,['-c','user.name=North_Cedar','-c','user.email=cloud-writer@users.noreply.github.com','commit','--allow-empty','-m',`云端写作：${writerKindLabel(prepared.kind)} ${prepared.key}\n\nWriter-Job: ${prepared.jobId}`]);
   const commit=gitText(run,['rev-parse','HEAD']);
   if(permission.expiresAt<=Date.now()) writerFail(409,'push_not_authorized','推送许可已失效，提交尚未推送');
   const result=run(['push','origin','HEAD:refs/heads/main']);

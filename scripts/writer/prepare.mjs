@@ -1,7 +1,7 @@
 import { lstatSync,readFileSync,writeFileSync,mkdirSync,existsSync,readdirSync } from 'node:fs';
 import { resolve,join } from 'node:path';
 import { planChanges,readPost,writerHash } from '../../src/lib/writer/content.ts';
-import { writerFail,writerId,validateTarget,utf8Length } from '../../src/lib/writer/model.ts';
+import { writerFail,writerId,validateTarget,writerTargetPath,writerAssetDirectory,utf8Length } from '../../src/lib/writer/model.ts';
 import { gitRunner,gitText,remoteHead } from './git.mjs';
 export function checkedPath(repoDir,path){
   if(path.includes('\\')||path.includes('\0')||path.includes('%')||path.startsWith('/')||path.split('/').some(p=>!p||p==='.'||p==='..')) writerFail(400,'invalid_path','候选路径越界');
@@ -12,7 +12,8 @@ export function checkedPath(repoDir,path){
 export function contentDigest(repoDir,paths){return writerHash(JSON.stringify([...paths].sort().map(path=>{const bytes=readFileSync(checkedPath(repoDir,path));return [path,bytes.length,writerHash(bytes)];})));}
 export function assertCandidate(repoDir,prepared,run=gitRunner(repoDir)){
   writerId(prepared.jobId);const target=validateTarget(prepared.kind,prepared.key),allowed=new Set(prepared.paths);
-  if(allowed.size!==prepared.paths.length||prepared.paths.some(p=>!(p===`content/posts/${target.key}/index.md`&&target.kind==='post'||p==='content/pages/talks.md'&&target.kind==='talk'||new RegExp(`^${target.kind==='post'?`content/posts/${target.key}/`:'src/assets/talks/'}writer-[a-f0-9]{64}\\.webp$`).test(p)))) writerFail(400,'invalid_path','候选文件超出本次内容范围');
+  const targetPath=writerTargetPath(target.kind,target.key),directory=writerAssetDirectory(target.kind,target.key);
+  if(allowed.size!==prepared.paths.length||prepared.paths.some(path=>path!==targetPath&&!(directory&&path.startsWith(directory)&&/^writer-[a-f0-9]{64}\.webp$/.test(path.slice(directory.length))))) writerFail(400,'invalid_path','候选文件超出本次内容范围');
   for(const path of prepared.paths){checkedPath(repoDir,path);const mode=gitText(run,['ls-files','--stage','--',path]).split(' ')[0];if(mode==='120000'||mode==='160000') writerFail(400,'symlink_rejected','候选文件不是普通文件');}
   const result=run(['status','--porcelain=v1','-z','--untracked-files=all']);
   if(result.status!==0) writerFail(502,'git_failed','无法读取工作区状态');
@@ -28,7 +29,7 @@ export function prepare({repoDir,snapshot,assets,jobId}){
   const run=gitRunner(repoDir),baseHead=gitText(run,['rev-parse','HEAD']);
   if(gitText(run,['status','--porcelain=v1','--untracked-files=all'])) writerFail(409,'dirty_checkout','发布工作区必须干净');
   if(remoteHead(run)!==baseHead) writerFail(409,'remote_changed','main 已更新，请在最新代码上重新校验');
-  const path=snapshot.kind==='post'?`content/posts/${snapshot.key}/index.md`:'content/pages/talks.md',target=checkedPath(repoDir,path);
+  const path=writerTargetPath(snapshot.kind,snapshot.key),target=checkedPath(repoDir,path);
   const stagedMode=gitText(run,['ls-files','--stage','--',path]).split(' ')[0];if(stagedMode==='120000'||stagedMode==='160000') writerFail(400,'symlink_rejected','目标不是普通文件');
   if(snapshot.kind==='post'&&existsSync(join(repoDir,'content/posts'))){
     const wanted=snapshot.value.fields.slug??snapshot.key;
@@ -53,7 +54,7 @@ export function prepare({repoDir,snapshot,assets,jobId}){
 export function verifySnapshotCandidate({repoDir,prepared,snapshot,assets}){
   const run=gitRunner(repoDir),{kind,key}=validateTarget(snapshot.kind,snapshot.key);
   if(kind!==prepared.kind||key!==prepared.key||!/^[a-f0-9]{40}$/.test(prepared.baseHead))writerFail(409,'candidate_changed','候选与发布快照不一致');
-  const path=kind==='post'?`content/posts/${key}/index.md`:'content/pages/talks.md',original=run(['show',`${prepared.baseHead}:${path}`]);
+  const path=writerTargetPath(kind,key),original=run(['show',`${prepared.baseHead}:${path}`]);
   const changes=planChanges(snapshot,original.status===0?original.stdout:null,assets),expected=writerHash(JSON.stringify(changes.map(c=>[c.path,c.bytes.length,writerHash(c.bytes)]).sort((a,b)=>a[0].localeCompare(b[0]))));
   if(JSON.stringify([...prepared.paths].sort())!==JSON.stringify(changes.map(c=>c.path).sort())||expected!==prepared.contentDigest)writerFail(409,'candidate_changed','候选摘要与服务端快照不一致');
   assertCandidate(repoDir,prepared,run);

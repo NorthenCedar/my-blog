@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import { parseDocument,isMap,isSeq,isAlias,visit,type YAMLMap } from 'yaml';
 import { TAGS } from '../../tag-registry.ts';
-import { writerFail,utf8Length,validateTarget,validateWriterValue,type WriterValue,type WriterDraft,type WriterChange } from './model.ts';
+import { projectSchema,safeLink } from '../project-schema.ts';
+import { forgePageSchema } from '../forge-page-schema.ts';
+import { z } from 'astro/zod';
+import MarkdownIt from 'markdown-it';
+import { writerFail,writerTargetPath,writerAssetDirectory,utf8Length,validateTarget,validateWriterValue,type WriterValue,type WriterDraft,type WriterChange } from './model.ts';
 const bad=(message='原文格式暂不支持安全编辑，请在本地处理')=>writerFail(400,'invalid_content',message);
 const conflict=()=>writerFail(409,'content_conflict','这篇内容已在其他地方修改，请重新导入并对照当前草稿');
 export const writerHash=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
@@ -93,12 +97,16 @@ function updateMap(source:string,node:YAMLMap,values:Record<string,unknown>,newl
 function jsonFields(fields:Record<string,unknown>,newline:string,indent=0){
   return Object.entries(fields).map(([key,value])=>`${' '.repeat(indent)}${JSON.stringify(key)}: ${JSON.stringify(value)}${newline}`).join('');
 }
-function replaceImages(body:string,resolve:(sha:string)=>string){
+function replaceImages(body:string,resolve:(sha:string)=>string,references=false){
   let fence='',ticks=0;
   return body.split(/(?<=\n)/).map(line=>{
     const marker=/^ {0,3}(`{3,}|~{3,})/.exec(line.replace(/^(?: {0,3}> ?)+/,''))?.[1];
     if(marker){if(!fence) fence=marker;else if(marker[0]===fence[0]&&marker.length>=fence.length) fence='';return line;}
     if(fence||/^ {4}|^\t/.test(line)) return line;
+    if(references&&!ticks){
+      const reference=/^( {0,3}\[(?:\\.|[^\]\\])+\]:[ \t]*<?)writer-asset:([a-f0-9]{64})(>?)/.exec(line);
+      if(reference)return line.slice(0,reference.index)+reference[1]+resolve(reference[2])+reference[3]+line.slice(reference[0].length);
+    }
     let out='',position=0;
     const pattern=/(`+)|(!\[(?:\\.|[^\]\\])*\]\(\s*<?writer-asset:([^\s)>]+)>?(?:\s+["'][^"']*["'])?\s*\))/g;
     for(const match of line.matchAll(pattern)){
@@ -111,8 +119,49 @@ function replaceImages(body:string,resolve:(sha:string)=>string){
     return out+line.slice(position);
   }).join('');
 }
+const projectImage = z.string().refine(src=>/^writer-asset:[a-f0-9]{64}$/.test(src)||/^(?:\.\/)?[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(src)&&!src.includes('..'),'项目配图必须来自当前项目目录或已上传图片');
+const publishedProject = projectSchema(()=>projectImage);
+const projectMarkdown = new MarkdownIt({html:true});
+function checkProjectBodyImages(body:string,assets:WriterValue['assets'],allowPrivate=true){
+  const known=new Set(assets.map(asset=>'writer-asset:'+asset.sha256));
+  const visit=(tokens:ReturnType<MarkdownIt['parse']>)=>{
+    for(const token of tokens){
+      if(token.type==='html_inline'||token.type==='html_block'){
+        if(/<!--(?:>|->)|--!>/.test(token.content))bad('项目注释的结束方式不明确，请使用完整的 HTML 注释');
+        const active=token.content.replace(/<!--[\s\S]*?(?:-->|$)/g,'');
+        if(/<\/?[a-z][^>]*>/i.test(active))bad('造物台正文请使用 Markdown 文字与图片，不能嵌入 HTML 标签');
+      }
+      if(token.type==='link_open'){
+        const href=token.attrGet('href')??'';
+        if(!(/^#[^\\\u0000-\u0020]*$/.test(href)||safeLink.safeParse(href).success))bad('项目正文链接须为站内路径或不含凭据的 HTTPS 地址');
+      }
+      if(token.type==='image'){
+        let source=token.attrGet('src')??'';
+        try{source=decodeURIComponent(source);}catch{bad('项目正文图片路径编码不对');}
+        if(!projectImage.safeParse(source).success)bad('项目正文图片只能来自当前项目目录或已上传图片');
+        if(source.startsWith('writer-asset:')&&(!allowPrivate||!known.has(source)))bad('项目正文配图未保存或写法暂不支持，请重新插入这张图片');
+      }
+      if(token.children)visit(token.children);
+    }
+  };
+  visit(projectMarkdown.parse(body,{}));
+}
 export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:WriterDraft['base']=null){
   validateWriterValue(kind,value,base);
+  if(kind==='forge'){
+    const checked=forgePageSchema.safeParse(value.fields);
+    if(!checked.success)bad('页面文案不完整：'+checked.error.issues[0].path.join('.')+'，请检查必填文字、三条滚动提示和工作手记');
+    return;
+  }
+  if(kind==='project'){
+    const checked=publishedProject.safeParse(value.fields);
+    if(!checked.success)bad('项目资料不完整：'+checked.error.issues[0].path.join('.')+'，'+checked.error.issues[0].message);
+    if(value.assets.some(a=>!a.alt.trim()))bad('请为每张新增配图填写说明');
+    const uploaded=new Set(value.assets.map(a=>'writer-asset:'+a.sha256));
+    for(const image of checked.data.images)for(const src of [image.src,image.darkSrc])if(typeof src==='string'&&src.startsWith('writer-asset:')&&!uploaded.has(src))bad('项目封面引用了未上传的图片');
+    checkProjectBodyImages(value.body,value.assets);
+    return;
+  }
   const fields=value.fields,date=fields.date;
   if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) bad('请填写有效日期');
   if(value.assets.some(a=>!a.alt.trim())) bad('请为每张新增配图填写说明');
@@ -122,13 +171,33 @@ export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:
 export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,currentText:string|null,assetBytes:Map<string,Uint8Array>):WriterChange[]{
   const {kind,key}=validateTarget(draft.kind,draft.key),value=validateWriterValue(kind,draft.value,draft.base);validatePublish(kind,value,draft.base);
   const changes:WriterChange[]=[],known=new Map(value.assets.map(a=>[a.sha256,a]));
+  const directory=writerAssetDirectory(kind,key);
   for(const asset of value.assets){
     const bytes=assetBytes.get(asset.sha256);if(!bytes||writerHash(bytes)!==asset.sha256) bad('配图缺失或摘要不一致，请重新上传');
-    changes.push({path:kind==='post'?`content/posts/${key}/writer-${asset.sha256}.webp`:`src/assets/talks/writer-${asset.sha256}.webp`,bytes});
+    if(!directory)bad('页面文案不能发布配图');
+    changes.push({path:`${directory}writer-${asset.sha256}.webp`,bytes});
   }
-  const resolve=(sha:string)=>{if(!known.has(sha)) return bad('正文引用了未保存的图片');return `${kind==='post'?'./':''}writer-${sha}.webp`;};
+  const resolve=(sha:string)=>{if(!known.has(sha)) return bad('正文引用了未保存的图片');return `${kind==='talk'?'':'./'}writer-${sha}.webp`;};
   let text:string;
-  if(kind==='post'){
+  if(kind==='project'||kind==='forge'){
+    if(draft.base?currentText!==draft.base.text:currentText!==null)return conflict();
+    if(kind==='forge'&&!draft.base)bad('请先导入现有造物台页面文案');
+    const fields={...value.fields};
+    if(kind==='project'){
+      const original=draft.base?readPost(draft.base.text):null;
+      if(fields.slug!==(original?.fields.slug))bad('项目网址由目录决定，不能在编辑中更改');
+      if(Array.isArray(fields.images))fields.images=fields.images.map(image=>{
+        const result={...(image as Record<string,unknown>)};
+        for(const field of ['src','darkSrc'])if(typeof result[field]==='string'&&(result[field] as string).startsWith('writer-asset:'))result[field]=resolve((result[field] as string).slice(13));
+        return result;
+      });
+    }
+    const body=kind==='project'?replaceImages(value.body,resolve,true):value.body;
+    if(kind==='project')checkProjectBodyImages(body,value.assets,false);
+    if(currentText!==null){const s=split(currentText);text=currentText.slice(0,s.offset)+apply(s.header,updateMap(s.header,s.doc.contents as YAMLMap,fields,s.newline))+`---${s.newline}`+body.replace(/\r?\n/g,s.newline);}
+    else text=`---\n${jsonFields(fields,'\n')}---\n${body}`;
+    changes.unshift({path:writerTargetPath(kind,key),bytes:new TextEncoder().encode(text)});
+  }else if(kind==='post'){
     if(draft.base?currentText!==draft.base.text:currentText!==null) return conflict();
     const fields={...value.fields,draft:false},original=draft.base?readPost(draft.base.text):null;
     if(original){if(fields.slug!==original.fields.slug) bad('旧文章网址标识不能修改');}
