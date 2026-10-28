@@ -238,11 +238,14 @@ export function createForgeScene(canvas, onFrame) {
     if (disposed || contextLost || !active || document.hidden) { last = 0; return; }
     const dt = last ? Math.min((time - last) / 1000, .06) : 1 / 60; last = time;
     const blend = reduced ? 1 : 1 - Math.exp(-8.5 * dt);
-    current += (target - current) * blend;
+    const next = current + (target - current) * blend;
+    // 快速回顶先在缩小姿态接回完整铁链，再让主体向开场展开。
+    const burst = release.advance(Math.min(target,next),dt,reduced);
+    if (!burst.restoring) current = next;
     currentX += (pointerX - currentX) * blend; currentY += (pointerY - currentY) * blend;
     const settled = Math.abs(target - current) < .00012 && Math.abs(pointerX - currentX) < .0002 && Math.abs(pointerY - currentY) < .0002;
     if (settled) { current = target; currentX = pointerX; currentY = pointerY; }
-    const p = reduced ? 1 : current, finish = smooth(.64, .94, p), burst = release.advance(p, dt, reduced);
+    const p = reduced ? 1 : current, finish = smooth(.64, .94, p);
     root.rotation.set(-.1 + p * .17 + currentY * .025, -.12 + p * .22 + currentX * .03, .105 - p * .055);
     root.position.y = -viewHeight * (smallScreen ? .058 : .065) + finish * viewHeight * (smallScreen ? .015 : .08);
     root.scale.setScalar(1 - finish * (smallScreen ? .08 : .22));

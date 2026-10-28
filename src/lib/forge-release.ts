@@ -9,7 +9,7 @@ export function createChainRelease(){
   return {
     advance(progress:number,seconds:number,reduced=false){
       const p=clamp(progress);
-      if(reduced){wasReduced=true;return {amount:1,active:false};}
+      if(reduced){wasReduced=true;return {amount:1,active:false,restoring:false};}
       if(!initialized||wasReduced){
         initialized=true;wasReduced=false;amount=target=p>=.955?1:0;
       }else{
@@ -19,7 +19,7 @@ export function createChainRelease(){
         amount=target?Math.min(1,amount+step):Math.max(0,amount-step);
         if(Math.abs(amount-target)<1e-7)amount=target;
       }
-      return {amount,active:amount!==target};
+      return {amount,active:amount!==target,restoring:target===0&&amount>0};
     },
   };
 }

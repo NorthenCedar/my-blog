@@ -31,6 +31,8 @@ html.dark body.forge-page .theme-toggle .sun{display:block}
 html.dark body.forge-page .theme-toggle .moon{display:none}
 body.forge-page .hero{height:320svh;position:relative}
 body.forge-page .hero-stage{height:100svh;min-height:620px;position:sticky;top:0;overflow:clip;isolation:isolate}
+/* 浏览器已排队的位移可能先于 scroll 纠正绘制，演出时固定舞台以隔离这段抖动。 */
+body.forge-page[data-chain-scroll-lock=true] .hero-stage{position:fixed;left:0;right:0;z-index:1}
 body.forge-page .etched-surface{position:absolute;inset:0;z-index:-2;background:radial-gradient(ellipse at 50% 48%,var(--paper-clean) 0%,var(--paper) 68%);transition:background .65s}
 body.forge-page .etch{position:absolute;width:min(85vw,1300px);height:125%;color:var(--etch);opacity:.65;stroke-width:.8;will-change:transform}
 body.forge-page .etch-left{left:-33%;top:-9%;transform:translate3d(0,calc(var(--progress,0) * -28px),0) rotate(-18deg)}

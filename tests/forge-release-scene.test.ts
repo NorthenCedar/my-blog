@@ -31,6 +31,16 @@ async function fixture(mobile=false,width=mobile?390:1440,height=900){
 }
 
 describe('真实场景接线与资源生命周期',()=>{
+  it('从页面底部快速返回时先完整收回碎链，再展开无限环，不让场景进度抢跑',async()=>{
+    const f=await fixture();f.scene.setProgress(1);f.tick(3);f.scene.setProgress(0);
+    const rows:number[][]=[];
+    for(let i=0;i<120;i++){f.tick();const row=f.onFrame.mock.lastCall;if(row)rows.push(row);}
+    const reverse=rows.filter(([,amount])=>amount>0&&amount<1);
+    expect(reverse.length).toBeGreaterThan(20);
+    expect(reverse.every(([progress])=>progress>=.94)).toBe(true);
+    const joined=rows.findIndex(([,amount])=>amount===0);expect(joined).toBeGreaterThan(0);
+    expect(rows.slice(joined).some(([progress])=>progress<.1)).toBe(true);
+  });
   it('终点出现四段断链、碎环退场，空闲之后停止请求动画帧，上滚会重新唤醒复原',async()=>{
     const f=await fixture();f.scene.setProgress(0);f.tick(100);f.scene.setProgress(1);f.tick(180);
     expect(f.canvas.dataset.chainRelease).toBe('1.000');

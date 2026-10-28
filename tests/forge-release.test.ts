@@ -13,23 +13,24 @@ describe('造物台末段的断链演出',()=>{
     for(let i=0;i<20;i++)expect(clock.advance(.94,1/60).amount).toBe(0);
     const first=clock.advance(.98,1/60);expect(first.amount).toBeGreaterThan(0);expect(first.active).toBe(true);
     for(let i=0;i<65;i++)clock.advance(.98,1/60);
-    expect(clock.advance(1,1/60)).toEqual({amount:1,active:false});
-    for(const p of [.95,.99,.94,1,.96])expect(clock.advance(p,1/60)).toEqual({amount:1,active:false});
+    expect(clock.advance(1,1/60)).toEqual({amount:1,active:false,restoring:false});
+    for(const p of [.95,.99,.94,1,.96])expect(clock.advance(p,1/60)).toEqual({amount:1,active:false,restoring:false});
   });
   it('上滚沿同一轨迹复原，复原之后再次下滚可以重新演出',async()=>{
     const {createChainRelease}=await release(),clock=createChainRelease();
     clock.advance(0,0);for(let i=0;i<70;i++)clock.advance(1,1/60);
     const reverse=clock.advance(.85,1/60);expect(reverse.amount).toBeLessThan(1);expect(reverse.active).toBe(true);
+    expect(reverse.restoring).toBe(true);expect(clock.advance(.92,0).restoring).toBe(true);
     for(let i=0;i<70;i++)clock.advance(.85,1/60);
-    expect(clock.advance(.85,1/60)).toEqual({amount:0,active:false});
+    expect(clock.advance(.85,1/60)).toEqual({amount:0,active:false,restoring:false});
     expect(clock.advance(.98,1/60).amount).toBeGreaterThan(0);
   });
   it('恢复到末段或减少动态时直接给出静止终态，切回动态不补播爆炸',async()=>{
     const {createChainRelease}=await release();
-    expect(createChainRelease().advance(1,1/60)).toEqual({amount:1,active:false});
+    expect(createChainRelease().advance(1,1/60)).toEqual({amount:1,active:false,restoring:false});
     const clock=createChainRelease();clock.advance(0,0);
-    expect(clock.advance(.1,1/60,true)).toEqual({amount:1,active:false});
-    expect(clock.advance(.1,1/60,false)).toEqual({amount:0,active:false});
+    expect(clock.advance(.1,1/60,true)).toEqual({amount:1,active:false,restoring:false});
+    expect(clock.advance(.1,1/60,false)).toEqual({amount:0,active:false,restoring:false});
   });
   it('不依赖帧率，不让后台积累的大时间差一次跨过整个爆炸',async()=>{
     const {createChainRelease}=await release();

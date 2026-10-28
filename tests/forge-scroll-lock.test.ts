@@ -18,6 +18,12 @@ async function fixture(){
 }
 
 describe('断链演出只限制页面向下滚动',()=>{
+  it('开始锁定时立即取消尚在推进的浏览器平滑滚动，不等页面越界再拉回',async()=>{
+    const f=await fixture();f.scroll(1580);f.win.scrollTo.mockClear();f.gate.frame(.02);
+    expect(f.win.scrollTo).toHaveBeenCalledWith({top:1580,behavior:'instant'});
+    f.win.scrollTo.mockClear();for(let i=0;i<10;i++)f.gate.frame(.02+i*.02);
+    expect(f.win.scrollTo).not.toHaveBeenCalled();
+  });
   it('一大步滚轮越过舞台时停在终点，断裂收尾完成后立即放行',async()=>{
     const f=await fixture();f.scroll(1500);
     expect(f.send('wheel',{deltaY:500,deltaMode:0}).defaultPrevented).toBe(true);expect(f.win.scrollY).toBe(1600);expect(f.body.dataset.chainScrollLock).toBe('true');

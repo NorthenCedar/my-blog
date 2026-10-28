@@ -13,6 +13,9 @@ export function createForgeScrollLock(body:HTMLElement,bounds:()=>{start:number;
   function hold(top:number){
     if(!locked){
       locked=true;ceiling=top;body.dataset.chainScrollLock='true';
+      // 即使位置没变也要调用一次，取消此前滚轮或锚点留下的平滑滚动。
+      window.scrollTo({top:ceiling,behavior:'instant'});
+      ceiling=window.scrollY;
       // 低帧率、上下文丢失等情况下也不能留下永久滚动限制。
       timer=setTimeout(()=>{timer=undefined;suspend();},2000);
     }else ceiling=Math.min(ceiling,top);
