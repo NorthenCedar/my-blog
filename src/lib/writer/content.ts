@@ -22,7 +22,7 @@ function split(text:string){
   const match=/^---\r?\n([\s\S]*?)^---[ \t]*(?:\r?\n|$)/m.exec(text);
   if(!match||match.index!==0) return bad();
   const offset=text.indexOf('\n')+1,header=match[1],end=match[0].length;
-  return {header,offset,end,body:text.slice(end),newline:text.includes('\r\n')?'\r\n':'\n',doc:document(header)};
+  return {header,offset,end,body:text.slice(end),newline:text.startsWith('---\r\n')?'\r\n':'\n',doc:document(header)};
 }
 export function readPost(text:string):WriterValue{
   const {doc,body}=split(text);
@@ -194,7 +194,13 @@ export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,
     }
     const body=kind==='project'?replaceImages(value.body,resolve,true):value.body;
     if(kind==='project')checkProjectBodyImages(body,value.assets,false);
-    if(currentText!==null){const s=split(currentText);text=currentText.slice(0,s.offset)+apply(s.header,updateMap(s.header,s.doc.contents as YAMLMap,fields,s.newline))+`---${s.newline}`+body.replace(/\r?\n/g,s.newline);}
+    // 只改资料时，正文与结束分隔符保留原字节；编辑过的正文才跟随资料区的行尾。
+    if(currentText!==null){
+      const s=split(currentText),ending=currentText.slice(s.offset+s.header.length,s.end);
+      const nextBody=body===s.body?body:body.replace(/\r?\n/g,s.newline);
+      // 空正文文件可直接以 --- 结束；首次加入正文时补上必要的分隔换行。
+      text=currentText.slice(0,s.offset)+apply(s.header,updateMap(s.header,s.doc.contents as YAMLMap,fields,s.newline))+ending+(nextBody&&!ending.endsWith('\n')?s.newline:'')+nextBody;
+    }
     else text=`---\n${jsonFields(fields,'\n')}---\n${body}`;
     changes.unshift({path:writerTargetPath(kind,key),bytes:new TextEncoder().encode(text)});
   }else if(kind==='post'){

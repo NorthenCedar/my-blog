@@ -9,6 +9,12 @@ const textOf=(changes:ReturnType<typeof planChanges>)=>new TextDecoder().decode(
 const project={fields:{title:'桌面小机器人',summary:'第一次装配',tagline:'从一个轮子开始',category:'硬件',status:'制作中',order:3,tags:['手作'],visual:'image',effect:'stack',images:[],links:[]},body:'## 装配记录\n',assets:[]};
 
 describe('造物台项目发布保持自己的内容契约',()=>{
+  it.each(['\n','\r\n'])('原项目以分隔符结束且没有末尾换行时仍能新增正文（%j）',newline=>{
+    const original=/^---\r?\n[\s\S]*?^---[ \t]*(?:\r?\n|$)/m.exec(readFileSync('content/projects/northcedar/index.md','utf8'))![0].replace(/\r?\n/g,newline).trimEnd();
+    const value=readPost(original);expect(value.body).toBe('');value.body=`新增正文${newline}`;
+    const output=textOf(planChanges({kind:'project',key:'northcedar',base:base(original),value},original,new Map()));
+    expect(readPost(output).body).toBe(value.body);
+  });
   it('新项目的封面、暗色替图和正文图片进入当前项目，保留代码示例原样',()=>{
     const bytes=new Uint8Array([10,20,30]),sha=createHash('sha256').update(bytes).digest('hex'),ref='writer-asset:'+sha;
     const value={...project,fields:{...project.fields,images:[{src:ref,darkSrc:ref,alt:'装配后的机器人'}]},body:`![结构](${ref})\n\n![引用图][封面]\n\n[封面]: ${ref}\n\n\`![例子](${ref})\`\n`,assets:[{sha256:sha,alt:'结构'}]};
@@ -32,13 +38,14 @@ describe('造物台项目发布保持自己的内容契约',()=>{
     const body='![合法](<./机器人 正面.webp>)\n\n`![示例](../secret.webp)`\n\n```md\n![示例](https://example.com/pixel.webp)\n```\n';
     expect(readPost(textOf(planChanges({kind:'project',key:'safe-project',base:null,value:{...value,body}},null,new Map()))).body).toBe(body);
   });
-  it('既有界面模型可以无损保存，改正文保留preview、未知字段和注释',()=>{
-    const source=readFileSync('content/projects/northcedar/index.md','utf8').replace('---\n','---\n# 原注释\ncustom: {keep: yes}\n').replace(/\r?\n/g,'\r\n');
+  it.each(['\n','\r\n'])('既有界面模型可以无损保存，改正文保留preview、未知字段和注释（%j）',newline=>{
+    const source=readFileSync('content/projects/northcedar/index.md','utf8').replace(/\r?\n/g,newline).replace(/^---\r?\n/,`---${newline}# 原注释${newline}custom: {keep: yes}${newline}`);
+    expect(source).toContain(`# 原注释${newline}`);expect(source).toContain('custom: {keep: yes}');
     const value=readPost(source);
     expect(textOf(planChanges({kind:'project',key:'northcedar',base:base(source),value},source,new Map()))).toBe(source);
-    value.body+='\r\n新的制作记录\r\n';
+    value.body+=`${newline}新的制作记录${newline}`;
     const output=textOf(planChanges({kind:'project',key:'northcedar',base:base(source),value},source,new Map()));
-    expect(output).toContain('# 原注释\r\n');expect(output).toContain('custom: {keep: yes}');
+    expect(output).toContain(`# 原注释${newline}`);expect(output).toContain('custom: {keep: yes}');
     expect(readPost(output).fields.preview).toEqual(value.fields.preview);expect(readPost(output).fields.visual).toBe('site');
     expect(()=>planChanges({kind:'project',key:'northcedar',base:base(source),value},source+'外部更新',new Map())).toThrow();
   });
@@ -55,6 +62,25 @@ describe('造物台项目发布保持自己的内容契约',()=>{
 });
 
 describe('造物台单页文案发布',()=>{
+  it.each(['--- \t\n','--- \t\r\n','---'])('只改资料时保留原结束分隔符（%j）',ending=>{
+    const original=readFileSync('content/pages/forge.md','utf8').replace(/---[ \t]*(?:\r?\n)?$/,ending);
+    const value=readPost(original);value.fields.topline='只修改页头';
+    const output=textOf(planChanges({kind:'forge',key:'forge',base:base(original),value},original,new Map()));
+    expect(output.endsWith(ending)).toBe(true);expect(readPost(output).body).toBe(value.body);
+  });
+  it.each([
+    ['LF','\n','\n'],
+    ['CRLF','\r\n','\r\n'],
+    ['CRLF资料与LF正文','\r\n','\n'],
+    ['LF资料与混合正文','\n','\r\n第二行\n'],
+  ])('只改资料时，未编辑的正文保留原字节（%s）',(_label,newline,bodyNewline)=>{
+    const original=readFileSync('content/pages/forge.md','utf8').replace(/\r?\n/g,newline)+`正文第一行${bodyNewline}正文末行${bodyNewline}`;
+    const value=readPost(original);
+    expect(textOf(planChanges({kind:'forge',key:'forge',base:base(original),value},original,new Map()))).toBe(original);
+    value.fields.topline='只修改页头';
+    const output=readPost(textOf(planChanges({kind:'forge',key:'forge',base:base(original),value},original,new Map())));
+    expect(output.fields.topline).toBe('只修改页头');expect(output.body).toBe(value.body);
+  });
   it('只修改固定页面的已编辑字段，工作手记换行可往返，保留未知字段和正文',()=>{
     const original=readFileSync('content/pages/forge.md','utf8')+'\n原有页面正文\n',value=readPost(original);
     value.fields.topline='从新的念头开始';
