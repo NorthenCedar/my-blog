@@ -38,7 +38,7 @@ describe.skipIf(!hasDist)('关于页 · 构建结果', () => {
     const plate = html.indexOf('data-fin-infinity');
     expect(plate, '关于页产物里找不到底纹装置的宿主标记（data-fin-infinity）').toBeGreaterThan(-1);
     expect(plate, '底纹必须在 .shell 之外，否则会跟着页面内容的过渡一起被 transform 困住')
-      .toBeLessThan(html.indexOf('class="shell"'));
+      .toBeLessThan(html.indexOf('<main'));
     expect(html.match(/data-fin-infinity/g), '底纹装置必须恰好一个').toHaveLength(1);
     expect(html).not.toMatch(/moon-main|class="ref-plate"/);
     /* 旧百褶不该再出现在关于页（它整体搬到标签页了）—— 留着就说明换漏了 */
@@ -52,12 +52,8 @@ describe.skipIf(!hasDist)('关于页 · 构建结果', () => {
     expect(css).toMatch(/body\.about-plate\s*\{[^}]*background:\s*var\(--paper\)/);
     expect(css).toMatch(/body\.about-plate\s+\.page-inf\s*\{[^}]*display:\s*none/);
   });
-  it('页头跨组件 grid 规则仍能匹配真实 h1', () => {
-    const rules = css.match(/\.pagehead\s*>\s*h1[^{}]*\{[^{}]*\}/g) ?? [];
-    expect(rules.length).toBeGreaterThan(0);
-    for (const rule of rules) {
-      const selector = rule.split(',').find(s => /\.pagehead\s*>\s*h1/.test(s))!;
-      expect(selector).not.toMatch(/data-astro-cid/);
-    }
-  });
-});
+  it('关于页使用完整视口章节，标题与头像仍在正文流中', () => {
+    expect(html).toContain('class="profile-header"');
+    expect(html).toContain('id="profile-title"');
+    expect(html).toContain('data-about-redesign="4"');
+  });});

@@ -684,6 +684,10 @@ html.dark {
   --fin-ambient-light: #fafaf7;
   /* 点击脉冲的淡绿表面色，独立于界面墨绿，避免染成深绿条。 */
   --fin-pulse-light: #b9dfc3;
+  /* 亮色场景也会预读暗色端点，避免主题预览读到空色值。 */
+  --fin-body-dark: #3a3a3e;
+  --fin-ambient-dark: #0d0d0f;
+  --fin-glow-dark: #e08a3f;
 }
 html.dark {
   /* 暗色档：鳍片 = 冷灰（对 --paper #0b0b0c 有明度差，约 1.9:1 —— 够撑出体积又不抢眼）；
@@ -903,3 +907,7 @@ html.dark {
   --forge-break-glint: var(--accent);
   --forge-rim: #ff7b00;
 }
+
+/* 关于页第四版：分段阅读、透明正文与浮动章节导航。 */
+:root{--about-line:#1a1a1a26;--about-glass:#fafaf7ed;--about-shade:#1a1a1a16;--about-hover:#266b3b0d;--about-space:clamp(25px,5.4vw,90px);--about-serif:'Songti SC','Noto Serif CJK SC','STSong','SimSun',serif}
+html.dark{--about-line:#f2f4f12e;--about-glass:#141416ed;--about-shade:#00000044;--about-hover:#ff7b0010}

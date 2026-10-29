@@ -262,7 +262,7 @@ describe('画布透明通路（2026-10-17 第五轮）', () => {
     expect(-top, '画布上下应多留至少 24px，投影尾部才不会贴着边界').toBeGreaterThanOrEqual(24);
     expect(component).toContain(`height="${h}"`);
     expect(component).toContain(`height: ${h}px`);
-    expect(read('../src/pages/about.astro')).toContain(`padding-top: calc(${h + top}px + var(--sp-5))`);
+    expect(read('../src/pages/about.astro')).toContain(`height:${h + top}px`);
     const root = { createUniform: () => ({ patch() {} }) };
     const camera = (height: number, degrees: number, target: number) => new CameraController(root as any,
       d.vec3f(0.024, 2.7, 1.9), d.vec3f(0, target, 0), d.vec3f(0, 1, 0), degrees * Math.PI / 180, 220, height);

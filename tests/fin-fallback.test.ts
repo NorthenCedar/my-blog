@@ -28,7 +28,7 @@ function harness({ mobile = false, reduce = false } = {}) {
     setAttribute() { this.hidden = true; },
     removeAttribute() { this.hidden = false; },
   };
-  const host = { classList: { add: vi.fn(), remove: vi.fn() }, getBoundingClientRect: () => ({ width: 640, height: 400 }) };
+  const host = { dataset: {}, classList: { add: vi.fn(), remove: vi.fn() }, getBoundingClientRect: () => ({ width: 640, height: 400 }) };
   const view = { hidden: true };
   const makeCanvas = (events = new Map<string, (event: unknown) => void>()): object => ({
     addEventListener: (name: string, handler: (event: unknown) => void) => events.set(name, handler),
@@ -57,6 +57,17 @@ function harness({ mobile = false, reduce = false } = {}) {
 }
 
 describe('关于页静态背景与动态场景的互斥', () => {
+  it('只改变视口高度也会重算章节目标，不依赖宿主或正文触发尺寸观察', async () => {
+    const h=harness();const setRelay=vi.fn();Object.assign(h.scene,{setRelay});
+    vi.stubGlobal('scrollY',650);vi.stubGlobal('innerHeight',780);
+    vi.stubGlobal('document',{...document,querySelectorAll:()=>[0,921,1951].map(top=>({getBoundingClientRect:()=>({top:top-650})}))});
+    h.start();await vi.dynamicImportSettled();
+    const previous=setRelay.mock.lastCall?.[0];expect(previous).toBeTypeOf('number');
+    const onResize=vi.mocked(addEventListener).mock.calls.find(([name])=>name==='resize')?.[1] as (()=>void)|undefined;
+    expect(onResize,'视口变化必须有独立入口，不依赖两个盒子是否变大').toBeTypeOf('function');
+    vi.stubGlobal('innerHeight',800);onResize!();
+    expect(setRelay.mock.lastCall?.[0]).not.toBe(previous);
+  });
   it('手机首次打开保留静态背景，并且不启动帧循环或三维场景', async () => {
     const h = harness({ mobile: true });
     h.start();

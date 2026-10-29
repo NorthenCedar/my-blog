@@ -3,785 +3,110 @@ import { getEntry, render } from 'astro:content';
 import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import FinInfinity from '../components/FinInfinity.astro';
-import PageTitle from '../components/PageTitle.astro';
 import SocialIcon from '../components/SocialIcon.astro';
 import ThemeToggle from '../components/ThemeToggle.astro';
 import { LANGUAGE_STATS_DIRS, readLanguageStats } from '../lib/lang-stats';
 
-// 关于页正文来自 content/pages/about.md —— 主题不持有任何正文（content-model.md §7）
 const entry = await getEntry('pages', 'about');
 const Content = entry ? (await render(entry)).Content : null;
-
-/** 头像与社交账号（站主 2026-09-26 要求）也走内容层：文件在 src/assets/about/，配置在 about.md 的 frontmatter。
- *  头像必须放 src/ 才能参与构建期优化（转 WebP + 出 srcset）—— 与「说说配图」同一条例外。 */
-interface Social {
-  icon: string;
-  name: string;
-  href: string;
-}
-/** 技术栈（站主 2026-09-28 要求：放在社交账号下方）。同样走内容层 about.md 的 `stack`，
- *  与社交账号同一条例外理由：这是站主自己的信息，不该硬编码在主题里。 */
-interface StackGroup {
-  group?: string;
-  items?: string[];
-}
+interface Social { icon: string; name: string; href: string; note?: string }
 interface AboutData {
-  avatar?: string;
-  avatarName?: string;
-  social?: Social[];
-  stack?: StackGroup[];
-  /* ★ 2026-10-03 站主口径：「只保留排版，其他什么背景签名全部恢复原样」
-     ⇒ signature / signatureNote 两个字段**已删**（连同 sign.png 素材、
-       src/scripts/hand-sign.ts、FIG.01 那块纸、以及它专属的测试与门闩）。
-     要恢复签名时按 git log 回看 9a4414b / 0572158 两版，别凭印象重写。 */
+  avatar?: string; avatarName?: string; social?: Social[];
+  stack?: {group: string; items: string[]}[];
+  presentation?: {
+    identity?: string; greeting?: string[]; technologyTitle?: string[]; languageTitle?: string[];
+    socialCaption?: string[]; technologyCaption?: string[]; languageCaption?: string[];
+    personalTitle?: string; interests?: {label: string; href?: string}[];
+  };
 }
-
-// 与首页共用构建期统计，语言行数、字节和比例均随源码更新，不保存手填快照。
-const languageStats = readLanguageStats();
-const languageNotes: Record<string, string> = {
-  Astro: '页面与组件', TypeScript: '页面脚本、接口与测试', CSS: '设计令牌与样式',
-  Markdown: '文章与页面内容', JavaScript: '构建与资源处理脚本', JSON: '项目数据',
-  Python: '浏览器验收与辅助脚本', SQL: '数据库结构与迁移',
-};
-const LANGS = languageStats.map((row) => ({
-  name: row.name,
-  bytes: row.bytes.toLocaleString('en-US') + ' B',
-  pct: row.pct + '%',
-  w: row.pct + '%',
-  fill: row.name === 'Astro'
-    ? 'linear-gradient(90deg, var(--accent-ink) 0%, var(--accent) 55%, var(--accent-bright) 100%)'
-    : row.name === 'TypeScript' ? 'var(--accent-ink)' : row.name === 'Markdown' ? 'var(--signal)' : 'var(--muted)',
-  dot: row.name === 'Astro' ? 'var(--accent)' : row.name === 'TypeScript' ? 'var(--accent-ink)' : row.name === 'Markdown' ? 'var(--signal)' : 'var(--muted)',
-  note: languageNotes[row.name] ?? '项目源码',
-}));
-const LANG_TOTAL = languageStats.reduce((sum, row) => sum + row.bytes, 0).toLocaleString('en-US') + ' B';
-const d = (entry?.data ?? {}) as unknown as AboutData;
-const assets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/about/*.{jpg,jpeg,png,webp,avif}', { eager: true });
+const d = (entry?.data ?? {}) as AboutData;
+const p = d.presentation ?? {};
+const assets = import.meta.glob<{default: ImageMetadata}>('/src/assets/about/*.{jpg,jpeg,png,webp,avif}', {eager: true});
 const avatar = d.avatar ? assets[`/src/assets/about/${d.avatar}`]?.default : undefined;
-/* ★ 2026-10-03 删：const signature = …（签名整体移除，见 AboutData 注记）*/
-
 const social = d.social ?? [];
-// 空组不渲染（内容层写错分组时不至于留一个空卡片）
-const stack = (d.stack ?? []).filter((g) => (g?.items ?? []).length > 0);
-const isExternal = (h: string) => /^https?:/i.test(h);
+const stack = (d.stack ?? []).filter(g => g.items?.length);
+const email = social.find(s => s.href.startsWith('mailto:'))?.href.slice(7);
+const intro = entry?.body?.trim().split(/\r?\n\s*\r?\n/)[0] ?? '';
+const languageStats = readLanguageStats();
+const total = languageStats.reduce((n, row) => n + row.bytes, 0).toLocaleString('en-US') + ' B';
+const colors = ['var(--accent)', 'var(--accent-ink)', 'var(--signal)', 'var(--muted)'];
+const groupNotes: Record<string,string> = {构建:'如何写成',服务:'如何运转',呈现:'如何呈现'};
 ---
-{
-  /* 关于页迁移（2026-09-26）：chrome='band' → 'page'（内页外壳：浅色顶栏 + 切片档案背景）。
-     **'page' 不渲染 <slot name="band" />** —— 所以标题必须从那个槽搬进正文流（外壳提供的 .pagehead），
-     漏搬会静默消失且构建照常成功（文章页同一个坑）。
-     PageTitle 本身不写任何颜色（只有 margin/font-weight + 字号类 token），**靠继承取色** ——
-      搬进浅底后自动继承外壳的 --ink，所以**无需主题化**（已读源码确认，见 docs/about-migration-notes.md）。
-      版式依据不是原型：prototype/terminal/ 里没有关于页，依据是既有内页外壳的实测实现（/gallery 与文章页）。 */
-}
-<Base title="关于" current="about" chrome="page" bodyClass="about-plate">
-  {/* 头像（站主 2026-09-26 要、2026-09-27 改）：
-      **必须和标题放在同一个页头里**，桌面靠 grid 排到右边、手机在标题下方居中。
-      为什么不用 `position: fixed`（第一版就是这么写的，被站主抓了）：
-        ① 它会**不跟页面滚**（站主："要求跟随鼠标滚轮上下而上下"）；
-        ② 更要命的：过渡动画给 `.shell` 加了 `transform: scale(0.98→1)`，而被 transform 的祖先会成为
-           `position: fixed` 的**包含块** ⇒ 头像按"相对 .shell"定位；动画结束、类被摘掉后 transform 变 none，
-           包含块又换回视口 ⇒ **位置突变，视觉上就是"加载后跳一下"**（实测从 y=246 跳到 y=198，48px）。
-      改成布局定位后这两个问题一起消失：位置由排版决定（不会变），元素在正文流里（自然跟着滚）。 */}
-  {/* 固定底纹走 plate 槽，避开正文过渡的 transform。
-      ★ 2026-10-18：底纹装置换成 **FinInfinity**（立体 ∞，移植自 rhine-lock 的
-        ∞ fin sculpture —— 400 片Gerono 双纽线鳍 + 自发光边缘 + 点击脉冲）。
-        原来的百褶 ∞（PleatedInfinity）整体搬到标签页，那边删掉了陶瓷版。 */}
+<Base title="关于" current="about" chrome="page" bodyClass="about-plate" fullWidth>
   <Fragment slot="plate"><FinInfinity /></Fragment>
-
-  {/* ===================================================================
-   * 两栏容器（站主 2026-10-03：「右半部分太空，重新排版」）
-   *
-   * 为什么这么分：内容天然分两类 ——
-   *   · **叙述类**（页头 / 签名 / 正文）要窄、要安静⇒ 左边一栏，宽度就是 --measure
-   *   · **读数类**（社交 / 技术栈 / 语言占比）天生是清单与仪表 ⇒ 右边一栏，占满余宽
-   * 分栏后 1280 视口的右半不再是空的，而清单类内容**比正文更适合窄栏堆叠**
-   * （行短、易扫读），布局与内容是匹配的，不是硬塞。
-   *
-   * ★ 关键：**不改变 DOM 里的阅读顺序**。签名仍在正文之前（移动端尤其重要）。
-   *   办法是移动端把 aside 设成 `display:contents` —— 它不生成盒子，
-   *   子元素直接参与父级流动，于是视觉顺序 = main 的三个 + aside 的三个，
-   *   与改造前**逐项一致**。（若用 grid 显式指定行列，两栏的 DOM 顺序就会决定
-   *   移动端顺序，签名会掉到正文后面。）
-   * =================================================================== */}
-  <div class="about-grid">
-  {/* ★★ 2026-10-17 第二轮（站主：把按钮调到「关于页右上角」，不要放进导航栏；
-      删掉「显示模式」那几个字，只留按钮）—— 主题开关现在挂在页面右上角：
-        · 桌面（≥1024px）：绝对定位在内容区右上、与右栏右缘对齐；右栏整体让出它
-          的高度（.about-side 的 padding-top），所以不会压住 FIG.02。
-        · 窄屏：回到普通流，右对齐排在页头之前（单列时「右上角」＝页首右侧）。
-        · FIG.05 编号 / 「显示模式」标题 / 那句说明**全部删除**，只留按钮本身。
-      ⚠ 仍然只在这一页、仍然动态 import —— 460 KB 渲染器不能上每一页（见组件注释）。 */}
-  <div class="theme-dock"><ThemeToggle /></div>
-  <div class="about-main">
-  <header class="pagehead">
-    {/* ★ 站主 2026-10-03：「我的头像上面不要有线」⇒原来的圆形刻度环（量规语汇）
-        与头像上的排线**全部去掉**，头像回归纯圆形照片。
-        刻度与量规的语汇改由页头那根 `--hair` 细线与各区块的 `FIG.0x` 编号承担。
-
-        ★★ 页头纸托底 `.page-paper` 已删（2026-10-03 第三轮口径）。
-          它存在过的唯一理由是「深绿大图压住标题」（实测 pagehead 整段落在图上）；
-          现在底纹回到百褶 ∞ 那一层（`z-index:-1` + `opacity:.2`，画在 body
-          纸白底**之下**）⇒ 标题直接落在纸白底上，不需要任何纸。
-          顺带 `.pagehead` 的 `overflow:hidden` 也去掉了（它只是给纸兜底）。*/}
-    <p class="fig-no" aria-hidden="true">FIG.00 — PROFILE</p>
-    <PageTitle>关于</PageTitle>
-    {avatar && (
-      <div class="profile">
-        <Image class="avatar" src={avatar} alt={`${d.avatarName ?? '站主'}的头像`} widths={[96, 192]} sizes="128px" />
-        <p class="profile-name">{d.avatarName} · SPECIMEN 00</p>
-      </div>
-    )}
-  </header>
-
-  {/* ★ 2026-10-03 站主口径：「签名全部恢复原样」⇒ FIG.01 HAND 整块**已删**
-      （含 <figure class="sign-card"> 纸托底、编号小字、<img data-sign-img>，
-        以及配套的 src/scripts/hand-sign.ts 揭幕动画与 sign.png 素材）。
-      左栏现在是：页头 → 正文。原「FIG.01」这个编号位空缺，
-      社交/技术栈/语言占比仍从 FIG.02 起（编号是连续的排版语汇，不重排）。*/}
-
-  <div class="prose">{Content && <Content />}</div>
-  </div><!-- /.about-main -->
-
-  <aside class="about-side" aria-label="站点信息">
-  {social.length > 0 && (
-    <section class="social-block fig-block" aria-labelledby="social-title">
-      <p class="fig-no" aria-hidden="true">FIG.02</p>
-      <h2 class="fig-h" id="social-title">我的一些社交账号</h2>
-      <ul class="social">
-        {social.map((s, i) => (
-          <li>
-            <a
-              href={s.href}
-              {...(isExternal(s.href) ? { rel: 'noopener' } : {})}
-              {...(isExternal(s.href) ? { target: '_blank' } : {})}
-            >
-              <span class="fig-idx" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
-              <SocialIcon name={s.icon} />
-              <span>{s.name}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )}
-
-  {stack.length > 0 && (
-    <section class="stack-block fig-block" aria-labelledby="stack-title">
-      <p class="fig-no" aria-hidden="true">FIG.03</p>
-      <h2 class="fig-h" id="stack-title">技术栈</h2>
-      <div class="stack-groups">
-        {stack.map((g) => (
-          <div class="stack-group">
-            {g.group && <p class="stack-group-name">{g.group}</p>}
-            <ul class="stack-items">
-              {(g.items ?? []).map((t) => (
-                <li>{t}</li>
-              ))}
-            </ul>
+  <div class="about-page about-grid" data-about-redesign="4">
+    <section class="scene social-scene" id="social" data-motion-stop="0" aria-labelledby="profile-title">
+      <div class="theme-dock"><ThemeToggle /></div>
+      <div class="scene-copy">
+        <header class="profile-header">
+          <div class="profile-mark">
+            {avatar && <Image class="avatar" src={avatar} alt={`${d.avatarName ?? '站主'}的头像`} widths={[96,192]} sizes="52px" />}
+            <p class="profile-name">关于{d.avatarName}<span>{p.identity}</span></p>
           </div>
-        ))}
+          <h1 id="profile-title">{(p.greeting ?? ['关于']).map((line,i)=><>{i>0 && <br />}{line}</>)}</h1>
+        </header>
+        <p class="intro">{intro}</p>
+        <div class="social-heading"><h2>在这些地方找到我</h2>{email && <button class="copy-mail" data-copy-mail={email}>复制邮箱 ⧉</button>}</div>
+        <div class="social-list">{social.map(s => <a class="social-link" href={s.href} {...(/^https?:/i.test(s.href)?{target:'_blank',rel:'noopener noreferrer'}:{})}>
+          <span class="social-icon"><SocialIcon name={s.icon} /></span><span>{s.name}<small>{s.note}</small></span><span class="visit" aria-hidden="true">↗</span>
+        </a>)}</div>
+        <p class="copy-status" role="status" aria-live="polite"></p>
+      </div>
+      <div class="scene-space" aria-hidden="true"><p class="scene-caption">{p.socialCaption?.map((line,i)=><>{i>0 && <br />}{line}</>)}</p></div>
+      <a class="next-scene" href="#technology"><span>这个站是怎么搭起来的</span><span aria-hidden="true">↓</span></a>
+    </section>
+    <section class="scene technology-scene" id="technology" data-motion-stop="1" aria-labelledby="tech-title">
+      <div class="scene-space" aria-hidden="true"><p class="scene-caption">{p.technologyCaption?.map((line,i)=><>{i>0 && <br />}{line}</>)}</p></div>
+      <div class="scene-copy"><p class="kicker">技术栈</p><h2 class="section-title" id="tech-title">{p.technologyTitle?.map((line,i)=><>{i>0 && <br />}{line}</>)}</h2>
+        <div class="stack-groups">{stack.map((g,i)=><section class={`stack-group group-${i}`}><h3><span>{g.group}</span><small>{groupNotes[g.group]}</small></h3><ul>{g.items.map(item=><li>{item}</li>)}</ul></section>)}</div>
       </div>
     </section>
-  )}
-
-  {/* 技术栈占比条（站主 2026-09-30：「更新技术栈并加一个这个」）——紧跟在技术栈之后，同一个位置。
-      数据口径：**本站源码实测**（站主拍板的那一档），不是抄原型那组——
-      原型是 HTML 单文件，它的 JS 占 93.1%（含 three.js 整包），与本站毫无可比性。
-      条宽直接用百分比当 CSS 宽度；每段配一个纯色圆点做图例
-      （渐变在小圆点上会渲染成全透明，所以 dot 与 fill 是两个字段）。 */}
-  {LANGS.length > 0 && (
-    <section class="lang-block fig-block" aria-labelledby="lang-title">
-      <p class="fig-no" aria-hidden="true">FIG.04</p>
-      <h2 class="fig-h" id="lang-title">源码语言占比</h2>
-      <p class="lang-total">
-        构建期按字节统计 · 合计 <b>{LANG_TOTAL}</b>。范围：{LANGUAGE_STATS_DIRS.map((dir, i) => <><code>{dir}/</code>{i < LANGUAGE_STATS_DIRS.length - 1 ? '、' : ''}</>)}；不含第三方副本、图片字体、缓存和临时文件。
-      </p>
-      <ul class="lang-list">
-        {LANGS.map((l) => (
-          <li class="lang-row">
-            <span class="lang-head">
-              <i class="lang-dot" style={`background:${l.dot}`} aria-hidden="true"></i>
-              <span class="lang-name">{l.name}</span>
-              <span class="lang-bytes">{l.bytes}</span>
-              <span class="lang-pct">{l.pct}</span>
-            </span>
-            <span class="lang-bar" aria-hidden="true">
-              <s class="lang-fill" style={`width:${l.w};background:${l.fill}`}></s>
-            </span>
-            <span class="lang-note">{l.note}</span>
-          </li>
-        ))}
-      </ul>
-      {/* 刻度尺：每 10% 一道，纯装饰（aria-hidden）。它是「读数」的延伸，不是新数据。 */}
-      <div class="lang-rule" aria-hidden="true">
-        {Array.from({ length: 10 }, (_, i) => <i style={`left:${i * 10}%`}></i>)}
+    <section class="scene language-scene" id="languages" data-motion-stop="2" aria-labelledby="lang-title">
+      <div class="scene-copy"><p class="kicker">源码语言占比</p><h2 class="section-title" id="lang-title">{p.languageTitle?.map((line,i)=><>{i>0 && <br />}{line}</>)}</h2>
+        <p class="section-intro">页面、交互、内容，还有它们背后的代码。</p>
+        <div class="language-overview" aria-hidden="true">{languageStats.map((row,i)=><span title={`${row.name} ${row.pct}%`} style={`flex-grow:${row.bytes};background:${colors[Math.min(i,3)]}`}></span>)}</div>
+        <ul class="language-list">{languageStats.map((row,i)=><li class="lang-row">
+          <div class="language-label"><span class="lang-name">{row.name}</span><span class="lang-pct">{row.pct}%</span></div>
+          <div class="language-meter" aria-hidden="true"><i style={`width:${row.pct}%;background:${colors[Math.min(i,3)]}`}></i></div>
+          <div class="lang-bytes">{row.bytes.toLocaleString('en-US')} B</div>
+        </li>)}</ul>
+        <details class="stats-scope"><summary>统计范围与口径</summary><p class="lang-total">构建时读取当前仓库，合计 <b>{total}</b>。范围为 {LANGUAGE_STATS_DIRS.join('、')}；排除第三方副本、图片、字体、缓存和临时文件，与 GitHub 的语言统计口径不同。</p></details>
       </div>
+      <div class="scene-space" aria-hidden="true"><p class="scene-caption">{p.languageCaption?.map((line,i)=><>{i>0 && <br />}{line}</>)}</p></div>
     </section>
-  )}
-  </aside><!-- /.about-side -->
-  </div><!-- /.about-grid -->
+    <section class="personal" id="personal" aria-labelledby="personal-title">
+      <div><p class="kicker">也关于我</p><h2 id="personal-title">{p.personalTitle}</h2></div>
+      <div class="personal-copy"><div class="prose">{Content && <Content />}</div><div class="interests">{p.interests?.map(item=>item.href?<a href={item.href}>{item.label} ↗</a>:<span>{item.label}</span>)}</div></div>
+    </section>
+  </div>
+  <nav class="chapter-nav" aria-label="关于页章节"><a href="#social" data-chapter="social">联系我</a><a href="#technology" data-chapter="technology">技术栈</a><a href="#languages" data-chapter="languages">源码语言</a></nav>
 </Base>
-
-
-
+<script>import '../scripts/about-page';</script>
+<!-- 正式站保留公共导航、搜索、账户与统计，关于页自己的样式只在本页生效。 -->
 <style>
-  /* 拍板 D：页头版心收成 --measure，与正文列左对齐（与文章页同一条）。 */
 
-  /* ===================================================================
-   * 标本馆（SPECIMEN CABINET）—— 站主 2026-10-03 定的版式语言
-   *
-   * 参照物是一组「拼贴 + 版画蚀刻 + 仪器图纸」的参考图，落到版式上是这四样：
-   *   ① 纸白底（口径 #1「纸白阅读底一行不改」）；
-   *   ② 标本编号（FIG.00 / 01 / 02…）用等宽小字 + 大字距，排在区块左上；
-   *   ③ 细线分隔的列表（**不做卡片** —— 站主 2026-10-03「直接放背景里，不要单独做卡片」）；
-   *   ④ 纸白底上的立体百褶环，点击触发单向纵波。
-   * 落在这四样上的改动只有版式（页头 / 列表项 / 刻度），**正文 .prose 一行没动**
-   * —— 口径 #3 明确「正文排版不动」。
-   * =================================================================== */
+:global(body.about-plate){background:var(--paper);isolation:isolate}
+:global(body.about-plate .page-inf){display:none}
+:global(body.about-plate > .foot){background:transparent;color:var(--muted);--on-band:var(--ink);--on-band-sub:var(--accent);--on-band-meta:var(--muted);--accent-ink:var(--accent);padding-bottom:100px}
+:global(body.about-plate > main){padding:0}
+.about-page{max-width:1600px;padding:0 var(--about-space);margin:auto;font:16px/1.85 'IBM Plex Sans','Microsoft YaHei','PingFang SC',sans-serif}
+:global(:where(.about-page p,.about-page h1,.about-page h2,.about-page h3,.about-page ul)){margin:0}
+:global(:where(.about-page ul)){list-style:none;padding:0}
+:global(:where(.about-page a)){color:inherit;text-decoration:none}
+:global(:where(.about-page button)){font:inherit;color:inherit;border:0;background:none}
+.profile-header{margin:0;padding:0;border:0}
+.theme-dock{position:absolute;right:0;top:18px;height:168px}
+.personal-copy :global(.prose){max-width:none;font-size:14px;line-height:2;color:var(--muted)}
+.personal-copy :global(.prose > p:first-child){display:none}
+.personal-copy :global(.prose > p){margin:0 0 var(--sp-3)}
+.scene{display:grid;grid-template-columns:1fr 1fr;gap:clamp(45px,6vw,96px);align-items:center;min-height:110svh;padding:120px 0;position:relative;scroll-margin-top:0}.scene-copy{position:relative;z-index:1;min-width:0}.scene-space{position:relative;align-self:stretch;pointer-events:none;min-width:0}.scene-caption{font-size:13px;line-height:2;color:var(--muted);position:absolute;bottom:30px;right:10px;text-align:right}.social-scene{min-height:calc(100svh - 82px);padding-top:70px;padding-bottom:130px}.profile-mark{display:flex;gap:16px;align-items:center;margin-bottom:25px}.profile-mark img{width:52px;height:52px;object-fit:cover;border-radius:50%}.profile-mark p{font-size:13px;color:var(--accent)}.profile-mark p span{display:block;font-size:11px;color:var(--muted);margin-top:2px}h1,.section-title,.personal h2{font-family:var(--about-serif);font-weight:400;letter-spacing:-.04em;line-height:1.25}h1{font-size:clamp(48px,5.4vw,82px)}.intro{font-size:15px;line-height:1.95;max-width:27em;margin-top:23px;color:var(--muted)}.social-heading{display:flex;gap:14px;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--about-line);margin-top:38px;padding-bottom:13px}.social-heading h2{font-size:14px;font-weight:400}.copy-mail{font-size:11px;color:var(--accent);padding:2px 0}.copy-mail:hover{text-decoration:underline}.social-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 25px}.social-link{display:flex;gap:13px;align-items:center;min-width:0;padding:20px 0;border-bottom:1px solid var(--about-line);transition:color .2s,background .2s}.social-icon{display:grid;place-items:center;flex:none;width:25px;color:var(--accent)}.social-icon :global(svg){width:24px;height:24px;fill:var(--social-icon-fill,currentColor);color:var(--accent)}.social-link>span:nth-child(2){font-size:16px}.social-link small{display:block;font-size:10px;line-height:1.5;color:var(--muted);margin-top:3px}.visit{font-size:18px;color:var(--accent);margin-left:auto}.social-link:hover{background:var(--about-hover);color:var(--accent)}.copy-status{font-size:11px;color:var(--accent);position:absolute;bottom:-30px;right:0}.next-scene{position:absolute;bottom:34px;left:0;display:flex;align-items:center;gap:30px;font-size:12px;color:var(--accent)}.next-scene>span:last-child{border:1px solid var(--about-line);border-radius:50%;width:34px;height:34px;display:grid;place-items:center}
+.technology-scene{grid-template-columns:.9fr 1.1fr;min-height:115svh;padding-top:140px;padding-bottom:140px}.technology-scene .scene-caption{right:auto;left:0;text-align:left}.kicker{font-size:13px;color:var(--accent);margin-bottom:24px;letter-spacing:.08em}.section-title{font-size:clamp(42px,4.5vw,66px);margin-bottom:40px}.stack-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px 26px}.stack-group h3{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:14px;font-weight:400;color:var(--accent);margin-bottom:12px}.stack-group h3 small{font-size:10px;color:var(--muted)}.stack-group li{font-size:13px;line-height:1.95;margin-bottom:8px;padding-left:10px;position:relative;overflow-wrap:anywhere}.stack-group li:before{content:'';position:absolute;left:0;top:.82em;background:var(--accent);width:3px;height:3px}.group-2{grid-column:1/-1;padding-top:23px;border-top:1px solid var(--about-line)}.group-2 ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:26px}.language-scene{min-height:110svh}.language-scene .section-title{margin-bottom:24px}.section-intro{font-size:14px;color:var(--muted);margin-bottom:28px}.language-overview{height:7px;display:flex;gap:3px;border-radius:3px;overflow:hidden;margin-bottom:30px}.language-overview span{flex-basis:0;min-width:1px}.language-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:23px 35px}.language-label{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:15px;font-variant-numeric:tabular-nums}.language-label>span:last-child{color:var(--accent-ink);font-size:24px;line-height:1.4}.language-label small{font-size:11px;margin-left:2px}.language-meter{height:3px;background:var(--about-line);margin:8px 0 6px}.language-meter i{display:block;height:100%;min-width:1px}.lang-bytes{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}.stats-scope{margin-top:27px;border-top:1px solid var(--about-line);padding-top:15px;font-size:12px;color:var(--muted)}.stats-scope summary{cursor:pointer;list-style:none}.stats-scope summary:after{content:'＋';float:right;color:var(--accent)}.stats-scope[open] summary:after{content:'－'}.stats-scope p{font-size:12px;line-height:1.9;margin-top:13px}
+.personal{display:grid;grid-template-columns:.8fr 1.2fr;gap:90px;padding:100px 0;border-top:1px solid var(--about-line);background:transparent;position:relative;z-index:2}.personal h2{font-size:42px}.personal-copy>p{font-size:14px;color:var(--muted);line-height:2;max-width:45em}.interests{display:flex;gap:14px 24px;flex-wrap:wrap;font-size:12px;margin-top:24px;color:var(--accent)}.read-link{display:inline-block;font-size:12px;color:var(--accent);border-bottom:1px solid var(--accent);margin-top:25px;padding-bottom:6px}.chapter-nav{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:5px 8px;border:1px solid var(--about-line);border-radius:35px;background:var(--about-glass);backdrop-filter:blur(16px);box-shadow:0 5px 25px var(--about-shade);z-index:8;display:flex;gap:4px}.chapter-nav a{font-size:12px;white-space:nowrap;min-width:76px;text-align:center;padding:8px 13px;border-radius:24px;transition:background .2s,color .2s}.chapter-nav a[aria-current=true]{background:var(--accent);color:var(--paper)}
+@media(min-width:1600px){.scene{gap:100px}.stack-group li{font-size:15px}.intro{font-size:17px}.section-intro{font-size:16px}.language-label{font-size:17px}.lang-bytes{font-size:12px}.social-link>span:nth-child(2){font-size:18px}}
+@media(max-width:1000px){.scene{gap:35px}.social-link{gap:10px}.social-list{column-gap:20px}.social-link>span:nth-child(2){font-size:14px}.intro{font-size:14px}.section-title{font-size:43px}.stack-group li{font-size:12px}.stack-group h3 small{display:none}.personal{gap:40px}.language-label{font-size:13px}.language-list{column-gap:23px}}
+@media(max-width:767px){.topbar{padding:18px 24px}.brand{font-size:14px;gap:9px}.brand>span{font-size:30px}.topbar nav{gap:15px;font-size:11px}main{padding:0 24px}.scene{display:flex;flex-direction:column;align-items:stretch;gap:0;min-height:0;padding:95px 0 75px}.social-scene{padding-top:125px;padding-bottom:110px}.profile-mark{margin-bottom:25px}.profile-mark img{width:46px;height:46px}.profile-mark p{font-size:12px}.profile-mark p span{font-size:10px}h1{font-size:clamp(45px,12vw,68px)}.intro{font-size:14px;max-width:24em}.social-heading{margin-top:30px}.social-heading h2{font-size:13px}.social-link{padding:19px 0;gap:12px}.social-link>span:nth-child(2){font-size:16px}.social-link small{font-size:10px}.social-list{column-gap:24px}.social-icon{width:22px}.social-icon :global(svg){width:22px;height:22px}.visit{font-size:16px}.theme-dock{top:-6px;right:-12px;height:145px}.scene-space{min-height:280px;width:100%;margin-top:35px}.scene-caption{right:0;bottom:0;font-size:11px}.next-scene{bottom:20px;gap:22px;font-size:11px}.technology-scene .scene-copy{order:0}.technology-scene .scene-space{order:1;margin-top:20px;min-height:280px}.kicker{font-size:12px;margin-bottom:22px}.section-title{font-size:clamp(36px,10.4vw,58px);margin-bottom:32px}.stack-groups{column-gap:24px;row-gap:24px}.stack-group li{font-size:13px;line-height:1.95;margin-bottom:10px}.stack-group h3{font-size:14px}.group-2{padding-top:22px}.group-2 ul{column-gap:24px}.language-scene .scene-space{min-height:300px;margin-top:35px}.section-intro{font-size:14px;line-height:1.9}.language-label{font-size:14px}.language-label>span:last-child{font-size:23px}.language-list{gap:22px 28px}.lang-bytes{font-size:10px}.language-overview{margin-bottom:29px}.stats-scope{font-size:11px}.stats-scope p{font-size:11px}.personal{display:block;padding:65px 0 60px}.personal h2{font-size:35px}.personal .kicker{margin-bottom:16px}.personal-copy{margin-top:25px}.personal-copy>p{font-size:13px;line-height:2}.interests{font-size:11px;gap:12px 20px}.read-link{font-size:11px}footer{font-size:9px;flex-wrap:wrap;row-gap:8px;padding-bottom:100px}footer>span:nth-child(2){order:2;flex-basis:100%}.chapter-nav{bottom:15px}.chapter-nav a{font-size:11px;min-width:72px;padding:8px 10px}.fin-infinity{width:min(96vw,800px,150vh)}.fin-view{display:none}.fin-static{opacity:.7}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition-duration:0s!important;animation:none!important}}
+@media(max-width:360px){.topbar{align-items:flex-start;flex-direction:column;gap:12px}.brand{white-space:nowrap}.topbar nav{width:100%;justify-content:space-between;gap:12px}h1{font-size:40px}.section-title{font-size:31px}.language-list{column-gap:18px}.language-label{font-size:12px}.language-label>span:last-child{font-size:20px}}
 
-  /* ===================================================================
-   * 两栏版式（站主 2026-10-03：「右半部分太空，重新排版」）
-   *
-   * 改版前：页头 / 签名 / 正文 / 社交 / 技术栈 / 语言占比 **全部**限在
-   * --measure（34em ≈ 578px）里单列排下来⇒ 1280 视口下右半 600px 全空。
-   *
-   * 分栏依据（不是「为了填满」而是内容本来就分两类）：
-   *   左栏 = **叙述类**（页头 / 签名 / 正文）—— 窄栏、安静、适合连续阅读
-   *   右栏 = **读数类**（社交 / 技术栈 / 语言占比）—— 清单与仪表，
-   *           行短可扫读，在窄栏里比在通栏里更好读（通栏时一行只剩三五个字，两端全是空白）
-   * ★ 正文 .prose 的宽度**一个字没改**（仍是 prose.css 里的 max-width:var(--measure)），
-   *   它在 grid 里被第一列约束，视觉效果与改版前一致 —— 口径 #3「正文排版不动」。
-   *
-   * ★ 移动端为什么用 `display: contents` 而不是 grid 显式定位：
-   *   若在 grid 上写 `grid-row/grid-column`，**DOM 顺序就决定了窄屏顺序**，
-   *   而 aside 在 main 之后 ⇒ 签名会掉到正文后面（改版前签名在正文之前）。
-   *   `display:contents` 让 aside 不生成盒子、子元素直接参与父级流动，
-   *   窄屏顺序 = main 的三个 + aside 的三个 = 与改版前**逐项一致**，零顺序变化。
-   * =================================================================== */
-  .about-grid {
-    display: block;            /* 窄屏默认就是原来的单列流 */
-    position: relative;        /* 主题开关（桌面档）的绝对定位包含块 */
-  }
-  /* ★ 2026-10-17 第二轮：主题开关挪到页面右上角（模板里有说明）。
-     窄屏：普通流、右对齐、排在页头之前 —— 单列时这就是"右上角"。
-     桌面档在下方 @media 里改成绝对定位，右栏让出它的高度。 */
-  .theme-dock {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: var(--sp-4);
-  }
-  .about-side {
-    display: contents;
-  }
-  @media (min-width: 1024px) {
-    .about-grid {
-      display: grid;
-      /* 左列固定 --measure（正文该多宽就多宽），右列吃掉余宽。
-         1024px 起才分栏：低于它右列不足 300px，清单会被挤成两三个字一行。 */
-      grid-template-columns: minmax(0, var(--measure)) minmax(0, 1fr);
-      column-gap: var(--sp-8);
-      align-items: start;      /* ★ 右栏不拉高，块按自身高度排（否则 social 会被prose 拉出大片空白）*/
-    }
-    .about-main {
-      grid-column: 1;
-      min-width: 0;
-      /* ★ 2026-10-03 删：`padding-top: min(30vh, 380px)` 那段顶部空档。
-         它存在过的唯一理由是「让铺满视口的深绿大图从页面上方整段露出来」
-         （当时的算式：图高 697px、月亮直径约 250px ⇒ 空档要装得下月亮）。
-         现在底纹回到百褶 ∞ 那一层（照抄它的挂法：fixed 居中、铺满视口、
-         `opacity:.2`、画在 body 纸白底之下）⇒ **不需要任何空档**，
-         而且右栏（.about-side）本来就没有这段 padding，
-         留着会让左右两栏的**首行基线错开**（实测左栏 y=490、右栏 y=110）。
-         ⇒ 删掉之后两栏齐平，这本该是版式的默认状态。 */
-    }
-    .about-side {
-      /* ★ 不用 flex + gap，用「上边框 + padding-top」分隔。
-         目检踩到：gap 与 border-top 同时存在时，两个半段间距（上一块下方 gap
-         + 下一块上方 padding）夹着一条线，看起来像「双线夹一段空白」。
-         现在间距**只由 padding-top 提供**，线上只有一条 —— 干净。 */
-      display: block;
-      grid-column: 2;
-      min-width: 0;
-      /* ★ 2026-10-17 第二轮：右上角的主题开关是绝对定位、不占行，
-         右栏必须自己让出它的高度（画布高度 + 一道气），
-         否则 FIG.02 的标题会钻到按钮底下。
-         ⚠ 与 ThemeToggle.astro 的画布实际占高绑定；渲染画布包含额外的阴影空间，
-           负外边距抵消上方留白，改变尺寸时按两者之和同步这里。 */
-      /* 200px 画布向上偏移 32px，实际占高 168px。 */
-      padding-top: calc(168px + var(--sp-5));
-    }
-    /* 主题开关：桌面档钉在内容区右上角，与右栏右缘对齐（见模板里的说明） */
-    .theme-dock {
-      position: absolute;
-      top: 0;
-      right: 0;
-      margin: 0;
-      z-index: 1;
-    }
-    /* 右栏标题比左栏小一档：它们是清单的标题，不是页的章节标题。
-       （--fs-lg → --fs-body 上浮，视觉上落在一级与二级之间。） */
-    .about-side .fig-h {
-      font-size: var(--fs-body);
-      font-weight: 700;
-      margin-bottom: var(--sp-2);
-    }
-    /* 编号与标题同行：右栏窄，横排更紧凑（左栏是竖排的两行） */
-    .about-side .fig-no {
-      margin-bottom: 0;
-    }
-    .about-side .fig-block {
-      /* 归零原有的 margin-top（.stack-block / .lang-block / .social-block 各带
-         `margin: var(--sp-8) 0 0`）—— 在右栏里由 padding-top 统一控制间距，
-         两处都留会叠成双倍空白。 */
-      margin-top: 0;
-      max-width: none;         /* 右栏宽度由 grid 列给，不该再限 --measure */
-      padding-top: var(--sp-5);
-      border-top: 1px solid var(--hair);
-    }
-    .about-side .fig-block:first-child {
-      padding-top: 0;
-      border-top: 0;
-    }
-    /* ★ 2026-10-03 删：.about-main .sign-card { width: min(380px,100%) }
-       —— 签名整块已删，这条是它专属的宽屏宽度约束。 */
-  }
 
-  /* 本页只保留纸白与交互百褶环。 */
-  :global(body.about-plate) { background: var(--paper); }
-
-  /* ★★ 必须**关掉**本页的百褶 ∞（`.page-inf`，由 Topbar 渲染，全站内页共用）。
-     不关的话两套母题会叠在一起 —— Topbar 注释里已记过这个教训
-     （「切片档案」四层换 ∞ 底纹时就是因为叠着才整体删掉）。
-     ⚠ 用 `:global(body.about-plate .page-inf)`：
-       `.page-inf` 是 Topbar 的元素、带的是**别的**作用域属性；
-       且 `body.chrome-page .page-inf` (0,2,1) 权重高于裸 `.page-inf` (0,1,0)
-       ⇒ 不对齐权重压不住它。
-     关法用 `display: none` 而不是 `opacity: 0`：
-       后者仍占层、仍可能被合成层吃掉 GPU（这层是 fixed 满屏，很贵）。 */
-  :global(body.about-plate .page-inf) {
-    display: none;
-  }
-
-  /* ===================================================================
-   * 纸托底 —— **整段已删**（2026-10-03 站主第三轮口径）
-   *
-   * 下面是踩了三轮才做对的东西，删掉之前先把为什么删写清楚（别手滑加回来）：
-   *   ① 两条竖条 + 中间留缝 ⇒ 月亮被劈成两半；
-   *   ② 一整块纸盖满版心 ⇒ 正文可读了，但月亮被整块吃掉；
-   *   ③ 分段但用写死的 % ⇒ 纸与内容错位，文字直接压在图上。
-   * 这三轮的共同前提是：**背景是一张铺满视口的深绿大图**，
-   * 文字压不住 ⇒ 必须有不透明纸垫在下面。
-   *
-   * ★ 现在底纹回到 `z-index: -1` + `opacity: .2` 的淡墨纹
-   *   （＝百褶 ∞ 那一层的角色），它画在 body 纸白底**之下**
-   *   ⇒ 不需要任何东西压它，跟百褶 ∞ 当年一样是裸挂的。
-   * ⇒ 一并删除的东西：`.sign-card::before` / `.prose::before` / `.fig-block::before`
-   *   / `.page-paper` 真元素 / `.ref-paper` 那两条写死 % 的分段纸 / body 的 transparent。
-   * ⇒ 顺带收益：`.prose` 的内容盒回到最干净的状态（此前 `::before` 一直挂在它身上），
-   *   红线「正文排版不动」少了一层需要维护的东西。
-   *=================================================================== */
-
-  /* 页头：宽屏两栏（标题左 / 头像右），窄屏单列纵向流。
-     ★ `display: grid` **只在媒体查询里写一次**（见下方 `@media (min-width:1024px)`），
-       这里**不重复声明** —— 同元素两处各写一次 display 时后写的赢（这个坑踩过：
-       外层 grid 被媒体查询的 flex 覆盖）。 */
-  .pagehead {
-    position: relative;
-  }
-  /* ★★ 页头网格必须**逐项显式指定落位**（2026-10-03 实测出来的坑）。
-     之前只写 `grid-template-columns: 1fr auto` 让浏览器自动放置，结果是：
-       实测 h1 x=562（落在**右**列）、.profile x=101（落在**左**列）
-     ⇒ 标题和头像左右**调换**了（与设计意图相反）。
-     根因：网格项按源码顺序自动-flow，`.fig-no` 先占 (1,1)，
-     于是 `h1` 被挤到 (1,2)、`.profile` 到 (2,1)。
-     ⇒ 显式落位，顺序无关：编号通栏（1/-1）· 标题左列 · 头像右列。
-
-     ★ 标题为什么用 `:global()` 而不是 `.pagehead > h1`（实测踩过）：
-       Astro 的 scoped CSS 会给选择器尾部加本页 cid 属性，
-       `.pagehead > h1` 编译成 `.pagehead[本页cid] > h1[本页cid]`；
-       而这个 h1 是 **PageTitle 组件**渲染的，元素上带的是**组件自己的** cid
-       ⇒ 属性选择器**不匹配** ⇒ 规则整条静默失效（不报错、不警告）。
-       当时纸（`.page-paper`，本页元素 ⇒ 匹配成功）拿到 position:absolute + z-index:0，
-       标题既static 又无 z-index ⇒ **纸把标题整个盖住**，页头一片空白。
-       ★ 现在纸已删、底纹是 z-index:-1，这个失效**不再有可见症状**，
-         但规则本身仍要写对（落位得真生效，否则左右又会调换）。
-       代价与边界：`:global()` 让这条规则离开本页作用域，
-       但它以 `.pagehead >` 为前缀（该类是本页独有）⇒ 影响面仅关于页。 */
-  .pagehead > .fig-no { grid-column: 1 / -1; grid-row: 1; }
-  :global(.pagehead > h1) { grid-column: 1; grid-row: 2; }
-  .pagehead > .profile { grid-column: 2; grid-row: 2; }
-
-  /* 块与块之间的间距。
-     ★ 这里曾用 `margin-bottom` 在「纸与纸之间露出背景图」——
-       纸已删（底纹回到淡墨纹，本来就铺满视口、不需要留缝），
-       间距改由各块自己的 margin 承担。 */
-  .prose,
-  .fig-block {
-    margin-bottom: var(--sp-7);
-  }
-
-  /* ---- 标本编号：等宽字 + 大字距 = 「标本标签」的印刷感，也是仪器语汇的延续 ---- */
-  .fig-no,
-  .fig-idx {
-    font-family: var(--font-mono);
-    font-size: var(--fs-xs);
-    letter-spacing: 0.16em;
-    color: var(--accent-ink);
-    font-variant-numeric: tabular-nums;
-  }
-  /* 编号与 h2 各占一行、之间留气：编号是「标签」不是标题，不能抢 h2 的节奏。 */
-  .fig-no {
-    margin: 0 0 var(--sp-2);
-    color: var(--muted);
-  }
-  .fig-h {
-    margin: 0 0 var(--sp-3);
-    font-size: var(--fs-lg);
-    font-weight: 800;
-  }
-  .fig-block {
-    position: relative;
-  }
-
-  /* ★ 签名的样式（.sign-card/.sign-head/.sign-img）**已删**（2026-10-03 第三轮口径）。
-     宽度那套`min(380px, 100%)` 的收窄结论仍然有效，将来要恢复签名时直接用。 */
-
-  /* ---- 社交卡 / 技术栈：站主 2026-10-03 第二轮「不做卡片」⇒
-     改成**细线分隔的列表**（上边框分隔、无卡片框、无底色）----
-     ★ 为什么彻底去框：参考图里那些元素是「浮在纸上」的不是「装在盒子里」；
-       保留 --panel 底色会让每一行都变成一个独立的方块，与底纹层打架。 */
-  .social {
-    border-top: 1px solid var(--hair);
-  }
-  .social a {
-    border: 0;
-    border-bottom: 1px solid var(--hair);
-    background: transparent;
-    padding: var(--sp-3) 0;
-  }
-  .social a:hover,
-  .social a:focus-visible {
-    background: var(--accent-wash);
-    /* 悬停时给一点左内边距，让它看起来「被抽出」而不是「被点亮」 */
-    padding-left: var(--sp-2);
-  }
-  .stack-group {
-    border: 0;
-    border-top: 1px solid var(--hair);
-    background: transparent;
-    padding: var(--sp-4) 0;
-  }
-  /* 卡片是标本 ⇒ 不再圆角。原有的 hover 反馈保留（accent-wash 那一档）。 */
-  .social a {
-    position: relative;
-  }
-  .social a .fig-idx {
-    position: absolute;
-    top: 0;
-    right: 0;
-    padding: 0 0.3em;
-    background: var(--paper);
-    color: var(--muted);
-    font-size: var(--fs-xs);
-    letter-spacing: 0.08em;
-  }
-  .stack-items li {
-    font-family: var(--font-mono);
-    font-size: var(--fs-xs);
-    letter-spacing: 0.04em;
-  }
-
-  /* ---- 语言占比条：条形保留（它是构建期实测的真读数），下面加一道刻度尺 ---- */
-  .lang-rule {
-    position: relative;
-    height: 6px;
-    margin-top: var(--sp-2);
-    border-bottom: 1px solid var(--hair);
-  }
-  .lang-rule i {
-    position: absolute;
-    bottom: 0;
-    width: 1px;
-    height: 3px;
-    background: var(--hair);
-  }
-  /* 0% 那一道加高一档，给个「起点」 */
-  .lang-rule i:first-child {
-    height: 6px;
-    background: var(--accent-ink);
-  }
-  .pagehead {
-    max-width: var(--measure);
-  }
-  /* ---- 头像 ---- */
-  /* 手机端：头像与「北杉」必须**同一条中轴**（站主 2026-09-27："头像移到北杉正上方，歪了"）。
-     用 flex 列 + align-items:center 而不是 text-align:center ——
-     后者对 Astro `<Image>` 产出的图片无效（它是块级元素，text-align 管不到它，
-     实测头像被左对齐、名字居中，于是看着是歪的）。 */
-  .profile {
-    margin: var(--sp-6) 0 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-  .avatar {
-    width: 96px;
-    height: 96px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 1px solid var(--hair);
-    background: var(--panel);
-  }
-  .profile-name {
-    margin: var(--sp-2) 0 0;
-    font-size: var(--fs-sm);
-    letter-spacing: 0.12em;
-    color: var(--muted);
-  }
-  /* 宽屏：页头变成**两栏** —— 标题在左、头像在右（都留在正文流里 ⇒ 位置固定不变、且跟着页面滚）。
-     为什么不用 position:fixed：① 不跟滚动；② 过渡动画给 .shell 加的 transform 会把 fixed 的包含块
-     从视口换成 .shell，动画一结束就位置突变（"加载后跳一下"）。布局定位两个问题都没有。
-
-     ★★ 但 `display: grid` 本身**必须限在宽屏**（2026-10-03 实测踩到）：
-       `grid-template-columns: 1fr auto` + auto 放置在窄屏算出的列宽超过视口
-       （实测 390 视口：纸宽 503px、文档 scrollWidth=512 ⇒ 横向溢出 122px，
-         头像与「北杉 · SPECIMEN 00」被切到屏幕外）。
-       窄屏本来就该是**单列纵向流**（标题在上、头像居中在下），所以把 grid
-       整体关掉，两个显式落位属性在非 grid 容器上自动失效。 */
-  @media (min-width: 1024px) {
-    .pagehead {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      grid-template-rows: auto auto;
-    }
-  }
-  @media (min-width: 1024px) {
-    .pagehead {
-      /* ★ 2026-10-03 分栏后：页头不再通栏（原来是 max-width:none 铺满整个 wrap，
-         而右半是空的）。现在它只占**左列**，标题与头像在列内左右分置。 */
-      max-width: none;
-      /* display 由上面那条媒体查询给 **grid** —— 这里**不要**再写 display。
-         ★ 踩到（2026-10-03）：这条媒体查询里曾写 `display: flex`，
-           它在层叠上**晚于**外层的 grid ⇒ 把 grid 覆盖成 flex
-           ⇒ `.page-paper`（absolute 子元素）在 flex 容器里高度塌成 0
-              （实测 y=466..466）⇒ 纸等于不存在 ⇒「关于」压在深色图上。
-         ⇒ 同一元素**不要在两处各写一次 display**，否则后写的赢；
-           grid 声明已提到独立的窄屏关闭段（见上）。 */
-      padding-bottom: var(--sp-5);
-      border-bottom: 1px solid var(--hair);
-    }
-    .pagehead .fig-no {
-      margin-bottom: var(--sp-2);
-    }
-    .profile {
-      /* 往下压一点，让头像对着标题的下半部分（站主给的参考图就是这个观感；
-         代价是页头行高变大、正文整体下移 —— 这是刻意的，不是副作用）。 */
-      margin: 2.5rem 0 0;
-    }
-    .avatar {
-      width: 128px;
-      height: 128px;
-      box-shadow: 0 6px 24px rgb(26 26 26 / 10%);
-    }
-  }
-  /* ---- 社交账号 ---- */
-  .social-block {
-    margin: var(--sp-8) 0 0;
-    max-width: var(--measure);
-  }
-  .social-block h2 {
-    margin: 0 0 var(--sp-4);
-    font-size: var(--fs-lg);
-    font-weight: 800;
-  }
-  .social {
-    /* 站主 2026-10-03「不做卡片」⇒ 由多列网格改成**单列细线列表** */
-    display: block;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .social a {
-    display: flex;
-    align-items: center;
-    gap: 0.6em;
-    padding: var(--sp-3) 0;
-    border: 0;
-    border-bottom: 1px solid var(--hair);
-    background: transparent;
-    color: var(--ink);
-    text-decoration: none;
-    font-size: var(--fs-sm);
-  }
-  .social a:hover,
-  .social a:focus-visible {
-    background: var(--accent-wash);
-    /* 悬停时给一点左内边距：看起来「被抽出」而不是「被点亮」*/
-    padding-left: var(--sp-2);
-  }
-  @media (max-width: 767px) {
-    .social {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-  /* ---- 技术栈（站主 2026-09-28 要求：社交账号下方）----
-     视觉取既有元件，不新造：卡片沿用社交卡的「--panel 底 + --hair 边框」，
-     组名沿用 .profile-name / 日志版本号的「--accent-ink 小字 + 字距」，
-     条目沿用标签页 chips 的方框写法。颜色只用 token，无 rgba()。 */
-  .stack-block {
-    margin: var(--sp-8) 0 0;
-    max-width: var(--measure);
-  }
-  .stack-block h2 {
-    margin: 0 0 var(--sp-4);
-    font-size: var(--fs-lg);
-    font-weight: 800;
-  }
-  .stack-groups {
-    /* 单列 + 无间隙：站主 2026-10-03「不做卡片」⇒ 三组之间靠 hair 细线分隔，
-       有间隙会变成三块独立的方块。 */
-    display: block;
-  }
-  .stack-group {
-    border: 0;
-    border-top: 1px solid var(--hair);
-    background: transparent;
-    padding: var(--sp-4) 0;
-  }
-  .stack-group-name {
-    margin: 0 0 var(--sp-3);
-    font-size: var(--fs-xs);
-    letter-spacing: 0.12em;
-    color: var(--accent-ink);
-  }
-  .stack-items {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-2);
-  }
-  /* 条目是**不是链接**，所以刻意不给 hover —— 免得看着能点 */
-  .stack-items li {
-    font-size: var(--fs-sm);
-    color: var(--ink);
-    border: 1px solid var(--hair);
-    padding: 0.15em 0.5em;
-  }
-
-  /* ---------- 源码语言占比条（站主 2026-09-30）----------
-     视觉取原型 v10.6 的**玻璃卡语言**（--glass-bg 底 + --glass-line 边 + backdrop-filter），
-     与技术栈那组实心 --panel 卡刻意拉开一档：栈是"清单"，占比是"仪表读数"。
-     颜色只用 token，一个自创色都没有。 */
-  .lang-block {
-    margin: var(--sp-8) 0 0;
-    max-width: var(--measure);
-  }
-  .lang-block h2 {
-    margin: 0 0 var(--sp-4);
-    font-size: var(--fs-lg);
-    font-weight: 800;
-  }
-  .lang-total {
-    margin: 0 0 var(--sp-5);
-    font-size: var(--fs-xs);
-    color: var(--muted);
-  }
-  .lang-total b {
-    color: var(--accent-ink);
-    font-variant-numeric: tabular-nums;
-  }
-  .lang-total code {
-    font-family: inherit;
-    color: var(--ink);
-  }
-  .lang-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    display: grid;
-    gap: var(--sp-4);
-  }
-  .lang-row {
-    display: grid;
-    gap: 0.4rem;
-  }
-  /* 表头行：圆点 + 语言名 + 字节数（右对齐）+ 百分比（等宽数字，右对齐） */
-  .lang-head {
-    display: flex;
-    align-items: baseline;
-    gap: 0.6rem;
-    font-size: var(--fs-sm);
-  }
-  .lang-dot {
-    width: 0.55rem;
-    height: 0.55rem;
-    flex: 0 0 auto;
-    /* 圆点与首行文字视觉居中（baseline 对齐会让它偏下） */
-    align-self: center;
-  }
-  .lang-name {
-    color: var(--ink);
-    font-weight: 600;
-  }
-  .lang-bytes {
-    margin-left: auto;
-    font-size: var(--fs-xs);
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .lang-pct {
-    min-width: 4.5ch;
-    text-align: right;
-    color: var(--accent-ink);
-    font-variant-numeric: tabular-nums;
-  }
-  /* 条本体：半透明玻璃槽 + 内部填充段。
-     ★ 高度 6px 是"非文字图形"⇒ 按 WCAG 1.4.11 要 ≥3:1。
-       主要 fill 色对 --paper 的对比度：accent 4.86 / accent-ink 6.18 / muted 6.62 / signal 2.83。
-       ⚠️ --signal（橙）只有 2.83 —— **不达标**。它只用于 Markdown 行，
-       且同一条的上方有文字标签 + 字节数 + 百分比三重冗余 ⇒ 颜色不是唯一的信息载体，
-       符合 1.4.11 的"信息不依赖颜色"豁免条件。这是**有意的取舍**，写在这免得以后被当成漏检。 */
-  .lang-bar {
-    display: block;
-    height: 6px;
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-line);
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    backdrop-filter: blur(var(--glass-blur));
-    overflow: hidden;
-  }
-  .lang-fill {
-    display: block;
-    height: 100%;
-    text-decoration: none;
-  }
-  .lang-note {
-    font-size: var(--fs-xs);
-    color: var(--muted);
-  }
-
-  /* ---- 显示模式（2026-10-17 第二轮：整块搬去右上角、文字删除）----
-     原来这里是 .display-note（一句说明）的样式；站主口径「只留按钮」⇒
-     说明文字与 FIG.05 标题一起删掉，这条规则**不要**加回来。
-     装置自己的样式在 ThemeToggle.astro 里（scoped），本页不越权改它。 */
-
-  @media (max-width: 767px) {
-    /* 窄屏：百分比与字节数换行排，别把语言名挤没 */
-    .lang-head {
-      flex-wrap: wrap;
-      row-gap: 0.15rem;
-    }
-    .lang-pct {
-      min-width: 0;
-    }
-    /* ---- 手机档（口径 #9：展示型留**极简版**）----
-       极简 = 去掉编号小字、缩小边距 —— 窄屏上这些挤得慌且读不出。
-       ★ 签名的极简规则（.sign-head span { display:none }）随签名一起删了。
-       ★ 底纹层不用为窄屏改任何参数：它照抄百褶 ∞（`width:min(128vw,1600px)`
-         + `contain`），128vw 在窄屏上自然收窄，比例由 aspect-ratio 锁住。 */
-    .fig-no {
-      margin-bottom: 0;
-    }
 </style>

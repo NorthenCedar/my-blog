@@ -11,18 +11,23 @@ avatar: avatar.jpg
 avatarName: 北杉
 social:
   - icon: github
+    note: NorthenCedar
     name: GitHub
     href: https://github.com/NorthenCedar
   - icon: mail
+    note: 写信联系
     name: 邮箱
     href: mailto:a13655515876@163.com
   - icon: rss
+    note: 订阅新文章
     name: RSS
     href: /rss.xml
   - icon: douyin
+    note: 生活片段
     name: 抖音
     href: https://www.douyin.com/user/MS4wLjABAAAA_s1DtB8crLmTepK0rZPjJr7U8W2Lm7EGWVti1q4Zwlgp52SGKtZsqL-1_U7_HOK_?from_tab_name=main
   - icon: bilibili
+    note: 视频与分享
     name: 哔哩哔哩
     href: https://space.bilibili.com/515563135?spm_id_from=333.1007.0.0
 stack:
@@ -52,6 +57,21 @@ stack:
       - 页面过渡（900 毫秒，CSS 时间轴）
       - 跟手光标（白点 + 圆盘 + 涟漪，无位图）
       - RSS / Sitemap
+presentation:
+  identity: 郑云嘉 / 大学生
+  greeting: [很高兴，, 在这里遇见。]
+  technologyTitle: [这个网站，, 是这样长出来的。]
+  languageTitle: [一行一行，, 写成现在的样子。]
+  socialCaption: [写随笔，放照片，, 也用 AI 折腾一些项目。]
+  technologyCaption: [把想法接成页面，, 再慢慢把页面打磨成自己的样子。]
+  languageCaption: [还在学习，, 也还在继续。]
+  personalTitle: 留下来的东西。
+  interests:
+    - label: 钢琴的手感
+    - label: 街舞的肌肉记忆
+    - label: 唱歌的自信
+    - label: 相机的眼睛
+      href: /gallery/
 ---
 
 我叫郑云嘉，是一个大学生。这个博客写我个人的成长经历。

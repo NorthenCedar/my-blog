@@ -569,9 +569,9 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     expect(html, '头像没渲染出来').toMatch(/class="[^"]*avatar/);
     expect(html, '头像没有 alt 文本').toContain('alt="北杉的头像"');
     expect(html, '头像下面没有名字').toContain('profile-name');
-    expect(html, '社交区块标题不在').toContain('我的一些社交账号');
+    expect(html, '社交区块标题不在').toContain('在这些地方找到我');
     for (const name of ['GitHub', '邮箱', 'RSS', '抖音', '哔哩哔哩']) {
-      expect(html, `社交卡片缺 ${name}`).toContain(`>${name}</span>`);
+      expect(html.includes(`>${name}<small`) || html.includes(`>${name}</span>`), `社交入口缺 ${name}`).toBe(true);
     }
     // 图标必须是**本站内联 SVG**（站上零第三方：不许引图标库）
     expect((html.match(/<svg class="[^"]*ic[^"]*"/g) ?? []).length, '内联图标数量不对').toBe(5);
@@ -787,49 +787,15 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     console.log(`判据 过渡 v3 对象 时长/三元素/darken/首帧/reduced-motion 实测: --pt-sweep:900ms 挂 :root · 无自引用 · .pt-ink+.pt-word+.pt-scan+pt-shell · darken · 初始静态声明`);
   });
 
-  it('关于页头像用布局定位（不许 position:fixed）', () => {
-    // 站主 2026-09-27："刚打开关于界面时头像在图一位置，随后跳到图二位置，并且不跟随鼠标滚轮上下。"
-    // 根因：`position: fixed` 的包含块会被祖先的 transform 抢走 —— 过渡动画给 .shell 加了
-    // `transform: scale(0.98→1)`，动画期间头像按"相对 .shell"定位，动画结束、类被摘掉后 transform 变 none，
-    // 包含块换回视口 ⇒ 位置突变（实测 y 从 246 跳到 198）；而真 fixed 又**不跟滚动**。
-    // 修法：头像放进页头、用 grid 排到右边（布局定位）⇒ 位置由排版决定（不会变）且在正文流里（跟着滚）。
-    const about = readFileSync(join(DIST, 'about', 'index.html'), 'utf8');
-    const head = (about.match(/<header class="pagehead"[\s\S]*?<\/header>/) ?? [''])[0];
-    expect(head, '头像不在页头里（布局定位的前提）').toContain('avatar');
-    expect(head, '头像下面那行名字跑出页头了').toContain('profile-name');
-
-    const cssFiles: string[] = [];
-    const walkCss = (d: string) => {
-      for (const e of readdirSync(d)) {
-        const p = join(d, e);
-        if (statSync(p).isDirectory()) walkCss(p);
-        else if (e.endsWith('.css')) cssFiles.push(p);
-      }
-    };
-    walkCss(DIST);
-    // ⚠️ 这一页的样式是**内联在 HTML 里**的（Astro 对小的作用域样式会内联，dist 的 .css 里根本没有 .profile）
-    const inline = [...about.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
-    const css = (cssFiles.map((f) => readFileSync(f, 'utf8')).join('\n') + '\n' + inline).replace(/\s+/g, '');
-    const rules = [...css.matchAll(/\.profile(?:\[data-astro-cid-[a-z0-9]+\])?\{[^}]*\}/g)].map((m) => m[0]);
-    expect(rules.length, '产物里一条 .profile 规则都没有').toBeGreaterThan(0);
-    expect(rules.join(' '), `.profile 里出现 position:fixed（会不跟滚动 + 加载后跳一下）`).not.toMatch(/position:fixed/);
-    // 页头必须是两栏 grid（头像才能排到右边而不是压在标题下面）。
-    // ★ 2026-10-03 修订：原来要求「`display:grid` 必须写在
-    //   `@media (min-width:1024px)` 里」，那是**绑死形态**—— 本轮把
-    //   `display:grid` 提到了外层（`.pagehead` 基线），
-    //   窄屏再由媒体查询收窄，头像在宽屏照样靠右、行为完全没变。
-    //   ⇒ 改为守**意图**：`.pagehead` 的规则里必须有 `display:grid`
-    //     +两列轨道（`grid-template-columns` 带 `auto`），
-    //     不再要求它必须被包在某个媒体查询里。
-    //   另：判据要区分「桌面要两栏」与「窄屏别挤」—— 只看有没有两列轨道。
-    const scope = '(?:\\[data-astro-cid-[a-z0-9]+\\])?';
-    const headRules = [...css.matchAll(new RegExp(`\\.pagehead${scope}\\{[^}]*\\}`, 'g'))].map((m) => m[0]);
-    expect(headRules.length, '产物里一条 .pagehead 规则都没有').toBeGreaterThan(0);
-    const hasTwoCol = headRules.some(
-      (r) => /display:grid/.test(r) && /grid-template-columns:[^;}]*auto/.test(r),
-    );
-    expect(hasTwoCol, `页头没有两栏 grid（头像会掉到标题下面）。现有规则：${headRules.join(' | ').slice(0, 300)}`).toBe(true);
-    console.log(`判据 关于页头像 对象 布局定位 实测: 头像与名字都在页头内 · ${rules.length} 条 .profile 规则无 position:fixed · 页头两栏 grid（${headRules.length} 条规则中命中）`);
+  it('关于页头像和名字在正文页头布局中，不固定在视口', () => {
+    const about=readFileSync(join(DIST,'about/index.html'),'utf8');
+    const head=(about.match(/<header class="profile-header"[\s\S]*?<\/header>/)??[''])[0];
+    expect(head).toContain('avatar');
+    expect(head).toContain('profile-name');
+    const source=readFileSync('src/pages/about.astro','utf8');
+    const profile=source.match(/\.profile-mark\{([^}]+)\}/)?.[1]??'';
+    expect(profile).toContain('display:flex');
+    expect(profile).not.toContain('position:fixed');
   });
 
   it('评论顺序：新的在最上面（接口排序 + 两个前端脚本的插入位置）', () => {

@@ -1,3 +1,4 @@
+import { createRelayMotion } from './about-relay.mjs';
 /**
  * 立体 ∞（FinInfinity）—— 装置本体。
  *
@@ -150,6 +151,7 @@ export interface FinScene {
   resize(w: number, h: number, dpr: number): void;
   /** ★ 入参单位是**毫秒**（rl-core 的 startLoop 就是这么给的），不是秒 */
   render(dtMs: number): void;
+  setRelay(progress: number): void;
   dispose(): void;
 }
 
@@ -244,6 +246,10 @@ export async function createFinScene(
 
   /* ── 雕塑（鳍片）── */
   const finGeo = instanced(new BoxGeometry(1, 1, 1), FIN_COUNT);
+  const relayMotion=createRelayMotion(FIN_COUNT);
+  const relayAttribute=new InstancedBufferAttribute(relayMotion.values,1);
+  finGeo.setAttribute('aRelay',relayAttribute);
+  let relayTarget=0;
 
   /* 脉冲：16 槽环形缓冲（原点填 -99 ⇒ age 恒为负 ⇒ 初始无脉冲） */
   const pulseT = new Float32Array(16).fill(-99);
@@ -454,6 +460,15 @@ export async function createFinScene(
        只有上面那行漏了 —— 同一个值在同一个函数里被当两种单位用。
        ⇒ 转换集中在这里做一次，下游一律拿秒。钳位 50ms 对齐原版的 0.05 秒。 */
     const step = Math.min(dtMs, 50) / 1000;
+    relayMotion.advance(relayTarget,step,U.uFlow.value);
+    relayAttribute.needsUpdate=true;
+    if(location.search.includes('qa=1')){
+      canvas.dataset.relay=relayMotion.progress.toFixed(4);
+      if(relayMotion.info){
+        canvas.dataset.relayDirection=relayMotion.info.horizontal;
+        canvas.dataset.relayStartPhase=(((relayMotion.info.first+relayMotion.info.flow)/FIN_COUNT)%1).toFixed(4);
+      }
+    }
     seconds += step;
     U.uTime.value = seconds;
     // 整条带子沿曲线匀速流动（原版 Stage.ts:382：flow + dt * 1.6）
@@ -530,6 +545,7 @@ export async function createFinScene(
   assembleT0 = 0;
 
   return {
+    setRelay(progress: number) { relayTarget=Math.max(0,Math.min(2,progress)); },
     hitTest: picker.hitTest,
     pulse,
     setDenied,

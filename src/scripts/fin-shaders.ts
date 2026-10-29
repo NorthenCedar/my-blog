@@ -21,6 +21,7 @@
  *   400 片长方体鳍沿这条曲线摆开，每片绕切线扭转 `phi`、再前倾 `lean`。
  */
 
+import { RELAY_GLSL } from './about-relay.mjs';
 export const FIN_COMMON = /* glsl */ `
 // ── 原版 rl_hash11：确定性哈希（同一 index永远同一个seed）──
 float rl_hash11(float p) {
@@ -75,9 +76,11 @@ varying float vTip;
    片元侧只需要那五个 varying（通过 varying 传过来），所以拆开最干净。 */
 export const FIN_VERTEX_ATTRS = /* glsl */ `
 attribute float aIndex;
+attribute float aRelay;
 `;
 
 export const FIN_VERTEX = /* glsl */ `
+${RELAY_GLSL}
 vec3 rl_curve(float t) {
     float s = sin(t), c = cos(t);
     // Gerono figure-eight; the branches separate in depth so the band passes over itself
@@ -165,6 +168,7 @@ void rl_finTransform(in vec3 lp, in vec3 nrm, out vec3 worldPos, out vec3 worldN
 
     worldPos = centre + Tt * lp.x * size.x + W * lp.y * size.y + H * lp.z * size.z;
     worldNrm = normalize(Tt * nrm.x + W * nrm.y + H * nrm.z);
+    rl_relayTransform(idx,centre,worldPos,worldNrm);
 
     // 笔尖高光：装配扫过的前沿发一道亮边
     float dt = along - uAssemble * (1.0 + window) + window * 0.5;

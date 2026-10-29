@@ -13,6 +13,7 @@
 import { createActivityGate, startLoop } from './rl-core';
 import type { FinPalette, FinScene } from './fin-scene';
 import { mixThemeColor, type ThemePreviewFrame } from './theme-preview';
+import { chapterProgress } from './about-relay.mjs';
 
 /** 脚本可跑的最严条件：过不了就只留静态层。 */
 const ok = () =>
@@ -78,7 +79,18 @@ export function initFinInfinity(root: HTMLElement): void {
   const resize = () => {
     const r = host.getBoundingClientRect();
     scene?.resize(r.width, r.height, devicePixelRatio || 1);
+    syncRelay();
   };
+  const syncRelay = () => {
+    // 三段内容各自提供过渡路程，不再把整页的短距离压成两次重排。
+    const anchors=Array.from(document.querySelectorAll?.<HTMLElement>('[data-motion-stop]') ?? []).map(el=>el.getBoundingClientRect().top+scrollY);
+    if(anchors.length<2)return;
+    const progress=chapterProgress(anchors,scrollY,innerHeight);
+    scene?.setRelay(progress);
+    host.dataset.relay = progress.toFixed(4);
+  };
+  addEventListener('scroll',syncRelay,{passive:true});
+  addEventListener('resize',syncRelay);
 
   const boot = async (ticket: number) => {
     const mod = await import('./fin-scene');
@@ -91,6 +103,7 @@ export function initFinInfinity(root: HTMLElement): void {
       return;
     }
     scene = s;
+    syncRelay();
     s.setPalette(themePreview ? previewPalette(themePreview) : buildPalette());
     s.setDenied(themePreview?.progress ?? (isDark() ? 1 : 0));
     resize();
@@ -144,6 +157,8 @@ export function initFinInfinity(root: HTMLElement): void {
 
   /* ── 尺寸：容器变了要跟着变（窄屏 / 旋转 / 侧栏开合）── */
   const ro = new ResizeObserver(() => resize());
+  const pageObserver = new ResizeObserver(() => syncRelay());
+  pageObserver.observe(document.body);
   ro.observe(host);
 
   /* ── 点按主题直接切换；拖动则使用 themepreview 的连续进度 ── */
@@ -240,6 +255,9 @@ addEventListener('pagehide', () => {
     mq.removeEventListener('change', onMq);
     motion.removeEventListener('change', onMq);
     removeEventListener('pointerdown', onDown);
+    removeEventListener('scroll',syncRelay);
+    removeEventListener('resize',syncRelay);
+    pageObserver.disconnect();
     removeEventListener('pointermove', onMove);
     stopLoop?.();
     scene?.dispose();
