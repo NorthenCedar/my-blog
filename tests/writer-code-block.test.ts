@@ -101,3 +101,11 @@ it('实际文章渲染保留代码缩进并转义 HTML，使用语言语法高�
   expect(rendered.code).toContain('<pre');expect(rendered.code).toContain('astro-code');
   expect(rendered.code).not.toContain('<script>');expect(rendered.metadata.headings).toHaveLength(0);
 });
+it.each(['c','cpp'])('C/C++ 从插入、更换语言到文章实际高亮都保留代码（%s）',async language=>{
+  const code=language==='c'?'#include <stdio.h>\nint main(void) {\n    printf("hello");\n}':'#include <iostream>\nint main() {\n    std::cout << "hello";\n}';
+  const raw=markdownCodeBlock(code,0,code.length,language).body;
+  const doc=parseWriterMarkdown(raw);expect(doc.firstChild?.attrs.params).toBe(language);expect(doc.firstChild?.textContent).toBe(code);
+  const e=editor(raw,2);e.run(codeLanguageCommand(language==='c'?'cpp':'c'));expect(e.state.doc.firstChild?.textContent).toBe(code);
+  const rendered=await (await createSatteriMarkdownProcessor()).render(serializeWriterMarkdown(doc));
+  expect(rendered.code).toContain('astro-code');expect(rendered.code).toContain(`data-language="${language}"`);expect(rendered.code).toContain('&lt;');
+});

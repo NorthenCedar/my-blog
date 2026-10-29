@@ -20,7 +20,7 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
   source.className='writer-body';source.value=raw;source.spellcheck=false;source.setAttribute('aria-label','正文 Markdown 源码');
   const visualButton=button('可视化编辑',()=>switchMode(false)),sourceButton=button('Markdown 源码',()=>switchMode(true));
   const codeTools=el('div','','writer-toolbar'),language=el('select');language.className='writer-code-language';language.setAttribute('aria-label','代码语言');
-  for(const [value,label]of [['python','Python'],['javascript','JavaScript'],['typescript','TypeScript'],['json','JSON'],['bash','Bash / Shell'],['text','纯文本']]){const option=el('option',label);option.value=value;language.append(option);}
+  for(const [value,label]of [['python','Python'],['c','C'],['cpp','C++'],['javascript','JavaScript'],['typescript','TypeScript'],['json','JSON'],['bash','Bash / Shell'],['text','纯文本']]){const option=el('option',label);option.value=value;language.append(option);}
   let preferredLanguage='python';
   function showLanguage(value:string){
     if(!Array.from(language.options).some(option=>option.value===value)){const option=el('option',value);option.value=value;language.append(option);}
@@ -43,7 +43,7 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
     view.dispatch(closeHistory(view.state.tr));const applied=command(view.state,view.dispatch,view);view.focus();return applied;
   }
   function add(label:string,command:Command,mark?:string){const b=button(label,()=>run(command));b.addEventListener('mousedown',event=>event.preventDefault());controls.push({button:b,command,mark});toolbar.append(b);return b;}
-  add('粗体',toggleMark(schema.marks.strong),'strong');add('斜体',toggleMark(schema.marks.em),'em');
+  add('加粗',toggleMark(schema.marks.strong),'strong');add('斜体',toggleMark(schema.marks.em),'em');add('删除线',toggleMark(schema.marks.strike),'strike');
   add('无序列表',wrapInList(schema.nodes.bullet_list));add('有序列表',wrapInList(schema.nodes.ordered_list));add('引用',wrapIn(schema.nodes.blockquote));
   const linkForm=el('form','','writer-link-form'),href=field('链接地址（https://…）','url'),text=field('显示文字（未选中文字时填写）');linkForm.hidden=true;
   const linkButton=button('链接',()=>{linkForm.hidden=!linkForm.hidden;if(!linkForm.hidden)href.input.focus();});linkButton.addEventListener('mousedown',e=>e.preventDefault());toolbar.append(linkButton);
@@ -91,7 +91,7 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
   }
 
   const plugins=()=>[history(),keymap({
-    'Mod-z':undo,'Mod-y':redo,'Mod-Shift-z':redo,'Mod-b':toggleMark(schema.marks.strong),'Mod-i':toggleMark(schema.marks.em),
+    'Mod-z':undo,'Mod-y':redo,'Mod-Shift-z':redo,'Mod-b':toggleMark(schema.marks.strong),'Mod-i':toggleMark(schema.marks.em),'Mod-Shift-x':toggleMark(schema.marks.strike),
     Enter:splitListItem(schema.nodes.list_item),'Mod-[':liftListItem(schema.nodes.list_item),'Mod-]':sinkListItem(schema.nodes.list_item),
   }),keymap(baseKeymap)];
   const view=new EditorView(visual,{

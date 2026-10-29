@@ -1,3 +1,7 @@
+import MarkdownIt from 'markdown-it';
+import { withWriterStrike } from './strike-markdown';
+const inlineMarkdown=withWriterStrike(new MarkdownIt({html:false,linkify:false}));
+
 export function safeWriterLink(value:string,origin:string):string|null{
   try{const url=new URL(value,origin);return ['http:','https:','mailto:'].includes(url.protocol)?url.href:null;}catch{return null;}
 }
@@ -9,22 +13,30 @@ export function renderWriterMarkdown(body:string,resolveImage:(source:string)=>s
   const fragment=document.createDocumentFragment(),origin=location.origin;
   const node=(tag:string,text?:string)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;return el;};
   function inline(parent:HTMLElement,text:string){
-    const tokens=/(`[^`\n]*`)|(!?\[([^\]\n]*)\]\(([^\s)]+)\))|(\*\*([^*\n]+)\*\*)/g;let end=0;
-    for(const match of text.matchAll(tokens)){
-      const start=match.index!;parent.append(document.createTextNode(text.slice(end,start)));end=start+match[0].length;
-      if(match[1]){parent.append(node('code',match[1].slice(1,-1)));continue;}
-      if(match[5]){parent.append(node('strong',match[6]));continue;}
-      const image=match[2].startsWith('!'),href=image?resolveImage(match[4]):safeWriterLink(match[4],origin);
-      if(image){
-        const approved=href?safeWriterImage(href,origin):null;
-        if(approved){const img=document.createElement('img');img.src=approved;img.alt=match[3];img.loading='lazy';img.decoding='async';parent.append(img);}else parent.append(document.createTextNode(`[配图：${match[3]||'待获取'}]`));
-      }else if(href){const link=document.createElement('a');link.href=href;link.textContent=match[3];link.target='_blank';link.rel='noopener noreferrer';parent.append(link);}
-      else parent.append(document.createTextNode(match[3]));
+    const stack=[parent];
+    for(const token of inlineMarkdown.parseInline(text,{})[0]?.children??[]){
+      const current=stack[stack.length-1];
+      if(token.type==='text'){current.append(document.createTextNode(token.content));continue;}
+      if(token.type==='code_inline'){current.append(node('code',token.content));continue;}
+      if(token.type==='softbreak'||token.type==='hardbreak'){current.append(node('br'));continue;}
+      if(token.type==='image'){
+        const resolved=resolveImage(token.attrGet('src')??''),approved=resolved?safeWriterImage(resolved,origin):null;
+        const alt=(token.children??[]).map(child=>child.content).join('');
+        if(approved){const img=document.createElement('img');img.src=approved;img.alt=alt;img.loading='lazy';img.decoding='async';current.append(img);}else current.append(document.createTextNode(`[配图：${alt||'待获取'}]`));
+        continue;
+      }
+      if(['strong_open','em_open','s_open','link_open'].includes(token.type)){
+        const child=node(token.type==='link_open'?'span':token.tag);
+        if(token.type==='link_open'){
+          const href=safeWriterLink(token.attrGet('href')??'',origin);
+          if(href){const link=document.createElement('a');link.href=href;link.target='_blank';link.rel='noopener noreferrer';current.append(link);stack.push(link);continue;}
+        }
+        current.append(child);stack.push(child);
+      }else if(token.nesting===-1&&stack.length>1)stack.pop();
     }
-    parent.append(document.createTextNode(text.slice(end)));
   }
   let fence='',code:string[]=[],paragraph:string[]=[],list:HTMLElement|null=null;
-  const flush=()=>{if(paragraph.length){const p=node('p');paragraph.forEach((line,n)=>{if(n)p.append(node('br'));inline(p,line);});fragment.append(p);paragraph=[];}list=null;};
+  const flush=()=>{if(paragraph.length){const p=node('p');inline(p,paragraph.join('\n'));fragment.append(p);paragraph=[];}list=null;};
   for(const raw of body.replaceAll('\r\n','\n').split('\n')){
     const line=raw.replace(/^(?: {0,3}> ?)+/,''),marker=/^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
     if(fence){if(marker&&marker[0]===fence[0]&&marker.length>=fence.length){const pre=node('pre');pre.append(node('code',code.join('\n')));fragment.append(pre);fence='';code=[];}else code.push(line);continue;}
