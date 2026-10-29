@@ -9,6 +9,12 @@ const textOf=(changes:ReturnType<typeof planChanges>)=>new TextDecoder().decode(
 const project={fields:{title:'桌面小机器人',summary:'第一次装配',tagline:'从一个轮子开始',category:'硬件',status:'制作中',order:3,tags:['手作'],visual:'image',effect:'stack',images:[],links:[]},body:'## 装配记录\n',assets:[]};
 
 describe('造物台项目发布保持自己的内容契约',()=>{
+  it('项目接收写作台的配对删除线，带属性或未配对的标签继续拒绝',()=>{
+    const original=readFileSync('content/projects/northcedar/index.md','utf8'),value=readPost(original);
+    value.body='这是<del>***旧字***</del>。';
+    expect(readPost(textOf(planChanges({kind:'project',key:'northcedar',base:base(original),value},original,new Map()))).body).toContain('<del>***旧字***</del>');
+    for(const body of ['<del onclick="x">字</del>','<del>字','</del>字','<del>a `</del>`'])expect(()=>planChanges({kind:'project',key:'northcedar',base:base(original),value:{...value,body}},original,new Map())).toThrow();
+  });
   it.each(['\n','\r\n'])('原项目以分隔符结束且没有末尾换行时仍能新增正文（%j）',newline=>{
     const original=/^---\r?\n[\s\S]*?^---[ \t]*(?:\r?\n|$)/m.exec(readFileSync('content/projects/northcedar/index.md','utf8'))![0].replace(/\r?\n/g,newline).trimEnd();
     const value=readPost(original);expect(value.body).toBe('');value.body=`新增正文${newline}`;

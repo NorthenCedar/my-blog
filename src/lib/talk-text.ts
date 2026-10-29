@@ -1,12 +1,13 @@
 import MarkdownIt from 'markdown-it';
+import { withWriterStrike } from './strike-markdown';
 
-const markdown = new MarkdownIt('commonmark', {
+const markdown = withWriterStrike(new MarkdownIt('commonmark', {
   html: false,
   breaks: true,
   xhtmlOut: false,
   linkify: false,
   typographer: false,
-});
+}).enable('strikethrough'));
 
 // 中文常把结束标点一起加粗，闭合 ** 后也不留空格；CommonMark 会拒绝这种右定界。
 // 仅给这类双星号补上闭合资格，配对、嵌套及 strong 生成仍交给原有强调后处理。
@@ -50,5 +51,12 @@ markdown.renderer.rules.image = (tokens, index) => markdown.utils.escapeHtml(tok
 
 /** 只生成 p 内合法的行内标记，原始 HTML 始终转义。 */
 export function renderTalkText(text: string): string {
-  return markdown.renderInline(text);
+  const env={},tokens=markdown.parseInline(text,env);
+  const balanced=tokens.every(token=>{
+    let depth=0;
+    for(const child of token.children??[]){if(child.markup==='<del>')depth++;else if(child.markup==='</del>'&&--depth<0)return false;}
+    return depth===0;
+  });
+  // 不完整标签退回字面文字，避免 set:html 中未闭合的格式影响下一条说说。
+  return balanced?markdown.renderer.render(tokens,markdown.options,env):markdown.renderInline(text,{writerLiteralStrike:true});
 }

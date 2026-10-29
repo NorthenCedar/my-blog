@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { renderTalkText } from '../src/lib/talk-text';
 
 describe('说说正文的安全行内 Markdown', () => {
+  it('写作台生成的删除线与强调组合正常显示，其他HTML仍转义',()=>{
+    expect(renderTalkText('这是<del>***旧字***</del>。')).toBe('这是<s><em><strong>旧字</strong></em></s>。');
+    expect(renderTalkText('~~旧字~~')).toBe('<s>旧字</s>');
+    expect(renderTalkText('<del onclick="x">字</del>')).not.toContain('<del onclick=');
+    for(const text of ['<del>未闭合','<del>a `</del>`','<del>a \\</del>','<del><del>a</del>']){
+      expect(renderTalkText(text)).not.toMatch(/<\/?s>/);expect(renderTalkText(text)).toContain('&lt;del&gt;');
+    }
+  });
   it('加粗、斜体及行内代码产生段落内合法的语义标记', () => {
     expect(renderTalkText('开始 **加粗** 与 *斜体*、_强调_，`代码`。'))
       .toBe('开始 <strong>加粗</strong> 与 <em>斜体</em>、<em>强调</em>，<code>代码</code>。');

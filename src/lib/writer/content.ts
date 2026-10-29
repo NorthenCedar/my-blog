@@ -125,10 +125,14 @@ const projectMarkdown = new MarkdownIt({html:true});
 function checkProjectBodyImages(body:string,assets:WriterValue['assets'],allowPrivate=true){
   const known=new Set(assets.map(asset=>'writer-asset:'+asset.sha256));
   const visit=(tokens:ReturnType<MarkdownIt['parse']>)=>{
+    let strikeDepth=0;
     for(const token of tokens){
       if(token.type==='html_inline'||token.type==='html_block'){
         if(/<!--(?:>|->)|--!>/.test(token.content))bad('项目注释的结束方式不明确，请使用完整的 HTML 注释');
         const active=token.content.replace(/<!--[\s\S]*?(?:-->|$)/g,'');
+        if(token.type==='html_inline'&&/^<\/?del>$/.test(active)){
+          strikeDepth+=active==='<del>'?1:-1;if(strikeDepth<0)bad('项目删除线标签未配对');continue;
+        }
         if(/<\/?[a-z][^>]*>/i.test(active))bad('造物台正文请使用 Markdown 文字与图片，不能嵌入 HTML 标签');
       }
       if(token.type==='link_open'){
@@ -143,6 +147,7 @@ function checkProjectBodyImages(body:string,assets:WriterValue['assets'],allowPr
       }
       if(token.children)visit(token.children);
     }
+    if(strikeDepth!==0)bad('项目删除线标签未配对');
   };
   visit(projectMarkdown.parse(body,{}));
 }

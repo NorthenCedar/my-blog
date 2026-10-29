@@ -3,7 +3,7 @@ import { Schema,type Node } from 'prosemirror-model';
 import { schema as commonmark,MarkdownParser,MarkdownSerializer,defaultMarkdownParser,defaultMarkdownSerializer } from 'prosemirror-markdown';
 import { safeWriterLink } from './preview';
 import type { WriterAssetRef } from '../../lib/writer/model';
-import { withWriterStrike } from './strike-markdown';
+import { withWriterStrike } from '../../lib/strike-markdown';
 
 // 图片由编辑视图解析私密地址；模型中的原始引用永不直接成为网络请求。
 export const writerSchema=new Schema({

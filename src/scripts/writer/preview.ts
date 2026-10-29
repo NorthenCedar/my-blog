@@ -1,5 +1,5 @@
 import MarkdownIt from 'markdown-it';
-import { withWriterStrike } from './strike-markdown';
+import { withWriterStrike } from '../../lib/strike-markdown';
 const inlineMarkdown=withWriterStrike(new MarkdownIt({html:false,linkify:false}));
 
 export function safeWriterLink(value:string,origin:string):string|null{
