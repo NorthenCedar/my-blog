@@ -79,7 +79,7 @@ const rows = items.map((t) => {
 // 说说配图：构建期收进来，才能走 Astro 的优化管线（WebP + srcset）
 const talkAssets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/talks/*.{jpg,jpeg,png,webp,avif}', { eager: true });
 const assetOf = (name: string) => talkAssets[`/src/assets/talks/${name}`]?.default;
-// 大档按实际配图生成；链接提供无脚本后备，缩略图继续使用原来的优化尺寸。
+// 大档按实际配图生成；链接提供无脚本后备，缩略图在列表中居中裁成正方形。
 const fullImages = new Map(await Promise.all(rows.flatMap(({ t }) => t.images ?? []).map(async (img) => {
   const asset = assetOf(img.src);
   return [img.src, asset ? (await getImage({ src: asset, width: Math.min(asset.width, 1920), format: 'webp' })).src : ''] as const;
@@ -143,72 +143,74 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     {rows.map(({ t, slug, videos }) => (
       <li class="talk">
         <time datetime={iso(t.date)}>{fmt(t.date)}</time>
-        <p class="body">
-          <Fragment set:html={renderTalkText(t.text)} />
-          {t.href && <> <a href={t.href}>链接</a></>}
-        </p>
-        {t.images && t.images.length > 0 && (
-          <div class="shots">
-            {t.images.map((img, i) =>
-              assetOf(img.src) ? (
-                <a href={fullImages.get(img.src)} data-talk-image={`talk-image-${slug}-${i}`} data-no-transition aria-label={`放大查看：${img.alt}`}>
-                  <Image
-                    src={assetOf(img.src)!}
-                    alt={img.alt}
-                    widths={[480, 760]}
-                    sizes="(max-width: 767px) 90vw, 640px"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </a>
-              ) : (
-                <p class="missing">找不到图片 {img.src}（应放在 src/assets/talks/ 下）</p>
-              ),
-            )}
-          </div>
-        )}
-
-        {videos.length > 0 && (
-          <div class="clips">
-            {videos.map((video) => (
-              <figure class="clip">
-                <video controls preload="none" playsinline src={video.src} aria-label={video.alt}>
-                  <a href={video.src}>下载视频：{video.alt}</a>
-                </video>
-                <figcaption>{video.alt}</figcaption>
-              </figure>
-            ))}
-          </div>
-        )}
-
-        {/* 点赞（不记名，只记个数）+ 评论（要写名字）。数据挂在 data-slug 上，见 src/scripts/talks.ts */}
-        <div class="acts">
-          <button type="button" class="act like" data-like={slug} aria-pressed="false">
-            <svg class="heart" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
-              <path d="M12 20.3 4.6 13a4.8 4.8 0 0 1 6.8-6.8l.6.6.6-.6A4.8 4.8 0 0 1 19.4 13Z" />
-            </svg>
-            <span data-like-count>·</span>
-          </button>
-          <button type="button" class="act" data-toggle={slug} aria-expanded="false" aria-controls={`c-${slug}`}>
-            评论<span data-count-for={slug}></span>
-          </button>
-        </div>
-        <section class="cbox" id={`c-${slug}`} data-comments-for={slug} hidden>
-          <ol class="clist" data-list></ol>
-          <p class="cempty" data-empty hidden>还没有评论，你可以是第一个。</p>
-          <form class="cform" data-form novalidate>
-            <label for={`n-${slug}`}>名字</label>
-            <input id={`n-${slug}`} name="name" type="text" maxlength="40" autocomplete="nickname" required />
-            <label for={`b-${slug}`}>评论</label>
-            <textarea id={`b-${slug}`} name="body" rows="3" maxlength="1000" required></textarea>
-            <div class="hp" aria-hidden="true">
-              <label for={`w-${slug}`}>网站（请留空）</label>
-              <input id={`w-${slug}`} name="website" type="text" tabindex="-1" autocomplete="off" />
+        <div class="talk-content">
+          <p class="body">
+            <Fragment set:html={renderTalkText(t.text)} />
+            {t.href && <> <a href={t.href}>链接</a></>}
+          </p>
+          {t.images && t.images.length > 0 && (
+            <div class="shots" data-columns={t.images.length <= 2 ? t.images.length : t.images.length === 4 ? 2 : 3}>
+              {t.images.map((img, i) =>
+                assetOf(img.src) ? (
+                  <a href={fullImages.get(img.src)} data-talk-image={`talk-image-${slug}-${i}`} data-no-transition aria-label={`放大查看：${img.alt}`}>
+                    <Image
+                      src={assetOf(img.src)!}
+                      alt={img.alt}
+                      widths={[480, 760]}
+                      sizes={t.images.length === 1 ? '(max-width: 767px) 65vw, 288px' : t.images.length === 2 || t.images.length === 4 ? '(max-width: 767px) 44vw, 280px' : '(max-width: 767px) 28vw, 184px'}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </a>
+                ) : (
+                  <p class="missing">找不到图片 {img.src}（应放在 src/assets/talks/ 下）</p>
+                ),
+              )}
             </div>
-            <button type="submit" data-submit>发表</button>
-          </form>
-          <p class="cerror" role="alert" data-error hidden></p>
-        </section>
+          )}
+
+          {videos.length > 0 && (
+            <div class="clips">
+              {videos.map((video) => (
+                <figure class="clip">
+                  <video controls preload="none" playsinline src={video.src} aria-label={video.alt}>
+                    <a href={video.src}>下载视频：{video.alt}</a>
+                  </video>
+                  <figcaption>{video.alt}</figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
+
+          {/* 点赞（不记名，只记个数）+ 评论（要写名字）。数据挂在 data-slug 上，见 src/scripts/talks.ts */}
+          <div class="acts">
+            <button type="button" class="act like" data-like={slug} aria-pressed="false">
+              <svg class="heart" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
+                <path d="M12 20.3 4.6 13a4.8 4.8 0 0 1 6.8-6.8l.6.6.6-.6A4.8 4.8 0 0 1 19.4 13Z" />
+              </svg>
+              <span data-like-count>·</span>
+            </button>
+            <button type="button" class="act" data-toggle={slug} aria-expanded="false" aria-controls={`c-${slug}`}>
+              评论<span data-count-for={slug}></span>
+            </button>
+          </div>
+          <section class="cbox" id={`c-${slug}`} data-comments-for={slug} hidden>
+            <ol class="clist" data-list></ol>
+            <p class="cempty" data-empty hidden>还没有评论，你可以是第一个。</p>
+            <form class="cform" data-form novalidate>
+              <label for={`n-${slug}`}>名字</label>
+              <input id={`n-${slug}`} name="name" type="text" maxlength="40" autocomplete="nickname" required />
+              <label for={`b-${slug}`}>评论</label>
+              <textarea id={`b-${slug}`} name="body" rows="3" maxlength="1000" required></textarea>
+              <div class="hp" aria-hidden="true">
+                <label for={`w-${slug}`}>网站（请留空）</label>
+                <input id={`w-${slug}`} name="website" type="text" tabindex="-1" autocomplete="off" />
+              </div>
+              <button type="submit" data-submit>发表</button>
+            </form>
+            <p class="cerror" role="alert" data-error hidden></p>
+          </section>
+        </div>
       </li>
     ))}
   </ol>
@@ -225,108 +227,85 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     max-width: var(--measure);
     color: var(--muted);
   }
-  /* ===================================================================
-   * 说说列表 —— 原位漂浮（站主 2026-10-04 拍板）
-   *
-   * 站主原话：「漂浮的短句卡片要，但只能在他原来的位置漂浮，不打乱顺序，不要乱飘，
-   *   只是做一个在本来位置小幅漂浮的效果」+ 拍板「振幅 4px」。
-   * ★ 底色：站主 2026-10-04 后补「每一个说说的背景改成透明的」⇒ `.talk` 不着色
-   *   （曾短暂加过 `--panel` 卡片面板，同一天撤掉）。
-   *
-   * ★ 「原位浮」的四条约束都落在**机制**上，不靠"小心地写"：
-   *   ① 只动 `transform` ⇒ **不参与布局**：不重排、不改顺序、不动文档流。
-   *      `offsetTop` 一行不变 —— 这是"只能在原来的位置浮"的**机制保证**
-   *      （实验台探针实测：两个不同 t 下 off 数组逐条相同，只有 computed transform 在变）。
-   *   ② 周期用站上**既有 token** `--dur-orbit`(8s)（它的注释就是"循环层基准时长 4/8/16s
-   *      按元素体量选"，此前无人消费）⇒ 满足"低频常动 ≥8s"，且不新增魔法数字。
-   *   ③ 相邻**三条**错相位（差 5s = 0.625 周期）⇒ 读得出"各自在浮"，而不是整页一起弹；
-   *      三条一组循环 ⇒ 条目变多时是一道**有秩序的波**，不是各自乱飘（＝站主要的"不要乱飘"）。
-   *      相位只用 `:nth-child` 排、**不写一行 JS** ⇒ 无 JS 时照样浮、脚本失败也不会僵在
-   *      半个位移上；而且**没有"每帧算位置"这回事**，漂浮完全是合成器的活（零主线程成本）。
-   *   ④ 幅度两层变量：`--amp`（4px 定稿值）× `--amp-k`（媒体查询里调小）。
-   *      乘法必须留在样式表里做 —— 内联会压过媒体查询（实验台踩过）。
-   *   降级：reduced-motion 直接关掉；≤767 振幅 ×0.6；切标签由 `html.float-idle` 暂停。
-   * =================================================================== */
+  /* 透明时间线：日期与正文分栏，留白让雨滴与墨点自然穿过。
+     正文保持稳定，背景 FLOAT 继续独立绘制；只裁缩略图，不改原件与灯箱。 */
   .talks {
-    margin: var(--sp-8) 0 0;
+    --date-column: calc(var(--sp-7) * 3);
+    --timeline-x: calc(var(--date-column) + var(--sp-5));
+    position: relative;
+    margin: var(--sp-8) 0 var(--sp-7);
     padding: 0;
     list-style: none;
-    max-width: var(--measure);
+    max-width: calc(var(--measure) + var(--date-column) + var(--sp-7));
     display: flex;
     flex-direction: column;
-    gap: var(--sp-3);
   }
-  /* 条目盒子：**只改 `.talk` 自己的盒子，一行 DOM 都不动** ⇒ 结构、顺序与既有断言
-     （`<time datetime>` 倒序 / `data-like` / `data-comments-for`）全不受影响。
-     左边缘就是原来那条时间轴竖线（border-left），5px 方点仍钉在它上面。
-     ★ 底色**透明**（站主 2026-10-04：「每一个说说的背景改成透明的」）—— 显式写
-       `transparent` 而不是删掉这一行：删掉是"默认继承"，写出来是"此处刻意不着色"，
-       后来人才不会当成漏写又给填回去。内边距保留 —— 它只决定内容位置，不产生色块，
-       去掉反而要让方点的 `top` 重算一遍（见下）。 */
   .talk {
     position: relative;
-    padding: var(--sp-3) var(--sp-4);
+    display: grid;
+    grid-template-columns: var(--date-column) minmax(0, 1fr);
+    column-gap: var(--sp-7);
+    padding: 0 0 var(--sp-8);
     background: transparent;
-    border-left: 1px solid var(--hair);
-    --amp: calc(4px * var(--amp-k, 1));
-    animation: talk-float var(--dur-orbit, 8s) ease-in-out infinite;
-    animation-delay: calc(var(--i, 0) * -5s);
   }
-  .talk:nth-child(3n + 2) {
-    --i: 1;
-  }
-  .talk:nth-child(3n) {
-    --i: 2;
-  }
-  @keyframes talk-float {
-    0%,
-    100% {
-      transform: translateY(calc(var(--amp) * -1));
-    }
-    50% {
-      transform: translateY(var(--amp));
-    }
-  }
-  /* 时间轴上的点：与相册/扫描带同一套"仪器感"。
-     ★ `top` 从 `.45em` 改成 `calc(填充 + .45em)`：原来是相对**内容盒**顶（那时卡片
-       padding-top 是 0），现在卡片有 `--sp-3` 上内边距 ⇒ 不补这一下，方点会浮到日期
-       上方去。补的是"同一个相对位置"，不是重新调参。 */
+  .talk:last-child { padding-bottom: 0; }
   .talk::before {
     content: '';
     position: absolute;
-    left: -3px;
-    top: calc(var(--sp-3) + 0.45em);
+    left: calc(var(--timeline-x) - 2px);
+    top: 0.75em;
     width: 5px;
     height: 5px;
     background: var(--accent);
   }
+  .talk:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: var(--timeline-x);
+    top: calc(0.75em + 5px);
+    bottom: -0.75em;
+    width: 1px;
+    background: var(--hair);
+  }
   time {
     display: block;
+    padding-top: var(--sp-1);
     font-size: var(--fs-xs);
     letter-spacing: 0.04em;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
+  .talk-content { min-width: 0; }
   .body {
-    margin: 0.35em 0 0;
+    margin: 0;
     color: var(--ink);
+    overflow-wrap: anywhere;
   }
-  /* 配图：最多两列并排（手机一列），圆角不用（站上是直角语言），细边框 */
   .shots {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--sp-3);
-    margin-top: var(--sp-3);
+    margin-top: var(--sp-5);
   }
-  .shots a { display: block; min-width: 0; }
+  .shots[data-columns='1'] {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(100%, calc(var(--sp-8) * 4));
+  }
+  .shots[data-columns='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shots a {
+    display: block;
+    min-width: 0;
+    aspect-ratio: 1;
+    overflow: hidden;
+  }
   .shots a:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: var(--sp-1); }
   .shots :global(img) {
     width: 100%;
-    height: auto;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
     display: block;
     border: 1px solid var(--hair);
-    /* 卡片底已改透明（= 纸白）⇒ 图底回到 `--panel`：配图带 alpha 时仍能看出图的边界，
-       图没加载完也有个浅灰占位，不至于只剩一条空边框 */
     background: var(--panel);
   }
   .clips {
@@ -489,22 +468,21 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     overflow: hidden;
   }
   @media (max-width: 767px) {
-    /* 窄屏振幅 ×0.6（与装置"极简版"同档）。原先是「padding-left 收一档」——
-       条目盒子把左右内边距统一成 --sp-4 之后那条已无差别，删掉不留假规则。 */
-    .talk {
-      --amp-k: 0.6;
+    .talks {
+      --timeline-x: 0px;
+      margin-top: var(--sp-7);
     }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    /* 原位漂浮是纯装饰 ⇒ RM 下直接关掉，不做"慢速版"（慢速仍然是在动） */
     .talk {
-      animation: none;
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: var(--sp-3);
+      padding-left: var(--sp-5);
+      padding-bottom: var(--sp-7);
     }
-  }
-  /* 切标签页暂停（由 src/scripts/float.ts 在 visibilitychange 上挂 / 摘这一行 class）。
-     与装置画布的停帧同一处触发 ⇒ 两半（CSS 浮 + Canvas 雨）行为一致，少一类只在某半才有的差异。 */
-  :global(html.float-idle) .talk {
-    animation-play-state: paused;
+    time { padding-top: 0; }
+    .talk::before { top: 0.5em; }
+    .talk:not(:last-child)::after { top: calc(0.5em + 5px); bottom: -0.5em; }
+    .shots { gap: var(--sp-2); }
+    .shots[data-columns='1'] { width: min(100%, 65vw, calc(var(--sp-8) * 4)); }
   }
 
   /* ===================================================================

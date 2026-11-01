@@ -3,8 +3,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { RUNTIME_DEPS_ALLOWED } from './_deps';
 
-/* 说说页「浮游 FLOAT」（斜飘雨线 + 下半屏椭圆涟漪）+ 原位漂浮 + 墨点螺旋底纹
- * （2026-10-04）的契约。
+/* 说说页「浮游 FLOAT」（斜飘雨线 + 下半屏椭圆涟漪）+ 墨点螺旋底纹
+ * （2026-10-04，2026-11-01 保留背景、正文改为稳定时间线）的契约。
  *
  * 站主拍板（先出实验台 `_probe/_float-lab.src.html` 的 ⑤ 号母题，看过真渲染才定的）：
  *   ① 装置 = Canvas 2D 手写；② 背景即装置；③ ≤767 极简版；④ 低频常动（≥8s）；
@@ -20,7 +20,7 @@ import { RUNTIME_DEPS_ALLOWED } from './_deps';
  *   ④ 背景**不读内容几何** —— 只吃时间。评论展开插 DOM 时不该触发重排重画。
  *   ⑤ 与其余四台**机制镜像** —— 只有它不读任何输入（滚动/指针一概不吃）。
  *   ⑥ 四态降级 —— reduced-motion / 无 JS / ≤767 极简版 / 视口外·切标签停帧。
- *   ⑦ 原位漂浮只动 `transform`（不参与布局）—— 这是"在原位浮"的机制保证。
+ *   ⑦ 2026-11-01：整页改为稳定的透明时间线，背景雨滴与底纹仍按原契约运行。
  *   ⑧ 零新增运行时依赖（红线）。
  */
 const ROOT = process.cwd();
@@ -200,77 +200,22 @@ describe('说说页 FLOAT · 装置契约', () => {
   it('降级④停帧：gate 观察画布 + 切标签同时暂停 CSS 原位漂浮（两半同一处触发）', () => {
     expect(CODE).toMatch(/createActivityGate\(cv/);
     expect(CODE).toMatch(/if \(!gate\.onScreen \|\| !gate\.visible\) return;/);
-    // CSS 那一半：同一处 visibilitychange 挂 / 摘 html.float-idle
+    // 背景的活动门闩保留；正文已在透明时间线改版中取消漂浮。
     expect(CODE).toMatch(/add\('float-idle'\)/);
     expect(CODE).toMatch(/remove\('float-idle'\)/);
-    expect(ACSS).toMatch(/:global\(html\.float-idle\)\s+\.talk\s*\{\s*animation-play-state:\s*paused/);
-    expect(DIST_CSS, '产物 CSS 里没有暂停规则').toMatch(/html\.float-idle[^{]*\{[^}]*animation-play-state:paused/);
     // bfcache 回来不重跑脚本 ⇒ 卸载时清 rAF 与 observer
     expect(CODE).toMatch(/beforeunload/);
     expect(CODE).toMatch(/gate\.dispose\(\)/);
   });
 });
 
-describe('说说页 · 原位漂浮 + 透明条目底（只动绘制，不动布局）', () => {
-  it('★ 原位漂浮是**纯 CSS**：相位只用 :nth-child 排，不写一行 JS', () => {
-    expect(ACSS).toMatch(/\.talk\s*\{[\s\S]*?animation:\s*talk-float var\(--dur-orbit, 8s\)/);
-    expect(ACSS).toMatch(/@keyframes talk-float/);
-    expect(ACSS, '相邻三条错相位').toMatch(/\.talk:nth-child\(3n \+ 2\)\s*\{\s*--i:\s*1/);
-    expect(ACSS).toMatch(/\.talk:nth-child\(3n\)\s*\{\s*--i:\s*2/);
-    expect(ACSS).toMatch(/animation-delay:\s*calc\(var\(--i, 0\) \* -5s\)/);
-    // 4px 是站主拍板值；乘法留在样式表里（内联会压过媒体查询）
-    expect(ACSS, '振幅不是站主拍板的 4px').toMatch(/--amp:\s*calc\(4px \* var\(--amp-k, 1\)\)/);
-    expect(ACSS, '窄屏振幅 ×0.6').toMatch(/--amp-k:\s*0\.6/);
-    // 周期用站上既有 token，不新增魔法数字
-    expect(TOKENS, '--dur-orbit 被删/改名了？契约要跟着看').toMatch(/--dur-orbit:\s*8s/);
-    // JS 侧不许有漂浮逻辑（相位不是算出来的）
-    expect(CODE, '漂浮不许进 JS').not.toMatch(/animationPlayState|animationDelay|--amp/);
-  });
-
-  it('★ 只动 transform（不参与布局）—— 那是"在原位浮"的机制保证', () => {
-    const kf = ACSS.match(/@keyframes talk-float\s*\{([\s\S]*?)\n  \}/)?.[1] ?? '';
-    expect(kf, '没读到 talk-float 关键帧').toBeTruthy();
-    expect(kf).toMatch(/transform:\s*translateY\(/);
-    for (const banned of ['top:', 'bottom:', 'margin', 'padding', 'height', 'position:']) {
-      expect(kf, `关键帧里不该动 ${banned}（动布局就不再是"原位"）`).not.toContain(banned);
-    }
-  });
-
-  it('★ 降级：reduced-motion 关掉漂浮；切标签暂停', () => {
-    expect(ACSS).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.talk\s*\{\s*animation:\s*none/,
-    );
-    // 关掉动画 ≠ 关掉滚动：不许顺手把别的东西也关掉（站上一条既有护栏的口径）
-    expect(ACSS.slice(ACSS.indexOf('@media (prefers-reduced-motion: reduce)'))).not.toMatch(
-      /overflow:\s*hidden/,
-    );
-  });
-
-  it('★ 条目底色**透明**：只改 .talk 自己的盒子，一行 DOM 都不动', () => {
-    expect(ACSS, '.talks 要排成一列留缝').toMatch(
-      /\.talks\s*\{[\s\S]*?display:\s*flex;[\s\S]*?gap:\s*var\(--sp-3\)/,
-    );
-    /* ★ 站主 2026-10-04：「每一个说说的背景改成透明的」。
-       守的是**性质**：`.talk` 自己那块不许着色。显式 `transparent` 也一并认
-       （要看见"此处刻意不着色"，而不是靠缺省继承）。 */
+describe('说说页 · 透明时间线（2026-11-01）', () => {
+  it('条目无面板，时间轴与图片占位随站点主题变化', () => {
     const talkBlock = ACSS.match(/\.talk\s*\{[\s\S]*?\}/)?.[0] ?? '';
-    expect(talkBlock, '没找到 .talk 块').not.toBe('');
-    expect(talkBlock, '.talk 不许有底色（站主：改成透明的）').toMatch(/background:\s*transparent/);
-    expect(talkBlock, '.talk 不许再出现 --panel（撤掉的面板）').not.toMatch(/var\(--panel\)/);
-    // 内边距保留：它只决定内容位置，不产色块（去掉反而要让方点的 top 重算）
-    expect(ACSS, '条目内边距').toMatch(/padding:\s*var\(--sp-3\) var\(--sp-4\)/);
-    // 时间轴的 5px 方点仍在
+    expect(talkBlock).toMatch(/background:\s*transparent/);
+    expect(talkBlock).not.toMatch(/var\(--panel\)|animation/);
     expect(ACSS).toMatch(/\.talk::before\s*\{[\s\S]*?background:\s*var\(--accent\)/);
-    // ★ 方点的 top 要补上盒子的上内边距（原来是相对内容盒顶）
-    expect(ACSS, '内边距还在 ⇒ 方点必须跟着补，否则浮到日期上方').toMatch(
-      /\.talk::before\s*\{[\s\S]*?top:\s*calc\(var\(--sp-3\) \+ 0\.45em\)/,
-    );
-    // 底色透明（纸白）⇒ 配图底回到 --panel：带 alpha 的图仍看得出边界、未加载时有占位
     expect(ACSS).toMatch(/\.shots :global\(img\)\s*\{[\s\S]*?background:\s*var\(--panel\)/);
-    // 面板把原来"末条竖线透明"的收尾去掉了 —— 每张卡自带一段轨
-    expect(ACSS, '末条规则应已删（每条自带一段轨）').not.toMatch(
-      /\.talk:last-child\s*\{[^}]*border-left-color:\s*transparent/,
-    );
   });
 });
 
