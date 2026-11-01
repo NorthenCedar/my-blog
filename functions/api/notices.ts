@@ -1,9 +1,9 @@
 /**
- * GET  /api/notices  → { unread, items }   我的「别人回复我」提醒（未登录：{ unread: 0, items: [] }）
+ * GET  /api/notices?before=<编号> → 当前账户的提醒，支持读取更早消息。
  * POST /api/notices  → { ids: [1,2] } | {}  （不传 ids = 全部已读）→ { unread }
  *
- * 2026-10-18 站主拍板：只做「别人回复我」这一种提醒，站上有新留言不提醒；
- * 到达方式是站内铃铛 + 未读角标（顶栏），不做邮件 / 推送。
+ * 普通访客收回复自己的提醒；站主另收全站新留言、评论及回复。
+ * 到达方式沿用站内铃铛 + 未读角标（顶栏）。
  *
  * 为什么 GET 未登录不报 401：铃铛在每一页都挂一次，匿名访客占绝大多数 ——
  * 回一个 200 + 空结果，前端的「未登录就藏起来」判断不用依赖错误码，也不会在控制台里
@@ -29,8 +29,13 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const user = await currentAccount(request, env);
   // signedIn 是给铃铛用的：未读为 0 时它还得分得清「登录了但没人回」与「压根没登录」——
   // 前者要留着铃铛（它是打开历史列表的唯一入口），后者顶栏上不该多出一格。
-  if (!user) return json({ unread: 0, items: [], signedIn: false });
-  return json({ ...(await listReplyNotices(env, user.id)), signedIn: true });
+  const isOwner = Boolean(user && env.OWNER_USER_ID && env.OWNER_USER_ID === user.id);
+  const labels = { title: isOwner ? '全站消息' : '回复提醒', emptyMessage: isOwner ? '还没有新的全站消息。' : '还没有人回复你。' };
+  if (!user) return json({ unread: 0, items: [], signedIn: false, isOwner: false, nextBefore: null, ...labels });
+  const raw = new URL(request.url).searchParams.get('before');
+  const before = raw === null ? undefined : Number(raw);
+  if (before !== undefined && (!Number.isSafeInteger(before) || before <= 0)) return json({ error: '消息位置无效' }, 400);
+  return json({ ...(await listReplyNotices(env, user.id, 20, before)), signedIn: true, isOwner, ...labels });
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {

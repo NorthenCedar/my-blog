@@ -161,7 +161,8 @@ describe('内页顶栏 · 不得建立 fixed 的包含块（手机端抽屉点�
   });
 
   it('★ 顶栏文字抬到玻璃层之上，且排除抽屉那两件（.navshell / .navtog）', () => {
-    const m = TCODE.match(/body\.chrome-page \.topbar > \*:not\(\.navshell\):not\(\.navtog\)\s*\{([^}]*)\}/);
+    // 允许继续排除其他独立浮层；抽屉的两项排除与定位要求仍必须成立。
+    const m = TCODE.match(/body\.chrome-page \.topbar > \*:not\(\.navshell\):not\(\.navtog\)(?::not\([^)]*\))*\s*\{([^}]*)\}/);
     expect(m, '没找到"抬起顶栏内容"的规则 —— 站名/导航会被玻璃一起模糊掉').toBeTruthy();
     expect(m![1], '抬升要真的加 z-index').toMatch(/z-index:\s*1/);
     expect(m![1], '抬升要真的改定位').toMatch(/position:\s*relative/);

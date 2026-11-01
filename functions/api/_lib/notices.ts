@@ -1,5 +1,5 @@
 /**
- * 回复提醒的数据层（2026-10-18 站主要求：别人回复我时能看见提醒）。
+ * 消息提醒的数据层：访客收自己的回复，站主另收全站新评论与回复。
  *
  * 三条铁律：
  *   ① **只认 id，不认名字**。0003 的 replies 只存了 reply_to 名字串，同楼层重名就串人；
@@ -17,7 +17,10 @@ export type ReplyNotice = {
   id: number;
   slug: string;
   parentId: number;
-  replyId: number;
+  replyId: number | null;
+  kind: 'comment' | 'reply';
+  href: string;
+  label: string;
   actorName: string;
   excerpt: string;
   createdAt: string;
@@ -63,21 +66,43 @@ export async function validNoticeTarget(
 /** 迁移还没执行时把它当「没有提醒」处理，而不是 500 —— 部署次序不该拖垮留言 */
 const forgiveMissingTable = (error: unknown) => /no such table: (reply_targets|reply_notices|comment_authors|visitor_accounts)/i.test(String(error));
 
+type NoticeContent = {
+  slug: string; parentId: number; replyId: number | null;
+  actorName: string; actorId: string | null; body: string; createdAt?: string; skipOwner?: boolean;
+};
+
+/** 只投递给存在的账户和仍存在的原评论；删除与通知写入交错时不留死链。 */
+function noticeInsert(env: VisitorEnv, userId: string, notice: NoticeContent) {
+  const { slug, parentId, replyId } = notice;
+  const source = replyId === null
+    ? 'SELECT 1 FROM comments WHERE id = ? AND slug = ?'
+    : 'SELECT 1 FROM replies WHERE id = ? AND slug = ? AND parent_id = ?';
+  const values = replyId === null ? [parentId, slug] : [replyId, slug, parentId];
+  return env.COMMENTS_DB.prepare(
+    'INSERT OR IGNORE INTO reply_notices ' +
+      '(user_id,slug,parent_id,reply_id,actor_name,actor_user_id,excerpt,created_at) ' +
+      `SELECT id,?,?,?,?,?,?,? FROM visitor_accounts WHERE id = ? AND EXISTS (${source})`
+  ).bind(slug, parentId, replyId, notice.actorName.slice(0, 60), notice.actorId,
+    notice.body.slice(0, EXCERPT_MAX), notice.createdAt ?? new Date().toISOString(), userId, ...values);
+}
+
+/** 顶层留言只有站主接收；匿名也投递，客户端提供的身份字段不参与判定。 */
+export async function recordCommentNotice(env: VisitorEnv, notice: Omit<NoticeContent, 'replyId'>): Promise<void> {
+  if (!env.OWNER_USER_ID || notice.parentId <= 0 || notice.skipOwner || notice.actorId === env.OWNER_USER_ID) return;
+  try {
+    await noticeInsert(env, env.OWNER_USER_ID, { ...notice, replyId: null }).run();
+  } catch (error) {
+    if (!forgiveMissingTable(error)) console.error('comment notice failed', error);
+  }
+}
+
 /**
  * 记一条「某人回复了你」。
  * 调用点只有 comments.ts 一处（发表回复之后）；失败一律吞掉，绝不连累发表。
  */
 export async function recordReplyNotice(
   env: VisitorEnv,
-  options: {
-    slug: string;
-    parentId: number;
-    replyId: number;
-    target: NoticeTarget;
-    actorName: string;
-    actorId: string | null;
-    body: string;
-  }
+  options: NoticeContent & { replyId: number; target: NoticeTarget }
 ): Promise<void> {
   const { slug, parentId, replyId, target } = options;
   if (replyId <= 0) return;
@@ -91,29 +116,17 @@ export async function recordReplyNotice(
     const statements = [
       // 指向无论如何都记：它描述的是「这条回复朝哪儿说话」，与对方有没有账户无关
       env.COMMENTS_DB.prepare(
-        'INSERT INTO reply_targets (reply_id, target_kind, target_id) VALUES (?, ?, ?) ' +
+        'INSERT INTO reply_targets (reply_id, target_kind, target_id) ' +
+          'SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM replies WHERE id = ? AND slug = ? AND parent_id = ?) ' +
           'ON CONFLICT(reply_id) DO UPDATE SET target_kind = excluded.target_kind, target_id = excluded.target_id'
-      ).bind(replyId, target.kind, target.id),
+      ).bind(replyId, target.kind, target.id, replyId, slug, parentId),
     ];
 
-    // 被回复者是匿名留言 / 自己回自己 ⇒ 不产生提醒
-    if (owner && owner.user_id !== options.actorId) {
-      statements.push(
-        env.COMMENTS_DB.prepare(
-          'INSERT OR IGNORE INTO reply_notices ' +
-            '(user_id, slug, parent_id, reply_id, actor_name, actor_user_id, excerpt, created_at) ' +
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(
-          owner.user_id,
-          slug,
-          parentId,
-          replyId,
-          options.actorName.slice(0, 60),
-          options.actorId,
-          options.body.slice(0, EXCERPT_MAX),
-          new Date().toISOString()
-        )
-      );
+    // 去重后再投递：直接回复站主时只有一条；站主自己发表（含主动匿名）不自收。
+    const recipients = new Set([owner?.user_id, env.OWNER_USER_ID]);
+    for (const recipient of recipients) {
+      if (!recipient || recipient === options.actorId || (options.skipOwner && recipient === env.OWNER_USER_ID)) continue;
+      statements.push(noticeInsert(env, recipient, options));
     }
 
     await env.COMMENTS_DB.batch(statements);
@@ -128,28 +141,42 @@ export async function recordReplyNotice(
 export async function listReplyNotices(
   env: VisitorEnv,
   userId: string,
-  limit = 20
-): Promise<{ unread: number; items: ReplyNotice[] }> {
+  limit = 20,
+  beforeId?: number
+): Promise<{ unread: number; items: ReplyNotice[]; nextBefore: number | null }> {
   try {
+    // 游标必须属于当前账户；时间相同时以编号排序，旧通知也能稳定翻页。
+    const cursor = beforeId ? await env.COMMENTS_DB.prepare(
+      'SELECT id,created_at FROM reply_notices WHERE user_id = ? AND id = ?'
+    ).bind(userId, beforeId).first<{ id: number; created_at: string }>() : null;
+    const filter = beforeId ? cursor ? ' AND (created_at < ? OR (created_at = ? AND id < ?))' : ' AND 0' : '';
+    const values = cursor ? [cursor.created_at, cursor.created_at, cursor.id] : [];
     const [counted, listed] = await env.COMMENTS_DB.batch([
       env.COMMENTS_DB.prepare('SELECT COUNT(*) AS n FROM reply_notices WHERE user_id = ? AND read_at IS NULL').bind(userId),
       env.COMMENTS_DB.prepare(
         'SELECT id, slug, parent_id, reply_id, actor_name, excerpt, created_at, read_at ' +
-          'FROM reply_notices WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?'
-      ).bind(userId, limit),
+          `FROM reply_notices WHERE user_id = ?${filter} ORDER BY created_at DESC, id DESC LIMIT ?`
+      ).bind(userId, ...values, limit + 1),
     ]);
     const unread = (counted.results?.[0] as { n?: number } | undefined)?.n ?? 0;
     const rows = (listed.results ?? []) as Array<{
-      id: number; slug: string; parent_id: number; reply_id: number;
+      id: number; slug: string; parent_id: number; reply_id: number | null;
       actor_name: string; excerpt: string; created_at: string; read_at: number | null;
     }>;
     return {
       unread,
-      items: rows.map((r) => ({
+      nextBefore: rows.length > limit ? rows[limit - 1].id : null,
+      items: rows.slice(0, limit).map((r) => ({
         id: r.id,
         slug: r.slug,
         parentId: r.parent_id,
         replyId: r.reply_id,
+        kind: r.reply_id === null ? 'comment' : 'reply',
+        // 保留既有落点规则；说说评论折叠，先定位到所属说说。
+        href: r.slug === 'guestbook' ? `/guestbook/#comment-${r.parent_id}`
+          : r.slug.startsWith('talk-') ? `/talks/#c-${r.slug}` : `/posts/${r.slug}/#comment-${r.parent_id}`,
+        label: (r.slug === 'guestbook' ? '留言板' : r.slug.startsWith('talk-') ? '说说评论' : '文章评论')
+          + ' · ' + (r.reply_id !== null ? '新回复' : r.slug === 'guestbook' ? '新留言' : '新评论'),
         actorName: r.actor_name,
         excerpt: r.excerpt,
         createdAt: r.created_at,
@@ -157,7 +184,7 @@ export async function listReplyNotices(
       })),
     };
   } catch (error) {
-    if (forgiveMissingTable(error)) return { unread: 0, items: [] };
+    if (forgiveMissingTable(error)) return { unread: 0, items: [], nextBefore: null };
     throw error;
   }
 }

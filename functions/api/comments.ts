@@ -9,9 +9,9 @@ import {
   type ReplyRecord,
 } from './_lib/comments-core';
 import { commentIdentity, attachCommentAuthors, saveAuthoredComment } from './_lib/visitor-comments';
-import { parseNoticeTarget, recordReplyNotice, validNoticeTarget, type NoticeTarget } from './_lib/notices';
+import { parseNoticeTarget, recordCommentNotice, recordReplyNotice, validNoticeTarget, type NoticeTarget } from './_lib/notices';
 import { AccountError } from './_lib/visitor-core';
-import { publicUser } from './_lib/visitor-store';
+import { currentAccount, publicUser } from './_lib/visitor-store';
 import { guardPublicWrite, readJsonBody, writeLimitStatements } from './_lib/public-write';
 import targets from './_generated/comment-targets.json';
 
@@ -172,11 +172,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const createdAt = new Date().toISOString();
+  // 主动匿名不暴露或保存账户关联，仅用服务端会话避免站主收到自己的消息。
+  let skipOwner = Boolean(env.OWNER_USER_ID && author?.id === env.OWNER_USER_ID);
+  if (env.OWNER_USER_ID && !author) {
+    try { skipOwner = (await currentAccount(request, env))?.id === env.OWNER_USER_ID; }
+    catch (error) { console.error('notice identity check failed', error); }
+  }
+  const notice = { slug, actorName: name, actorId: author?.id ?? null, body, createdAt, skipOwner };
 
   // ---- 顶层评论（parentId = 0）----
   if (parentId === 0) {
     if (author) {
       const id = await saveAuthoredComment(request, env, author, 'comment', [slug, name, body, createdAt, ipHash]);
+      await recordCommentNotice(env, { ...notice, parentId: id });
       return json({ comment: { id, slug, name, body, createdAt, parentId: 0, replyTo: '', author: publicUser(author, env) } }, 201);
     }
     const inserted = await env.COMMENTS_DB.prepare(
@@ -185,6 +193,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       .bind(slug, name, body, createdAt, ipHash)
       .first<{ id: number }>();
 
+    await recordCommentNotice(env, { ...notice, parentId: inserted?.id ?? 0 });
     return json({ comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId: 0, replyTo: '', author: null } }, 201);
   }
 
@@ -192,7 +201,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (author) {
     const id = await saveAuthoredComment(request, env, author, 'reply', [slug, parentId, replyTo, name, body, createdAt, ipHash]);
     // 回复已经落库 ⇒ 再记提醒（失败不影响发表，见 _lib/notices.ts）
-    await recordReplyNotice(env, { slug, parentId, replyId: id, target: noticeTarget!, actorName: name, actorId: author.id, body });
+    await recordReplyNotice(env, { ...notice, parentId, replyId: id, target: noticeTarget! });
     return json({ comment: { id, slug, name, body, createdAt, parentId, replyTo, author: publicUser(author, env) } }, 201);
   }
   const inserted = await env.COMMENTS_DB.prepare(
@@ -201,7 +210,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .bind(slug, parentId, replyTo, name, body, createdAt, ipHash)
     .first<{ id: number }>();
 
-  await recordReplyNotice(env, { slug, parentId, replyId: inserted?.id ?? 0, target: noticeTarget!, actorName: name, actorId: null, body });
+  await recordReplyNotice(env, { ...notice, parentId, replyId: inserted?.id ?? 0, target: noticeTarget! });
 
   return json(
     { comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId, replyTo, author: null } },

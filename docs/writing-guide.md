@@ -1060,31 +1060,35 @@ npx wrangler d1 execute beishan-comments --remote --file=migrations/0004_visitor
 
 维护依赖时保留 `vendor/http-cache-semantics/README.md` 的来源和 BSD-2-Clause 许可说明。该库相关安全公告被维护者争议，新版未改变所涉行为，本站采用有行为回归的本地保守加固；不要只改版本号或删除 override 让审计表面清零。补丁维护说明在该目录，升级后同时跑 `tests/dependency-cache.test.ts` 和整站验证。
 
-### 14.9 回复提醒（2026-10-18）
+### 14.9 消息提醒（2026-11-01 扩展）
 
-别人回复我的评论、留言或说说评论时，顶栏铃铛亮起并带未读数；点开是「回复我的」列表，点条目跳到原文那条评论。只提醒被回复者本人：自己回复自己不算，匿名访客没有账户可挂也收不到；站上出现新留言、新评论不提醒。已登录就一直留着铃铛（读完也留着，它是回看历史回复的入口），角标最多显示 9+；小屏把文字链接收进抽屉，铃铛仍留在顶栏。打开铃铛即算读过，角标与未读圆点同时归零；未读行左侧一个 5px 实心圆点，未读条数写进读屏标签。
+普通访客仍只收到回复自己的提醒；站主额外收到留言板、文章及说说中的全部新评论和回复，匿名发表也包括。身份继续由服务端 `OWNER_USER_ID` 与登录账户的完整 ID 识别，不按昵称判断。站主自己发表（包括登录后主动匿名）不自收；直接回复站主时仅提醒一次。匿名访客没有账户，不能接收个人提醒。
 
-数据落在两张新表：`reply_targets` 记「这条回复针对哪一条」，`reply_notices` 每行是一次「某人回复了你」，带 `read_at` 支持单条已读。提醒在写入评论时物化，不在页面加载时现算。回复表单照常只填名字与正文，目标由页面自己带上；伪造或指向不存在评论的目标会退回父评论，不会把提醒发给旁人。说说页评论区默认折叠，提醒落到那条说说（`#c-<slug>`）而不是看不见的评论行。
+已登录时铃铛一直保留，角标最多显示 9+；站主的读屏名称为“全站消息”，普通访客仍为“回复提醒”。列表显示来源、留言或回复类型、发表者、前 80 字及时间，点击名字跳到对应页面。每页 20 条，点“更早消息”继续查看，关闭后重新打开回到最近一页。打开或翻页后，仅将本次展示的未读条目标记已读；成功后同步圆点和总未读数，不清掉未显示或请求期间新到的消息。网络失败保留未读，下次打开重试。手机与明暗模式沿用原铃铛样式。
 
-**本地初始化：** `npm run db:init` 已包含 0005/0006。已有本地库只需依次执行：
+数据仍落在 `reply_targets` 与 `reply_notices`。前者记录回复对象，后者每行是一个账户收到的一条消息，`reply_id` 为空表示顶层新留言，非空表示回复；`read_at` 保留已读状态。每个账户对同一源评论或回复只收一条，删除源评论或回复时一起清理提醒。提醒只在正文发表成功后生成，失败不影响发表；不保存 IP 或额外的完整正文副本。伪造回复目标退回当前父评论。说说页仍跳到那条说说的 `#c-<slug>`。
+
+**本地初始化：** `npm run db:init` 包含 0005/0006，完成后需执行新增 0010。已初始化过 0005/0006 的本地库只执行下面最后一条：
 
 ```powershell
 npx wrangler d1 execute beishan-comments --local --file=migrations/0005_reply_targets.sql
 npx wrangler d1 execute beishan-comments --local --file=migrations/0006_reply_notices.sql
+npx wrangler d1 execute beishan-comments --local --file=migrations/0010_owner_notices.sql
 ```
 
-两张表都是 `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`，可重复执行，不改旧表结构。
+0005/0006 使用 `CREATE ... IF NOT EXISTS`；0010 整份作为原子迁移执行，扩展原提醒表以支持顶层留言，保留通知编号、自增上界、摘要、已读和未读，不扫描或回填历史评论。成功后可重复执行。不要拆开执行 0010 的语句。
 
-**上线前：** 先备份线上 D1，再逐条执行（`npm run db:init:remote` 会把 0002–0006 一起跑，同样是可重跑的）：
+**上线前：** 先备份线上 D1。已有提醒功能的生产库只需执行 0010，随后再部署新版代码；`npm run db:init:remote` 目前只包含 0002–0006，不能代替这一步。下面列出从尚未启用提醒的数据库开始的完整顺序：
 
 ```powershell
 npx wrangler d1 export beishan-comments --remote --output=<工作区备份目录>/comments-before-notices.sql
 npx wrangler d1 execute beishan-comments --remote --file=migrations/0005_reply_targets.sql
 npx wrangler d1 execute beishan-comments --remote --file=migrations/0006_reply_notices.sql
+npx wrangler d1 execute beishan-comments --remote --file=migrations/0010_owner_notices.sql
 npx wrangler d1 execute beishan-comments --remote --command "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'reply_%'"
 ```
 
-最后一条应返回 `reply_notices` 与 `reply_targets` 两行。**表没建就部署不会报错**——接口对缺表是容错的，只是铃铛永远不出现，所以这条验证不能跳。`wrangler d1 execute` 不加 `--remote` 打在本地库上，看着成功但线上没变（前面记过的坑）。
+最后一条应返回 `reply_notices` 与 `reply_targets` 两行；再用 `PRAGMA table_info(reply_notices)` 核对 `reply_id` 的 `notnull` 为 0，并核对旧通知数量及已读状态。缺表时提醒接口会返回空列表；未执行 0010 时原回复提醒可用，新顶层留言通知无法保存。`--local` 只操作本地模拟库；生产迁移需明确使用 `--remote`。本轮开发未执行生产迁移或部署。
 
 ---
 

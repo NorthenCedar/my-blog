@@ -225,12 +225,11 @@ const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('
       // 页面过渡的点击拦截（每一页都加载 ⇒ Astro 会抽成同源共享 chunk）。
       import '../scripts/transition';
       import '../scripts/nav-drawer';
-      /* 回复提醒（2026-10-18）的**角标**那一半：挂在**这一块**而不是 Topbar 里单独一块 ——
+      /* 消息提醒：挂在**这一块**而不是 Topbar 里单独一块 ——
          ① 首页的 console 外壳也走这个布局，共享块天然覆盖；
          ② 文章页那条「脚本条数与体积预算」按 `<script>` 处数算，多开一块就直接顶线。
-         ⇒ 这里只进「拉未读 + 亮角标」（没 [data-notices] 就 return），面板本体在 notices.ts
-         里、点开铃铛才动态 import：螺旋盘页的 JS 预算只剩 34 字节，整包搬进来必红。
-         别把这两个文件合并回一个模块。 */
+         ⇒ 没 [data-notices] 不发请求。notices.ts 随共享块加载完整铃铛，
+         不引入访客账户客户端；来源文案和落点由服务端生成，守住既有字节预算。 */
       import '../scripts/notices';
     </script>
   </body>

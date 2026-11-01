@@ -182,8 +182,9 @@ const { wordmark, current } = Astro.props;
   /* 顶栏自己的**文字与图标**抬到玻璃层之上：玻璃层是 z-index:0 的定位元素，
      而定位元素画在内流内容**之后**，不抬的话站名/导航会被一起模糊掉。
      ⚠ 必须排除抽屉那两件：`.navshell` 是 `position:fixed`、`.navtog` 小屏下是 `position:absolute`
-     —— 给它们加 `position` 会当场改坏抽屉（`.navbtn` 是静态定位，抬上来是对的）。 */
-  body.chrome-page .topbar > *:not(.navshell):not(.navtog) {
+     —— 给它们加 `position` 会当场改坏抽屉（`.navbtn` 是静态定位，抬上来是对的）。
+     消息面板也必须排除：其 absolute / z-index:30 要保持，不能参与顶栏 flex 布局。 */
+  body.chrome-page .topbar > *:not(.navshell):not(.navtog):not(.notices-panel) {
     position: relative;
     z-index: 1;
   }
@@ -343,6 +344,16 @@ const { wordmark, current } = Astro.props;
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+  .notices-more {
+    margin-top: var(--sp-3);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
   }
   .notice {
     padding-top: 0.5rem;
