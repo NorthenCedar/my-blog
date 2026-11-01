@@ -4,7 +4,7 @@ import { scatterLayout } from '../scripts/album-scene-core';
 
 type File = { w: number; h: number; actualW?: number; url: string };
 type Frame = { alt: string; src: string; files: File[] };
-type Album = { id: string; title: string; titleEn?: string; layout?: 'scatter' | 'slices'; date: string; total: number; frames: Frame[] };
+type Album = { id: string; title: string; titleEn?: string; layout?: 'scatter' | 'slices' | 'wall'; date: string; total: number; frames: Frame[] };
 interface Props { album: Album; no: number }
 const { album, no } = Astro.props;
 const layout = album.layout ?? 'scatter';

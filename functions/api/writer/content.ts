@@ -12,6 +12,7 @@ export const onRequestGet:PagesFunction<WriterEnv>=async({request,env})=>{
     const image=query.get('image');
     if(image){const asset=await repo.readImage(commit,image),ext=image.split('.').pop();return new Response(asset.bytes,{headers:{...writerHeaders,'Content-Type':ext==='jpg'||ext==='jpeg'?'image/jpeg':`image/${ext}`}});}
     const kind=query.get('kind'),page=Math.max(1,Math.min(100,Number(query.get('page'))||1));
+    if(kind==='gallery'){const items=await repo.listGalleries(commit);return writerJson({commit,items:items.slice((page-1)*20,page*20),more:items.length>page*20});}
     if(kind==='post'){const items=await repo.listPosts(commit);return writerJson({commit,items:items.slice((page-1)*20,page*20),more:items.length>page*20});}
     if(kind==='project'){const items=await repo.listProjects(commit);return writerJson({commit,items:items.slice((page-1)*20,page*20),more:items.length>page*20});}
     if(kind==='forge'){const source=await repo.readForge(commit);return writerJson({commit,items:[{key:'forge',title:String(readPost(source.text).fields.title??'造物台页面文案')}],more:false});}

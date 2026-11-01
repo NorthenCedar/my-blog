@@ -2,6 +2,7 @@ import { clampCamera, clampFocus, clampZoom, slicePose, zoomAt, scatterZoomStep,
 
 /** 单册渐进增强：同一批 figure 在陈列与索引间移动，灯箱留在变换层外。 */
 for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]')) {
+  if(root.dataset.layout==='wall')continue;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
   const get = <T extends HTMLElement = HTMLElement>(name: string) => root.querySelector<T>(`[data-scene-${name}]`)!;
   const viewport = get('viewport');

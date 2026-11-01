@@ -9,7 +9,7 @@ import {filmPattern} from '../../lib/gallery-film.mjs';
 const albums=(manifest.albums as GalleryAlbum[]).filter(album=>album.frames.length);
 const total=albums.reduce((sum,album)=>sum+album.total,0),count=albums.length+2;
 const siteWordmark=(await getSite()).wordmark;
-const first=albums[0]?.frames[0],shareImage=first?.files.reduce((a,b)=>b.w>a.w?b:a).url;
+const first=albums[0]?.frames.find(frame=>frame.src===albums[0]?.cover)??albums[0]?.frames[0],shareImage=first?.files.reduce((a,b)=>b.w>a.w?b:a).url;
 ---
 <Base title="相册" description={`${albums.map(album=>album.title).join('、')} · ${total} 张照片`} shareImage={shareImage} shareImageAlt={first?.alt} current="gallery" chrome="page" bodyClass="gallery-inf-plate gallery-story" fullWidth>
   <Fragment slot="plate">

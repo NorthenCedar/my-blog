@@ -1,3 +1,4 @@
+import {validateAlbumFields} from '../album-presentation.mjs';
 import { createHash } from 'node:crypto';
 import { parseDocument,isMap,isSeq,isAlias,visit,type YAMLMap } from 'yaml';
 import { TAGS } from '../../tag-registry.ts';
@@ -82,6 +83,20 @@ function updateMap(source:string,node:YAMLMap,values:Record<string,unknown>,newl
     const current=node.get(key,true);
     const before=node.get(key);
     if(JSON.stringify(before)===JSON.stringify(value)) continue;
+    if(key==='images'&&isSeq(current)&&Array.isArray(value)&&current.items.every(isMap)&&value.every(v=>v&&typeof v==='object'&&!Array.isArray(v))&&source[current.range![0]]!=='['){
+      const originals=current.items as YAMLMap[];
+      const available=[...originals];
+      let output='';
+      for(const image of value){
+        const match=available.findIndex(item=>item.get('src')===image.src);
+        if(match<0){output+=`${' '.repeat(indent+2)}- ${JSON.stringify(image)}${newline}`;continue;}
+        const node=available.splice(match,1)[0],start=source.lastIndexOf('\n',node.range![0]-1)+1,end=node.range![2];
+        const fragment=source.slice(start,end);
+        output+=apply(fragment,updateMap(source,node,image,newline,indent+4).map(p=>({...p,start:p.start-start,end:p.end-start})));
+      }
+      const start=source.lastIndexOf('\n',current.range![0]-1)+1;
+      patches.push({start,end:current.range![1],text:output});continue;
+    }
     const encoded=JSON.stringify(value);
     if(encoded===undefined) return bad('字段值无法保存');
     if(current&&typeof current==='object'&&'range'in current&&current.range){
@@ -153,6 +168,12 @@ function checkProjectBodyImages(body:string,assets:WriterValue['assets'],allowPr
 }
 export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:WriterDraft['base']=null){
   validateWriterValue(kind,value,base);
+  if(kind==='gallery'){
+    try{validateAlbumFields(value.fields,{publish:true});}catch(error){bad((error as Error).message);}
+    const uploaded=new Set(value.assets.map(a=>'writer-asset:'+a.sha256));
+    for(const image of value.fields.images as {src:string}[])if(image.src.startsWith('writer-asset:')&&!uploaded.has(image.src))bad('相册引用了未上传的图片');
+    return;
+  }
   if(kind==='forge'){
     const checked=forgePageSchema.safeParse(value.fields);
     if(!checked.success)bad('页面文案不完整：'+checked.error.issues[0].path.join('.')+'，请检查必填文字、三条滚动提示和工作手记');
@@ -177,17 +198,24 @@ export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,
   const {kind,key}=validateTarget(draft.kind,draft.key),value=validateWriterValue(kind,draft.value,draft.base);validatePublish(kind,value,draft.base);
   const changes:WriterChange[]=[],known=new Map(value.assets.map(a=>[a.sha256,a]));
   const directory=writerAssetDirectory(kind,key);
+  const galleryReferences=kind==='gallery'?new Set((value.fields.images as {src:string}[]).map(image=>image.src)):null;
   for(const asset of value.assets){
+    if(galleryReferences&&!galleryReferences.has('writer-asset:'+asset.sha256))continue;
     const bytes=assetBytes.get(asset.sha256);if(!bytes||writerHash(bytes)!==asset.sha256) bad('配图缺失或摘要不一致，请重新上传');
     if(!directory)bad('页面文案不能发布配图');
     changes.push({path:`${directory}writer-${asset.sha256}.webp`,bytes});
   }
   const resolve=(sha:string)=>{if(!known.has(sha)) return bad('正文引用了未保存的图片');return `${kind==='talk'?'':'./'}writer-${sha}.webp`;};
   let text:string;
-  if(kind==='project'||kind==='forge'){
+  if(kind==='project'||kind==='forge'||kind==='gallery'){
     if(draft.base?currentText!==draft.base.text:currentText!==null)return conflict();
     if(kind==='forge'&&!draft.base)bad('请先导入现有造物台页面文案');
     const fields={...value.fields};
+    if(kind==='gallery'){
+      fields.draft=false;
+      fields.images=(fields.images as Record<string,unknown>[]).map(image=>({...image,src:typeof image.src==='string'&&image.src.startsWith('writer-asset:')?resolve(image.src.slice(13)):image.src}));
+      if(typeof fields.cover==='string'&&fields.cover.startsWith('writer-asset:'))fields.cover=resolve(fields.cover.slice(13));
+    }
     if(kind==='project'){
       const original=draft.base?readPost(draft.base.text):null;
       if(fields.slug!==(original?.fields.slug))bad('项目网址由目录决定，不能在编辑中更改');

@@ -1,17 +1,19 @@
 ---
-import {coverPresentation,coverStrokes,type GalleryAlbum} from '../lib/gallery-stage';
+import {coverPresentation,type GalleryAlbum} from '../lib/gallery-stage';
+import {coverArtwork,mobileArtwork} from '../lib/album-cover-art.mjs';
 interface Props {album:GalleryAlbum;index:number}
 const {album,index}=Astro.props;
 const cover=coverPresentation(album,index);
-const strokes=coverStrokes[cover?.kind??'left'];
+const strokes=coverArtwork(cover?.stroke,cover?.kind);
+const mobile=mobileArtwork(cover?.stroke);
 ---
-{cover&&<section class={`slide kind-${cover.kind}`} style={`--gallery-cover-ratio:${cover.width}/${cover.height}`} data-slide={index+2} data-kind="album" data-title={album.title} data-gallery-album={album.id} aria-labelledby={`album-${index}-title`}>
+{cover&&<section class={`slide kind-${cover.kind}`} style={`--gallery-cover-ratio:${cover.width}/${cover.height};--gallery-title-columns:${Math.max(...cover.lines.map(line=>Array.from(line).length),1)}`} data-long-title={Array.from(album.title).length>4?'true':undefined} data-transition={cover.transition} data-stroke={cover.stroke} data-weight={cover.weight} data-slide={index+2} data-kind="album" data-title={album.title} data-gallery-album={album.id} aria-labelledby={`album-${index}-title`}>
   <div class="copy">
     <p class="folio" data-reveal data-order="-1"><span>{String(index+1).padStart(2,'0')}</span><i></i><span>相册</span></p>
     <h2 class="album-title" id={`album-${index}-title`}><a class="album-title-link" href={cover.href}>{cover.lines.map((line,j)=><span class="title-line"><span data-reveal data-order={j}>{line}{cover.kind==='wide'&&j===cover.lines.length-1&&<svg class="word-circle" viewBox="0 0 260 110" aria-hidden="true"><path d="M225 19 C160 -2 34 2 15 44 C-6 91 164 108 232 72 C277 49 215 9 132 13" pathLength="1000" data-draw data-delay="620"/></svg>}</span></span>)}</a></h2>
     <div class="album-meta" data-reveal data-order="3"><span>{album.total} 张照片</span><span>{album.date.replaceAll('-','.')}</span></div>
     <a class="caption" data-reveal data-order="4" href={cover.href}>{cover.alt}<span aria-hidden="true">↗</span></a>
-    <svg class="copy-ink" viewBox="0 0 400 240" preserveAspectRatio="none" aria-hidden="true"><path class="main-ink" d="M2 225 C104 241 190 208 269 223 C353 240 397 164 383 40" pathLength="1000" data-draw data-delay="380"/><path class="echo-ink" d="M10 235 C111 248 197 220 269 234" pathLength="1000" data-draw data-delay="570"/></svg>
+    <svg class="copy-ink" viewBox="0 0 400 240" preserveAspectRatio="none" aria-hidden="true"><path class="main-ink" d={mobile.main} pathLength="1000" data-draw data-delay="380"/><path class="echo-ink" d={mobile.echo} pathLength="1000" data-draw data-delay="570"/></svg>
   </div>
   <div class="visual"><figure class="frame"><a class="cover-link" href={cover.href}><img src={cover.src} alt={cover.alt} width={cover.width} height={cover.height} loading="eager" decoding="async" draggable="false"/></a></figure></div>
   <svg class="ink-layer desktop-ink" viewBox="0 0 1400 800" preserveAspectRatio="none" aria-hidden="true"><path class="main-ink" d={strokes.main} pathLength="1000" data-draw data-delay="380"/><path class="echo-ink" d={strokes.echo} pathLength="1000" data-draw data-delay="570"/><path class="corner-ink" d={strokes.corner} pathLength="1000" data-draw data-delay="680"/></svg>

@@ -2,6 +2,7 @@ import {mountWheelNavigation,createNavigator,swipeIntent} from './gallery-stage-
 import './develop';
 import {getTheme,setTheme} from './theme';
 import {mountOriginalHelix} from './gallery-native.js';
+import {coverMotion} from './gallery-cover-motion.mjs';
 import '../styles/gallery-stage.css';
 const root=document.documentElement,stage=document.querySelector('[data-stage]'),slides=[...document.querySelectorAll('[data-slide]')];
 const selection=createNavigator(slides.length),reduce=matchMedia('(prefers-reduced-motion:reduce)');
@@ -53,12 +54,13 @@ function show(index,direction=1,initial=false){
   if(old&&old!==target){
     old.classList.remove('is-active');old.classList.add('is-out');old.inert=true;old.setAttribute('aria-hidden','true');
     if(old.contains(document.activeElement))stage.focus({preventScroll:true});
-    animate(old,{opacity:'0',transform:`translateX(${-direction*6}%) scale(.985)`},{duration:480}).then(()=>{if(revision===generation&&selection.index!==previousIndex)hide(old)});
+    animate(old,coverMotion(old.dataset.transition,direction).exit,{duration:480}).then(()=>{if(revision===generation&&selection.index!==previousIndex)hide(old)});
   }
   const returning=target.classList.contains('is-out');
   cancel(target);target.classList.remove('is-out');target.classList.add('is-active');target.style.visibility='visible';target.inert=false;target.removeAttribute('aria-hidden');
-  if(!returning){target.style.opacity='0';target.style.transform=`translateX(${direction*7}%) scale(.99)`;}
-  animate(target,{opacity:'1',transform:'translateX(0%) scale(1)'},{duration:760});
+  const motion=coverMotion(target.dataset.transition,direction);
+  if(!returning)Object.assign(target.style,motion.enter);
+  animate(target,motion.visible,{duration:760});
   const image=target.querySelector('.cover-link img');
   if(image){if(!returning){cancel(image);image.style.transform=`translateX(${direction*2}%) scale(1.055)`;}
   animate(image,{transform:'translateX(0%) scale(1)'},{duration:1100});}

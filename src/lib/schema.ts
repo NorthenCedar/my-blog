@@ -1,5 +1,6 @@
 import { z } from 'astro/zod';
 import { TAGS } from '../tag-registry';
+import {validateAlbumFields} from './album-presentation.mjs';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -99,16 +100,19 @@ export type GalleryFrontmatter = z.infer<typeof gallerySchema>;
  * alt 仍然必填 —— 那与图片管线无关，是无障碍要求。
  */
 export const gallerySchema = z.object({
-  title: z.string().min(1),
+  title: z.string().default(''),
   titleEn: z.string().trim().optional(),
-  layout: z.enum(['scatter', 'slices']).default('scatter'),
-  date: dateField('date'),
+  layout: z.enum(['scatter', 'slices','wall']).default('scatter'),
+  date: z.preprocess(v=>v instanceof Date?v.toISOString().slice(0,10):v,z.string().default('')),
+  draft:z.boolean().optional(),
+  cover:z.string().optional(),
+  presentation:z.record(z.string(),z.unknown()).optional(),
   images: z
     .array(
       z.object({
         src: z.string().min(1),
-        alt: z.string().min(1, '每张图都必须有 alt'),
+        alt: z.string(),
       })
     )
-    .min(1, '相册至少要有一张图'),
-});
+    .default([]),
+}).superRefine((value,context)=>{try{validateAlbumFields(value,{publish:value.draft!==true})}catch(error){context.addIssue({code:'custom',message:error.message})}});

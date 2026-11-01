@@ -9,6 +9,7 @@
 
 import { readdir, readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import {parseDocument} from 'yaml';
 
 const POSTS = 'content/posts';
 const DIST_ASTRO = 'dist/_astro';
@@ -21,13 +22,13 @@ async function collect() {
 
   let dirs = [];
   try {
-    dirs = (await readdir(POSTS, { withFileTypes: true })).filter((d) => d.isDirectory());
+    for(const parent of [POSTS,'content/gallery'])for(const entry of await readdir(parent,{withFileTypes:true}).catch(()=>[]))if(entry.isDirectory())dirs.push({name:join(parent,entry.name)});
   } catch {
     return { drafts, published };
   }
 
   for (const d of dirs) {
-    const file = join(POSTS, d.name, 'index.md');
+    const file = join(d.name, 'index.md');
     let text;
     try {
       text = await readFile(file, 'utf8');
@@ -38,7 +39,7 @@ async function collect() {
     //    只认 \n 的话这里会静默 continue（草稿隔离失效，而不是报错 —— 更危险）。
     const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
     if (!fm) continue;
-    const isDraft = /^draft:\s*true\s*$/m.test(fm[1]);
+    const isDraft = parseDocument(fm[1]).get('draft')===true;
     const target = isDraft ? drafts : published;
 
     // 正文里的相对图片，外加 frontmatter 的 cover

@@ -59,6 +59,12 @@ body.gallery-story{color-scheme:light}
 html.dark body.gallery-story{color-scheme:dark}
 body.gallery-story .bath-mark{font-family:"Homemade Apple",'STXingkai','楷体',cursive}
 body.gallery-story .kind-wide .frame{aspect-ratio:var(--gallery-cover-ratio)}
+body.gallery-story .slide[data-weight=regular] .main-ink{stroke-width:2.5}
+body.gallery-story .slide[data-weight=regular] .echo-ink{stroke-width:.8;opacity:.4}
+body.gallery-story .slide[data-weight=regular] .corner-ink{stroke-width:1.2}
+body.gallery-story .slide[data-stroke=corner] .word-circle{display:none}
+@media(min-width:768px){body.gallery-story .kind-right .copy{container-type:inline-size}body.gallery-story .kind-right .album-title{font-size:min(clamp(94px,10.2vw,170px),calc(96cqw / var(--gallery-title-columns,2)))}}
+@media(max-width:767px){body.gallery-story .slide[data-long-title=true] .album-title{white-space:normal}body.gallery-story .slide[data-long-title=true] .title-line{display:block}body.gallery-story .slide[data-long-title=true] .title-line+.title-line{margin-left:0}}
 body.gallery-story .tsl-veil{display:none}
 html.tsl-in body.gallery-story .tsl-veil{display:block;position:fixed;inset:0;z-index:31;pointer-events:none;background:var(--gallery-entry-bg);animation:gallery-veil-out .8s var(--ease) both}
 @keyframes gallery-veil-out{from{opacity:1}to{opacity:0}}

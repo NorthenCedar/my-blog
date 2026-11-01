@@ -2,7 +2,7 @@ import type { WriterDraft,WriterValue,WriterSave,WriterBase } from '../../lib/wr
 export type SaveState='saved'|'unsaved'|'saving'|'device'|'error'|'conflict'|'reauth';
 export type RecoveryCopy={value:WriterValue;revision:number;pending:WriterSave|null;serial:number;pendingSerial:number;updatedAt:number};
 type Clock={now:()=>number;setTimeout:typeof setTimeout;clearTimeout:typeof clearTimeout};
-type Options={load:()=>WriterDraft|Promise<WriterDraft>;save:(input:WriterSave)=>Promise<{revision:number}>;recovery:{put:(copy:RecoveryCopy)=>Promise<unknown>};clock?:Clock;onState:(state:SaveState,info:{backedUp:boolean;error?:unknown;revision:number})=>void;initialRecovery?:RecoveryCopy};
+type Options={beforeSave?:()=>Promise<void>;load:()=>WriterDraft|Promise<WriterDraft>;save:(input:WriterSave)=>Promise<{revision:number}>;recovery:{put:(copy:RecoveryCopy)=>Promise<unknown>};clock?:Clock;onState:(state:SaveState,info:{backedUp:boolean;error?:unknown;revision:number})=>void;initialRecovery?:RecoveryCopy};
 export function createSaveController(options:Options){
   // 浏览器计时器不能以普通 clock 对象作为 this；包装后仍支持测试注入时钟。
   const clock=options.clock??{now:()=>Date.now(),setTimeout:(run:()=>void,delay:number)=>setTimeout(run,delay),clearTimeout:(id:ReturnType<typeof setTimeout>)=>clearTimeout(id)};
@@ -30,6 +30,7 @@ export function createSaveController(options:Options){
   async function sendOnce(){
     await ready;if(disposed||(!dirty&&!pending)) return;
     if(flight) return flight;
+    if(!pending){try{await options.beforeSave?.();}catch(error){report(error instanceof TypeError?'device':'error',error);throw error;}if(disposed)return;if(flight)return flight;}
     if(!pending){pending={id:draft.id,requestId:crypto.randomUUID().replaceAll('-',''),expectedRevision:revision,value:structuredClone(latest)};pendingSerial=serial;}
     const input=pending,startedSerial=pendingSerial;
     flight=(async()=>{

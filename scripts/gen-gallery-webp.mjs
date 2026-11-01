@@ -18,10 +18,12 @@
  * 2026-10-13：文件名改为 `NN-<内容摘要>-<宽>.webp`。内容摘要包含源图字节与
  * 编码版本/质量，保证中间插图、重排或覆盖源图后 immutable 地址不指向旧照片。
  */
-import { readFile, writeFile, mkdir, stat, readdir, unlink } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { readFile, writeFile, mkdir, stat, readdir, unlink, realpath } from 'node:fs/promises';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { readAlbumDocument } from '../src/lib/album-source.mjs';
+import {validateAlbumKey} from '../src/lib/album-presentation.mjs';
 import { readAlbumOptions } from '../src/lib/album-options.mjs';
 import { galleryFileName } from '../src/lib/album-files.mjs';
 
@@ -50,30 +52,16 @@ for (const name of albums) {
      站主自己换台电脑克隆就会遇到，所以这里统一写成 \r?\n，并按 \r?\n 切行。 */
   const fm = (text.match(/^---\r?\n([\s\S]*?)\r?\n---/) || [])[1];
   if (!fm) fail(`相册 ${name}/index.md 没有 frontmatter`);
-  const title = (fm.match(/^title:\s*(.+)$/m) || [])[1];
-  const date = (fm.match(/^date:\s*(.+)$/m) || [])[1];
-  if (!title || !date) fail(`相册 ${name}/index.md 缺 title 或 date`);
-  const lines = fm.split(/\r?\n/);
-  const images = [];
-  for (let i = 0; i < lines.length; i++) {
-    const s = lines[i].match(/^\s*-\s*src:\s*(\S+)\s*$/);
-    if (!s) continue;
-    const a = (lines[i + 1] || '').match(/^\s*alt:\s*(.+?)\s*$/);
-    if (!a) fail(`相册 ${name} 里 ${s[1]} 没有 alt（alt 必填）`);
-    images.push({ src: s[1], alt: a[1] });
-  }
-  if (images.length === 0) fail(`相册 ${name} 一张图都没有`);
-  if (new Set(images.map((image) => image.src)).size !== images.length) fail(`相册 ${name} 存在重复图源`);
-  let options;
-  try { options = readAlbumOptions(fm); } catch (error) { fail(`相册 ${name}：${error.message}`); }
+  let fields,options;
+  try { validateAlbumKey(name);fields=readAlbumDocument(text);if(fields.draft===true)continue;options=readAlbumOptions(fm); } catch (error) { fail(`相册 ${name}：${error.message}`); }
+  const {title,date,images}=fields;
   parsed.push({ name, title: title.trim(), date: date.trim(), images, ...options });
 }
 // 最新相册（与 index.astro 同规则：date 倒序）—— 首页那 3 张从这里取
-parsed.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+parsed.sort((a,b)=>String(b.date).localeCompare(String(a.date))||(a.name<b.name?-1:a.name>b.name?1:0));
 const homeAlbum = parsed[0];
-if (homeAlbum.images.length < HOME_SHOTS) {
-  fail(`最新相册 ${homeAlbum.name} 只有 ${homeAlbum.images.length} 张图，首页要 ${HOME_SHOTS} 张`);
-}
+if(!homeAlbum)fail('请至少保留一本已发布相册；草稿不会进入公开构建');
+// 一两张照片也可成册，首页槽位循环取已有照片，真实总张数不变。
 
 /* 2) 读上一版 manifest 当缓存表（缺失/旧结构都当空表，不影响正确性） */
 const prevFp = new Map();
@@ -87,6 +75,15 @@ try {
 } catch { /* 没有上一版：全部重编码 */ }
 
 /* 3) 全量生成 */
+// 草稿/移除相册曾有的生成图片也不留在 public 中；仅删除本站生成命名的文件。
+await mkdir(OUT,{recursive:true});
+for(const entry of await readdir(OUT,{withFileTypes:true})){
+  if(entry.isSymbolicLink())fail('相册生成目录不允许符号链接');
+  if(!entry.isDirectory()||parsed.some(album=>album.name===entry.name))continue;
+  const directory=join(OUT,entry.name);
+  if(dirname(resolve(directory))!==resolve(OUT))fail('生成图片清理超出相册目录');
+  for(const file of await readdir(directory))if(/^\d+-(?:[a-f0-9]{12}-)?(?:800|1280)\.webp$/.test(file))await unlink(join(directory,file));
+}
 const result = { albums: [], home: null };
 let encoded = 0, reused = 0, bytes = 0;
 
@@ -100,6 +97,7 @@ for (const album of parsed) {
     const n = idx + 1;                       // 该帧在所属相册里的序号（1 起）
     const rel = img.src.replace(/^\.\//, '');
     const srcPath = join(GALLERY, album.name, rel);
+    if(await realpath(srcPath).catch(()=>null)!==resolve(srcPath))fail(`源图不存在或使用了目录外链接：${album.name}/${rel}`);
     const st = await stat(srcPath).catch(() => null);
     if (!st) fail(`源图不存在: ${srcPath}`);
     const sourceBytes = await readFile(srcPath);
@@ -136,10 +134,11 @@ for (const album of parsed) {
 
   result.albums.push({
     id: album.name, title: album.title, titleEn: album.titleEn, layout: album.layout, date: album.date,
+    ...(album.cover===undefined?{}:{cover:album.cover}),...(album.presentation===undefined?{}:{presentation:album.presentation}),
     total: album.images.length, frames,
   });
   if (album.name === homeAlbum.name) {
-    result.home = { albumId: album.name, title: album.title, total: album.images.length, shots: frames.slice(0, HOME_SHOTS) };
+    result.home = { albumId: album.name, title: album.title, total: album.images.length, shots: Array.from({length:HOME_SHOTS},(_,i)=>frames[i%frames.length]) };
   }
 }
 

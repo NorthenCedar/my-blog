@@ -34,7 +34,7 @@ describe('单册空间陈列产物', () => {
   });
   it('生成清单保留展示选项与真实像素宽，新字段不污染首页照片池', () => {
     for (const album of manifest.albums) {
-      expect(['scatter', 'slices']).toContain(album.layout);
+      expect(['scatter', 'slices','wall']).toContain(album.layout);
       expect(typeof album.titleEn).toBe('string'); // 新相册可以省略英文名，清单写空串。
       for (const frame of album.frames) {
         for (const file of frame.files) expect(file.actualW).toBeGreaterThan(0);

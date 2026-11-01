@@ -39,6 +39,14 @@ export function prepare({repoDir,snapshot,assets,jobId}){
       if(existsSync(file)&&(readPost(readFileSync(file,'utf8')).fields.slug??entry.name)===wanted) writerFail(409,'duplicate_slug','此文章网址已被另一篇文章使用');
     }
   }
+  if(snapshot.kind==='gallery'){
+    for(const image of snapshot.value.fields.images??[]){
+      if(typeof image.src!=='string'||image.src.startsWith('writer-asset:'))continue;
+      const imagePath=writerAssetDirectory('gallery',snapshot.key)+image.src.replace(/^\.\//,'');
+      const file=checkedPath(repoDir,imagePath);
+      if(!lstatSync(file,{throwIfNoEntry:false})?.isFile())writerFail(400,'missing_image','相册照片不存在，请重新选择或上传');
+    }
+  }
   const changes=planChanges(snapshot,existsSync(target)?readFileSync(target,'utf8'):null,assets);
   const text=new TextDecoder().decode(changes[0].bytes);
   if(utf8Length(JSON.stringify({commit:'0'.repeat(40),blobSha:'0'.repeat(40),text,itemHash:'0'.repeat(64)}))>262144) writerFail(413,'base_too_large','发布后的基线过大，请在本地处理');

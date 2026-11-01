@@ -115,7 +115,7 @@ export async function publishedBase(repo:WriterRepository,row:JobRow,commit:stri
   await repo.commitReceipt(commit,row.id);
   const snapshot:WriterDraft=JSON.parse(row.snapshot_json),source=await readPublishedSource(repo,commit,snapshot.kind,snapshot.key),item=snapshot.kind==='talk'?readTalks(source.text).find(t=>t.key===snapshot.key):null;
   if(snapshot.kind==='talk'&&!item)writerFail(409,'invalid_receipt','发布的说说尚未确认');
-  return {commit,blobSha:source.sha,text:source.text,...(item?{itemHash:item.itemHash}:{})};
+  return {commit,blobSha:source.sha,text:source.text,...(item?{itemHash:item.itemHash}:{}),...(snapshot.kind==='gallery'&&snapshot.base?.galleryIndex!==undefined?{galleryIndex:snapshot.base.galleryIndex}:{})};
 }
 async function observePush(db:D1Database,row:JobRow,commit:string,base:WriterBase){
   const encoded=JSON.stringify(base),marker=randomToken(16);if(utf8Length(encoded)>262144)writerFail(413,'base_too_large','发布基线超限，请先导出并在本地处理');
