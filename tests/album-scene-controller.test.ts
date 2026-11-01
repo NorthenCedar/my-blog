@@ -120,6 +120,15 @@ function setup(layout = 'scatter', reduced = false, count = 2) {
 }
 
 describe('真实相册控制器事件回归', () => {
+  it('直接照片墙保留原 DOM 和原生滚动，不启动散片或切片控制器',()=>{
+    const s=setup('wall',false,3);
+    expect(s.root.classes.has('scene-on')).toBe(false);
+    expect(s.figures.every(figure=>s.wall.contains(figure))).toBe(true);
+    expect(s.elements.viewport.handlers.size).toBe(0);
+    expect(s.pendingFrames()).toBe(0);
+    const wheel=s.emit(s.elements.viewport,'wheel',{deltaX:0,deltaY:100,deltaMode:0});
+    expect(wheel.defaultPrevented).toBe(false);
+  });
   it('散片默认接受单指上下拖动，松手沿纵向继续滑行', () => {
     for (const dy of [-120, 120]) {
       const s = setup();

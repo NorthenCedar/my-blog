@@ -1,3 +1,4 @@
+import {writerFixture} from './_writer';
 import { afterEach,expect,it,vi } from 'vitest';
 import { mountWriterEditor } from '../src/scripts/writer/editor';
 import { mountPublish } from '../src/scripts/writer/publish';
@@ -137,4 +138,19 @@ it('文章与项目仍要求上传前说明，相册空图注规则不放宽其�
 it('空册主动选择完整编排后保存并上传横图仍保留明确选择',async()=>{
  const {root,saved}=await open('gallery',{title:'空册',date:'2026-11-01',images:[],draft:true},[],[],{},async()=>({sha256:'d'.repeat(64)}));find(root,'圈注 · 显影').click();find(root,'保存草稿').click();await settle();expect(saved.at(-1).value.fields.presentation).toMatchObject({arrangement:'right',transition:'reveal'});
  const choose=root.all().find(n=>n.type==='file')!;(choose as any).files=[new Blob(['w'])];choose.dispatchEvent(new Event('change'));await settle();find(root,'全部上传到相册').click();await settle();find(root,'保存草稿').click();await settle();expect(saved.at(-1).value.fields.presentation).toMatchObject({arrangement:'right',transition:'reveal'});
+});
+
+it('移除上传照片释放草稿资产关联和100张名额，缓存仍可读取且可再新增',async()=>{
+ const {writerProof}=await import('../functions/api/_lib/writer-auth');const {createDraft,saveDraft}=await import('../functions/api/_lib/writer-drafts');const {readAsset}=await import('../functions/api/_lib/writer-assets');
+ const session=await writerFixture();session.sqlite.exec((await import('node:fs')).readFileSync('migrations/0009_writer_gallery.sql','utf8'));const proof=await writerProof(session.request(),{id:session.owner,auth_version:0} as never);
+ const assets=Array.from({length:100},(_,n)=>({sha256:(n+1).toString(16).padStart(64,'0'),alt:'图'+n})),extra='f'.repeat(64);
+ for(const sha of [...assets.map(a=>a.sha256),extra])session.sqlite.prepare('INSERT INTO writer_assets(owner,sha256,width,height,bytes,size,created_at) VALUES(?,?,800,1200,?,1,1)').run(session.owner,sha,new Uint8Array([1]));
+ const fields={title:'满额相册',date:'2026-11-01',images:assets.map(asset=>({src:'writer-asset:'+asset.sha256,alt:asset.alt,width:800,height:1200}))};
+ const draft=await createDraft(session.db,proof,{kind:'gallery',key:'example',base:null,value:{fields,body:'',assets}});
+ const {root,saved}=await open('gallery',fields,assets,[],{},async()=>({sha256:extra}));
+ find(root,'移除图库项').click();expect(mounted!.getDraft()!.value.assets).toHaveLength(99);expect(mounted!.getDraft()!.value.assets[0].sha256).toBe(assets[1].sha256);for(let i=1;i<100;i++)find(root,'移除图库项').click();find(root,'保存草稿').click();for(let i=0;i<8;i++)await settle();expect(saved.at(-1).value.assets).toEqual([]);
+ const empty=await saveDraft(session.db,proof,{id:draft.id,requestId:'a'.repeat(32),expectedRevision:1,value:saved.at(-1).value});expect(empty.value.assets).toEqual([]);expect(session.sqlite.prepare('SELECT count(*) AS n FROM writer_draft_assets WHERE draft_id=?').get(draft.id)?.n).toBe(0);
+ expect(new Uint8Array((await readAsset(session.db,session.owner,assets[0].sha256)).bytes)).toEqual(new Uint8Array([1]));expect(session.sqlite.prepare('SELECT count(*) AS n FROM writer_assets').get()?.n).toBe(101);
+ const choose=root.all().find(n=>n.type==='file')!;(choose as any).files=[new Blob(['w'])];choose.dispatchEvent(new Event('change'));await settle();find(root,'全部上传到相册').click();await settle();find(root,'保存草稿').click();await settle();expect(saved.at(-1).value.assets).toEqual([{sha256:extra,alt:''}]);
+ await saveDraft(session.db,proof,{id:draft.id,requestId:'b'.repeat(32),expectedRevision:2,value:saved.at(-1).value});expect(session.sqlite.prepare('SELECT sha256 FROM writer_draft_assets WHERE draft_id=?').all(draft.id)).toEqual([{sha256:extra}]);
 });
