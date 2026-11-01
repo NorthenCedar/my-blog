@@ -55,7 +55,7 @@ const scriptsOf = (s: string) =>
    · 入口页 `/gallery`          → 板头 + 手风琴条（AlbumRow）
    · 相册页 `/gallery/<册名>/`  → 砖墙 + 灯箱（PhotoWall） */
 const GAL_SRC = read('src/pages/gallery/index.astro');
-const ROW_SRC = read('src/components/AlbumRow.astro');
+const ROW_SRC = read('src/components/GalleryCover.astro');
 const WALL_SRC = read('src/components/PhotoWall.astro');
 const ALBUM_SRC = read('src/pages/gallery/[album].astro');
 const GAL_CODE = strip(GAL_SRC);
@@ -109,96 +109,7 @@ const GAL_PLATES = plateSegs(GAL);
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const pad3 = (n: number) => String(n).padStart(3, '0');
 
-describe('相册 · 入口条（分板契约）', () => {
-  it('★ 板数 = 相册数（不写死），且按清单位次一块对一册', () => {
-    expect(ALBUMS.length, '相册表空了？').toBeGreaterThan(0);
-    for (const a of ALBUMS) {
-      expect(a.total, `相册「${a.title}」的 total(${a.total}) 与 frames 长度(${a.frames.length}) 不一致 ⇒ 板头会印错数`).toBe(
-        a.frames.length,
-      );
-    }
-    expect(hasDist, '先 npm run build').toBe(true);
-    expect(GAL_PLATES.length, `入口条数应等于相册数 ${ALBUMS.length}`).toBe(ALBUMS.length);
-    GAL_PLATES.forEach((seg, i) => {
-      const a = ALBUMS[i];
-      expect(seg, `第 ${i + 1} 条入口的 data-plate 不是「${a.id}」`).toContain(`data-plate="${a.id}"`);
-      expect(seg, `第 ${i + 1} 条入口的 aria-labelledby 没指向 plate-${i + 1}`).toContain(`aria-labelledby="plate-${i + 1}"`);
-      expect(seg, `板头 h2 缺 id="plate-${i + 1}"`).toContain(`id="plate-${i + 1}"`);
-      /* 顺序 = 清单顺序 ⇒ 「板 01」确实是最新加进清单那一册的相对位次 */
-      expect(seg.indexOf(a.title), `第 ${i + 1} 条入口里找不到相册名「${a.title}」`).toBeGreaterThan(-1);
-    });
-  });
-
-  it('★ 板头是一行完整编目读数（板号 · 相册名 · 帧数 · 日期）', () => {
-    expect(PAGE_CSS, '缺 .plate-no 的样式').toContain('.plate-no');
-    expect(PAGE_CSS, '缺 .plate-title 的样式').toContain('.plate-title');
-    expect(PAGE_CSS, '缺 .plate-meta 的样式').toContain('.plate-meta');
-    GAL_PLATES.forEach((seg, i) => {
-      const a = ALBUMS[i];
-      expect(seg, `第 ${i + 1} 条入口缺「板 ${pad2(i + 1)}」`).toContain(`板 ${pad2(i + 1)}`);
-      expect(seg, `第 ${i + 1} 条入口缺帧数${a.total} 帧`).toContain(`${a.total} 帧`);
-      expect(seg, `第 ${i + 1} 条入口缺日期 ${a.date}`).toContain(a.date);
-      /* 板号两位零填充（<10 册时要读成 板 01，不是 板 1） */
-      expect(seg, `板号没零填充：板 ${pad2(i + 1)}`).toMatch(new RegExp(`板 ${pad2(i + 1)}(?![\\d])`));
-    });
-  });
-
-  it('★★ 板号是**固定编目位次**（清单里的 i + 1），不是"当前可见第几块"', () => {
-    /* ★ 2026-10-07：板号由**入口页**按清单下标传进去（`no={i + 1}`），入口条只负责印它 ——
-       所以两处都要钉住：传的是下标 +1，印的是两位零填充。
-       旧版那条"筛选里不许重写板号"的断言随筛选一起作废（入口页已经没有筛选了），
-       换成等价的一条：**运行时脚本不许碰板号**。 */
-    expect(GAL_CODE, '板号必须取相册在清单里的固定位次（i + 1）').toMatch(/<AlbumRow album=\{a\} no=\{i \+ 1\} \/>/);
-    expect(ROW_CODE, '入口条必须印传进来那个位次').toMatch(/板 \{pad2\(no\)\}/);
-    expect(ROW_CODE, '板号要两位零填充（板 01，不是板 1）').toMatch(/padStart\(2, '0'\)/);
-    expect(
-      scriptsOf(ROW_SRC) + scriptsOf(GAL_SRC),
-      '运行时脚本不许碰板号（板号是编目位次，一旦被"当前第几块"改写，语义就丢了）',
-    ).not.toContain('plate-no');
-    expect(scriptsOf(GAL_SRC), '入口页的脚本不该重建 DOM（只有手风琴状态类那点事）').not.toContain('innerHTML');
-  });
-
-  it('★★ 一册一条：每条挂的是**本册**的照片，且素材池钩子齐全', () => {
-    /* 这条替掉的是上一版的「空板会被一起收起」—— 那个风险随筛选一起消失了
-       （现在"筛到单册"就是"进那一册的页面"，页内没有可筛的东西）。
-       换来的是新结构真正会坏的地方：**三条并列，串册/漏册是最容易犯的错**。 */
-    expect(hasDist, '先 npm run build').toBe(true);
-    /* ★★★ 素材池钩子（显影板的取片源）要在**两个层次**各钉一次，且必须带**属性边界**。
-       ★ 为什么必须带边界：`toContain('data-bath-src')` 连 `data-bath-src-x` 都放行，
-         而 develop.ts 那边订的是精确选择器 `[data-bath-src] figure` —— 差一个字符
-         就整块失灵，且是**静默**的（板里不出底图，要划过才出来，看着像"随机没生效"）。
-       ★ 为什么要盯**源文件**：上面 `GAL_PLATES` 取的是 dist ⇒ 只判产物的话，
-         改坏源文件而没重新构建是**永远绿**的（2026-10-07 的变异验证正是栽在这里）。
-         用**剥过注释**的 `ROW_CODE`：注释里也写着这个词，否则"注释满足断言"就是假绿。 */
-    expect(
-      (ROW_CODE.match(/data-bath-src(?![-\w])/g) ?? []).length,
-      'AlbumRow 源文件里 data-bath-src 应恰好出现 1 次（容器那一个；注释里的不算）',
-    ).toBe(1);
-    GAL_PLATES.forEach((seg, i) => {
-      const a = ALBUMS[i];
-      /* ★ 2026-10-07 第二轮：一条里**最多 15 张**（等距抽样，含首尾）——
-         原来是一条 = 整册每一帧，57 帧那册每条只有 12.2px（目检：连成彩色锯齿）。
-         抽样本身的性质（上限 / 含首尾 / 去重 / 编号是真实序号）在
-         tests/gallery-album-row.test.ts 里逐条钉；这里只钉**结构自洽**。 */
-      const k = Math.min(15, a.total);
-      expect(seg, `第 ${i + 1} 条入口的图没有挂本册 id（串册了）`).toContain(`data-album="${a.id}"`);
-      expect((seg.match(/class="ar-item"/g) ?? []).length, `第 ${i + 1} 条应有 ${k} 张（上限 15）`).toBe(k);
-      expect(
-        (seg.match(new RegExp(`data-album-title="${a.title}"`, 'g')) ?? []).length,
-        `第 ${i + 1} 条里带本册名的 figure 数不对（灯箱与显影板的读数都读它）`,
-      ).toBe(k);
-      expect(seg, `第 ${i + 1} 条缺 data-bath-src（显影板的素材池钩子）`).toMatch(/data-bath-src(?![-\w])/);
-    });
-    /* 产物侧复核：源码有、构建期被摇掉也是一种坏法（比如挪进被 tree-shake 的分支）。 */
-    expect(
-      (GAL.match(/data-bath-src(?![-\w])/g) ?? []).length,
-      '产物里素材池钩子应每册一个',
-    ).toBe(ALBUMS.length);
-    /* 反向正对照：入口页**不再**有砖墙与筛选（砖墙整块搬去了相册页） */
-    expect(GAL, '入口页不该再出现砖墙（.wf）').not.toContain('class="wf"');
-    expect(GAL, '入口页不该再出现筛选条').not.toContain('class="filters"');
-  });
-});
+// 新封面入口的内容、位次、链接与全量素材池由 gallery-stage.test.ts 验证。
 
 describe('相册屏 · 错缝砖墙契约', () => {
   it('★★ 错缝是 `margin-top`，**不是** `transform`（transform 不占位 ⇒ 会咬到下一行）', () => {
@@ -273,8 +184,8 @@ describe('相册屏 · 错缝砖墙契约', () => {
     /* ★★ 边界必须写清楚（2026-10-07）：**入口条的细条反而是必须裁的** ——
        十几 px 宽的槽里要的是"照片的一条竖切面"，contain 会把整张照片压成一根发丝。
        ⇒ 这条断言只管档案视图；入口条那侧的 `object-fit: cover` 由下面这行**显式认领**。 */
-    expect(ROW_CODE, '入口条那侧应当**明确**用 cover 裁（细条的切面就是这么来的）').toMatch(
-      /\.ar-frame img\s*\{[^}]*object-fit:\s*cover/,
+    expect(read('src/styles/gallery-stage.css'), '新封面完整显示照片').toMatch(
+      /\.cover-link img\s*\{[^}]*object-fit:\s*contain/,
     );
   });
 
@@ -370,8 +281,7 @@ describe('相册 · 与页面其他部分的互锁', () => {
        ★ 2026-10-07 第二轮：入口条改**等距抽样、上限 15** ⇒ 这里不再是全站帧数之和，
          而是 `Σ min(15, total)`。素材池小了一半（40 / 82）——
          这是"少图"的直接后果，但显影板要的是"随便挑一张横幅"，40 张足够。 */
-    const POOL = ALBUMS.reduce((n, a) => n + Math.min(15, a.total), 0);
-    expect((GAL.match(/<figure class="ar-item"/g) ?? []).length, `入口页应有 ${POOL} 个素材 figure`).toBe(POOL);
+    expect((GAL.match(/data-sp-item="/g) ?? []).length, '原盘保留全部照片作为显影素材池').toBe(TOTAL);
   });
 
   it('★ 缩略图链接仍是 data-no-transition（灯箱接管这次点击，页面蒙版必须放行）', () => {
@@ -415,7 +325,7 @@ describe('相册 · 红线与预算', () => {
 
     /* 入口条那一段：从板头到文件尾（它的样式块里没有深底，所以没有合法的字面色值）。
        ⚠ 结尾是 `<script>` —— 剥过注释的 JS 里也不该有 `#rgb` / `rgb()`。 */
-    const rowCss = ROW_CODE.slice(ROW_CODE.indexOf('.plate {'));
+    const rowCss = strip(read('src/styles/gallery-stage.css')).replace(/url\("data:image[^"]*"\)/g, '');
     expect(rowCss.length, '没切到入口条那一段样式').toBeGreaterThan(400);
     expect(rowCss, '入口条样式里出现了字面色值').not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(rowCss, '入口条样式里出现了 rgba()（alpha 由 8 位 hex 承载）').not.toMatch(/\brgba?\(/);
@@ -426,7 +336,7 @@ describe('相册 · 红线与预算', () => {
     expect(tokens, '--deco-plate-fine 必须是 --accent(#2d7d46) 压 alpha 的 6% 档').toMatch(
       /--deco-plate-fine:\s*#2d7d46[0-9a-f]{2}/,
     );
-    expect(ROW_CODE, '入口条的占位底必须用 token').toMatch(/background:\s*var\(--deco-plate-fine\)/);
+    expect(rowCss, '封面底色必须用 token').toContain('var(--gallery-paper)');
     expect(WALL_CODE, '砖墙的占位底必须用 token').toMatch(/background:\s*var\(--deco-plate-fine\)/);
   });
 });

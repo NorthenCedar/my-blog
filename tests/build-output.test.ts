@@ -1322,7 +1322,7 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
   // 实测（2026-09-26）：1971 字节（筛选 + 灯箱，零依赖）。余量 4173。
   // 灯箱刻意走**渐进增强**：图包在 <a href="1280档"> 里，JS 到位才拦截点击开灯箱 ——
   // 所以无 JS 时页面完整可用（点图直接开大图），也不需要第二个 `html.js` 门控脚本。
-  it('相册页 JS 总量（内联 + 同源外链闭包）≤ 25 KB', () => {
+  it('相册页 JS 总量（内联 + 同源外链闭包）≤ 36 KiB', () => {
     /* ★ 2026-10-07 **原地改口径**（不新开一条）：螺旋盘搬进本页后，装置的脚本是
        **外链 chunk**（SpiralPlate 5953 + rl-core 1208）—— 只算内联会**整台漏掉**，
        这条预算就退化成"守着一个空壳"。改成与文章页 / 螺旋盘页同一条口径：
@@ -1339,7 +1339,8 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     const inline = sizes.reduce((a, b) => a + b, 0);
     // 2026-10-18（回复提醒）：共享块多了铃铛，实测 24578 —— 上一轮只剩 8 字节余量，当场撞线。
     // 站主拍板 24 KiB → 25 KiB，仍是「加一两处交互够用、把 three 拖进来必炸」的量级。
-    const BUDGET = 25600;
+    // 五幕编排、长线绘制和主题状态增加约 9 KiB，仅调整本页预算；不引入三维引擎。
+    const BUDGET = 36864;
     const { code, files } = jsClosure(page);
     const full = Buffer.byteLength(code, 'utf8');
     console.log(

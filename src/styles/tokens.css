@@ -911,3 +911,10 @@ html.dark {
 /* 关于页第四版：分段阅读、透明正文与浮动章节导航。 */
 :root{--about-line:#1a1a1a26;--about-glass:#fafaf7ed;--about-shade:#1a1a1a16;--about-hover:#266b3b0d;--about-space:clamp(25px,5.4vw,90px);--about-serif:'Songti SC','Noto Serif CJK SC','STSong','SimSun',serif}
 html.dark{--about-line:#f2f4f12e;--about-glass:#141416ed;--about-shade:#00000044;--about-hover:#ff7b0010}
+
+/* 相册封面舞台：经体验稿确认的纸白、胶片灰绿与暗色铜金。 */
+ :root{--gallery-paper:#fafaf7;--gallery-ink:#1a1a1a;--gallery-muted:#68716a;--gallery-accent:#286e40;--gallery-stroke:#2b7446;--gallery-hair:#244f302b;--gallery-image-line:#1a1a1a24;--gallery-image-shadow:#13281921;--gallery-dialog-shadow:#17351e2e;--gallery-backdrop:#15261b6b;--gallery-hover:#286e400b;--gallery-serif:'Songti SC','Noto Serif CJK SC',STSong,SimSun,serif}
+html.dark{--gallery-paper:#0b0b0c;--gallery-ink:#f2f4f1;--gallery-muted:#a6aaa4;--gallery-accent:#efa66c;--gallery-stroke:#efa66c;--gallery-hair:#efa66c42;--gallery-image-line:#f2f4f13b;--gallery-image-shadow:#00000099;--gallery-dialog-shadow:#00000099;--gallery-backdrop:#000000ad;--gallery-hover:#efa66c0c}
+ :root{--gallery-film-base:#8c9b8d;--gallery-film-shade:#d0d5c8;--gallery-film-edge:#54725a;--gallery-film-frame:#708777;--gallery-film-opacity:.40;--gallery-bath-faint:#ffffffa6}
+html.dark{--gallery-film-base:#785737;--gallery-film-shade:#221c17;--gallery-film-edge:#c28d58;--gallery-film-frame:#a37344;--gallery-film-opacity:.47;--gallery-bath-faint:#15100bb0}
+:root{--gallery-detail-1:#00000026}

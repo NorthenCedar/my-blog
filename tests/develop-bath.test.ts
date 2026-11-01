@@ -61,10 +61,10 @@ const ASTRO = readFileSync('src/pages/gallery/index.astro', 'utf8');
    ★ 这条断言守的是"网格图挂的 width/height 必须是 800 档" ⇒ 它要看的是**产 figure 的那个文件**，
      也就是这一个 —— 不能继续读 index.astro（那里已经一个 figure 都没有了，
      换个读法就会变成"断言恒假"或"恒真"的假红/假绿）。 */
-const ROW = readFileSync('src/components/AlbumRow.astro', 'utf8');
+const ROW = readFileSync('src/components/SpiralPlate.astro', 'utf8');
 /* ★ 读 CSS 判据要用**去掉注释**的那份：注释里常会写"不要写 width:100vw"这种反面例子，
    不剥掉注释的话，判"没有 100vw"的断言会被注释里的字样自己打脸（本轮就撞上了）。 */
-const ACSS = ASTRO.replace(/\/\*[\s\S]*?\*\//g, ' ');
+const ACSS = readFileSync('src/styles/gallery-stage.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, ' ');
 const num = (name: string) =>
   Number((SRC.match(new RegExp(`${name}\\s*=\\s*([\\d.]+(?:e[-+]?\\d+)?)`, 'i')) ?? [])[1]);
 
@@ -486,8 +486,8 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
        manifest 的 `w` 是"请求宽"不是实际宽（源图窄于目标宽时 withoutEnlargement 生效），
        照 1280 档判会有 6 张横竖判反（实测：「苏州的美」manifest 1280×1184 像横幅，
        实际文件 896×1184 是竖幅）；照 800 档判一张都不反。 */
-    const gridTier = /const\s+g\s*=\s*at\(f,\s*GRID_W\)/.test(ROW);
-    const whAttrs = /width=\{g\.w\}\s+height=\{g\.h\}/.test(ROW);
+    const gridTier = /grid:\s*at\(fr,\s*GRID_W\)/.test(ROW);
+    const whAttrs = /width=\{x\.grid\.w\}\s+height=\{x\.grid\.h\}/.test(ROW);
     console.log(
       `判据 抽片 实测: ${land ? '只收 w>h ✓' : '⚠️ 没收窄到横幅'} · `
       + `${pick ? '打开时随机抽一张 ✓' : '⚠️ 没有随机抽片'} · `
@@ -502,72 +502,19 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     expect(gridTier && whAttrs, '网格图挂的不是 800 档尺寸 ⇒ 脚本端判横竖/定图源的口径对不上').toBe(true);
   });
 
-  it('★ 整屏首屏：铺满视口、一屏高，且不靠 100vw', () => {
-    /* ★★ 2026-10-01 第四轮：站主「不如直接把这个放在相册页整屏」⇒ 这条判据**翻过来**了：
-       上一版钉的是"不是满宽条"，现在钉的是"**是**满宽 + 一屏高"。 */
-    const bleed = /margin-inline:\s*calc\(50%\s*-\s*50vw\)/.test(ACSS);
-    /* ★★ 第五轮：站主「打开相册那个直接顶头」⇒ 顶栏改成 absolute 浮在板上，
-       板自己就是纯 `100svh`（**不再**减顶栏高度）。 */
-    const svh = /height:\s*100svh/.test(ACSS);
-    const noVw = !/\bwidth:\s*100vw/.test(ACSS);
-    /* ★★ 还有第二个 48px：板在 `.shell` 里，`.shell` 有 `padding: var(--sp-7) …`（3rem）
-       ⇒ 光把顶栏浮起来，板仍被推到 y=48（实测过，别再只改一半）。
-          正解是给板一个**负 margin-top 抵消**（不去改共用的 `.shell`）；
-          ★ 手机档必须撤掉它 —— 那边板是页头里的小板，负 margin 会让它骑到页头上边。 */
-    const negTop = /\.bath\s*\{[^}]*margin-top:\s*calc\(-1\s*\*\s*var\(--sp-7\)\)/.test(ACSS);
-    const mNegZero = /@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.bath\s*\{[^}]*margin-top:\s*0/.test(ACSS);
-    /* ★ 顶栏浮层：必须是 absolute（不是 fixed —— fixed 会一直跟着滚，本站内页顶栏是滚走的），
-       且**包在 min-width:768px 里**（手机档是页头旁边的小板，顶栏要回到普通文档流）。 */
-    /* ★ 本页是 scoped style ⇒ 选择器写成 `:global(body.chrome-page .topbar.topbar)`
-       ⇒ 正则里 `.topbar.topbar` 后面是 `)` 而不是 `{`，别漏了这一个字符。 */
-    const tbAbs = /@media\s*\(min-width:\s*768px\)\s*\{[\s\S]*?\.topbar\.topbar\s*\)\s*\{[^}]*position:\s*absolute/.test(ACSS);
-    const tbZ = /\.topbar\.topbar\s*\)\s*\{[^}]*z-index:\s*30/.test(ACSS);
-    /* ★ 桌面：板是页头的**第一个**子元素（整屏），标题被它顶到首屏之下。
-       手机（≤767px）：同一份 DOM 用 order 把板排到标题**右边**，变回小板。 */
-    const firstChild = ASTRO.indexOf('class="bath"') > 0
-      && ASTRO.indexOf('class="bath"') < ASTRO.indexOf('class="pagehead-main"');
-    const noPadTop = /\.pagehead\.pagehead\s*\{[^}]*padding-top:\s*0/.test(ACSS);
-    const mq = /@media\s*\(max-width:\s*767px\)/.test(ACSS);
-    const mOrder = /\.pagehead-main\s*\{[^}]*order:\s*1/.test(ACSS) && /\.bath\s*\{[^}]*order:\s*2/.test(ACSS);
-    const mAr = /aspect-ratio:\s*var\(--bath-ar/.test(ACSS);
-    const mW = /width:\s*min\(56%,\s*240px\)/.test(ACSS);
-    /* ★ flex: 0 0 auto 必须有：flex 子项默认可收缩，缺了它标题一挤就把板压扁
-       （实测 390 视口：CSS 写 179 px，实测被压到 133 px）。 */
-    const mNoShrink = /\.bath\s*\{[^}]*flex:\s*0\s+0\s+auto/.test(ACSS);
-    /* ★ 笔触在**小板**上要另算一档：整屏那档（板高的 0.15375）搬到 160px 小板上只有 25 px */
-    const small = /RADIUS_SMALL_K\s*=\s*0\.19/.test(CODE) && /RB\s*=\s*Math\.min\(W,\s*H\)\s*<\s*SMALL_PLATE/.test(CODE);
-    /* ★★ 半径必须按**板高 H**算（参考站是 `size*1.35/height`），不是短边、不是 min(W,H)。
-       本站两种版面都是横的（H 就是短边）⇒ 现在两者相等，但**写法**必须钉住：
-       哪天板变成竖的，按短边算就会跟参考站差一个宽高比。 */
-    /* ★★ 半径的单位必须是**板高**（参考站 `size*1.35/height`）：场是 uv 空间的，
-       `off = (uv − pointer) * vec2(aspect, 1)` ⇒ |off| 的单位就是"板高的比例"
-       ⇒ 半径直接取 RB（= RADIUS_K = 0.15375），**不要再乘一次 H**（乘了就是平方量纲）。 */
-    const byHeight = /const\s+radius\s*=\s*RB;/.test(CODE)
-      && /const\s+ox\s*=\s*\(u\s*-\s*pu\)\s*\*\s*aspect/.test(CODE);
-    console.log(
-      `判据 整屏 实测: ${bleed ? '逃出 .shell 铺满宽 ✓' : '⚠️ 没有满宽手法（会被 .shell 框窄）'} · `
-      + `${svh ? '高 = 100svh（顶到页面最顶端）✓' : '⚠️ 高度不是一屏'} · `
-      + `${tbAbs && tbZ ? '顶栏 absolute 浮在板上 ✓' : '⚠️ 顶栏没浮起来（板顶不到头）'} · `
-      + `${negTop ? '负 margin 抵消 .shell 内边距 ✓' : '⚠️ 没抵消 .shell 的 48px（板仍被推到 y=48）'} · `
-      + `${mNegZero ? '手机档撤掉负 margin ✓' : '⚠️ 手机档还留着负 margin（板会骑到页头上）'} · `
-      + `${noVw ? '没有 width:100vw ✓' : '⚠️ 用了 width:100vw（含滚动条宽度 ⇒ 会溢出）'} · `
-      + `${firstChild ? '是页头第一个子元素 ✓' : '⚠️ 不在页头最前（首屏不是它）'} · `
-      + `${noPadTop ? '页头上内边距清零 ✓' : '⚠️ 首屏顶上留了一条空'} · `
-      + `${mq && mOrder && mAr && mW && mNoShrink ? '手机档回到页头旁的小板 ✓' : '⚠️ 手机档没回到小板'} · `
-      + `${small ? '小板另算一档笔触 ✓' : '⚠️ 小板沿用了整屏的笔触（25px，手指擦不动）'} · `
-      + `${byHeight ? '半径按板高算 ✓' : '⚠️ 半径不是按板高（参考站是 size*1.35/height）'}`,
-    );
-    expect(bleed, '没有满宽手法 ⇒ 整屏会被 .shell 框成"中间一块"（首页 .band 踩过同一处）').toBe(true);
-    expect(svh, '高度不是 100svh ⇒ 板没顶到页面最顶端（站主：「直接顶头」）').toBe(true);
-    expect(tbAbs && tbZ, '顶栏没有 absolute 浮起来 ⇒ 板被顶栏挤下去，不是"顶头"').toBe(true);
-    expect(negTop, '没抵消 .shell 的 padding-top（3rem）⇒ 板仍被推到 y=48，顶不到头').toBe(true);
-    expect(mNegZero, '手机档还留着负 margin ⇒ 小板会骑到页头上边').toBe(true);
-    expect(noVw, 'width:100vw 含滚动条宽度 ⇒ 横向溢出').toBe(true);
-    expect(firstChild, '板不是页头第一个子元素 ⇒ 打开相册页先看到标题，不是整屏装置').toBe(true);
-    expect(noPadTop, '页头还有上内边距 ⇒ 首屏顶上多一条空白，不是从顶部铺到底').toBe(true);
-    expect(mq && mOrder && mAr && mW && mNoShrink, '手机档没回到"页头旁边的小板"（站主：触屏涂抹不习惯）').toBe(true);
-    expect(small, '小板沿用整屏的笔触比例 ⇒ 一笔只有 25 px，手指擦不动').toBe(true);
-    expect(byHeight, '笔触半径不是按板高算 ⇒ 与参考站 size*1.35/height 的口径不一致').toBe(true);
+  it('★ 显影板在 body 具名槽固定铺满，手机也能涂抹上下留白', () => {
+    expect(ASTRO).toContain(' fullWidth');
+    const plate=ASTRO.slice(ASTRO.indexOf('<Fragment slot="plate">'),ASTRO.indexOf('</Fragment>'));
+    expect(plate).toContain('data-bath hidden');
+    expect(ACSS).toMatch(/\.bath\s*\{[^}]*position:\s*fixed;inset:\s*0/);
+    expect(ACSS).not.toMatch(/\bwidth:\s*100vw/);
+    expect(ACSS).toMatch(/html\.on-develop body\.gallery-story>main\{pointer-events:none/);
+    expect(ACSS).toMatch(/html\.on-develop body\.gallery-story \.bath\{visibility:visible;pointer-events:auto/);
+    expect(ACSS).toContain('100svh');
+    // 原装置的高度归一化笔触不因全屏舞台改变。
+    expect(CODE).toMatch(/const\s+radius\s*=\s*RB;/);
+    expect(CODE).toMatch(/const\s+ox\s*=\s*\(u\s*-\s*pu\)\s*\*\s*aspect/);
+    expect(CODE).toMatch(/RADIUS_SMALL_K\s*=\s*0\.19/);
   });
 
   /* ★★ 2026-10-08：这里原有「★ 鼠标上去显示那个跟着手的白圈（照抄参考站 .pointer-dot）」

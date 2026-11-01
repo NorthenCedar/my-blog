@@ -755,7 +755,7 @@ describe('时间切片 · 产物骨架（无 JS 可用是底线）', () => {
 
 describe('时间切片 · 相册页的交接（站主第九轮 ③：缓缓浮上来）', () => {
   it('交接层与内容上浮只在 .tsl-in 那一次播；默认版面逐字节不变', () => {
-    const gal = readFileSync('src/pages/gallery/index.astro', 'utf8');
+    const gal = readFileSync('src/pages/gallery/index.astro', 'utf8') + readFileSync('src/styles/gallery-stage.css', 'utf8');
     // ① 交接层：一屏与剧场绿幕同款的深绿（同一组 token、同一条 178deg 梯度）
     expect(gal).toContain('class="tsl-veil"');
     expect(gal).toMatch(/\.tsl-veil\s*\{\s*display:\s*none/); // 没有标记时它不存在
@@ -763,20 +763,12 @@ describe('时间切片 · 相册页的交接（站主第九轮 ③：缓缓浮�
        选择器都补 data-astro-cid-*，而 `.tsl-in` 挂在 <html>（Base 组件渲染，
        另一个 cid）⇒ 不加 :global 编译出来是 `.tsl-in[data-astro-cid-x] …`，
        **永远匹配不上**，交接层与上浮动效双双静默失效（本轮实测踩到）。 */
-    expect(gal).toContain(':global(.tsl-in) .tsl-veil');
-    expect(gal).toContain('@keyframes tsl-veil-out');
-    expect(gal).toContain('background: var(--gallery-entry-bg)');
-    // ② 内容上浮：板里的花体字 + 板下的标题/筛选
-    expect(gal).toContain('@keyframes tsl-rise-in');
-    expect(gal).toContain(':global(.tsl-in) .bath-mark');
-    expect(gal).toContain(':global(.tsl-in) .pagehead-main');
-    /* ★ 2026-10-07：上浮的第二组元素从「筛选条」换成了「相册入口条」——
-       筛选随"一册一页"一起取消了（页内再筛一个只有一个选项的集合没有意义），
-       现在页头之下最先浮上来的是那几条入口。 */
-    expect(gal).toContain(':global(.tsl-in) .rows');
-    // 站规：位移只用 transform、显隐只用 opacity；减少动效的读者整套不播
-    expect(gal).toContain('prefers-reduced-motion: no-preference');
-    expect(gal).toMatch(/transform:\s*translateY\(1\.1rem\)/);
+    expect(gal).toContain('html.tsl-in body.gallery-story .tsl-veil');
+    expect(gal).toContain('@keyframes gallery-veil-out');
+    expect(gal).toContain('background:var(--gallery-entry-bg)');
+    // 新版文字逐行浮现由舞台 WAAPI 处理；交接层仅淡出，减少动效时撤掉。
+    expect(gal).toContain('prefers-reduced-motion:reduce');
+    expect(gal).toContain('@keyframes gallery-veil-out');
     // ③ 交接标记必须在**首次绘制之前**挂上（<head> 里的同步脚本）
     const base = readFileSync('src/layouts/Base.astro', 'utf8');
     const bootstrap = base.match(/<script is:inline>([\s\S]*?)<\/script>/)?.[1];
@@ -802,9 +794,8 @@ describe('时间切片 · 相册页的交接（站主第九轮 ③：缓缓浮�
   it('产物 CSS：交接层选择器真的匹配得上（作用域只加在最后那段）', () => {
     const css = distCss();
     expect(css).toContain(':root'); // 有东西可查（防空跑成恒真）
-    expect(css).toMatch(/\.tsl-in\s+\.tsl-veil\[data-astro-cid-[a-z0-9]+\]/);
+    expect(css).toMatch(/html\.tsl-in body\.gallery-story \.tsl-veil\{/);
     expect(css).not.toMatch(/\.tsl-in\[data-astro-cid-[a-z0-9]+\]\s+\.tsl-veil/);
-    expect(css).toMatch(/\.tsl-in\s+\.pagehead-main\[data-astro-cid-[a-z0-9]+\]/);
     // 主页那一格署名同理：它是「深底上的链接」，必须用深底链色，不能落到
     // 全站 `a{color:var(--accent-ink)}` 那条纸上链色（深底上几乎看不见）
     const home = homepageCss();

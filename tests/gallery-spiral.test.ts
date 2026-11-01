@@ -943,8 +943,8 @@ describe('螺旋盘 · 红线与预算', () => {
        放**入口**」⇒ 用产物里的**字节偏移**判，比看类名可靠。 */
     const iBath = GAL_HTML.indexOf('data-bath');
     const iSp = GAL_HTML.indexOf('data-spiral');
-    const iRow = GAL_HTML.indexOf('data-album-row');
-    const iEntry = GAL_HTML.indexOf('class="entry"');
+    const iRow = GAL_HTML.indexOf('data-gallery-album');
+    const iEntry = GAL_HTML.indexOf('全屏打开螺旋盘');
     expect([iBath, iSp, iRow, iEntry].every((i) => i >= 0), '页序四段没找齐').toBe(true);
     expect(iBath, '显影板必须排在螺旋盘之前').toBeLessThan(iSp);
     expect(iSp, '螺旋盘必须排在相册入口条之前').toBeLessThan(iRow);

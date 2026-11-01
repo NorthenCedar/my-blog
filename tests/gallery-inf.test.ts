@@ -10,7 +10,7 @@ import { RUNTIME_DEPS_ALLOWED } from './_deps';
  *   「1.三条路都换。2.v2。3.A。4.0.08。5.保留。6.墨迹宽度与日志页 ∞ 同档」
  *
  * 这一族真正会坏的地方**不是样式写错**（那看得见），是三件**看不见**的事：
- *   ① **三页漏挂 `bodyClass`** —— 漏的那一页会同时显示百褶 ∞ 与本 ∞ 两层母题，
+ *   ① **单册与独立螺旋盘两页漏挂 `bodyClass`** —— 漏的那一页会同时显示百褶 ∞ 与本 ∞ 两层母题，
  *      而构建、测试、截图**全都不会报错**（TagsPlate 里那条注释记的就是这个坑）。
  *   ② **挂法角色写错**（不是 fixed / 不是 z-index:-1）—— 底纹会盖住正文或跳位。
  *   ③ **层宽/比例与素材脱钩** —— 改素材忘了改 CSS，墨迹会被拉扁或切掉。
@@ -25,8 +25,8 @@ const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
 /** 剥两类注释：Astro 模板里的 JSX 块注释、以及 <style> 里的 CSS 块注释。 */
 const strip = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
 
-/** 相册区的三条路由 —— 都在 `src/pages/gallery/` 下。 */
-const ROUTES = ['src/pages/gallery/index.astro', 'src/pages/gallery/[album].astro', 'src/pages/gallery/spiral.astro'];
+/** 相册区的两条路由 —— 都在 `src/pages/gallery/` 下。 */
+const ROUTES = ['src/pages/gallery/[album].astro', 'src/pages/gallery/spiral.astro'];
 const COMPONENT = 'src/components/GalleryInf.astro';
 
 const COMP_SRC = read(COMPONENT);
@@ -52,8 +52,8 @@ const ALL_CSS = (
     : '') + inlineStyles
 ).replace(/\[data-astro-cid-[a-z0-9]+\]/g, '');
 
-describe('相册 ∞ · 三页必须同进同退', () => {
-  it('★★ 三条路由都挂了 bodyClass 与 plate 槽（漏一页 = 两层母题叠着，且四处都不报错）', () => {
+describe('相册 ∞ · 单册与独立螺旋盘两页必须同进同退', () => {
+  it('★★ 两条路由都挂了 bodyClass 与 plate 槽（漏一页 = 两层母题叠着，且四处都不报错）', () => {
     for (const p of ROUTES) {
       const src = read(p);
       expect(src, `${p} 没挂 bodyClass="gallery-inf-plate"（它会退回去显示百褶 ∞，与本 ∞ 叠着）`).toContain(
@@ -66,13 +66,13 @@ describe('相册 ∞ · 三页必须同进同退', () => {
     }
   });
 
-  it('★★ 三页的 bodyClass 字面量必须**完全相同**（差一个字符就是两个不同的类）', () => {
+  it('★★ 单册与独立螺旋盘两页的 bodyClass 字面量必须**完全相同**（差一个字符就是两个不同的类）', () => {
     const got = ROUTES.map((p) => read(p).match(/bodyClass="([^"]+)"/)?.[1]);
-    expect(new Set(got).size, `三页的 bodyClass 不一致：${got.join(' / ')}`).toBe(1);
+    expect(new Set(got).size, `单册与独立螺旋盘两页的 bodyClass 不一致：${got.join(' / ')}`).toBe(1);
     expect(got[0]).toBe('gallery-inf-plate');
   });
 
-  it('★ 底纹层只有一个来源（组件），三页不许各写一份 `.gallery-inf`', () => {
+  it('★ 底纹层只有一个来源（组件），单册与独立螺旋盘两页不许各写一份 `.gallery-inf`', () => {
     for (const p of ROUTES) {
       expect(read(p), `${p} 自己写了一份 .gallery-inf ⇒ 三份会各自腐化`).not.toContain('.gallery-inf');
     }
@@ -106,7 +106,7 @@ describe('相册 ∞ · 挂法角色（与百褶 ∞ 同角色，只有母题不
     expect(hasDist, '先 npm run build').toBe(true);
     /* ★ 判据取**产物**：Astro 从真素材上量出 width/height 属性写进 <img>。
        素材被换掉而 CSS 没跟 ⇒ 这里立刻红（不用去解析 webp 头）。 */
-    const html = pageHtml('gallery/index.html');
+    const html = pageHtml('gallery/spiral/index.html');
     const img = html.match(/<img[^>]*class="gallery-inf-img"[^>]*>/)?.[0] ?? '';
     expect(img, '产物里找不到 .gallery-inf-img').toBeTruthy();
     const iw = img.match(/width="(\d+)"/)?.[1];
@@ -157,9 +157,9 @@ describe('相册 ∞ · 红线', () => {
 });
 
 describe('相册 ∞ · 产物', () => {
-  it('★★ 三页产物里都有这一层，且 body 类名对', () => {
+  it('★★ 单册与独立螺旋盘两页产物里都有这一层，且 body 类名对', () => {
     expect(hasDist, '先 npm run build').toBe(true);
-    for (const p of ['gallery/index.html', 'gallery/人像/index.html', 'gallery/spiral/index.html']) {
+    for (const p of ['gallery/人像/index.html', 'gallery/spiral/index.html']) {
       const html = pageHtml(p);
       expect(html, `${p} 的 body 缺 gallery-inf-plate`).toContain('class="chrome-page gallery-inf-plate"');
       expect(html, `${p} 产物里没有 .gallery-inf 这一层`).toContain('class="gallery-inf"');

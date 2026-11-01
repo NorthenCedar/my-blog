@@ -1,445 +1,54 @@
 ---
-/**
- * 相册入口页（P5）—— 整屏显影板 + 螺旋盘 + **按册的入口条**（2026-10-07 改版）。
- *
- * ── 这一页现在是什么 ──────────────────────────────────────────────
- *   显影板（整屏，滚下去才见内容）→ 螺旋盘（一座装置，滚轮让给页面）→
- *   **一册一条的入口条**（`AlbumRow`）→ 螺旋盘的全屏入口（页末一行）。
- *
- * ★★ 为什么"铺开全部照片"的砖墙**不在这里了**（站主 2026-10-07）：
- *   「**下面不放现在全部铺开的，放入口**，类似这样的，**有几个文件夹就放几个**……
- *     点击**放大的照片**就**进入这个文件夹**，就像现在本站的照片砖墙一样，
- *     **不过是单独的一页**」
- *   ⇒ 砖墙搬去 `/gallery/<册名>/`（`src/components/PhotoWall.astro`，一册一页），
- *     本页只留"入口"：一条 = 一个相册。
- *   ⇒ 连带**删掉**的：筛选条（`.filters`）与它那段脚本 —— 一册一页之后，
- *     "筛到单册"就是"进那一册"，页内再放一组按钮等于让访客去筛一个只有一个选项的集合。
- *
- * ── 相册数一律不写死 ──────────────────────────────────────────────
- *   清单来自 public/gallery/manifest.json（由 scripts/gen-gallery-webp.mjs 从 content/ 生成，
- *   而 `npm run build` 的第一步就是跑它）⇒ 站主往 content/gallery/ 丢一个新文件夹、推上去，
- *   本页自动多一条入口、相册页自动多一页。**这里没有一处写着"3"。**
- *
- * ── 三处刻意偏离冻结原型 prototype/terminal/gallery.html（理由不变）──────────
- *  ① **不用 `body.no-js` 门控**：改成渐进增强 —— 图片包在 `<a href="1280档">` 里，
- *     JS 到位才拦截点击开灯箱（灯箱现在在相册页那一侧）。于是无 JS 时点图直接开大图，
- *     页面完整可用，且不需要第二个门控脚本。
- *  ② **灯箱取图走 manifest 的 1280 档**，不用 `img.currentSrc`（网格图是 800 档）。
- *  ③ **不印 `RULE ≤2MB`**：那条规则没有任何测试守它 ⇒ 要么量出来再印、要么不印，这里选不印。
- */
 import Base from '../../layouts/Base.astro';
-import PageTitle from '../../components/PageTitle.astro';
-import PageReadout from '../../components/PageReadout.astro';
 import SpiralPlate from '../../components/SpiralPlate.astro';
-import AlbumRow from '../../components/AlbumRow.astro';
-import GalleryInf from '../../components/GalleryInf.astro';
+import GalleryCover from '../../components/GalleryCover.astro';
 import manifest from '../../../public/gallery/manifest.json';
-/* ★ 板里那行手写花体是**站名** ⇒ 必须从 content/site.md 读，不能写死在 src/ 里
-   （架构契约：主题不持有正文/站名，有 tests/content-invariants.test.ts 守着）。 */
-import { getSite } from '../../lib/site';
-const siteWordmark = (await getSite()).wordmark;
-
-type File = { w: number; h: number; url: string };
-type Frame = { alt: string; src: string; files: File[] };
-type Album = { id: string; title: string; date: string; total: number; frames: Frame[] };
-
-const albums = manifest.albums as Album[];
-const total = albums.reduce((n, a) => n + a.total, 0);
-const shareFrame = albums[0]?.frames[0];
-const shareImage = shareFrame?.files.reduce<File | undefined>((largest, file) => !largest || file.w > largest.w ? file : largest, undefined)?.url;
+import {getSite} from '../../lib/site';
+import {coverPresentation,type GalleryAlbum} from '../../lib/gallery-stage';
+import {filmPattern} from '../../lib/gallery-film.mjs';
+const albums=(manifest.albums as GalleryAlbum[]).filter(album=>album.frames.length);
+const total=albums.reduce((sum,album)=>sum+album.total,0),count=albums.length+2;
+const siteWordmark=(await getSite()).wordmark;
+const first=albums[0]?.frames[0],shareImage=first?.files.reduce((a,b)=>b.w>a.w?b:a).url;
 ---
-
-<Base title="相册" description={`${albums.map(album => album.title).join('、')} · ${total} 张照片`} shareImage={shareImage} shareImageAlt={shareFrame?.alt} chrome="page" current="gallery" bodyClass="gallery-inf-plate">
-  {/* ① 视口底纹 ∞（站主 2026-10-08：「替换掉整个相册页的百褶无限符号」）。
-      ★ 必须走 `plate` 具名槽：普通 slot 会落进 `.shell` 里，而页面过渡给它加 transform
-        ⇒ 装饰层会跳位。三页共用一份，见 `GalleryInf.astro`。 */}
-  <Fragment slot="plate"><GalleryInf /></Fragment>
-
-  {/* ★★ 交接层（站主第九轮 ③：「到绿屏进相册时相册页内容缓缓浮上来，要丝滑点」）。
-      它只在**从剧场绿幕切过来**这一次露面：主页装置在跳转前把 `tsl-nav` 写进
-      sessionStorage，<head> 里那段同步脚本读掉它并给 <html> 挂 `.tsl-in`
-      （见 layouts/Base.astro）——所以这一屏同款深绿是**首帧就在**的。
-      为什么必须有它：本页的板（`.bath`）要等脚本解除 `hidden` 才露面，光靠板
-      自己会先闪一下纸白；铺一层与剧场绿幕同色的垫底，交接才是「同色溶解」。
-      默认 `display: none`（没有标记时它**不存在**，版面逐字节不变）。
-      aria-hidden：纯装饰，读屏不需要它。 */}
-  <div class="tsl-veil" data-tsl-veil aria-hidden="true"></div>
-
-  {/* ===== 整屏显影板（站主 2026-10-01 第四轮：「不如直接把这个放在相册页整屏，
-         鼠标往下滚的时候才看到相册页的内容」）=====
-      ★ 没有指针 = 一块纯色；指针**涂抹**过的地方擦出照片，擦痕停留约 3 s 后褪回纯色。
-      ★ 每次打开**随机一张横幅照片**，整屏铺满（cover，会裁）。
-      ★ 素材池 = 下面那些入口条里的 `<figure>`（`data-bath-src`，见 AlbumRow）——
-        砖墙搬去相册页之后，本页的照片只剩那里。
-      ★ 整块默认 hidden —— 脚本到位才露面。没有 JS 时它**不存在**（不是藏起来）：
-        板是装饰，内容在下面本来就完整，不需要靠它承载任何东西。
-      ★★ 花体字是 canvas **外面**的 DOM ⇒ 擦痕擦不掉它。 */}
-  <header class="pagehead">
-    {/* ★ 板在 DOM 上是页头的**第一个子元素**：
-        桌面 ⇒ 它整屏铺满、把标题顶到首屏之下（往下滚才看到标题与入口）；
-        手机 ⇒ 用 order 把它排到标题**右边**，变回"页头旁边的小板"。
-        同一个 DOM 两副版面 —— 不写两份结构，也不靠脚本搬节点。 */}
-    <div class="bath" data-bath hidden aria-hidden="true">
-      <canvas class="bath-cv" data-bath-cv></canvas>
-      <span class="bath-mark">{siteWordmark}</span>
-      {/* ★ 左下角滚动提示（站主 2026-10-01：「往下划↓」）——
-          纯装饰 aria-hidden；压在颗粒层与花体字之上（z-index 3）。
-          手机档显影板变回「页头旁边的小板」，这个提示没有意义 ⇒ 一并隐藏。 */}
-      <span class="bath-hint" aria-hidden="true">往下划 ↓</span>
+<Base title="相册" description={`${albums.map(album=>album.title).join('、')} · ${total} 张照片`} shareImage={shareImage} shareImageAlt={first?.alt} current="gallery" chrome="page" bodyClass="gallery-inf-plate gallery-story" fullWidth>
+  <Fragment slot="plate">
+    <div class="tsl-veil" aria-hidden="true"></div>
+    <div class="film-backdrop" aria-hidden="true"><div class="film-object" data-film><Fragment set:html={filmPattern()}/></div></div>
+    <div class="bath" data-bath hidden aria-hidden="true"><canvas class="bath-cv" data-bath-cv></canvas><span class="bath-mark">{siteWordmark}</span></div>
+  </Fragment>
+  <div class="gallery-stage-ui" data-gallery-redesign="1">
+    <h1 class="sr-only">相册</h1>
+    <div class="stage" data-stage tabindex="-1">
+      <section class="slide kind-develop" data-slide="0" data-kind="develop" data-title="显影板" aria-labelledby="develop-title">
+        <h2 class="sr-only" id="develop-title">显影板</h2>
+        <div class="develop-topnote" data-reveal data-order="-1"><span>{albums.length} 本相册</span><i></i><span>{total} 张照片</span></div>
+        <div class="develop-bottom" data-reveal data-order="3"><p>移动鼠标，让照片显影。<span>触屏可涂抹，点击箭头继续。</span></p><button type="button" data-advance>翻到螺旋盘 <span aria-hidden="true">↓</span></button></div>
+      </section>
+      <section class="slide kind-spiral" data-slide="1" data-kind="spiral" data-title="螺旋盘" aria-labelledby="spiral-title">
+        <h2 class="sr-only" id="spiral-title">螺旋盘</h2>
+        <div class="original-plate" data-bath-src tabindex="0" aria-label="螺旋盘照片"><SpiralPlate mode="embed" /></div>
+      </section>
+      {albums.map((album,index)=><GalleryCover album={album} index={index}/>)}
     </div>
-
-    {/* `.pagehead-main` 同时是**上浮动效的钩子**（见下面 `:global(.tsl-in) .pagehead-main`）——
-        它是从剧场绿幕切过来时那一组"缓缓升起"的元素之一。 */}
-    <div class="pagehead-main">
-      <PageTitle>相册</PageTitle>
-      {/* 读数：FRAMES / ALBUMS 两个数都从清单算。
-          ★ 原来还有一条 `VIEWING`（跟着筛选条变）—— 筛选没了，它也就没有了。 */}
-      <PageReadout>
-        <span>FRAMES <em>{total}</em></span>
-        <span>ALBUMS <em>{albums.length}</em></span>
-      </PageReadout>
+    <div class="pager">
+      <div class="page-reading"><span class="position"><b data-current>01</b><span>/ {String(count).padStart(2,'0')}</span></span><span class="album-current" data-current-title>显影板</span></div>
+      <p class="view-hint"><span class="desktop-hint">滚动翻页</span><span class="mobile-hint">上下滑动翻页</span><i aria-hidden="true"></i><span data-hint>涂抹显影，再往下翻</span></p>
+      <div class="pager-actions">
+        <button class="theme-button gallery-theme" data-gallery-theme type="button" aria-label="切换明暗模式" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/></svg></button>
+        <button type="button" class="catalog-button" data-catalog aria-haspopup="dialog">相册目录<span aria-hidden="true">☷</span></button>
+        <div class="direction-buttons"><button type="button" data-prev aria-label="上一页"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" data-next aria-label="下一页"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button></div>
+      </div>
     </div>
-
-  </header>
-
-  {/* ===== 螺旋盘（画廊层）=====
-      站主 2026-10-07：「把螺旋盘放到显影板的下面」。
-      ★ mode="embed" 与独立页的差别只有三处（全在组件里注释着）：**不接管滚轮**
-        （长页里滚轮是页面滚动，装置占了就等于把访客扣在装置里）、不渲染"回到相册"、
-        提示语不写"滚轮"。装置本体与 `/gallery/spiral/` 共用
-        `src/components/SpiralPlate.astro` ⇒ 几何参数只改那一处。 */}
-  <SpiralPlate mode="embed" />
-
-  {/* ===== 相册入口（一册一条）=====
-      一条 = 板头一行编目 + 一条手风琴照片条：默认第一张放大，点别的张它放大、
-      原来那张缩回细条；**点放大那张**进该册的页面（`/gallery/<册名>/` = 砖墙）。
-      ★ `.rows` 是**上浮动效的钩子**（原 `.filters` 那个位置）——
-        从绿幕切过来时它跟着标题一起升起。 */}
-  <div class="rows">
-    {albums.map((a, i) => <AlbumRow album={a} no={i + 1} />)}
   </div>
-
-  {/* ===== 出口：螺旋盘（**全屏**视图）=====
-      装置本体已经在**上面**（显影板之下）—— 这里给的是它的全屏入口：
-      独立页没有入口条也没有砖墙，滚轮也归装置（页内那台把滚轮让给页面）。
-      ★ 不放 `data-no-transition`：它是真的换页，页面过渡应该照常走。 */}
-  <p class="entry">
-    <a href="/gallery/spiral/">
-      <span>螺旋盘</span>
-      <span class="entry-d">全屏打开（滚轮翻片）</span>
-      <span aria-hidden="true">→</span>
-    </a>
-  </p>
+  <p class="sr-only" data-status role="status" aria-live="polite"></p>
+  <dialog class="gallery-catalog" aria-labelledby="catalog-title">
+    <header><div><p>{total} 张照片</p><h2 id="catalog-title">挑一本，慢慢看。</h2></div><button type="button" data-close-catalog aria-label="关闭相册目录">×</button></header>
+    <div class="catalog-scenes"><button type="button" data-pick="0"><span>01</span>显影板</button><button type="button" data-pick="1"><span>02</span>螺旋盘</button></div>
+    <div class="catalog-list">{albums.map((album,index)=>{const cover=coverPresentation(album,index)!;return <button type="button" data-pick={index+2}><img src={cover.src} alt={cover.alt} width="80" height="90" loading="lazy"/><span><b>{album.title}</b><small>{album.total} 张照片</small></span><span class="catalog-no">{String(index+1).padStart(2,'0')}</span></button>})}</div>
+    <p class="catalog-note">选中封面后，点击照片或文字进入相册。</p>
+    <p class="catalog-note"><a href="/gallery/spiral/">全屏打开螺旋盘 ↗</a></p>
+    <div data-gallery-site-meta></div>
+  </dialog>
 </Base>
-
-<style>
-  /* ===== 整屏显影板（2026-10-01 第四轮：从"页头右侧的小板"改成整屏首屏）=====
-     板底那层深墨绿是**照搬首页 .band 的同一支色**（含左上角那道极淡绿），
-     擦痕由 canvas 画（透明）⇒ 没擦到的地方"没有像素"，露出的就是这块底色。
-     这样既和首页同一色系，也让 canvas 每帧少一次全屏填充。
-
-     ★ 逃出 .shell 铺满视口 —— 与首页 .band 同一手法
-       （本站多一层全局 .shell（max-width + padding），会把背景一起框窄）。
-       ★ 不写 width:100vw —— vw 含滚动条宽度 ⇒ 横向溢出。
-     ★ 100svh：手机地址栏收放时不跳（同首页 .band）。
-     ★ 照片按 cover 整屏铺满（会裁）⇒ 只收横幅：竖幅只能裁成中间一条。 */
-  /* ★★ 顶栏**浮在板上**（站主 2026-10-01 第五轮：「打开相册那个直接顶头，
-       把导航栏什么的直接放在上面」）。
-     · 做法：顶栏从文档流里拿出来（`position: absolute` 贴文档顶部）⇒ 板就顶到了页面最顶端；
-       再用 `z-index` 把它压在板**上面**（板是 relative、z-index auto ⇒ 顶栏只要 > 0 就在它之上）。
-     · 为什么是 absolute 不是 fixed：fixed 会一直跟着滚 —— 本站内页顶栏本来是**滚走**的，
-       没必要为这一页改掉全站的手感。absolute 是"贴在文档顶部 ⇒ 滚下去就跟着走"。
-     · ★ 选择器写两条 `.topbar.topbar`：外壳那条是 `body.chrome-page .topbar`（特异性 0,2,0），
-       本页这条要压过它 —— 靠特异性，不靠"谁在后面"（CSS 分片的先后顺序不该拿来赌）。
-     · ★ 只在本页的 CSS 分片里 ⇒ 其余 13 页的顶栏**逐字节不变**。
-     · ★★ 顶栏原本是**半透明毛玻璃**（`--glass-bg` 渐变 + backdrop-filter），
-       压在深墨绿的板上正好；但它的字色是 `--muted`（中灰）⇒ 在深底上对比度不够，
-       所以下面连同字色一起改成浅色（只改这一页）。
-     · ★★ 整段包在 `min-width: 768px` 里：**手机档是页头旁边的小板、不是整屏**
-       ⇒ 顶栏必须回到普通文档流。★ 用断点包住而不是写一堆"恢复默认"的规则 ——
-         恢复式写法漏一条就留一个 bug（本站 `.topbar` 有 5 条声明要还原）。 */
-  @media (min-width: 768px) {
-    :global(body.chrome-page .topbar.topbar) {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 30;   /* ★ 站上 z-index 阶梯：抽屉 40/41 · 过渡蒙版 45 · 灯箱 50 · 开场 60 · 光标 64+ */
-      color: var(--gallery-topbar-ink);
-      border-bottom-color: var(--gallery-topbar-line);
-      background: var(--gallery-topbar-bg);
-      box-shadow: none;   /* 原版那道"顶部高光"是给浅底用的，压在深底上是一道白边 */
-    }
-    :global(body.chrome-page .topbar.topbar .site) {
-      color: var(--gallery-topbar-emphasis);
-    }
-    /* ⚠️ 同外壳那条：`> nav:not(.navpanel)` —— 漏了 `:not()` 会把抽屉自己按成横排（踩过）。 */
-    :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a) {
-      color: var(--gallery-topbar-ink);
-      border-color: var(--gallery-topbar-nav-line);
-    }
-    :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a:hover),
-    :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a:focus-visible) {
-      color: var(--gallery-topbar-emphasis);
-      border-color: var(--gallery-topbar-hot-line);
-      /* ★ 2026-10-01 顶栏改胶囊后补的抵消：外壳胶囊 hover/focus 给了 --accent-wash 浅绿底，
-         那是**纸白顶栏**用的；本页顶栏浮在深墨绿板上，第五轮定稿没有底色 ⇒ 显式归透明。 */
-      background: transparent;
-    }
-    :global(body.chrome-page .topbar.topbar > nav:not(.navpanel) a[aria-current='page']) {
-      color: var(--gallery-topbar-emphasis);
-      border-color: var(--gallery-topbar-current-line);
-      /* ★ 同上：当前页的浅绿底是纸白顶栏的配色，深板上回到定稿的「白字 + 绿描边、无底色」。 */
-      background: transparent;
-    }
-  }
-  /* ★ 桌面：页头不能有上内边距 —— 首屏要从顶部一路铺到底。
-     写两条 `.pagehead` 是为了压过外壳那条 `body.chrome-page .pagehead`（它的特异性更高）。 */
-  .pagehead.pagehead {
-    padding-top: 0;
-  }
-  .bath {
-    position: relative;
-    /* ★★ 板**顶到页面最顶端**（第五轮）：顶栏已经 absolute 出文档流 ⇒ 这里就是纯 100svh，
-       不再减 `--topbar-h`。
-       ★ 100svh：手机地址栏收放时不跳（同首页 .band）。
-       ★★ 还有第二个 48px：板在 `.shell` 里，而 `.shell` 有 `padding: var(--sp-7) …`
-       （3rem = 48px）⇒ 光把顶栏浮起来还不够，板仍被这层内边距推到 y=48（实测过）。
-          用**负 margin-top 抵消**，不去改 `.shell` 本身 —— `.shell` 是全部内页共用的，
-          改它等于替别的页面决定排版；负 margin 只动这一块板。
-          ★ 用同一个 token 而不是抄 48 这个数 ⇒ token 一改，两边一起改。 */
-    margin-top: calc(-1 * var(--sp-7));
-    margin-inline: calc(50% - 50vw);
-    height: 100svh;
-    min-height: 420px;
-    overflow: hidden;
-    background: var(--gallery-bath-bg);
-  }
-  /* 无 JS 时整块不出现。显式写一条，免得上游给 .bath 加了 display 后 [hidden] 被覆盖 */
-  .bath[hidden] {
-    display: none;
-  }
-  /* ★★ 胶片颗粒（站主 2026-10-01：「照片加一点噪点颗粒感，参考站的效果」）
-     ★★ 放在 **CSS 层、不进 canvas**，两个理由：
-        ① canvas 里撒随机噪点会**掺进随机源** —— 那条硬规矩「形状必须是 t 的确定函数」
-           （同 t 逐点比对的验收手段）会直接失效；
-        ② 静态噪点**每帧零成本**（浏览器只栅格化一次并平铺），而 canvas 每帧重画一遍
-           全屏噪点在整屏尺寸下是实打实的开销。
-     ★ 噪点图是**内联 SVG（feTurbulence）的 data URI** —— 站内不许引外部资源，
-       这是自包含的，不发任何请求。
-       · fractalNoise + saturate 0 ⇒ 灰度噪点；feComponentTransfer 把 alpha 拉平到 1
-         （feTurbulence 的 alpha 本身也是噪声，不拉平会变成一团斑块而不是颗粒）。
-       · stitchTiles='stitch' ⇒ 平铺无缝。
-     ★ overlay 混合 + 中灰噪点 ⇒ 只轻微改变明暗，不改色相（正经胶片颗粒的做法）。 */
-  .bath::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 1;             /* 颗粒在擦痕之上、花体字之下 */
-    pointer-events: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0' intercept='1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
-    background-size: 160px 160px;
-    opacity: 0.42;
-    mix-blend-mode: overlay;
-  }
-  /* ★ absolute + inset：板的高度来自 aspect-ratio，用百分比高度会有解析上的意外，
-     铺满定位则永远等于板的盒子（canvas 尺寸就是板的尺寸，探针读的也是同一个盒子）。 */
-  .bath-cv {
-    position: absolute;
-    inset: 0;
-    display: block;
-    width: 100%;
-    height: 100%;
-  }
-  /* ★★ 手写花体的**英文站名（wordmark）**—— 擦不掉的那一层
-     ★ 它是 canvas **外面**的 DOM（参考站 lowkeytp.art 里画面文字同样压在显影层之上）
-       ⇒ 擦痕再怎么擦也擦不到它，这条不需要任何脚本配合。
-     ★ 字体：站内不许引外部资源（无 CDN / 无自托管字体文件）⇒ 走**系统中文手写体栈**
-       —— 行楷优先（最像手写花体），落到楷体，再兜 `cursive`。
-       ★★ 中文手写体必须写**中文名**那一档（"楷体"）一起兜：只写英文名的机器不一定有。
-     ★ 白字 + 极淡投影 ⇒ 在深墨绿底和擦出来的照片上都读得清（不用两套配色）。 */
-  .bath-mark {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    /* ★ Homemade Apple = 参考站同款手写花体（自托管在 public/fonts，OFL）；
-       它只有拉丁字形 ⇒ 后面跟系统中文手写体兜底（真出现中文时也不会掉成黑体）。 */
-    font-family: "Homemade Apple", "STXingkai", "Xingkai SC", "STKaiti", "Kaiti SC", "楷体", cursive;
-    font-size: clamp(2.4rem, 8vw, 4.6rem);
-    line-height: 1;
-    letter-spacing: 0.12em;
-    text-align: center;
-    color: var(--gallery-bath-ink);
-    text-shadow: var(--gallery-bath-shadow);
-    pointer-events: none;
-    user-select: none;
-    z-index: 2;             /* ★ 压在颗粒层之上：颗粒可以盖照片，但不能盖花体字 */
-  }
-  /* ★★ 这里原来有一个跟着鼠标的 16px 白圈（`.bath-dot`，照抄参考站 `.pointer-dot`，
-     脚本 `develop.ts` 的 `markDot()` 驱动）。**2026-10-08 站主决定删掉。**
-     原因：本站**全站本来就有**跟手光标（`CursorRing.astro` 的 34px 墨色圆盘 + 8px 白点，
-     由 `Base.astro` 引入），两者在指针处**叠成三层同心**（34 / 16 / 8 px）；
-     而参考站 lowkeytp.art 自己**没有**全站光标，所以它只有那一层 —— 照抄到本站就重复了。
-     ⇒ 现在"手在哪"由全站光标表示，"液体到哪了"由笔触表示。详见 docs/rhinelab-spec.md §6.63。 */
-  /* ★★ 左下角滚动提示（站主 2026-10-01：「往下划↓」）。
-     位置语汇延续**首页首屏的左下角横排读数**，
-     但更简 —— 就是一行白字。
-     白字压在深墨绿底与擦出来的照片上都读得清（同 .bath-mark 的取值思路），
-     给一层极淡投影兜底。z-index 3 = 压在花体字之上。 */
-  .bath-hint {
-    position: absolute;
-    left: var(--gutter);
-    bottom: 1rem;
-    z-index: 3;
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-    letter-spacing: 0.12em;
-    color: var(--gallery-bath-ink);
-    text-shadow: var(--gallery-bath-hint-shadow);
-    pointer-events: none;
-    user-select: none;
-  }
-
-  /* ===== 手机：改回"页头旁边的小板" =====
-     ★★ 站主 2026-10-01 第四轮：「到了手机上不要整屏了，因为涂抹的效果不好
-        （触屏操作不习惯）。手机端改回之前的版本，放在页头右边（就是我之前说的旁边），
-        尺寸就用照片的原尺寸（只要横着的照片，不放竖着的）」。
-     · 版面：页头变回左右两栏（标题左、板右）—— 板在 DOM 上是页头**第一个**子元素
-       （桌面要它占满第一屏），靠 `order` 把它排到右边 ⇒ 一个 DOM 两副版面。
-     · 尺寸：**高走照片原比例**（--bath-ar 由脚本按抽中的照片设 ⇒ 不裁不拉伸），
-       宽由版面定（min(46%, 300px)）。★ 这正是"只收横幅"的原因 —— 竖幅会撑成竖条。
-     · 笔触在**小板**上是另一档尺寸（参考站那 82/720 的比例是按整屏定的，
-       照搬到 ~160 px 高的小板上只有 25 px，手指根本擦不动）⇒ 见 develop.ts 的 RADIUS_SMALL_K。 */
-  @media (max-width: 767px) {
-    .pagehead.pagehead {
-      padding-top: var(--sp-8);   /* 回到普通页头的上内边距（首屏不再从顶部铺起） */
-    }
-    .pagehead {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: var(--sp-4);
-    }
-    .pagehead-main {
-      order: 1;
-      min-width: 0;   /* 让读数那排在窄视口能换行，而不是把板顶出去 */
-    }
-    .bath {
-      order: 2;
-      /* 板内手势用于涂抹，避免浏览器接管滑动后发出 pointercancel；板外照常滚动。 */
-      touch-action: none;
-      /* ★ flex: 0 0 auto 必须写：flex 子项默认可收缩，不写的话标题一挤就把板压扁
-         （实测 390 视口下被压到 133 px，而 CSS 写的是 179 px）。 */
-      flex: 0 0 auto;
-      width: min(56%, 240px);
-      height: auto;
-      min-height: 0;
-      aspect-ratio: var(--bath-ar, 3 / 2);
-      margin-inline: 0;
-      /* ★ 手机档是"页头旁边的小板" ⇒ 抵消 .shell 内边距的那个负 margin 必须撤掉，
-         否则板会骑到页头上边去。 */
-      margin-top: 0;
-    }
-    .bath-mark {
-      font-size: clamp(1.1rem, 5vw, 1.6rem);
-    }
-    .bath-hint {
-      display: none;   /* 手机档小板不提示「往下划」 */
-    }
-  }
-
-  /* ===== 入口条组：只负责与上面那台装置之间的呼吸（每条自己的版面在 AlbumRow 里） ===== */
-  .rows {
-    margin-top: var(--sp-7);
-  }
-
-  /* ===== 交接层 + 内容上浮（站主第九轮 ③，2026-10-02）=====
-     原话：「到绿屏进相册时相册页内容缓缓浮上来，要丝滑点」。
-     两件事叠在一起：
-       ① **交接层**：一屏与剧场绿幕**同款**的深绿（同一组 token、同一条 178deg
-          梯度 —— 主页 `.tsl-green` 就是照它写的），从满屏淡到透明。它保证
-          「从绿幕切过来」这一下的**首帧就是绿**。
-       ② **内容上浮**：板里的花体字 + 板下的标题/读数/入口条，从下方 1.1rem
-          升起并淡入（板本身不动 —— 它一移动，顶上就会露出纸白）。
-     ★ 只在「从剧场绿幕切过来」这一次播：交接标记由主页装置写在跳转前，
-       <head> 的同步脚本读掉并挂 `.tsl-in`。点站内链接过来的那条路有墨色浸染
-       （`html.pt-play`，与 `.tsl-in` 互斥：标记用完即删），直接打开/刷新本页
-       更是一个动画都不播 ⇒ 默认版面逐字节不变。
-     ★ 位移只用 transform、显隐只用 opacity（站规：不碰布局属性）；
-       `prefers-reduced-motion` 的读者全套不播（那时首帧就是普通纸白版面）。 */
-  .tsl-veil {
-    display: none;
-  }
-  @keyframes tsl-veil-out {
-    from { opacity: 1; }
-    to { opacity: 0; }
-  }
-  @keyframes tsl-rise-in {
-    from { opacity: 0; transform: translateY(1.1rem); }
-    to { opacity: 1; transform: none; }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    /* ★★ `:global(.tsl-in)` 不能省（本轮真踩坑，见下）：
-       Astro 的作用域会给**选择器里每一段元素级选择器**都补上 `data-astro-cid-*`，
-       不只是最后那段。写 `.tsl-in .tsl-veil` 编译出来是
-       `.tsl-in[data-astro-cid-wiaw4zal] .tsl-veil[data-astro-cid-wiaw4zal]`，
-       而 `.tsl-in` 挂在 `<html>` 上、`<html>` 是 Base 组件渲染的（另一个 cid）
-       ⇒ **这条规则永远匹配不上**，交接层与上浮动效双双静默失效。
-       ⇒ 前导那段必须 `:global()`，只让最后那段吃作用域。 */
-    :global(.tsl-in) .tsl-veil {
-      display: block;
-      position: fixed;
-      inset: 0;
-      /* 层叠阶梯：正文 ≤4 < 过渡蒙版 45 < 交接层 46 < 相册灯箱 50 < 开场 60 */
-      z-index: 46;
-      pointer-events: none;
-      background: var(--gallery-entry-bg);
-      animation: tsl-veil-out 620ms var(--ease) both;
-    }
-    :global(.tsl-in) .bath-mark,
-    :global(.tsl-in) .bath-hint,
-    :global(.tsl-in) .pagehead-main,
-    :global(.tsl-in) .rows {
-      animation: tsl-rise-in 820ms var(--ease-glass) both;
-    }
-  }
-
-  /* ===== 出口：螺旋盘 =====
-     ★ 放在灯箱那几段**之后**（本样式块的最后）—— 历史上有一条门闩按
-       `.plate {` 到 `.lb {` 切片查"颜色只用 token"，放这儿就不进那片；
-       当然它自己也只用 token（--hair / --ink / --accent / --accent-ink）。
-     ⚠ 注释里**不许**写出样式块的结束标签原文：HTML 的解析器不认 CSS 注释，
-       它看到那几个字符就直接把样式块关掉 ⇒ 后面全被当成标记、构建报
-       「Expected } but found {」（本轮真踩，顺手记在这）。 */
-  .entry {
-    margin: var(--sp-7) 0 0;
-    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    font-size: var(--fs-xs);
-  }
-  .entry a {
-    display: inline-flex;
-    align-items: baseline;
-    gap: var(--sp-3);
-    padding: 0.55rem 0.95rem;
-    border: 1px solid var(--hair);
-    color: var(--ink);
-    text-decoration: none;
-    transition: border-color var(--dur-fast) var(--ease-interact), color var(--dur-fast) var(--ease-interact);
-  }
-  .entry a:hover,
-  .entry a:focus-visible {
-    border-color: var(--accent);
-    color: var(--accent-ink);
-  }
-  .entry-d {
-    color: var(--muted);
-  }
-</style>
-
-<script>
-  // 显影槽（页头装置）。与相册页那一侧的砖墙/灯箱刻意分开成独立入口：
-  // 它只读 DOM（`[data-bath-src] figure` 的 img / data-cap），不引用任何别的脚本的状态。
-  import '../../scripts/develop';
-</script>
+<script>import '../../scripts/gallery-stage.js';</script>
