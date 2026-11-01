@@ -111,6 +111,23 @@ html.cursor-none * {
   cursor: none !important;
 }
 
+/* 原生视频控件在浏览器的内部树里，普通 * 选不到；控件自己的 UA 光标会盖过继承。
+   分开声明，避免某个浏览器不认识一个伪元素时连带丢掉全部规则。
+   仍由 cursor-none 门闩启用，无脚本、触摸或减少动态时保留系统光标。 */
+/* 视频真正全屏时，普通页面跟手层不在全屏顶层，恢复系统光标以免失去指针。 */
+html.cursor-none video:fullscreen { cursor: auto !important; }
+html.cursor-none video:not(:fullscreen)::-webkit-media-controls { cursor: none !important; }
+html.cursor-none video:not(:fullscreen)::-webkit-media-controls-enclosure { cursor: none !important; }
+html.cursor-none video:not(:fullscreen)::-webkit-media-controls-panel { cursor: none !important; }
+html.cursor-none video:not(:fullscreen)::-webkit-media-controls-overlay-play-button { cursor: none !important; }
+html.cursor-none video:not(:fullscreen)::-webkit-media-controls-play-button { cursor: none !important; }
+html.cursor-none video:not(:fullscreen)::-webkit-media-controls-mute-button { cursor: none !important; }
+html.cursor-none video:not(:fullscreen)::-webkit-media-controls-volume-slider { cursor: none !important; }
+html.cursor-none video:not(:fullscreen)::-webkit-media-controls-volume-slider-container { cursor: none !important; }
+html.cursor-none video:not(:fullscreen)::-webkit-media-controls-timeline { cursor: none !important; }
+html.cursor-none video:not(:fullscreen)::-webkit-media-controls-fullscreen-button { cursor: none !important; }
+html.cursor-none video:not(:fullscreen)::-webkit-media-controls-toggle-closed-captions-button { cursor: none !important; }
+
 .skip {
   position: absolute;
   left: -9999px;

@@ -420,7 +420,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     walkSrc('src');
     /** 扫描前必须剥掉注释：之前栽过 —— 在注释里为了解释 UA 那条规则写了 `a{cursor:pointer}` 被当成真声明。 */
     const stripComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, ' ');
-    const ALLOW = /^(none(?: !important)?|auto|text|default|inherit|not-allowed|pointer)$/;
+    const ALLOW = /^((?:none|auto)(?: !important)?|text|default|inherit|not-allowed|pointer)$/;
     const offenders: string[] = [];
     for (const f of srcFiles) {
       const text = stripComments(readFileSync(f, 'utf8'));
