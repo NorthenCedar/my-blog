@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import { withWriterStrike } from '../../lib/strike-markdown';
-const inlineMarkdown=withWriterStrike(new MarkdownIt({html:false,linkify:false}));
+import { preserveCodeSpaces } from './markdown-spaces';
+const inlineMarkdown=preserveCodeSpaces(withWriterStrike(new MarkdownIt({html:false,linkify:false})));
 
 export function safeWriterLink(value:string,origin:string):string|null{
   try{const url=new URL(value,origin);return ['http:','https:','mailto:'].includes(url.protocol)?url.href:null;}catch{return null;}

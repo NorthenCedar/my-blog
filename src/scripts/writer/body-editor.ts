@@ -8,6 +8,7 @@ import { wrapInList,splitListItem,liftListItem,sinkListItem } from 'prosemirror-
 import { parseWriterMarkdown,serializeWriterMarkdown,visualMarkdownIssue,writerSchema as schema } from './markdown';
 import { safeWriterImage,safeWriterLink } from './preview';
 import { codeBlockCommand,codeLanguageCommand,markdownCodeBlock,markdownCodeLanguage } from './code-block';
+import { indentText,tabIndentCommand } from './indentation';
 import { el,button,field } from './ui';
 
 type Options={onChange:()=>void;onImageFiles:(files:File[])=>void;resolveImage:(source:string)=>string|null;onError:(error:Error)=>void};
@@ -74,25 +75,36 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
     showLanguage(current??preferredLanguage);
   }
   for(const event of ['select','keyup','click'])source.addEventListener(event,updateSourceControls);
+  function applySourceEdit(result:{body:string;start:number;end:number}){
+    if(result.body===source.value)return;
+    const before=source.value,direction=source.selectionDirection,top=source.scrollTop,left=source.scrollLeft;
+    let from=0,to=before.length,tail=result.body.length;
+    while(from<to&&from<tail&&before[from]===result.body[from])from++;
+    while(to>from&&tail>from&&before[to-1]===result.body[tail-1]){to--;tail--;}
+    source.focus();source.setSelectionRange(from,to);
+    // 原生事务触发 input，沿用既有保存流程并保留 Ctrl+Z/Y。
+    document.execCommand('insertText',false,result.body.slice(from,tail));
+    if(source.value!==result.body)throw Error('当前浏览器未能完成编辑操作，请保留正文后重试。');
+    source.setSelectionRange(result.start,result.end,direction);source.scrollTop=top;source.scrollLeft=left;
+  }
+  source.addEventListener('keydown',event=>{
+    if(event.key!=='Tab'||event.ctrlKey||event.metaKey||event.altKey||source.readOnly||source.disabled||sourceComposing||event.isComposing||event.keyCode===229)return;
+    event.preventDefault();
+    try{applySourceEdit(indentText(source.value,source.selectionStart,source.selectionEnd,event.shiftKey));}
+    catch(error){options.onError(error instanceof Error?error:Error(String(error)));}
+  });
   function editSourceCode(action:'insert'|'language'|'paragraph'){
     if(sourceComposing){options.onError(Error('请先完成当前文字输入，再设置代码格式。'));return;}
     try{
       const result=markdownCodeBlock(source.value,source.selectionStart,source.selectionEnd,language.value,action);
-      if(result.body===source.value)return;
-      const before=source.value;let from=0,to=before.length,tail=result.body.length;
-      while(from<to&&from<tail&&before[from]===result.body[from])from++;
-      while(to>from&&tail>from&&before[to-1]===result.body[tail-1]){to--;tail--;}
-      source.focus();source.setSelectionRange(from,to);
-      // 原生编辑命令保留 textarea 的撤销记录；输入事件继续走现有草稿保存流程。
-      document.execCommand('insertText',false,result.body.slice(from,tail));
-      if(source.value!==result.body)throw Error('当前浏览器未能完成代码格式操作，请保留正文后重试。');
-      source.setSelectionRange(result.start,result.end);
+      applySourceEdit(result);
     }catch(error){options.onError(error instanceof Error?error:Error(String(error)));}
   }
 
   const plugins=()=>[history(),keymap({
     'Mod-z':undo,'Mod-y':redo,'Mod-Shift-z':redo,'Mod-b':toggleMark(schema.marks.strong),'Mod-i':toggleMark(schema.marks.em),'Mod-Shift-x':toggleMark(schema.marks.strike),
     Enter:splitListItem(schema.nodes.list_item),'Mod-[':liftListItem(schema.nodes.list_item),'Mod-]':sinkListItem(schema.nodes.list_item),
+    Tab:tabIndentCommand(),'Shift-Tab':tabIndentCommand(true),
   }),keymap(baseKeymap)];
   const view=new EditorView(visual,{
     state:EditorState.create({doc:original.doc,plugins:plugins()}),
@@ -141,7 +153,7 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
     sourceParagraph.hidden=!sourceMode;
     updateSourceControls();
     visualButton.disabled=!!issue;visualButton.setAttribute('aria-pressed',String(!sourceMode));sourceButton.setAttribute('aria-pressed',String(sourceMode));
-    note.textContent=issue?`正文包含${issue}，请在源码模式编辑；原始内容会完整保留。`:'选中正文后设置格式。代码块可直接输入或粘贴代码，Ctrl / ⌘ + Enter 继续正文；章节标题和小标题会进入本文目录。';
+    note.textContent=(issue?`正文包含${issue}，请在源码模式编辑；原始内容会完整保留。`:'选中正文后设置格式。代码块可直接输入或粘贴代码，Ctrl / ⌘ + Enter 继续正文；章节标题和小标题会进入本文目录。')+' Tab 缩进四个空格，Shift+Tab 减少缩进。';
   }
   function switchMode(next:boolean){
     if(next===sourceMode)return;

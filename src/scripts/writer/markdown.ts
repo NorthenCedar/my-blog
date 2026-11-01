@@ -1,9 +1,10 @@
 import MarkdownIt from 'markdown-it';
 import { Schema,type Node } from 'prosemirror-model';
-import { schema as commonmark,MarkdownParser,MarkdownSerializer,defaultMarkdownParser,defaultMarkdownSerializer } from 'prosemirror-markdown';
+import { schema as commonmark,MarkdownParser,MarkdownSerializer,defaultMarkdownParser,defaultMarkdownSerializer,type MarkdownSerializerState } from 'prosemirror-markdown';
 import { safeWriterLink } from './preview';
 import type { WriterAssetRef } from '../../lib/writer/model';
 import { withWriterStrike } from '../../lib/strike-markdown';
+import { preserveCodeSpaces } from './markdown-spaces';
 
 // 图片由编辑视图解析私密地址；模型中的原始引用永不直接成为网络请求。
 export const writerSchema=new Schema({
@@ -20,12 +21,36 @@ export const writerSchema=new Schema({
   // 删除线置于强调外层，避免中文句中的 ***~~文字~~*** 被识别成字面星号。
   }).addBefore('em','strike',{parseDOM:[{tag:'s'},{tag:'del'},{tag:'strike'}],toDOM:()=>['s',0]}),
 });
-const parser=new MarkdownParser(writerSchema,withWriterStrike(new MarkdownIt('commonmark',{html:false}).enable('strikethrough')),{
+const parser=new MarkdownParser(writerSchema,preserveCodeSpaces(withWriterStrike(new MarkdownIt('commonmark',{html:false}).enable('strikethrough'))),{
   ...defaultMarkdownParser.tokens,
   s:{mark:'strike'},
   image:{node:'image',getAttrs:token=>({src:token.attrGet('src'),title:token.attrGet('title')||null,alt:(token.children??[]).map(t=>t.content).join('')})},
 });
-const serializer=new MarkdownSerializer(defaultMarkdownSerializer.nodes,{
+/** 可视化行首与尾部空格用实体保留，避免四格正文重读时变为代码或被语法吞掉。 */
+const preserveIndent=(kind:'paragraph'|'heading')=>(state:MarkdownSerializerState,node:Node,parent:Node,index:number)=>{
+  const original=state.text;
+  let lineStart=true;
+  state.text=function(value:string,escape=true){
+    if(!escape){if(value)lineStart=value.endsWith('\n');return original.call(this,value,false);}
+    const lines=value.split('\n');
+    for(let i=0;i<lines.length;i++){
+      let line=lines[i];
+      if(lineStart||this.atBlockStart||this.out.endsWith('\n')){
+        const leading=/^ +/.exec(line)?.[0].length??0;
+        if(leading){this.write('&#32;'.repeat(leading));line=line.slice(leading);}
+      }
+      const trailing=/ +$/.exec(line)?.[0].length??0;
+      if(trailing)line=line.slice(0,-trailing);
+      original.call(this,line,escape);
+      if(trailing)this.write('&#32;'.repeat(trailing));
+      if(lines[i])lineStart=false;
+      if(i<lines.length-1){original.call(this,'\n',false);lineStart=true;}
+    }
+  };
+  try{defaultMarkdownSerializer.nodes[kind](state,node,parent,index);}
+  finally{state.text=original;}
+};
+const serializer=new MarkdownSerializer({...defaultMarkdownSerializer.nodes,paragraph:preserveIndent('paragraph'),heading:preserveIndent('heading')},{
   ...defaultMarkdownSerializer.marks,strike:{open:'<del>',close:'</del>',expelEnclosingWhitespace:true},
 },{escapeExtraCharacters:/</g});
 const detector=withWriterStrike(new MarkdownIt({html:true}));

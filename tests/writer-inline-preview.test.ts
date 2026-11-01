@@ -22,5 +22,7 @@ it('预览的加粗、斜体和删除线可组合，代码及HTML符号保持文
     const multiline=renderWriterMarkdown('<del>甲\\\n乙</del>',()=>null) as unknown as PreviewNode;
     expect(multiline.children[0].children[0].tagName).toBe('s');
     expect(multiline.children[0].children[0].children.some(node=>node.tagName==='br')).toBe(true);
+    const blankCode=renderWriterMarkdown('前 `    ` 后',()=>null) as unknown as PreviewNode;
+    expect(blankCode.children[0].children.find(node=>node.tagName==='code')?.textContent).toBe('    ');
   }finally{vi.unstubAllGlobals();}
 });
