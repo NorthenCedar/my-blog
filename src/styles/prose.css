@@ -7,6 +7,18 @@
   margin: 0 0 1.15em;
 }
 
+/* ★ 2026-11-04：段落里的单个换行也换行。
+   Markdown 把段落内换行当“软换行”，渲染时并成一个空格 —— 站主报「本地写作台正常，
+   推到线上换行全没了」就是这个原因。实测全站 7 篇文章：多行段落 50 处，
+   像“长句硬折行”的 0 处，也就是说站主是一行写一条，按行渲染才是他要的样子。
+   解析器把换行原样留在文本里，所以这里用 pre-wrap 就够，不必动 Markdown 管线。
+   只作用于段落与列表项；代码块另有规则（.prose pre）。 */
+.prose p,
+.prose li,
+.prose blockquote p {
+  white-space: pre-wrap;
+}
+
 .prose h2,
 .prose h3 {
   margin: var(--sp-7) 0 var(--sp-3);
