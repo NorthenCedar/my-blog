@@ -3,6 +3,8 @@ import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import typegpu from 'unplugin-typegpu/vite';
 import { createVideoDevPlugin } from './src/lib/video-assets.mjs';
+import { withPreservedIndent } from './src/lib/markdown-preserve-indent.mjs';
+import { satteri } from '@astrojs/markdown-satteri';
 
 export default defineConfig({
   // 站点正式地址（2026-09-25 绑定自有域名 northcedar.top）。
@@ -13,6 +15,10 @@ export default defineConfig({
     // 用 CSS 变量接管代码块配色（design-spec.md：黑底白字），
     // 这样 Shiki 输出的是变量引用，我们能在 prose.css 里覆盖，不必写自定义主题 JSON。
     shikiConfig: { theme: 'css-variables' },
+    // ★ 2026-11-04：保住段落续行的行首缩进。CommonMark 在**解析阶段**就把续行开头的
+    //   空格当缩进吃掉了（mdast 里已经查不到），所以只能包一层处理器、在喂给解析器
+    //   之前把行首 1–3 个空格换成不换行空格；换行本身由 prose.css 的 pre-wrap 保住。
+    processor: withPreservedIndent(satteri()),
   },
   image: {
     // 让正文里的图片自动带 srcset/sizes。不加这条，短文那三张 2133px 宽的原图
