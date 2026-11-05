@@ -1,7 +1,7 @@
 ---
 title: 我的C语言学习笔记
 date: 2026-10-29
-updated: 2026-11-04
+updated: 2026-11-06
 summary: 如标题所示，本文主要是用来记笔记的，有兴趣或者也想学习C语言的小伙伴可以看看
 tags: [个人, 备忘]
 draft: false
@@ -188,4 +188,175 @@ for (初始条件; 循环继续的条件; 循环每轮要做的动作){
     }
 
     printf("%d!=%d\n", n, fact);
+```
+
+### 整数正序循环拆解的例子
+常规的 x % 10 只能抠出最后一个数字。
+所以这里用了一个非常巧妙的 mask（掩码）：
+1. 第一步算 mask：如果输入 123，用 while 循环算出 mask = 100。
+2. 第二步除法（求首位）：123 / 100 = 1，打印出了 1。
+3. 第三步取余（去首位）：123 % 100 = 23，把第一位砍掉了。
+4. 第四步降级：mask / 10 变成 10。
+5. 循环往复，直到 mask 变成 0。
+```c
+#include <stdio.h>
+
+int main()
+{
+    int x;
+    scanf("%d", &x);
+    
+    int mask = 1;
+    int t = x;
+
+    // 计算 mask（找到最高位的权重，比如输入123，mask就是100）
+    while ( t > 9 ) {
+        t /= 10;
+        mask *= 10;
+    }
+
+    // 调试打印（为了让你看到 x 和 mask 的值）
+    printf("x=%d, mask=%d\n", x, mask);
+
+    // 正序拆分并输出每一位数字
+    do {
+        int d = x / mask;
+        printf("%d", d);
+        
+        // 如果不是最后一位，打印一个空格
+        if ( mask > 9 ) {
+            printf(" ");
+        }
+        
+        // 去掉已经输出的最高位
+        x %= mask;
+        // mask 降级
+        mask /= 10;
+    } while ( mask > 0 );
+    
+    printf("\n");
+    
+    return 0;
+}
+```
+
+### 求最大公约数
+这里利用辗转相除法求出最大公约数
+```c
+/*如果b等于0，计算结束，a就是最大公约数；
+否则，计算a除以b的余数，让a等于b，而b等于那个余数；
+回到第一步。
+
+a    b    t
+12   18   12
+18   12   6
+12   6    0
+6    0
+*/
+#include <stdio.h>
+
+int main()
+{
+    int a, b;
+    int t;
+    scanf("%d %d", &a, &b);
+
+    while ( b != 0 ) {
+        t = a % b;
+        a = b;
+        b = t;
+    }
+
+    printf("gcd=%d\n", a);
+    
+    return 0;
+}
+```
+
+### 循环例子
+给定一个数（比如输入 2），输出它及后面连续 3 个数（即 2, 3, 4, 5）能组成的所有互不相同的三位数。
+```c
+#include <stdio.h>
+
+int main()
+{
+    int a;
+    scanf("%d", &a);
+    
+    int i, j, k;
+    int cnt = 0;
+
+    // 用 for 循环直接把初始化、条件、自增写在一行，代码更短
+    for (i = a; i <= a + 3; i++) {
+        for (j = a; j <= a + 3; j++) {
+            for (k = a; k <= a + 3; k++) {
+                if (i != j && i != k && j != k) {
+                    cnt++;
+                    printf("%d%d%d", i, j, k);
+                    if (cnt == 6) {
+                        printf("\n");
+                        cnt = 0;
+                    } else {
+                        printf(" ");
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+```
+
+### 水仙花数
+```c
+#include <stdio.h>
+
+int main()
+{
+    int n;
+    scanf("%d", &n);
+    
+    int first = 1;
+    int i = 1;
+    
+    // 1. 计算位数对应的起始值（比如 n=3，first 就是 100；n=4，first 就是 1000）
+    while ( i < n ) {
+        first *= 10;
+        i++;
+    }
+    
+    // 2. 遍历所有的 n 位数
+    i = first;
+    while ( i < first * 10 ) {
+        int t = i;
+        int sum = 0;
+        
+        // 3. 拆解 i 的每一位数字
+        do {
+            int d = t % 10; // 取出最后一位
+            t /= 10;        // 去掉最后一位
+            
+            // 4. 计算这一位数字的 n 次方
+            int p = d;
+            int j = 1;
+            while ( j < n ) {
+                p *= d;
+                j++;
+            }
+            
+            // 5. 把每一位的 n 次方累加到 sum 里
+            sum += p;
+            
+        } while ( t > 0 );
+        
+        // 6. 判断累加结果是否等于原数字
+        if ( sum == i ) {
+            printf("%d\n", i);
+        }
+        
+        i++;
+    }
+    
+    return 0;
+}
 ```
