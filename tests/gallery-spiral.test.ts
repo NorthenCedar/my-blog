@@ -918,7 +918,8 @@ describe('螺旋盘 · 红线与预算', () => {
           共享脚本里（每一页都有铃铛，没有"只给内页"的省法），本页闭包 12254 → 14216
           （共享块 1112 → 3074 内联）—— 本就只剩 34 字节的余量当场撞线。
           14 KiB 下仍留 ~120 字节天花板，three 那条反面正对照照旧生效。 */
-    const BUDGET = 14336;
+    // 全站公共歌单播放器增加约 5.5 KiB，共享闭包预留 6 KiB。
+    const BUDGET = 20480;
     expect(hasDist, '先 npm run build').toBe(true);
     const { code, files } = jsClosure(PAGE_PATH);
     const full = Buffer.byteLength(code, 'utf8');

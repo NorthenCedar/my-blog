@@ -997,7 +997,8 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     // 站主拍板抬到 **24576**：仍留着 ~170 字节的硬天花板，标签数 5 处不变。
     // 2026-10-26：新增目录当前位置、复制正式链接及反馈；净增1599 B，实测26147 B。
     // 本次功能的上限调整为26 KiB，仍统计完整同源闭包且最多5个入口；首页预算不变。
-    const BUDGET = 26624;
+    // 公共歌单播放器新增约 5.5 KiB，共享闭包预算增加 6 KiB。
+    const BUDGET = 32768;
     console.log(`内联脚本体积: ${inline.join(' + ')} = ${inlineTotal} 字节 · 含同源外链合计 ${full} 字节（预算 ${BUDGET}）· ${scripts.length} 处 <script>`);
 
     expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBeLessThanOrEqual(5);
@@ -1039,7 +1040,9 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     // 所以原来"只查页面 HTML"的写法会假阳性。判据不变：**评论代码里必须打自己的端点**。
     const code = jsLoadedBy(page);
     expect(code, '评论应当打自己的端点').toContain('/api/comments');
-    expect(/https?:\/\//.test(code), '评论脚本里出现了外部 URL').toBe(false);
+    // 全站播放器获准访问此公共歌单服务，评论仍访问本站端点。
+    const withoutMusicApi = code.replaceAll('https://api.qijieya.cn/meting/', '');
+    expect(/https?:\/\//.test(withoutMusicApi), '脚本中出现未经登记的外部 URL').toBe(false);
   });
 
   it('产物 JS 只在预算内，且都是本站产物（原"不许有独立 JS"的修订版）', () => {
@@ -1322,7 +1325,7 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
   // 实测（2026-09-26）：1971 字节（筛选 + 灯箱，零依赖）。余量 4173。
   // 灯箱刻意走**渐进增强**：图包在 <a href="1280档"> 里，JS 到位才拦截点击开灯箱 ——
   // 所以无 JS 时页面完整可用（点图直接开大图），也不需要第二个 `html.js` 门控脚本。
-  it('相册页 JS 总量（内联 + 同源外链闭包）≤ 36 KiB', () => {
+  it('相册页 JS 总量（内联 + 同源外链闭包）≤ 42 KiB', () => {
     /* ★ 2026-10-07 **原地改口径**（不新开一条）：螺旋盘搬进本页后，装置的脚本是
        **外链 chunk**（SpiralPlate 5953 + rl-core 1208）—— 只算内联会**整台漏掉**，
        这条预算就退化成"守着一个空壳"。改成与文章页 / 螺旋盘页同一条口径：
@@ -1340,7 +1343,8 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     // 2026-10-18（回复提醒）：共享块多了铃铛，实测 24578 —— 上一轮只剩 8 字节余量，当场撞线。
     // 站主拍板 24 KiB → 25 KiB，仍是「加一两处交互够用、把 three 拖进来必炸」的量级。
     // 五幕编排、长线绘制和主题状态增加约 9 KiB，仅调整本页预算；不引入三维引擎。
-    const BUDGET = 36864;
+    // 全站播放器共享脚本增加 6 KiB 的预算，继续禁止三维库泄漏。
+    const BUDGET = 43008;
     const { code, files } = jsClosure(page);
     const full = Buffer.byteLength(code, 'utf8');
     console.log(
@@ -1354,7 +1358,7 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     );
   });
 
-  it('★ 留言页 JS 总量（内联 + 同源外链闭包）≤ 29 KiB', () => {
+  it('★ 留言页 JS 总量（内联 + 同源外链闭包）≤ 35 KiB', () => {
     /* 2026-10-16：站主选择连续浅水波面，替代离散 CSS 圆环。
        新增网格求解与像素光影，实测闭包约 18 KB；本页预算调整为 20 KiB。
        仍统计完整 import 闭包，不影响其他页面预算，不引入三维库。 */
@@ -1365,7 +1369,8 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     const inline = scripts.map((s) => Buffer.byteLength(s[1], 'utf8')).reduce((a, b) => a + b, 0);
     // 2026-10-20：账户与名片模块加入后完整闭包实测 26079 B。
     // 2026-10-18（回复提醒）：共享块多了顶栏铃铛，实测 29203 B ⇒ 站主拍板 28 KiB → 29 KiB。
-    const BUDGET = 29 * 1024;
+    // 全站播放器共享脚本增加 6 KiB 的预算。
+    const BUDGET = 35 * 1024;
     const { code, files } = jsClosure(page);
     const full = Buffer.byteLength(code, 'utf8');
     console.log(

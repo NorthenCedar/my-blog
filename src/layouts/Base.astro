@@ -17,6 +17,7 @@ import CursorRing from '../components/CursorRing.astro';
 import Band from '../components/Band.astro';
 import Topbar from '../components/Topbar.astro';
 import SiteFooter from '../components/SiteFooter.astro';
+import MusicPlayer from '../components/MusicPlayer.astro';
 import { getSite } from '../lib/site';
 import type { NavKey } from '../lib/nav';
 
@@ -221,6 +222,7 @@ const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('
     </div>
     {/* 跟手光标环与涟漪：普通层级 64/65/66，原生弹窗打开时由组件迁入顶层。 */}
     <CursorRing />
+    {!noIndex && <MusicPlayer />}
     <script>
       // 页面过渡的点击拦截（每一页都加载 ⇒ Astro 会抽成同源共享 chunk）。
       import '../scripts/transition';
@@ -231,6 +233,7 @@ const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('
          ⇒ 没 [data-notices] 不发请求。notices.ts 随共享块加载完整铃铛，
          不引入访客账户客户端；来源文案和落点由服务端生成，守住既有字节预算。 */
       import '../scripts/notices';
+      import '../scripts/music-player';
     </script>
   </body>
 </html>
