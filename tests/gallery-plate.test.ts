@@ -63,7 +63,7 @@ const ROW_CODE = strip(ROW_SRC);
 /** 砖墙那一整份（错缝 / 方槽 / 不裁图 / 编目号 那几条都盯着它）。
  *  ★ 2026-10-07 之前它指的是 `src/pages/gallery/index.astro` —— 搬运之后不能再指那里，
  *    否则所有"源码里有没有某条规则"的断言都会恒假（那是最没价值的红）。 */
-const WALL_CODE = strip(WALL_SRC);
+const WALL_CODE = strip(WALL_SRC + '\n' + read('src/scripts/photo-wall.ts'));
 
 const MANIFEST = JSON.parse(read('public/gallery/manifest.json')) as {
   widths: number[];

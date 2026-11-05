@@ -70,3 +70,14 @@ if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
     true, // 捕获阶段只做初筛；真正的判断在微任务里（见上）
   );
 }
+
+// 客户端换页沿用原来的墨色过渡，不替换持久播放器。
+document.addEventListener('astro:before-preparation', () => {
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) root.classList.add('pt-on');
+});
+document.addEventListener('astro:after-swap', () => {
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    root.classList.add('pt-on','pt-play');
+    setTimeout(() => root.classList.remove('pt-on','pt-play'), HANDOFF_MS);
+  }
+});

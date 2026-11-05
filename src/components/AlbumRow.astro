@@ -421,6 +421,10 @@ const skipped = pick.length < album.total;
 </style>
 
 <script>
+
+import { onPage } from '../scripts/page-lifecycle';
+onPage(({document, addEventListener}) => {
+
   /* 入口条：点**关着**的那张 ⇒ 只放大（不跳转）；点**放大**的那张 ⇒ 照常进相册页。
      一行只有一个入口，所有条目的 href 指向同一个相册页 ⇒ 哪一张在放大态纯粹是视觉状态。 */
   (() => {
@@ -469,4 +473,6 @@ const skipped = pick.length < album.total;
       });
     }
   })();
+
+},"[data-ar]");
 </script>

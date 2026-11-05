@@ -328,7 +328,7 @@ describe('友链页 · 星座 CONSTELLATION（2026-10-05）', () => {
     it('㉓ 装置脚本不引新依赖、只import rl-core', () => {
       expect(CODE).toMatch(/from '\.\/rl-core'/);
       const imports = [...CODE.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1]);
-      expect(imports.every((i) => i === './rl-core')).toBe(true);
+      expect(imports.every((i) => i === './rl-core' || i === './page-lifecycle')).toBe(true);
     });
 
     it('㉔ 页面不新增外链资源（零第三方请求）', () => {

@@ -592,9 +592,9 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
     position: fixed;
     inset: 0;
     z-index: 50;
-    background: rgb(26 26 26 / 92%);
+    background: var(--photo-lightbox-bg);
     flex-direction: column;
-    color: var(--paper);
+    color: var(--photo-lightbox-ink);
   }
   .splb.on {
     display: flex;
@@ -604,38 +604,39 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
     align-items: center;
     gap: var(--sp-4);
     padding: 0.7rem var(--gutter);
-    border-bottom: 1px solid rgb(250 250 247 / 18%);
+    border-bottom: 1px solid var(--photo-lightbox-hair);
     font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
     font-size: var(--fs-xs);
   }
   .splb-meta {
-    color: rgb(250 250 247 / 72%);
+    color: var(--photo-lightbox-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .splb-meta b {
-    color: var(--paper);
+    color: var(--photo-lightbox-ink);
     font-weight: 400;
   }
   .splb-pos {
     margin-left: auto;
     font-variant-numeric: tabular-nums;
-    color: rgb(250 250 247 / 72%);
+    color: var(--photo-lightbox-muted);
   }
   .splb button {
     background: none;
-    border: 1px solid rgb(250 250 247 / 30%);
+    border: 1px solid var(--photo-lightbox-edge);
     border-radius: 0;
-    color: var(--paper);
+    color: var(--photo-lightbox-ink);
     font: inherit;
     padding: 0.25rem 0.7rem;
   }
   .splb button:hover,
   .splb button:focus-visible {
-    border-color: var(--accent-bright);
-    color: var(--accent-bright);
+    border-color: var(--photo-lightbox-accent);
+    color: var(--photo-lightbox-accent);
   }
+  .splb button:focus-visible {outline:2px solid var(--photo-lightbox-accent);outline-offset:3px;}
   .splb-stage {
     flex: 1;
     display: flex;
@@ -671,7 +672,7 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
     border: 0;
     border-radius: 50%;
     font: 300 1.5rem/1 "IBM Plex Mono", Consolas, "Courier New", monospace;
-    color: var(--paper);
+    color: var(--photo-lightbox-ink);
     background: var(--dark-glass-bg);
     -webkit-backdrop-filter: blur(var(--dark-glass-blur)) saturate(var(--dark-glass-sat));
     backdrop-filter: blur(var(--dark-glass-blur)) saturate(var(--dark-glass-sat));
@@ -687,7 +688,7 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
   .splb-stage > button:hover { background: var(--dark-glass-bg-hot); }
   .splb-stage > button:active { transform: scale(0.94); }
   .splb-stage > button:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--photo-lightbox-accent);
     outline-offset: 3px;
   }
   @media (hover: none) {
@@ -699,12 +700,15 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
 </style>
 
 <script>
+import { startLoop, createActivityGate, prefersReducedMotion, shouldAnimate } from '../scripts/rl-core';
+import { clamp, blendV, throwTarget, stepSpring, stepPxOf, radiusOf, edgeOf, DT_MAX } from '../scripts/helix-core';
+import { showBig, prefetch, intentPrefetch } from '../scripts/big-image';
+import { onPage } from '../scripts/page-lifecycle';
+onPage(({document, window, addEventListener, setTimeout, clearTimeout}) => {
+
   /* 螺旋盘装置。零依赖：只用 rl-core 的帧循环 / 停帧 / 降级三件套（本站装置的公共底盘），
      以及 helix-core 的惯性数学（★ 抽出去是为了**可单测** —— 那里出过一个真 bug：
      速度没夹就进积分器，见 helix-core.ts 文件头）。 */
-  import { startLoop, createActivityGate, prefersReducedMotion, shouldAnimate } from '../scripts/rl-core';
-  import { clamp, blendV, throwTarget, stepSpring, stepPxOf, radiusOf, edgeOf, DT_MAX } from '../scripts/helix-core';
-  import { showBig, prefetch, intentPrefetch } from '../scripts/big-image';
 
   (() => {
     const vp = document.querySelector<HTMLElement>('[data-spiral]');
@@ -1228,4 +1232,6 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
       });
     }
   })();
+
+},"[data-spiral]");
 </script>

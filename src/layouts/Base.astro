@@ -12,6 +12,7 @@ import '../styles/transition.css';
 //   各页原有的颜色与形态仍以先引入的规则为准 —— 同特异性下后者胜，
 //   这个顺序保证「基线补参数、不改形态」真的成立。
 import '../styles/hover.css';
+import { ClientRouter } from 'astro:transitions';
 import Brandline from '../components/Brandline.astro';
 import CursorRing from '../components/CursorRing.astro';
 import Band from '../components/Band.astro';
@@ -83,8 +84,9 @@ const shareURL = new URL(shareImage || '/share.png', Astro.site ?? Astro.url);
 const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('/share.png', Astro.site ?? Astro.url).href;
 ---
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" transition:animate="none">
   <head>
+    <ClientRouter />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     {/* ★★ 2026-10-08 起，这一行的用途是**退出手机 Chrome 的「自动深色」**；这条至今没变。
@@ -168,7 +170,7 @@ const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('
            ⚠ 别为了看清楚再拆成两块 —— 那会撞那条预算，而且不是"预算太紧"，
              是这个页面上的脚本本来就该合并（5 条里已经有 4 条 module）。
         ⚠ 两块各自带 try/catch（隐私模式下 localStorage 会抛）：一块抛了不许拖累另一块。 */}
-    <script is:inline>try{var r=document.documentElement.classList,t=localStorage.getItem('theme');if(t==='dark'||!t&&matchMedia('(prefers-color-scheme: dark)').matches)r.add('dark')}catch{}try{for(var[k,c]of[['pt',['pt-on','pt-play']],['tsl-nav',['tsl-in']]])if(sessionStorage.getItem(k)){sessionStorage.removeItem(k);r.add(...c)}}catch{}</script>
+    <script is:inline data-astro-rerun>try{var r=document.documentElement.classList,t=localStorage.getItem('theme');if(t==='dark'||!t&&matchMedia('(prefers-color-scheme: dark)').matches)r.add('dark')}catch{}try{for(var[k,c]of[['pt',['pt-on','pt-play']],['tsl-nav',['tsl-in']]])if(sessionStorage.getItem(k)){sessionStorage.removeItem(k);r.add(...c)}}catch{}</script>
   </head>
   <body
     class={[
@@ -222,7 +224,7 @@ const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('
     </div>
     {/* 跟手光标环与涟漪：普通层级 64/65/66，原生弹窗打开时由组件迁入顶层。 */}
     <CursorRing />
-    {!noIndex && <MusicPlayer />}
+    <MusicPlayer />
     <script>
       // 页面过渡的点击拦截（每一页都加载 ⇒ Astro 会抽成同源共享 chunk）。
       import '../scripts/transition';

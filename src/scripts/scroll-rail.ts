@@ -1,3 +1,6 @@
+
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, ResizeObserver}) => {
 /* =============================================================================
  * 文章与日志 · 滚动轨（SCROLL RAIL）—— 页面右侧一根**可拖动**的滚动条
  *
@@ -115,3 +118,5 @@
      做成 `role="scrollbar"` 反而要维持一整套 aria-valuenow 状态，而那条路
      对读屏用户并不比原生滚动更好 —— 不如不给一个半对的可访问性接口。 */
 })();
+
+});

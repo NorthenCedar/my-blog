@@ -1,5 +1,7 @@
 import { createPleats, hitPleats, PleatWaves, updatePleats } from './pleated-core';
 import { createPleatedRenderer } from './pleated-renderer';
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, cancelAnimationFrame, ResizeObserver}) => {
 
 (() => {
   const host = document.querySelector<HTMLElement>('[data-pleated-infinity]');
@@ -95,3 +97,5 @@ import { createPleatedRenderer } from './pleated-renderer';
   new ResizeObserver(() => { if (renderer && !document.hidden) paint(); }).observe(canvas);
   start();
 })();
+
+});

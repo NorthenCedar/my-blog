@@ -1,7 +1,8 @@
-/** 留言页浅水：按需绘制连续波面，平静、后台及减少动态效果时停帧。 */
 import { WaterSurface } from './water-core';
 import { prefersReducedMotion } from './rl-core';
-
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, cancelAnimationFrame}) => {
+/** 留言页浅水：按需绘制连续波面，平静、后台及减少动态效果时停帧。 */
 (() => {
   const canvas = document.querySelector<HTMLCanvasElement>('[data-ripple]');
   if (!canvas) return;
@@ -110,3 +111,5 @@ import { prefersReducedMotion } from './rl-core';
   });
   resize();
 })();
+
+});

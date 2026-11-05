@@ -50,15 +50,16 @@ describe('相册舞台 · 正式产物',()=>{
       expect(seg).toContain('data-draw');
     });
   });
-  it('全量原盘照片兼作显影素材；保留公共导航、明暗入口和站点统计',()=>{
+  it('全量原盘照片兼作显影素材；保留公共导航和站点统计，主题开关只留在关于页',()=>{
     const total=manifest.albums.reduce((n:number,a:GalleryAlbum)=>n+a.total,0);
     expect((html.match(/data-sp-item="/g)??[]).length).toBe(total);
     expect((html.match(/data-bath-src(?:\s|>)/g)??[]).length).toBe(1);
-    for(const hook of ['data-spiral','id="splb"','data-gallery-theme','data-gallery-site-meta','class="topbar','class="foot'])expect(html).toContain(hook);
+    for(const hook of ['data-spiral','id="splb"','data-gallery-site-meta','class="topbar','class="foot'])expect(html).toContain(hook);
     const page=read('src/pages/gallery/index.astro');
     expect(page).toContain('<SpiralPlate mode="embed" />');
     const script=read('src/scripts/gallery-stage.js');
-    expect(script).toContain("import {getTheme,setTheme} from './theme'");
+    expect(html).not.toContain('data-gallery-theme');
+    expect(script).not.toContain('setTheme');
     expect(script).not.toMatch(/Jelly|typegpu|three/);
   });
   it('新主题声明限于相册页，新增根 token 不改变全站普通属性',()=>{

@@ -1001,6 +1001,7 @@ export async function setupScene(root: TgpuRoot, context: GPUCanvasContext) {
        果冻物理落定）然后停帧；任何新交互由 EventHandler.wake 唤醒（见 events.ts）。 */
   const IDLE_FRAMES_TO_STOP = 90;
   let animationFrameHandle = 0;
+  let disposed = false;
   let idleFrames = 0;
   let lastMouseX = Number.NaN;
   let onProgress: ((progress: number) => void) | null = null;
@@ -1072,6 +1073,7 @@ export async function setupScene(root: TgpuRoot, context: GPUCanvasContext) {
   }
 
   function wake() {
+    if (disposed) return;
     if (animationFrameHandle !== 0) return;
     lastTimestamp = null;     // 重启后的第一帧不要拿到巨大的 dt
     lastMouseX = Number.NaN;  // 视为"刚动过"，重新打开 90 帧窗口
@@ -1210,6 +1212,7 @@ export async function setupScene(root: TgpuRoot, context: GPUCanvasContext) {
       return resolutionScale;
     },
     onCleanup() {
+      disposed = true; eventHandler.dispose(); onProgress = null;
       cancelAnimationFrame(animationFrameHandle);
       animationFrameHandle = 0;
     },

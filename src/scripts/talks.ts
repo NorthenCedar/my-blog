@@ -1,3 +1,7 @@
+import { fmtTime, groupReplies, parentIdsOf, postComment, replyLi, toggleReplyForm, type Reply } from './reply-common';
+import { authorNode, identityControls, node, type Authored } from './visitor-client';
+import { onPage } from './page-lifecycle';
+onPage(({document, addEventListener}) => {
 // 说说的点赞与评论。全站第三个客户端脚本（前两个：代码复制、文章/留言页评论）。
 //
 // 与 src/scripts/comments.ts 的区别（所以没有复用它）：
@@ -6,10 +10,6 @@
 //   两边**共用** src/scripts/reply-common.ts 的回复渲染与表单 ⇒ 三处回复的观感与规则完全一致。
 //
 // 安全铁律同 comments.ts：**任何地方都不用 innerHTML**，用户输入一律 textContent。
-
-import { fmtTime, groupReplies, parentIdsOf, postComment, replyLi, toggleReplyForm, type Reply } from './reply-common';
-import { authorNode, identityControls, node, type Authored } from './visitor-client';
-
 type Comment = Authored & { body: string; createdAt: string };
 
 const LIKE_STORE = 'nc-liked-talks';
@@ -271,3 +271,5 @@ const writeLiked = (list: string[]) => {
       });
   }
 }
+
+});

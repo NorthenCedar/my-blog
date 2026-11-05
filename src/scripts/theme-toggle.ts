@@ -1,3 +1,4 @@
+import { createPageScope } from './page-lifecycle';
 /**
  * Jelly Slider 主题切换 —— 原版 WebGPU 实现（Software Mansion / TypeGPU，MIT）。
  *
@@ -75,11 +76,15 @@ function mountFallback(root: HTMLElement): void {
     paint();
   });
   document.addEventListener('themechange', paint);
+  window.addEventListener('pagehide',()=>document.removeEventListener('themechange',paint),{once:true});
   root.appendChild(btn);
   paint();
 }
 
 export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
+  const scope=createPageScope(globalThis.window,globalThis.document);
+  const {window,document}=scope;
+  window.addEventListener('pagehide',()=>scope.dispose(),{once:true});
   const canvas = root.querySelector('canvas');
   if (!canvas) return;
 
@@ -97,6 +102,7 @@ export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
     return;
   }
 
+  if (!root.isConnected) { tgRoot.destroy(); scope.dispose(); return; }
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
   canvas.width = Math.round(W * dpr);
   canvas.height = Math.round(H * dpr);
@@ -105,8 +111,11 @@ export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
      于是关于页的 ∞ 底纹从按钮底下透出来、影子也落在页面上，见 scene.ts 的 blit 注释。 */
   const context = tgRoot.configureContext({ canvas, alphaMode: 'premultiplied' });
   const scene = await setupScene(tgRoot, context);
+  if (!root.isConnected) { scene.onCleanup(); tgRoot.destroy(); scope.dispose(); return; }
+  scope.keep(()=>{scene.onCleanup();tgRoot.destroy();});
   const events = scene.eventHandler;
   const preview = createThemePreview();
+  scope.keep(()=>preview.clear());
   let dragPreview = false;
   const paintTip = (progress: number) => {
     const color = mixThemeColor(preview.colors.light['--jelly-tip-light'], preview.colors.dark['--jelly-tip-dark'], progress);

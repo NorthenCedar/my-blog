@@ -18,6 +18,7 @@ export { LIGHT_END, DARK_END };
 
 export class EventHandler {
   private canvas: HTMLCanvasElement;
+  private readonly listeners = new AbortController();
   private mouseX = 1.0;
   private targetMouseX = 1.0;
   private isMouseDown = false;
@@ -99,13 +100,13 @@ export class EventHandler {
       } catch {
         /* 无所谓：window 上的 pointermove 才是主通路 */
       }
-    });
+    }, {signal:this.listeners.signal});
 
     // 挂在 window 而不是 canvas：拖出画布（甚至拖出视口再回来）都要继续跟手
     window.addEventListener('pointermove', (e) => {
       if (!this.isMouseDown || e.pointerId !== this.activePointerId) return;
       this.handlePointerMove(e.clientX);
-    });
+    }, {signal:this.listeners.signal});
 
     const endDrag = (e: PointerEvent) => {
       if (e.pointerId !== this.activePointerId) return;
@@ -118,9 +119,12 @@ export class EventHandler {
         /* 已经释放 / 从未捕获 */
       }
     };
-    window.addEventListener('pointerup', endDrag);
-    window.addEventListener('pointercancel', endDrag);
+    window.addEventListener('pointerup', endDrag, {signal:this.listeners.signal});
+    window.addEventListener('pointercancel', endDrag, {signal:this.listeners.signal});
   }
+
+  /** 客户端离页后撤销窗口监听，旧开关不再被唤醒。 */
+  dispose() { this.listeners.abort(); this.wake=null; this.hitTest=null; this.snapDone=null; }
 
   private handlePointerMove(clientX: number) {
     this.updateTargetMouseX(clientX);

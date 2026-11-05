@@ -918,3 +918,49 @@ html.dark{--gallery-paper:#0b0b0c;--gallery-ink:#f2f4f1;--gallery-muted:#a6aaa4;
  :root{--gallery-film-base:#8c9b8d;--gallery-film-shade:#d0d5c8;--gallery-film-edge:#54725a;--gallery-film-frame:#708777;--gallery-film-opacity:.40;--gallery-bath-faint:#ffffffa6}
 html.dark{--gallery-film-base:#785737;--gallery-film-shade:#221c17;--gallery-film-edge:#c28d58;--gallery-film-frame:#a37344;--gallery-film-opacity:.47;--gallery-bath-faint:#15100bb0}
 :root{--gallery-detail-1:#00000026}
+
+/* 音乐播放器：透光底、折射亮边与内侧暗边共同表达玻璃厚度。 */
+:root {
+  --music-glass: #fafaf70f;
+  --music-glass-bar: #fafaf700;
+  --music-glass-bar-fallback: #fafaf700;
+  --music-glass-fallback: #fafaf7f5;
+  --music-glass-edge: #ffffffcc;
+  --music-glass-glint: #ffffffeb;
+  --music-glass-inner: #ffffff26;
+  --music-glass-shade: #17291f21;
+  --music-glass-shadow: #12241b2b;
+  --music-glass-control: #ffffff33;
+  --music-glass-hover: #ffffff59;
+  --music-glass-muted: #2b352e;
+  --music-glass-accent: #174026;
+  --music-glass-selected: #2d7d4617
+}
+html.dark {
+  --music-glass: #1d202314;
+  --music-glass-bar: #1d202300;
+  --music-glass-bar-fallback: #1d202300;
+  --music-glass-fallback: #191b1df5;
+  --music-glass-edge: #ffffff36;
+  --music-glass-glint: #ffffff70;
+  --music-glass-inner: #ffffff0f;
+  --music-glass-shade: #00000070;
+  --music-glass-shadow: #00000066;
+  --music-glass-control: #ffffff0f;
+  --music-glass-hover: #ffffff1a;
+  --music-glass-muted: #bfc4c1;
+  --music-glass-accent: #ffb576;
+  --music-glass-selected: #ff7b001f
+}
+
+/* 单册灯箱独立暗幕，保持照片的中性包围色。 */
+:root{--photo-lightbox-bg:#1a1a1aeb;}
+
+/* 灯箱位于独立暗幕，文字与交互色不继承正文纸色或首页局部强调色。 */
+:root{--photo-lightbox-ink:#fafaf7;--photo-lightbox-muted:#fafaf7b8;--photo-lightbox-edge:#fafaf74d;--photo-lightbox-hair:#fafaf72e;--photo-lightbox-accent:#4caf50;}
+html.dark{--photo-lightbox-accent:#ffb570;}
+
+/* 小型液态玻璃控件：边缘明暗与镜片内圈，中心不压实色。 */
+:root{--mask-solid:#000000;
+  --liquid-tint:#ffffff03;--liquid-glint:#ffffff8c;--liquid-inner:#ffffff2e;--liquid-shade:#0014238c;--liquid-drop:#00000059;--liquid-cool:#a0c8ff29;--liquid-sheen:#ffffff0d;--liquid-shadow:#000a1e12;--liquid-rim:#ffffff26;}
+html.dark{--liquid-tint:#ffffff03;--liquid-glint:#ffffff73;--liquid-inner:#ffffff21;--liquid-shade:#0000008c;--liquid-drop:#00000080;--liquid-cool:#adc9d929;--liquid-sheen:#ffffff0a;--liquid-shadow:#0000001a;--liquid-rim:#ffffff21;}

@@ -1,6 +1,8 @@
 import { accountRequest, loadViewer, node, portrait, setViewer, viewerVersion, watchViewer, type Visitor } from './visitor-client';
 import { openLogin, recoveryPanel } from './visitor-dialog';
 import { DEFAULT_AVATARS } from '../lib/visitor-avatars';
+import { onPage } from './page-lifecycle';
+onPage(({document, addEventListener, keep}) => {
 
 const root = document.querySelector<HTMLElement>('[data-account-state]')!;
 const notices = document.querySelector<HTMLElement>('[data-account-notices]')!;
@@ -117,5 +119,7 @@ function show(initial: Visitor | null) {
   });
   safety.append(logout); root.append(safety);
 }
-watchViewer(user => { if ((user?.id ?? null) !== displayed) show(user); });
+keep(watchViewer(user => { if ((user?.id ?? null) !== displayed) show(user); }));
 void loadViewer().then(show);
+
+}, '[data-account-state]');

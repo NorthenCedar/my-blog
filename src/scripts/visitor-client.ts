@@ -95,5 +95,7 @@ export function identityControls(form: HTMLFormElement) {
   window.addEventListener('visitor-session-expired', onExpired);
   listeners.add(update);
   void loadViewer().then(apply);
-  return () => { listeners.delete(update); window.removeEventListener('visitor-session-expired', onExpired); };
+  const dispose = () => { listeners.delete(update); window.removeEventListener('visitor-session-expired', onExpired); window.removeEventListener('pagehide',dispose); };
+  window.addEventListener('pagehide',dispose,{once:true});
+  return dispose;
 }

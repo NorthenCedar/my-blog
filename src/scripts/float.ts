@@ -1,3 +1,6 @@
+import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } from './rl-core';
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia, setTimeout, clearTimeout}) => {
 /* =============================================================================
  * 说说页 · 浮游（FLOAT）—— 斜飘雨线 + 下半屏的椭圆涟漪
  *
@@ -58,8 +61,6 @@
  *        显影板 / 卷尺上是**在流里**的元素，onScreen 才真的有语义；这里保留它，
  *        是为了"切标签必停"这一条与其余装置走同一条代码路径（少一类只在某页才有的行为）。
  */
-import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } from './rl-core';
-
 (() => {
   const cv = document.querySelector<HTMLCanvasElement>('[data-float-bg]');
   if (!cv) return;
@@ -248,3 +249,5 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
     gate.dispose();
   }, { once: true });
 })();
+
+},".float-bg");

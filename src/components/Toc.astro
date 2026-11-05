@@ -9,15 +9,19 @@ const { headings } = Astro.props;
 {headings.length > 0 && (
   <nav class="toc" aria-label="本文目录">
     <h2 class="label">本文目录</h2>
-    <ol>
+    <div class="toc-index"><span class="toc-marker" data-toc-marker aria-hidden="true" hidden></span><ol>
       {headings.map((h) => (
         <li class={`lv${h.depth}`}><a href={`#${h.id}`}>{h.text}</a></li>
       ))}
-    </ol>
+    </ol></div>
   </nav>
 )}
 
 <style>
+  .toc-index{position:relative;overflow:hidden;}
+  .toc-marker{position:absolute;left:0;top:0;width:2px;height:1px;background:var(--accent-ink);transform-origin:0 0;pointer-events:none;z-index:1;}
+  .toc-marker[hidden]{display:none;}
+  .toc[data-toc-enhanced] a[aria-current="location"]{border-left-color:transparent;}
   .toc {
     border-top: 1px solid var(--ink);
     border-bottom: 1px solid var(--hair);

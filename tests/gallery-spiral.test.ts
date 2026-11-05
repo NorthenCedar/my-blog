@@ -1,3 +1,4 @@
+import { MOTION_ENGINE_BUDGET, expectMotionStartup } from './_motion-budget';
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -919,7 +920,9 @@ describe('螺旋盘 · 红线与预算', () => {
           （共享块 1112 → 3074 内联）—— 本就只剩 34 字节的余量当场撞线。
           14 KiB 下仍留 ~120 字节天花板，three 那条反面正对照照旧生效。 */
     // 全站公共歌单播放器增加约 5.5 KiB，共享闭包预留 6 KiB。
-    const BUDGET = 20480;
+    // 随机播放队列净增约 1 KiB，保留完整闭包和 Three 禁入断言。
+    const BUDGET = 53248 + MOTION_ENGINE_BUDGET;
+    expectMotionStartup(PAGE_PATH, 53248);
     expect(hasDist, '先 npm run build').toBe(true);
     const { code, files } = jsClosure(PAGE_PATH);
     const full = Buffer.byteLength(code, 'utf8');

@@ -1,3 +1,7 @@
+import { prefersReducedMotion, shouldAnimate } from './rl-core';
+import { bucketize, envelope, ticks, pickUnit, toNotes, bucketAt, fmtAt, type Note, type Bin, type Unit } from './voiceprint-core';
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener}) => {
 /* =============================================================================
  * 留言页 · 声纹带 VOICEPRINT —— 控制器（2026-10-14）
  *
@@ -20,9 +24,6 @@
  *   本文件**不 fetch**、不轮询、不观察 DOM —— 那三样都会与留言列表抢主线程，
  *   而且"DOM 变了"不是"留言成功了"的可靠信号。
  */
-import { prefersReducedMotion, shouldAnimate } from './rl-core';
-import { bucketize, envelope, ticks, pickUnit, toNotes, bucketAt, fmtAt, type Note, type Bin, type Unit } from './voiceprint-core';
-
 (() => {
   const root = document.querySelector<HTMLElement>('[data-voiceprint]');
   const list = document.querySelector<HTMLElement>('[data-list]');
@@ -250,3 +251,4 @@ const W = 1000, H = 100, TOP = 18, SPAN = 68, SAMPLES = 240;
     });
   }
 })();
+});

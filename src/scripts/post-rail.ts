@@ -1,5 +1,5 @@
 /** 阅读侧栏的增强：目录原生锚点照常可用，脚本只负责当前位置与复制反馈。 */
-export function initPostRail(doc: Document): () => void {
+export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement, changed: boolean) => void): () => void {
   const win = doc.defaultView;
   if (!win) return () => {};
   const pairs = [...doc.querySelectorAll<HTMLAnchorElement>('.post-rail .toc a')]
@@ -13,12 +13,15 @@ export function initPostRail(doc: Document): () => void {
     if (!live || !pairs.length) return;
     let next = 0;
     pairs.forEach(({ heading }, i) => { if (heading.getBoundingClientRect().top <= win.innerHeight * 0.2) next = i; });
-    if (next === current) return;
-    current = next;
-    pairs.forEach(({ link }, i) => {
-      if (i === next) link.setAttribute('aria-current', 'location');
-      else link.removeAttribute('aria-current');
-    });
+    const changed=next!==current;
+    if(changed){
+      current = next;
+      pairs.forEach(({ link }, i) => {
+        if (i === next) link.setAttribute('aria-current', 'location');
+        else link.removeAttribute('aria-current');
+      });
+    }
+    onActive?.(pairs[next].link,changed);
   };
   const schedule = () => { if (live && !frame && pairs.length) frame = win.requestAnimationFrame(update); };
   win.addEventListener('scroll', schedule, { passive: true });

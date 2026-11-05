@@ -1,3 +1,6 @@
+
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener}) => {
 /**
  * 顶栏消息铃铛：访客收回复，站主收全站新留言与回复。
  * 打开即读仅作用于当前展示的消息；可翻到更早消息，失败不清未读。
@@ -152,3 +155,5 @@ if (bell) {
   window.addEventListener('pageshow', () => void pull());
   void pull();
 }
+
+});

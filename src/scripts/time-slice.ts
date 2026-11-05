@@ -1,3 +1,9 @@
+import { createActivityGate, createSpring, prefersReducedMotion, shouldAnimate, startLoop } from './rl-core';
+import { TSL, tslTimeline, tslWindow } from './time-slice-core';
+import { navigate } from 'astro:transitions/client';
+import { onPage } from './page-lifecycle';
+export { TSL, TSL_FRAMES, TSL_SECONDS, tslHash, tslPath, tslTimeline } from './time-slice-core';
+onPage(({document, window, addEventListener, matchMedia, setTimeout, clearTimeout}) => {
 /* =============================================================================
  * TIME SLICE 时间切片 —— 主页收尾装置（S6，footer 之前）· 控制器
  *
@@ -90,10 +96,7 @@
 
 /* 纯函数层住在 time-slice-core.ts（无 DOM、零随机源，测试直接 import）；
    这里转出口保持既有 import 路径兼容。 */
-import { createActivityGate, createSpring, prefersReducedMotion, shouldAnimate, startLoop } from './rl-core';
-import { TSL, tslTimeline, tslWindow } from './time-slice-core';
 
-export { TSL, TSL_FRAMES, TSL_SECONDS, tslHash, tslPath, tslTimeline } from './time-slice-core';
 
 /* ------------------------------------------------------------------ 装置本体 */
 
@@ -387,7 +390,7 @@ function init() {
       /* 这一帧绿幕已满屏（exit ≥ 0.95 ⇒ 绿幕 opacity = 1），相册页开场是
          同一套深绿（逐档实测误差 ≤2/255）⇒ 直接切过去就是无缝的。 */
       const dest = goLink.getAttribute('href'); // 地址从静态层的链接读，不在 JS 里写死
-      if (dest) window.location.assign(dest);
+      if (dest) void navigate(dest);
     }, NAV_HOLD_MS);
   };
   const cancelNav = () => {
@@ -565,3 +568,5 @@ function init() {
 if (typeof document !== 'undefined') {
   init();
 }
+
+},'[data-tsl]');

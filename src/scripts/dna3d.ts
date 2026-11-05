@@ -1,3 +1,6 @@
+
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, cancelAnimationFrame, ResizeObserver, IntersectionObserver, MutationObserver}) => {
 // 真 3D DNA 双螺旋（2026-09-30，站主拍板「用 three.js，接受破例」）
 //
 // 几何与自转移植自视觉原型 nc-rhine-v7 v10.3 —— 原型那版是在无头 Chrome 里
@@ -64,7 +67,7 @@ async function boot(host: HTMLElement) {
     import('./dna-scene'),
     import('../vendor/GLTFLoader.js'),
   ]);
-  if (!inView) return; // 下载期间滚走了：别白烧 GPU
+  if (!inView || !host.isConnected) return; // 下载期间滚走了：别白烧 GPU
 
   let renderer: import('three').WebGLRenderer;
   try {
@@ -139,7 +142,10 @@ async function boot(host: HTMLElement) {
   paintTheme();
   const themeObserver = new MutationObserver(paintTheme);
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-  addEventListener('pagehide', () => themeObserver.disconnect(), { once: true });
+  addEventListener('pagehide', () => {
+    live = false; themeObserver.disconnect(); renderer.dispose();
+    scene.traverse(object => { const mesh=object as import('three').Mesh; if(mesh.isMesh){mesh.geometry.dispose();for(const material of Array.isArray(mesh.material)?mesh.material:[mesh.material])material.dispose();} });
+  }, { once: true });
 
   const fit = () => {
     const r = host.getBoundingClientRect();
@@ -154,6 +160,7 @@ async function boot(host: HTMLElement) {
     '/dna-slim.glb',
     (gltf: { scene: import('three').Object3D }) => {
       const src = gltf.scene;
+      if (!host.isConnected) { src.traverse(object=>{const mesh=object as import('three').Mesh;if(mesh.isMesh){mesh.geometry.dispose();for(const material of Array.isArray(mesh.material)?mesh.material:[mesh.material])material.dispose();}});return; }
 
       // GLB 两条链共用同一材质；逐链克隆后才能分别设铜色与石墨色。
       let chain = 0;
@@ -262,3 +269,5 @@ function onceVisible(el: HTMLElement): Promise<boolean> {
     io.observe(el);
   });
 }
+
+},"#dnaStack");

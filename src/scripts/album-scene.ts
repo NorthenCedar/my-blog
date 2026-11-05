@@ -1,4 +1,6 @@
 import { clampCamera, clampFocus, clampZoom, slicePose, zoomAt, scatterZoomStep, focusIntent, coastStep, sliceThrowTarget, sliceWheelImpulse, scatterWheelFactor, coastSliceWheel, type Camera, type Placement } from './album-scene-core';
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, cancelAnimationFrame, setTimeout, clearTimeout, ResizeObserver}) => {
 
 /** 单册渐进增强：同一批 figure 在陈列与索引间移动，灯箱留在变换层外。 */
 for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]')) {
@@ -26,6 +28,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
     y: Math.max(...positions.map((p) => Math.abs(p.y))) + 400,
   };
   let camera: Camera = { x: 0, y: 0, scale: 1 };
+  let cameraTarget: Camera | null = null;
   let focus = 0;
   let target = 0;
   let active = false;
@@ -106,6 +109,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
     velocity = { x: 0, y: 0 };
     wheelVelocity = 0;
     zoomTarget = null;
+    cameraTarget = null;
   }
 
   function animate(now: number) {
@@ -130,6 +134,12 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
       camera = state.camera;
       velocity = state.velocity;
       let settling = false;
+      if (cameraTarget) {
+        const k = 1 - Math.exp(-9 * dt);
+        camera = { x: camera.x + (cameraTarget.x - camera.x) * k, y: camera.y + (cameraTarget.y - camera.y) * k, scale: camera.scale + (cameraTarget.scale - camera.scale) * k };
+        settling = Math.abs(camera.x-cameraTarget.x)+Math.abs(camera.y-cameraTarget.y) > .2 || Math.abs(camera.scale-cameraTarget.scale) > .0005;
+        if (!settling) { camera = cameraTarget; cameraTarget = null; }
+      }
       if (zoomTarget) {
         const zoom = scatterZoomStep(camera, zoomTarget, dt);
         camera = zoom.camera;
@@ -155,11 +165,18 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
     else start();
   }
 
-  function home() {
+  function moveCamera(next: Camera, instant = false) {
     stop();
-    if (slices) { focus = target = 0; }
-    else camera = { x: 0, y: 0, scale: Math.max(0.34, Math.min(0.9, viewport.clientWidth / 1400)) };
-    paint();
+    const dest = clampCamera(next, bounds);
+    if (instant || reduce.matches) { camera = dest; paint(); }
+    else { cameraTarget = dest; start(); }
+  }
+
+  function home(instant = false) {
+    if (slices) {
+      stop(); target = 0;
+      if (instant || reduce.matches) { focus = 0; paint(); } else start();
+    } else moveCamera({ x: 0, y: 0, scale: Math.max(0.34, Math.min(0.9, viewport.clientWidth / 1400)) }, instant);
   }
 
   function setActive(on: boolean) {
@@ -175,7 +192,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
       root.classList.add('scene-on');
       viewport.tabIndex = 0;
       controls.hidden = false;
-      if (!started) { started = true; home(); }
+      if (!started) { started = true; home(true); }
       else paint();
     } else {
       root.classList.remove('scene-on');
@@ -189,7 +206,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
         links[i].removeAttribute('tabindex');
       }
     }
-    toggle.textContent = on ? '查看全部' : '返回展览';
+    toggle.querySelector('[data-scene-toggle-label]')!.textContent = on ? '查看全部' : '返回展览';
     toggle.setAttribute('aria-pressed', String(!on));
   }
 
@@ -204,12 +221,12 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
     if (!viewport.contains(event.target as Node)) navigation = focusIntent('focus', navigation.pending);
   });
   toggle.addEventListener('click', () => setActive(!active));
-  get('home').addEventListener('click', home);
-  prev.addEventListener('click', () => { if (slices) goto(target - 1); else { camera.x += 200; paint(); } });
-  next.addEventListener('click', () => { if (slices) goto(target + 1); else { camera.x -= 200; paint(); } });
+  get('home').addEventListener('click', () => home());
+  prev.addEventListener('click', () => { if (slices) goto(target - 1); else { const base = cameraTarget ?? camera; moveCamera({ ...base, x: base.x + 200 }); } });
+  next.addEventListener('click', () => { if (slices) goto(target + 1); else { const base = cameraTarget ?? camera; moveCamera({ ...base, x: base.x - 200 }); } });
   if (!slices) {
-    get('zoom-in').addEventListener('click', () => { stop(); camera = zoomAt(camera, { x: 0, y: 0 }, 1.2); paint(); });
-    get('zoom-out').addEventListener('click', () => { stop(); camera = zoomAt(camera, { x: 0, y: 0 }, 1 / 1.2); paint(); });
+    get('zoom-in').addEventListener('click', () => { moveCamera(zoomAt(cameraTarget ?? camera, { x: 0, y: 0 }, 1.2)); });
+    get('zoom-out').addEventListener('click', () => { moveCamera(zoomAt(cameraTarget ?? camera, { x: 0, y: 0 }, 1 / 1.2)); });
   }
 
   viewport.addEventListener('pointerdown', (event) => {
@@ -336,3 +353,5 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
 }
+
+},"[data-album-scene]");

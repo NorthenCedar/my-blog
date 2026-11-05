@@ -1,0 +1,34 @@
+import {beforeEach,afterEach,expect,it,vi} from 'vitest';
+import {Window} from 'happy-dom';
+import {createPageScope} from '../src/scripts/page-lifecycle';
+afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
+it('页面作用域注销全局监听、媒体查询和观察器，异步回调不能复活旧页面',()=>{
+  const win=new Window(), doc=win.document;
+  const pending=new Map<number,FrameRequestCallback>();let id=0;
+  vi.spyOn(win,'requestAnimationFrame').mockImplementation(fn=>{pending.set(++id,fn);return id;});
+  vi.spyOn(win,'cancelAnimationFrame').mockImplementation(n=>{pending.delete(n);});
+  const scope=createPageScope(win as any,doc as any);let clicks=0,frames=0,disposed=0;
+  scope.document.addEventListener('click',()=>clicks++);
+  const query=scope.matchMedia('(min-width:1px)');query.onchange=()=>clicks++;
+  const observer=new scope.MutationObserver(()=>{});const disconnect=vi.spyOn(observer,'disconnect');
+  scope.requestAnimationFrame(()=>frames++);scope.keep(()=>disposed++);
+  doc.dispatchEvent(new win.Event('click'));expect(clicks).toBe(1);
+  scope.dispose();scope.dispose();
+  doc.dispatchEvent(new win.Event('click'));
+  expect(clicks).toBe(1);expect(query.onchange).toBe(null);expect(pending.size).toBe(0);
+  expect(disconnect).toHaveBeenCalledTimes(1);expect(disposed).toBe(1);
+  expect(scope.requestAnimationFrame(()=>frames++)).toBe(0);expect(frames).toBe(0);
+});
+it('首屏只挂载一次，替换页面时先清理，再为目标页重新挂载',async()=>{
+  vi.resetModules();const win=new Window();win.document.body.innerHTML='<button data-probe>一</button>';
+  vi.stubGlobal('window',win);vi.stubGlobal('document',win.document);vi.stubGlobal('PageTransitionEvent',win.PageTransitionEvent);
+  const {onPage}=await import('../src/scripts/page-lifecycle');let starts=0,stops=0,clicks=0;
+  onPage(scope=>{starts++;scope.document.addEventListener('click',()=>clicks++);return()=>stops++;},'[data-probe]');
+  win.document.dispatchEvent(new win.Event('astro:page-load'));expect(starts).toBe(1);
+  win.document.dispatchEvent(new win.Event('astro:before-swap'));expect(stops).toBe(1);
+  win.document.body.innerHTML='<button data-probe>二</button>';
+  win.document.dispatchEvent(new win.Event('astro:page-load'));expect(starts).toBe(2);
+  win.document.dispatchEvent(new win.Event('click'));expect(clicks).toBe(1);
+  win.document.dispatchEvent(new win.Event('astro:before-swap'));win.document.body.replaceChildren();
+  win.document.dispatchEvent(new win.Event('astro:page-load'));expect(starts).toBe(2);expect(stops).toBe(2);
+});

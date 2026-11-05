@@ -35,7 +35,6 @@ const first=albums[0]?.frames.find(frame=>frame.src===albums[0]?.cover)??albums[
       <div class="page-reading"><span class="position"><b data-current>01</b><span>/ {String(count).padStart(2,'0')}</span></span><span class="album-current" data-current-title>显影板</span></div>
       <p class="view-hint"><span class="desktop-hint">滚动翻页</span><span class="mobile-hint">上下滑动翻页</span><i aria-hidden="true"></i><span data-hint>涂抹显影，再往下翻</span></p>
       <div class="pager-actions">
-        <button class="theme-button gallery-theme" data-gallery-theme type="button" aria-label="切换明暗模式" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/></svg></button>
         <button type="button" class="catalog-button" data-catalog aria-haspopup="dialog">相册目录<span aria-hidden="true">☷</span></button>
         <div class="direction-buttons"><button type="button" data-prev aria-label="上一页"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" data-next aria-label="下一页"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button></div>
       </div>

@@ -1,3 +1,6 @@
+
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, cancelAnimationFrame, setTimeout, clearTimeout, IntersectionObserver}) => {
 /* =============================================================================
  * 相册页 · 显影板（DEVELOP PLATE）—— 页头右侧那块小板
  *
@@ -1057,3 +1060,5 @@
     }
   }
 })();
+
+},".bath");

@@ -33,6 +33,8 @@
  *     零第三方的约束已于同日撤除（见 AGENTS.md §3 开头）。
  */
 export const RUNTIME_DEPS_ALLOWED = [
+  // 交互形变与布局重排：仅在交互意图后加载 GSAP 核心与 Flip。
+  'gsap',
   // 站点骨架
   '@astrojs/rss',
   '@astrojs/sitemap',

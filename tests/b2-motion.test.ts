@@ -1,3 +1,4 @@
+import {jsClosure} from './_writer-output';
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -80,7 +81,7 @@ describe.skipIf(!hasDist)('B2 动效层：产物静态契约', () => {
     expect(css, '首页不该再有 .field-item 的聚焦弱化（已随 console 外壳删除）').not.toMatch(
       /\.field-item/,
     );
-    const idx = readFileSync(join(DIST, 'index.html'), 'utf8');
+    const idx = jsClosure(join(DIST, 'index.html')).code;
     expect(
       idx,
       '揭示的 opacity:0 初值必须由 JS 写（写进 CSS ⇒ 无 JS 时整页空白）',

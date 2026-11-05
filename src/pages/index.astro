@@ -499,6 +499,10 @@ const titleLines: { ch: string; i: number }[][] = (() => {
        ★ 滚动视差走 CSS scroll-driven（见样式表末尾的 @supports 块），不用 JS 滚动监听。
        ★ 不用 innerHTML（本站硬约束，有测试守着）。 */}
   <script>
+
+import { onPage } from '../scripts/page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, setInterval, IntersectionObserver}) => {
+
     (() => {
       const root = document.documentElement;
       const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -604,23 +608,29 @@ const titleLines: { ch: string; i: number }[][] = (() => {
         setInterval(tick, 1e3);
       }
     })();
-  </script>
+
+},"body.chrome-console");
+</script>
 
   {/* ===== 真 3D DNA + 流场线 =====
        这两块走**外部 module**（Astro 打包成 /_astro/*.js）：
        首页内联脚本有 7168 B 预算守护，three 与 Perlin 噪声装不进去。
        three 本体再往下拆一层动态 import —— 只有真要画的时候才下载那 542 KB。 */}
   <script>
-    import '../scripts/dna3d';
-    import '../scripts/rhgrid';
-    import '../scripts/time-slice';
-    import { initHomeLog } from '../scripts/home-log';
+import '../scripts/dna3d';
+import '../scripts/rhgrid';
+import '../scripts/time-slice';
+import { initHomeLog } from '../scripts/home-log';
+import { onPage } from '../scripts/page-lifecycle';
+onPage(({document, addEventListener}) => {
     const logRoot = document.querySelector<HTMLElement>('[data-home-log]');
     if (logRoot) {
       const disposeLog = initHomeLog(logRoot);
       addEventListener('pagehide', event => { if (!event.persisted) disposeLog(); });
     }
-  </script>
+
+},"body.chrome-console");
+</script>
 </Base>
 
 <style>
@@ -1836,7 +1846,8 @@ const titleLines: { ch: string; i: number }[][] = (() => {
   }
   .tsl-hud {
     position: absolute;
-    right: var(--gutter);
+    right: max(var(--gutter), 248px);
+    max-width: calc(100% - var(--gutter) - 248px);
     bottom: 1.1rem;
     margin: 0;
     padding: 0.3rem 0.62rem;
@@ -1852,6 +1863,7 @@ const titleLines: { ch: string; i: number }[][] = (() => {
        它只在「穿过菱窗之前」露面 —— 不透明度由脚本按窗口张开进度逐帧写，
        进窗口后归 0、同时挂 hidden（连外链也不再可点）。 */
   }
+  @media(max-width:767px){.tsl-hud{right:var(--gutter);bottom:84px;max-width:calc(100% - 2 * var(--gutter));}}
   .tsl-scroll-hint {
     position: absolute;
     right: 0;

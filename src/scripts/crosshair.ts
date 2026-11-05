@@ -1,3 +1,6 @@
+
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia}) => {
 /* =============================================================================
  * 标签页 · 准星（CROSSHAIR）—— 示波器的十字光标
  *
@@ -116,3 +119,5 @@
     if (document.visibilityState !== 'visible') hide();
   });
 })();
+
+},"[data-crosshair]");

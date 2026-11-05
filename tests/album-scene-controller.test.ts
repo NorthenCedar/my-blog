@@ -1,3 +1,4 @@
+import { unwrapPage } from './page-controller-source';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { transformSync } from 'esbuild';
@@ -5,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 
 // 执行真实控制器，仅替代 DOM/时钟。验证事件状态，不冒充浏览器布局和原生手势验收。
 const core = readFileSync('src/scripts/album-scene-core.ts', 'utf8').replace(/^export /gm, '');
-const controller = readFileSync('src/scripts/album-scene.ts', 'utf8').replace(/^import .*\r?\n/, '');
+const controller = unwrapPage(readFileSync('src/scripts/album-scene.ts', 'utf8')).replace(/^import .*\r?\n/gm, '');
 const code = transformSync(`${core}\n${controller}`, { loader: 'ts' }).code;
 
 function setup(layout = 'scatter', reduced = false, count = 2) {
@@ -62,6 +63,9 @@ function setup(layout = 'scatter', reduced = false, count = 2) {
   const root = new Element(); doc.append(root);
   const names = ['viewport', 'world', 'toggle', 'prev', 'next', 'controls', 'status', 'help', 'home', 'zoom-in', 'zoom-out'];
   const elements = Object.fromEntries(names.map((name) => [name, new Element()]));
+  const toggleLabel=new Element(),toggleIcon=new Element();
+  elements.toggle.append(toggleIcon,toggleLabel);
+  elements.toggle.querySelector=selector=>selector==='[data-scene-toggle-label]'?toggleLabel:null;
   const title = new Element();
   root.append(...Object.values(elements));
   elements.viewport.append(title, elements.world);
@@ -116,7 +120,7 @@ function setup(layout = 'scatter', reduced = false, count = 2) {
     frames.clear();
     pending.forEach((fn) => fn(now));
   };
-  return { root, wall, figures, links, title, elements, emit, media, frame, pendingFrames: () => frames.size };
+  return { root, wall, figures, links, title, elements, toggleLabel, toggleIcon, emit, media, frame, pendingFrames: () => frames.size };
 }
 
 describe('真实相册控制器事件回归', () => {
@@ -294,6 +298,10 @@ describe('真实相册控制器事件回归', () => {
     s.emit(s.elements['zoom-out'], 'click');
     expect(Number(s.elements.world.values.get('--scene-scale'))).toBe(0.25);
     s.emit(s.elements.home, 'click');
+    expect(Number(s.elements.world.values.get('--scene-scale'))).toBe(.25);
+    s.frame();
+    expect(Number(s.elements.world.values.get('--scene-scale'))).toBeGreaterThan(.25);
+    for(let i=0;i<70;i++)s.frame();
     expect(Number(s.elements.world.values.get('--scene-scale'))).toBeCloseTo(1000 / 1400);
     expect(s.elements.world.values.get('--scene-pan-x')).toBe('0px');
   });
@@ -360,13 +368,15 @@ describe('真实相册控制器事件回归', () => {
     }
     expect(rises).toBeGreaterThan(5);
     expect(s.pendingFrames()).toBe(0);
-    // 缩放按钮立即接管，取消滚轮收尾，不与缓动相互拉扯。
+    // 缩放按钮接管目标并平滑收尾，取消滚轮目标，不与缓动相互拉扯。
     s.emit(s.elements.viewport, 'wheel', { deltaX: 0, deltaY: -120, deltaMode: 0, clientX: 620, clientY: 480 });
     s.frame();
     s.emit(s.elements['zoom-out'], 'click');
     const clicked = scale();
-    for (let i = 0; i < 10; i++) s.frame();
-    expect(scale()).toBe(clicked);
+    s.frame();
+    expect(scale()).toBeLessThan(clicked);
+    for (let i = 0; i < 70; i++) s.frame();
+    expect(scale()).toBeCloseTo(clicked / 1.2, 3);
     expect(s.pendingFrames()).toBe(0);
     const fast = setup();
     fast.emit(fast.elements.viewport, 'wheel', { deltaX: 0, deltaY: -100000, deltaMode: 0, clientX: 620, clientY: 480 });
@@ -418,4 +428,26 @@ describe('真实相册控制器事件回归', () => {
     expect(s.figures[0].inert).toBe(false);
     expect(s.pendingFrames()).toBe(0);
   });
+});
+
+it('查看全部切换只更新文字，保留玻璃按钮中的图标',()=>{
+  const s=setup();expect(s.toggleLabel.textContent).toBe('查看全部');
+  s.emit(s.elements.toggle,'click');expect(s.toggleLabel.textContent).toBe('返回展览');
+  expect(s.toggleIcon.parent).toBe(s.elements.toggle);
+  s.emit(s.elements.toggle,'click');expect(s.toggleLabel.textContent).toBe('查看全部');
+});
+
+it('散片按钮连点累积目标，中间帧平滑移动，归位也保留过渡',()=>{
+  const s=setup();const x=()=>parseFloat(s.elements.world.values.get('--scene-pan-x')!);
+  s.emit(s.elements.prev,'click');s.emit(s.elements.prev,'click');
+  expect(x()).toBe(0);s.frame();expect(x()).toBeGreaterThan(0);expect(x()).toBeLessThan(400);
+  for(let i=0;i<80;i++)s.frame();expect(x()).toBe(400);expect(s.pendingFrames()).toBe(0);
+  s.emit(s.elements.home,'click');expect(x()).toBe(400);s.frame();expect(x()).toBeLessThan(400);expect(x()).toBeGreaterThan(0);
+  for(let i=0;i<80;i++)s.frame();expect(x()).toBe(0);expect(s.pendingFrames()).toBe(0);
+});
+it('切片回到第一张先移动中间帧，再落到初始位置',()=>{
+  const s=setup('slices',false,10);const x=()=>parseFloat(s.figures[0].values.get('--scene-x')!);
+  s.emit(s.elements.next,'click');for(let i=0;i<90;i++)s.frame();const moved=x();expect(moved).toBeLessThan(0);
+  s.emit(s.elements.home,'click');expect(x()).toBe(moved);s.frame();expect(x()).toBeGreaterThan(moved);expect(x()).toBeLessThan(0);
+  for(let i=0;i<90;i++)s.frame();expect(x()).toBe(0);expect(s.pendingFrames()).toBe(0);
 });

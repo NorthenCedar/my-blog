@@ -26,6 +26,10 @@
   <canvas aria-hidden="true" width="220" height="200"></canvas>
 </div>
 <script>
+
+import { onPage } from '../scripts/page-lifecycle';
+onPage(({document, window, addEventListener, setTimeout}) => {
+
   /* ★ 2026-10-17 懒加载（站主：「只在放按钮的那几页懒加载它」）。
      渲染器是 ~460 KB 的 chunk（TypeGPU + 光追场景），不该挡关于页首屏。
      `import()` 是**动态**的 ⇒ Astro/Vite 把它切成独立 chunk，只有真调到这一行才下载。
@@ -53,6 +57,8 @@
   };
   if (document.readyState === 'complete') schedule();
   else window.addEventListener('load', schedule, { once: true });
+
+},"[data-theme-toggle]");
 </script>
 <style>
   .theme-toggle {

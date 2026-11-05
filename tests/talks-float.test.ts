@@ -99,7 +99,7 @@ describe('说说页 FLOAT · 装置契约', () => {
 
   it('★ 机制镜像：只引 rl-core（帧循环 / 停帧 / 降级开关），不引弹簧', () => {
     const imports = [...CODE.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1]);
-    expect(imports.length, '至少要从 rl-core 取帧循环与降级开关').toBe(1);
+    expect(imports.length, '只引入动画底盘和页面生命周期').toBe(2);
     expect(imports[0], `只许引 rl-core，实际：${imports.join(', ')}`).toBe('./rl-core');
     for (const fn of ['startLoop', 'createActivityGate', 'prefersReducedMotion', 'shouldAnimate']) {
       expect(CODE, `缺 ${fn}`).toMatch(new RegExp(`\\b${fn}\\b`));
@@ -341,7 +341,7 @@ describe('说说页 · 红线与依赖', () => {
 
   it('装置脚本与评论脚本并进同一个 <script> 块（不新增标签）', () => {
     const n = (TALKS.match(/<script\b/g) ?? []).length;
-    expect(n, `说说页有 ${n} 处 <script>，比预期多 —— 装置应并在既有那个模块里`).toBeLessThanOrEqual(5);
+    expect(n, `说说页有 ${n} 处 <script>，比预期多 —— 装置应并在既有那个模块里`).toBeLessThanOrEqual(6);
     expect(TALKS).toMatch(/<script\s+type="module"\s+src="\/_astro\/talks\./);
   });
 

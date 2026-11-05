@@ -1,3 +1,6 @@
+
+import { onPage } from './page-lifecycle';
+onPage(({document, addEventListener, requestAnimationFrame, setTimeout, clearTimeout}) => {
 /** 关于页只负责章节标记与邮箱复制，主题与鳍片仍使用各自的原控制器。 */
 const sections=Array.from(document.querySelectorAll<HTMLElement>('[data-motion-stop]'));
 const links=Array.from(document.querySelectorAll<HTMLElement>('[data-chapter]'));
@@ -22,3 +25,5 @@ button?.addEventListener('click',async()=>{
   catch{status!.textContent=button.dataset.copyMail!;}
   timer=setTimeout(()=>{status!.textContent=''},3500);
 });
+
+},"[data-motion-stop]");

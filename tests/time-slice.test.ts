@@ -178,7 +178,7 @@ describe('时间切片 · 源码红线', () => {
     // 控制器的静态导入只有共享层与纯函数层（零新增运行时依赖）
     const imports = [...SRC.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1]);
     expect(imports.length).toBeGreaterThan(0);
-    for (const im of imports) expect(['./rl-core', './time-slice-core']).toContain(im);
+    for (const im of imports) expect(['./rl-core', './time-slice-core', './page-lifecycle', 'astro:transitions/client']).toContain(im);
     // three 场景是独立 chunk：动态 import（不进首屏关键路径），three 走既有 vendor alias
     expect(SRC).toContain("import('./time-slice-scene')");
     expect(SCENE).toContain("from 'three'");
@@ -771,7 +771,7 @@ describe('时间切片 · 相册页的交接（站主第九轮 ③：缓缓浮�
     expect(gal).toContain('@keyframes gallery-veil-out');
     // ③ 交接标记必须在**首次绘制之前**挂上（<head> 里的同步脚本）
     const base = readFileSync('src/layouts/Base.astro', 'utf8');
-    const bootstrap = base.match(/<script is:inline>([\s\S]*?)<\/script>/)?.[1];
+    const bootstrap = base.match(/<script is:inline(?: data-astro-rerun)?>([\s\S]*?)<\/script>/)?.[1];
     expect(bootstrap, '首帧同步脚本缺失').toBeTruthy();
     const added: string[] = [], removed: string[] = [];
     runInNewContext(bootstrap!, {

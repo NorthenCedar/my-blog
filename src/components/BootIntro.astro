@@ -121,6 +121,10 @@ const MARK = 'M12 6c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2-2.67 4-4 6-4a
        监听器**一直有效到 close()** —— 键盘用户不会因为按钮先退场而失去跳过能力。
 */}
 <script>
+
+import { onPage } from '../scripts/page-lifecycle';
+onPage(({document, addEventListener, removeEventListener, setTimeout}) => {
+
   (() => {
     const html = document.documentElement;
     const overlay = document.querySelector('[data-boot-overlay]');
@@ -160,6 +164,8 @@ const MARK = 'M12 6c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2-2.67 4-4 6-4a
       setTimeout(close, 8000); // 兜底：animationend 万一不来，也别把滚动锁死
     }
   })();
+
+},"[data-boot-overlay]");
 </script>
 
 <style>

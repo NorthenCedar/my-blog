@@ -67,10 +67,12 @@ export function startLoop(cb: (dt: number, t: number) => void): () => void {
     raf = requestAnimationFrame(frame);
   };
   raf = requestAnimationFrame(frame);
-  return () => {
-    stopped = true;
-    cancelAnimationFrame(raf);
+  const stop = () => {
+    stopped = true; cancelAnimationFrame(raf);
+    globalThis.document?.removeEventListener?.('astro:before-swap',stop);
   };
+  globalThis.document?.addEventListener?.('astro:before-swap',stop,{once:true});
+  return stop;
 }
 
 /* ------------------------------------------------------------------ 视口停帧 */
@@ -128,6 +130,8 @@ export function createActivityGate(
   );
   io.observe(el);
 
+  const dispose = () => { io.disconnect(); document.removeEventListener('visibilitychange',onVis); globalThis.document?.removeEventListener?.('astro:before-swap',dispose); };
+  globalThis.document?.addEventListener?.('astro:before-swap',dispose,{once:true});
   return {
     get onScreen() {
       return state.onScreen;
@@ -135,10 +139,7 @@ export function createActivityGate(
     get visible() {
       return state.visible;
     },
-    dispose() {
-      io.disconnect();
-      document.removeEventListener('visibilitychange', onVis);
-    },
+    dispose,
   };
 }
 

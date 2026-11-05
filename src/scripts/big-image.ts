@@ -79,17 +79,19 @@ export function intentPrefetch(
   el: HTMLElement,
   url: () => string | null | undefined,
   dwell = 250,
+  signal?: AbortSignal,
 ): void {
   let timer: number | undefined;
   const stop = () => { if (timer !== undefined) { clearTimeout(timer); timer = undefined; } };
   el.addEventListener('pointerenter', () => {
     stop();
     timer = window.setTimeout(() => prefetch(url()), dwell);
-  });
-  el.addEventListener('pointerleave', stop);
+  }, {signal});
+  el.addEventListener('pointerleave', stop, {signal});
   /* 指针已经落下去了 ⇒ 悬停计时器没有意义，取消掉别抢带宽。 */
-  el.addEventListener('pointerdown', stop);
-  el.addEventListener('focus', () => prefetch(url()));
+  el.addEventListener('pointerdown', stop, {signal});
+  el.addEventListener('focus', () => prefetch(url()), {signal});
+  signal?.addEventListener('abort', stop, {once:true});
 }
 
 /**

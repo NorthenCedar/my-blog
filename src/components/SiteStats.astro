@@ -57,6 +57,10 @@ const sinceISO = /^\d{4}-\d{2}-\d{2}$/.test(since) ? since : '2026-09-25';
 </style>
 
 <script>
+
+import { onPage } from '../scripts/page-lifecycle';
+onPage(({document, setInterval}) => {
+
   // 页脚统计（本站已运行 + PV/UV）。**这段必须短**：它内联在每一页上，文章页的 JS 预算是 4096 字节。
   // 两条踩过的坑写在这：
   //   ① 内联 <script> 是**按 JS** 解析的（不是 TS）⇒ 别写 `<HTMLElement>` 尖括号断言，会 "Unexpected token" 并让构建失败；
@@ -84,4 +88,6 @@ const sinceISO = /^\d{4}-\d{2}-\d{2}$/.test(since) ? since : '2026-09-25';
       })
       .catch(() => {});
   }
+
+},"[data-stats]");
 </script>

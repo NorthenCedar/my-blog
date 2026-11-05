@@ -114,6 +114,10 @@ const shareCover = !entry.data.draft && entry.data.cover ? `/post-covers/${meta.
 </Base>
 
 <style>
+  @media (prefers-reduced-motion: no-preference) {
+    :global(html:has(body.post-plate)) { scroll-behavior: smooth; }
+  }
+  :global(body.post-plate .prose :is(h2,h3)) { scroll-margin-top: var(--sp-6); }
   /* 页头版心收成 --measure，与正文列对齐（站主拍板 D）—— 避免 1440 下那条下缘实线横跨 1312px。
      四角定位点与页头内边距由外壳的 .pagehead 提供（内页外壳基础设施，各页复用）。 */
   .pagehead {
@@ -495,12 +499,23 @@ const shareCover = !entry.data.draft && entry.data.cover ? `/post-covers/${meta.
 </style>
 
 <script>
-  // 文章页的客户端脚本：代码块工具栏 + 评论区 + 阅读尺。见 src/scripts/
-  import '../scripts/copy-code';
-  import '../scripts/comments';
-  import '../scripts/reading-rule';
-  import '../scripts/scroll-rail';
-  import { initPostRail } from '../scripts/post-rail';
-  const disposeRail = initPostRail(document);
-  addEventListener('pagehide', event => { if (!event.persisted) disposeRail(); });
+import '../scripts/copy-code';
+import '../scripts/comments';
+import '../scripts/reading-rule';
+import '../scripts/scroll-rail';
+import { initPostRail } from '../scripts/post-rail';
+import { createTocMotion } from '../scripts/toc-motion';
+import { onPage } from '../scripts/page-lifecycle';
+onPage(({document, addEventListener}) => {
+
+  // 文章页的客户端脚本：代码块工具栏 + 评论区 + 阅读尺。见 src/scripts/  const toc = document.querySelector<HTMLElement>('.post-rail .toc');
+  const motion = toc ? createTocMotion(toc) : null;
+  const disposeRail = initPostRail(document, (link, changed) => motion?.moveTo(link, changed));
+  addEventListener('pagehide', event => {
+    motion?.finish();
+    if (!event.persisted) { disposeRail(); motion?.dispose(); }
+  });
+  addEventListener('pageshow', event => { if (event.persisted) motion?.finish(); });
+
+},".post-rail");
 </script>

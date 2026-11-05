@@ -777,7 +777,7 @@ describe('404 · 装置脚本契约（fracture.ts）', () => {
     expect(BOOT, '没加 is-ready 类 ⇒ opacity:0 门控让它永远不可见').toMatch(/classList\.add\('is-ready'\)/);
     /* 装置脚本不许引别的模块 */
     const imports = [...TS.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1]);
-    expect(imports.every((i) => i === './rl-core'), `只许 import rl-core，实际 ${imports.join(',')}`).toBe(true);
+    expect(imports.every((i) => i === './rl-core' || i === './page-lifecycle'), `只许 import rl-core，实际 ${imports.join(',')}`).toBe(true);
   });
 
   it('★★ 分野 ③：挂在**文档**坐标系（不是视口）', () => {

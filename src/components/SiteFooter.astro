@@ -63,4 +63,8 @@ const year = new Date().getFullYear();
     display: block;
     margin-top: var(--sp-3);
   }
+  .links{display:flex;flex-wrap:wrap;gap:var(--sp-3);}
+  .links a{margin-left:0;}
+  @media(min-width:900px){:global(body:has([data-music])) .wrap{padding-inline-end:max(var(--gutter),240px);}}
+  @media(max-width:899px){:global(body:has([data-music])) .foot{padding-bottom:calc(var(--sp-6) + 72px);}}
 </style>

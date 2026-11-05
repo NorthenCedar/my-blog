@@ -14,9 +14,9 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
 
 <section class="album-scene" data-album-scene data-layout={layout} data-placements={JSON.stringify(placements)}>
   <div class="scene-bar">
-    <a class="scene-back" href="/gallery/">← 相册</a>
+    <a class="scene-back liquid-glass" href="/gallery/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg><span>相册</span></a>
     <span class="scene-name">{album.title}</span>
-    <button type="button" data-scene-toggle hidden aria-pressed="false">查看全部</button>
+    <button class="liquid-glass" type="button" data-scene-toggle hidden aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg><span data-scene-toggle-label>查看全部</span></button>
   </div>
   <div class="scene-viewport" data-scene-viewport role="group" aria-label={`${album.title}，互动照片陈列`} aria-describedby="scene-help" tabindex="-1">
       <header class:list={['scene-title', { 'scene-title-long': title.length > 28 }]}>
@@ -31,14 +31,14 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
   <div class="scene-controls" data-scene-controls hidden>
     <p id="scene-help" data-scene-help></p>
     <div class="scene-actions">
-      <button type="button" data-scene-prev aria-label={layout === 'slices' ? '上一张' : '向左移动'}>←</button>
+      <button class="liquid-glass liquid-glass--round" type="button" data-scene-prev aria-label={layout === 'slices' ? '上一张' : '向左移动'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
       <span class="scene-status" data-scene-status role="status" aria-live="polite">{album.total} 帧</span>
-      <button type="button" data-scene-next aria-label={layout === 'slices' ? '下一张' : '向右移动'}>→</button>
+      <button class="liquid-glass liquid-glass--round" type="button" data-scene-next aria-label={layout === 'slices' ? '下一张' : '向右移动'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
       {layout === 'scatter' && <>
-        <button type="button" data-scene-zoom-out aria-label="缩小画布">−</button>
-        <button type="button" data-scene-zoom-in aria-label="放大画布">＋</button>
+        <button class="liquid-glass liquid-glass--round" type="button" data-scene-zoom-out aria-label="缩小画布"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg></button>
+        <button class="liquid-glass liquid-glass--round" type="button" data-scene-zoom-in aria-label="放大画布"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12M12 6v12"/></svg></button>
       </>}
-      <button type="button" data-scene-home>{layout === 'slices' ? '回到第一张' : '回到中心'}</button>
+      <button class="liquid-glass liquid-glass--round" type="button" data-scene-home aria-label={layout === 'slices' ? '回到第一张' : '回到中心'} title={layout === 'slices' ? '回到第一张' : '回到中心'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1 7M4 4v6h6"/></svg></button>
     </div>
   </div>
 </section>
@@ -102,7 +102,7 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
   .scene-on .scene-name { flex: 0; white-space: nowrap; }
   .scene-on [data-scene-toggle] { margin-left: auto; }
   .scene-on .scene-controls {
-    position: absolute; left: var(--sp-5); right: var(--sp-5); bottom: var(--sp-4);
+    position: absolute; left: var(--sp-5); right: 316px; bottom: var(--sp-4);
     z-index: 4; border: 0; padding: 0; pointer-events: none;
   }
   .scene-on .scene-controls p, .scene-on .scene-actions { padding: var(--sp-2); }
@@ -173,7 +173,7 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
     .scene-controls p { text-align: center; }
     .scene-on .scene-bar { left: var(--sp-3); right: var(--sp-3); top: var(--sp-3); }
     .scene-on .scene-back { flex: 0; white-space: nowrap; }
-    .scene-on .scene-controls { left: var(--sp-3); right: var(--sp-3); bottom: var(--sp-3); }
+    .scene-on .scene-controls { left: var(--sp-3); right: var(--sp-3); bottom: 84px; }
     .scene-on[data-layout='slices'] .scene-title { top: var(--scene-mobile-title-top); }
     .scene-on[data-layout='slices'] .scene-title p { margin-block: var(--sp-2); }
     .scene-on[data-layout='slices'] .scene-title .scene-plate { display: none; }
@@ -181,6 +181,25 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
       width: min(calc(100% - var(--scene-paper-edge) * 2), calc(var(--scene-mobile-photo-height) * var(--scene-photo-ratio)));
     }
   }
+  /* 紧凑镜片按钮：底部操作放在播放器正上方，提示退为轻文字。 */
+  .scene-on .scene-bar{align-items:center;gap:var(--sp-2);}
+  .scene-on .scene-back,.scene-on .scene-name,.scene-on .scene-bar button,.scene-on .scene-actions,.scene-on .scene-controls p{background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;border:0;box-shadow:none;color:var(--ink);}
+  .scene-on .scene-back,.scene-on .scene-bar button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border-radius:999px;font-size:12px;}
+  .scene-on .scene-back.liquid-glass,.scene-on .scene-bar button.liquid-glass,.scene-on .scene-actions button.liquid-glass{box-shadow:none;}
+  .scene-on .scene-name{font-size:11px;color:var(--muted);padding:0 6px;min-height:0;}
+  .scene-on .scene-controls{position:absolute;left:auto;right:12px;bottom:78px;width:max-content;max-width:calc(100vw - 24px);display:block;padding:0;}
+  .scene-on .scene-controls p{position:fixed;left:24px;bottom:20px;max-width:calc(100vw - 280px);padding:0;font-size:11px;color:var(--muted);pointer-events:none;}
+  .scene-on .scene-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:0;flex-wrap:nowrap;pointer-events:auto;}
+  .scene-on .scene-actions button{display:grid;place-items:center;width:36px;height:36px;min-width:36px;min-height:36px;padding:0;border:0;border-radius:50%;color:var(--ink);background:transparent;}
+  .scene-on .scene-actions button:hover:not(:disabled),.scene-on .scene-bar button:hover{background:var(--liquid-sheen);}
+  .scene-on .scene-actions button:disabled{opacity:.3;}
+  .scene-on .scene-status{min-width:42px;font-size:11px;color:var(--muted);}
+  .scene-on .scene-actions svg,.scene-on .scene-bar svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;}
+  .scene-on .scene-back:focus-visible,.scene-on .scene-bar button:focus-visible,.scene-on .scene-actions button:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+  @media(max-width:680px){.scene-on .scene-controls{right:12px;bottom:78px;}.scene-on .scene-controls p{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}.scene-on .scene-actions{gap:5px;}.scene-on .scene-actions button{width:38px;height:38px;min-width:38px;min-height:38px;}.scene-on .scene-bar button,.scene-on .scene-back{min-height:40px;}}
+  .scene-bar .scene-back.liquid-glass,.scene-bar button.liquid-glass{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 12px;border:0;border-radius:999px;color:var(--ink);background:var(--liquid-tint);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;font-size:12px;text-decoration:none;}
+  .scene-bar svg{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;}
+  @media(max-width:680px){.scene-bar .scene-back.liquid-glass,.scene-bar button.liquid-glass{min-height:40px;}}
 </style>
 
 <script>

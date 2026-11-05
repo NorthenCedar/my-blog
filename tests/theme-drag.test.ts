@@ -4,7 +4,7 @@ const state = vi.hoisted(() => ({ scene: null as any, theme: 'light', writes: []
 vi.mock('../src/vendor/jelly-slider/scene.ts', () => ({ setupScene: async () => state.scene }));
 vi.mock('typegpu', async (original) => {
   const actual = await original<typeof import('typegpu')>();
-  return { ...actual, tgpu: { ...actual.tgpu, init: async () => ({ configureContext: () => ({}) }) } };
+  return { ...actual, tgpu: { ...actual.tgpu, init: async () => ({ configureContext: () => ({}), destroy: vi.fn() }) } };
 });
 vi.mock('../src/scripts/theme.ts', () => ({
   getTheme: () => state.theme,
@@ -52,9 +52,9 @@ async function run(theme = 'light', reduced = false) {
     snapTo: vi.fn((_x: number, done: () => void) => { pending = done; }),
     cancelDrag: vi.fn(() => { events.isPointerDown = false; events.didGrab = false; pending = undefined; }),
   };
-  state.scene = { eventHandler: events, groundTint: null, jellyColor: null, onProgress: null };
+  state.scene = { onCleanup: vi.fn(), eventHandler: events, groundTint: null, jellyColor: null, onProgress: null };
   const canvas = { width: 0, height: 0, addEventListener: (n: string, fn: (e: any) => void) => canvasEvents.set(n, fn) };
-  const root = { querySelector: () => canvas, setAttribute() {}, addEventListener() {} };
+  const root = { isConnected: true, querySelector: () => canvas, setAttribute() {}, addEventListener() {} };
   vi.stubGlobal('document', document);
   vi.stubGlobal('window', { devicePixelRatio: 1, matchMedia: () => ({ matches: reduced }),
     addEventListener: (n: string, fn: (e: any) => void) => windowEvents.set(n, fn) });

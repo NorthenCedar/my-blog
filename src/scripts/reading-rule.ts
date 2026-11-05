@@ -1,3 +1,6 @@
+import { createActivityGate, prefersReducedMotion, shouldAnimate } from './rl-core';
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, setTimeout, clearTimeout}) => {
 /* =============================================================================
  * 文章页 · 阅读尺（READING RULE）—— 视口底部的横向直尺
  *
@@ -31,8 +34,6 @@
  * ★ 时间/确定性约定：**没有动画循环、没有时间项** —— 读头位置是「滚动量 + 节节点」的
  *   纯函数，跨加载逐字节可复现（无随机源、无 dt）。
  */
-import { createActivityGate, prefersReducedMotion, shouldAnimate } from './rl-core';
-
 (() => {
   const rule = document.querySelector<HTMLElement>('[data-rule]');
   const prose = document.querySelector<HTMLElement>('.prose');
@@ -254,3 +255,5 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate } from './rl-co
     });
   }
 })();
+
+},"[data-rule]");

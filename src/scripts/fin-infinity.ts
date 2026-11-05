@@ -1,3 +1,4 @@
+import { onPage } from './page-lifecycle';
 /**
  * 立体 ∞（FinInfinity）· 控制器。
  *
@@ -261,12 +262,12 @@ addEventListener('pagehide', () => {
     removeEventListener('pointermove', onMove);
     stopLoop?.();
     scene?.dispose();
-  });
+  }, {once:true});
 }
 
 /* ── 自启动（与 pleated-infinity.ts 同模式：脚本被import 就跑）── */
-(() => {
+onPage(() => {
   const host = document.querySelector<HTMLElement>('[data-fin-infinity]');
   if (!host) return;
   initFinInfinity(host.parentElement ?? document.body);
-})();
+}, '[data-fin-infinity]');

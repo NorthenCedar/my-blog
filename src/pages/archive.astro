@@ -144,68 +144,7 @@ for (let i = 0; i < tapeTicks.length - 1; i++) {
 </Base>
 
 <script>
-  // 归档筛选：纯客户端显示/隐藏 + 重排（不改数据、不请求接口）。
-  // 缩小到 1.4 KB 左右是有意的：这个页面本来没有脚本，加的是"读列表"的工具，不该比内容还重。
-  const bar = document.querySelector<HTMLFormElement>('[data-filters]');
-  const groupsBox = document.querySelector<HTMLElement>('[data-groups]');
-  if (bar && groupsBox) {
-    bar.hidden = false;
-    const q = bar.querySelector<HTMLInputElement>('[data-q]')!;
-    const yearSel = bar.querySelector<HTMLSelectElement>('[data-year]')!;
-    const monthSel = bar.querySelector<HTMLSelectElement>('[data-month]')!;
-    const countEl = bar.querySelector<HTMLElement>('[data-count]')!;
-    const emptyEl = document.querySelector<HTMLElement>('[data-empty]')!;
-    const rows = [...groupsBox.querySelectorAll<HTMLLIElement>('.index li')];
-    const groups = [...groupsBox.querySelectorAll<HTMLElement>('.yeargroup')];
-    const desc = bar.querySelector<HTMLButtonElement>('[data-sort="desc"]')!;
-    const asc = bar.querySelector<HTMLButtonElement>('[data-sort="asc"]')!;
-    let dir: 1 | -1 = -1; // 默认倒序（新的在上面）
-
-    const apply = () => {
-      const needle = q.value.trim().toLowerCase();
-      const y = yearSel.value;
-      const m = monthSel.value;
-      let shown = 0;
-      for (const li of rows) {
-        const ok =
-          (!needle || (li.dataset.q ?? '').includes(needle)) &&
-          (y === 'all' || li.dataset.year === y) &&
-          (m === 'all' || li.dataset.month === m);
-        li.hidden = !ok;
-        if (ok) shown++;
-      }
-      for (const g of groups) {
-        g.hidden = ![...g.querySelectorAll<HTMLElement>('.index li')].some((li) => !li.hidden);
-      }
-      // 排序：组按年份、组内按日期；用 append 移动节点（不重渲染、不丢已挂的事件）
-      [...groups]
-        .sort((a, b) => (Number(a.dataset.year) - Number(b.dataset.year)) * dir)
-        .forEach((g) => groupsBox.append(g));
-      for (const g of groups) {
-        const ul = g.querySelector('.index')!;
-        [...ul.children].sort((a, b) => String((a as HTMLElement).dataset.date).localeCompare(String((b as HTMLElement).dataset.date)) * dir).forEach((li) => ul.append(li));
-      }
-      countEl.textContent = shown === rows.length ? `共 ${shown} 篇` : `筛出 ${shown} / ${rows.length} 篇`;
-      emptyEl.hidden = shown > 0;
-      desc.setAttribute('aria-pressed', String(dir === -1));
-      asc.setAttribute('aria-pressed', String(dir === 1));
-    };
-
-    q.addEventListener('input', apply);
-    yearSel.addEventListener('change', apply);
-    monthSel.addEventListener('change', apply);
-    desc.addEventListener('click', () => { dir = -1; apply(); });
-    asc.addEventListener('click', () => { dir = 1; apply(); });
-    bar.querySelector('[data-clear]')!.addEventListener('click', () => {
-      q.value = '';
-      yearSel.value = 'all';
-      monthSel.value = 'all';
-      dir = -1;
-      apply();
-      q.focus();
-    });
-    apply();
-  }
+  import '../scripts/archive-filter';
 </script>
 
 <script>

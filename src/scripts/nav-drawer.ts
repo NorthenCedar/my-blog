@@ -1,3 +1,6 @@
+
+import { onPage } from './page-lifecycle';
+onPage(({document, matchMedia}) => {
 /** 原生 modal 负责焦点循环、Esc、背景隔离及关闭后的焦点恢复。 */
 const toggle = document.querySelector<HTMLInputElement>('.navtog');
 const drawer = document.querySelector<HTMLDialogElement>('.navshell');
@@ -16,3 +19,5 @@ if (toggle && drawer) {
   };
   matchMedia('(min-width: 1024px)').onchange = (event) => { if (event.matches) close(); };
 }
+
+});

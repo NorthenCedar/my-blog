@@ -1,3 +1,6 @@
+import { startLoop, createSpring, createActivityGate, shouldAnimate, prefersReducedMotion } from './rl-core';
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia, ResizeObserver}) => {
 /* =============================================================================
  * 归档页 · 索引卷尺（INDEX TAPE）—— 右侧竖向刻度尺
  *
@@ -18,8 +21,6 @@
  * ★ 时间/平滑约定：位置吃**真实 dt**（二阶弹簧半隐式欧拉），禁「每帧固定系数」；
  *   无随机源 —— 游标位置是 t 与滚动量的确定函数，可跨加载逐点比对。
  */
-import { startLoop, createSpring, createActivityGate, shouldAnimate, prefersReducedMotion } from './rl-core';
-
 (() => {
   const host = document.querySelector<HTMLElement>('[data-tape]');
   if (!host) return;
@@ -196,3 +197,5 @@ import { startLoop, createSpring, createActivityGate, shouldAnimate, prefersRedu
     paintPast(targetFor());
   }
 })();
+
+},"[data-tape]");

@@ -1,9 +1,11 @@
 import {mountWheelNavigation,createNavigator,swipeIntent} from './gallery-stage-core.mjs';
 import './develop';
-import {getTheme,setTheme} from './theme';
+import {finishGalleryEntry} from './gallery-entry';
 import {mountOriginalHelix} from './gallery-native.js';
 import {coverMotion} from './gallery-cover-motion.mjs';
 import '../styles/gallery-stage.css';
+import { onPage } from './page-lifecycle';
+onPage(({document, addEventListener, matchMedia, ResizeObserver}) => {
 const root=document.documentElement,stage=document.querySelector('[data-stage]'),slides=[...document.querySelectorAll('[data-slide]')];
 const selection=createNavigator(slides.length),reduce=matchMedia('(prefers-reduced-motion:reduce)');
 const prev=document.querySelector('[data-prev]'),next=document.querySelector('[data-next]'),status=document.querySelector('[data-status]');
@@ -13,6 +15,8 @@ const helix=mountOriginalHelix(document.querySelector('.kind-spiral'));
 const film=document.querySelector('[data-film]');
 const overlayOpen=()=>dialog.open||helix.lightboxOpen||!!document.querySelector('dialog:modal,[data-notices][aria-expanded="true"]');
 const publicFooter=document.querySelector('body.gallery-story>.foot');if(publicFooter)document.querySelector('[data-gallery-site-meta]').append(publicFooter);
+document.body.append(dialog);
+finishGalleryEntry(root,reduce.matches);
 const topbar=document.querySelector('body.gallery-story>.topbar');
 function measureChrome(){root.style.setProperty('--gallery-topbar-height',`${topbar.getBoundingClientRect().height}px`)}
 new ResizeObserver(measureChrome).observe(topbar);measureChrome();
@@ -126,11 +130,7 @@ catalogButton.addEventListener('click',()=>dialog.showModal());document.querySel
 dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close()}});
 for(const button of dialog.querySelectorAll('[data-pick]'))button.addEventListener('click',()=>{go(Number(button.dataset.pick));dialog.close()});
 dialog.addEventListener('close',()=>catalogButton.focus({preventScroll:true}));
-const themeButton=document.querySelector('[data-gallery-theme]'),system=matchMedia('(prefers-color-scheme:dark)');
-topbar.append(themeButton);themeButton.hidden=false;
-function syncTheme(){const dark=root.classList.contains('dark');themeButton.setAttribute('aria-label',dark?'切换至亮色模式':'切换至暗色模式');themeButton.setAttribute('aria-pressed',String(dark));}
-themeButton.addEventListener('click',()=>setTheme(root.classList.contains('dark')?'light':'dark'));
-document.addEventListener('themechange',syncTheme);
-system.addEventListener('change',()=>{root.classList.toggle('dark',getTheme()==='dark');syncTheme()});
 reduce.addEventListener('change',()=>{syncHint();if(reduce.matches)for(const [el,animation]of [...animations]){const to=animation.effect.getKeyframes().at(-1);cancel(el);for(const key of Object.keys(to))if(!['offset','computedOffset','easing','composite'].includes(key))el.style[key]=to[key];} });
-for(const slide of slides)hide(slide);syncTheme();const saved=history.state?.galleryScene;show(Number.isInteger(saved)&&saved>=0&&saved<slides.length?saved:0,1,true);
+for(const slide of slides)hide(slide);const saved=history.state?.galleryScene;show(Number.isInteger(saved)&&saved>=0&&saved<slides.length?saved:0,1,true);
+
+},"[data-stage]");

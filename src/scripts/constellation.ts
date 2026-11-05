@@ -1,3 +1,6 @@
+import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } from './rl-core';
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia}) => {
 /* =============================================================================
  * 友链页 · 星座（CONSTELLATION）—— 靠近的点连出细线，停留越久连得越多
  *
@@ -64,8 +67,6 @@
  *
  * ★ 颜色只从 token 读，alpha 以**8 位 hex** 读出后交给 canvas（站上约定，不写 rgba()）。
  * ==========================================================================*/
-import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } from './rl-core';
-
 (() => {
   const cv = document.querySelector<HTMLCanvasElement>('[data-const-bg]');
   if (!cv) return;
@@ -553,3 +554,5 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
     cv.classList.add('is-ready');
   }
 })();
+
+},"[data-const-bg]");

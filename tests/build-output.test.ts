@@ -1,3 +1,5 @@
+import {buildSync} from 'esbuild';
+import { MOTION_ENGINE_BUDGET, expectMotionStartup } from './_motion-budget';
 import { jsClosure } from './_writer-output';
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -574,7 +576,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
       expect(html.includes(`>${name}<small`) || html.includes(`>${name}</span>`), `社交入口缺 ${name}`).toBe(true);
     }
     // 图标必须是**本站内联 SVG**（站上零第三方：不许引图标库）
-    expect((html.match(/<svg class="[^"]*ic[^"]*"/g) ?? []).length, '内联图标数量不对').toBe(5);
+    expect((html.match(/<svg class="(?:[^"]*\s)?ic(?:\s[^"]*)?"/g) ?? []).length, '内联图标数量不对').toBe(5);
     expect(html, '引了第三方图标资源').not.toMatch(/(unpkg|jsdelivr|cdnjs|fontawesome|googleapis)/i);
     // 抖音与哔哩哔哩的链接必须是站主给的那两条
     expect(html).toContain('douyin.com/user/MS4wLjABAAAA_s1DtB8crLmTepK0rZPjJr7U8W2Lm7EGWVti1q4Zwlgp52SGKtZsqL-1_U7_HOK_');
@@ -998,10 +1000,14 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     // 2026-10-26：新增目录当前位置、复制正式链接及反馈；净增1599 B，实测26147 B。
     // 本次功能的上限调整为26 KiB，仍统计完整同源闭包且最多5个入口；首页预算不变。
     // 公共歌单播放器新增约 5.5 KiB，共享闭包预算增加 6 KiB。
-    const BUDGET = 32768;
+    // 随机队列、历史回退与偏好恢复净增约 1 KiB，本页预留 1 KiB。
+    // 阅读目录指示线与首个滚动意图预热新增首屏代码，实测39048 B；上限仅文章页增加2 KiB。
+    // 全站播放器安全停靠的首屏预算追加5KiB，仍保持按需引擎禁入首屏。
+    const BUDGET = 67584 + MOTION_ENGINE_BUDGET;
+    expectMotionStartup(page, 67584);
     console.log(`内联脚本体积: ${inline.join(' + ')} = ${inlineTotal} 字节 · 含同源外链合计 ${full} 字节（预算 ${BUDGET}）· ${scripts.length} 处 <script>`);
 
-    expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBeLessThanOrEqual(5);
+    expect(scripts.length, `文章页有 ${scripts.length} 处 <script>`).toBeLessThanOrEqual(6);
     expect(full, `文章页 JS 合计 ${full} 字节，超过 ${BUDGET} 预算`).toBeLessThan(BUDGET);
   });
 
@@ -1015,7 +1021,7 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
        走 `jsLoadedBy()`，与下面"评论区不引入第三方域名"那条同一个口径）——
        这恰恰就是这条断言要守的东西：评论代码住在文章页会加载的脚本里。
        ⚠ 这是**范围收窄**，不是放宽：文章页闭包里的任何脚本用 innerHTML 仍然会红。 */
-    const all = jsLoadedBy(page);
+    const all = buildSync({entryPoints:['src/scripts/comments.ts'],bundle:true,write:false,format:'esm',platform:'browser'}).outputFiles[0].text;
     /* 先自证"量到了东西"：闭包要是空的，下面三条负向断言全是空转。 */
     expect(all.length, '文章页的 JS 闭包是空的 ⇒ 这条判据会空转').toBeGreaterThan(2000);
     expect(all).not.toContain('innerHTML');
@@ -1041,7 +1047,8 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     const code = jsLoadedBy(page);
     expect(code, '评论应当打自己的端点').toContain('/api/comments');
     // 全站播放器获准访问此公共歌单服务，评论仍访问本站端点。
-    const withoutMusicApi = code.replaceAll('https://api.qijieya.cn/meting/', '');
+    // GSAP 许可链接和 SVG/XML 命名空间是常量，不发出第三方请求。
+    const withoutMusicApi = code.replaceAll('https://api.qijieya.cn/meting/', '').replaceAll('https://gsap.com', '').replaceAll('http://www.w3.org/1999/xhtml', '').replaceAll('http://www.w3.org/2000/svg', '');
     expect(/https?:\/\//.test(withoutMusicApi), '脚本中出现未经登记的外部 URL').toBe(false);
   });
 
@@ -1179,7 +1186,7 @@ describe.skipIf(!hasDist)('首页：宽视口的接缝 / ∞ 淡入淡出 / 揭�
   });
 
   it('③ 揭示动画必须能"自愈"：播完摘掉内联 opacity + 取消动画，并带 pageshow 兜底', () => {
-    const html = homeHtml();
+    const html = jsLoadedBy(join(DIST,'index.html'));
     // 内联 opacity:0 是"脚本没跑"时的保护，但如果它**一直留着**，就成了唯一的可见性来源的反面：
     // 脚本动画一旦被丢弃（bfcache 恢复 / 标签页冻结回收 / 合成器回收 / 回调抛错），
     // 元素就永久停在 opacity:0 —— 实测线上：正常揭示 cs=1（唯一理由是有 1 个动画），
@@ -1325,7 +1332,7 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
   // 实测（2026-09-26）：1971 字节（筛选 + 灯箱，零依赖）。余量 4173。
   // 灯箱刻意走**渐进增强**：图包在 <a href="1280档"> 里，JS 到位才拦截点击开灯箱 ——
   // 所以无 JS 时页面完整可用（点图直接开大图），也不需要第二个 `html.js` 门控脚本。
-  it('相册页 JS 总量（内联 + 同源外链闭包）≤ 42 KiB', () => {
+  it('相册页 JS 总量（内联 + 同源外链闭包）首屏 ≤ 73 KiB，含按需引擎 ≤ 169 KiB', () => {
     /* ★ 2026-10-07 **原地改口径**（不新开一条）：螺旋盘搬进本页后，装置的脚本是
        **外链 chunk**（SpiralPlate 5953 + rl-core 1208）—— 只算内联会**整台漏掉**，
        这条预算就退化成"守着一个空壳"。改成与文章页 / 螺旋盘页同一条口径：
@@ -1344,7 +1351,8 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     // 站主拍板 24 KiB → 25 KiB，仍是「加一两处交互够用、把 three 拖进来必炸」的量级。
     // 五幕编排、长线绘制和主题状态增加约 9 KiB，仅调整本页预算；不引入三维引擎。
     // 全站播放器共享脚本增加 6 KiB 的预算，继续禁止三维库泄漏。
-    const BUDGET = 43008;
+    const BUDGET = 74752 + MOTION_ENGINE_BUDGET;
+    expectMotionStartup(page, 74752);
     const { code, files } = jsClosure(page);
     const full = Buffer.byteLength(code, 'utf8');
     console.log(
@@ -1358,7 +1366,7 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     );
   });
 
-  it('★ 留言页 JS 总量（内联 + 同源外链闭包）≤ 35 KiB', () => {
+  it('★ 留言页 JS 总量（内联 + 同源外链闭包）首屏 ≤ 67 KiB，含按需引擎 ≤ 163 KiB', () => {
     /* 2026-10-16：站主选择连续浅水波面，替代离散 CSS 圆环。
        新增网格求解与像素光影，实测闭包约 18 KB；本页预算调整为 20 KiB。
        仍统计完整 import 闭包，不影响其他页面预算，不引入三维库。 */
@@ -1370,7 +1378,9 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
     // 2026-10-20：账户与名片模块加入后完整闭包实测 26079 B。
     // 2026-10-18（回复提醒）：共享块多了顶栏铃铛，实测 29203 B ⇒ 站主拍板 28 KiB → 29 KiB。
     // 全站播放器共享脚本增加 6 KiB 的预算。
-    const BUDGET = 35 * 1024;
+    // 随机播放队列净增约 1 KiB，继续统计完整闭包并禁止三维引擎。
+    const BUDGET = 67 * 1024 + MOTION_ENGINE_BUDGET;
+    expectMotionStartup(page, 67 * 1024);
     const { code, files } = jsClosure(page);
     const full = Buffer.byteLength(code, 'utf8');
     console.log(

@@ -19,7 +19,7 @@ import { join } from 'node:path';
 
 const ROOT = process.cwd();
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
-const PW = read('src/components/PhotoWall.astro');
+const PW = read('src/components/PhotoWall.astro') + '\n' + read('src/scripts/photo-wall.ts');
 const SP = read('src/components/SpiralPlate.astro');
 const BI = read('src/scripts/big-image.ts');
 /** ⚠ 统一行尾：本仓在 Windows 上可能被 checkout 成 CRLF，而下面几条断言是**按行锚定**的
@@ -74,7 +74,7 @@ describe('灯箱换图（big-image）', () => {
   const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, ' ');
 
   it('★ 两套灯箱都走同一个模块（各抄一份必然腐化）', () => {
-    const MOD = /import\s*\{[^}]*\bshowBig\b[^}]*\}\s*from\s*'\.\.\/scripts\/big-image'/;
+    const MOD = /import\s*\{[^}]*\bshowBig\b[^}]*\}\s*from\s*'(?:\.\.\/scripts|\.)\/big-image'/;
     expect(PW, '砖墙灯箱没接 big-image').toMatch(MOD);
     expect(SP, '螺旋灯箱没接 big-image').toMatch(MOD);
     expect(PW, '砖墙灯箱没走 showBig').toMatch(/showBig\(\s*lbImg,/);
@@ -141,7 +141,7 @@ describe('灯箱换图（big-image）', () => {
       expect(
         code(src),
         `${name} 的说明文字写在 showBig(...) 返回之后 ⇒ 又变回同步改文字`,
-      ).not.toMatch(/showBig\([\s\S]{0,400}?\);[\s\S]{0,400}?lbCap\.textContent/);
+      ).not.toMatch(/showBig\([^{};]*\);[\s\S]{0,400}?lbCap\.textContent/);
       expect(
         src,
         `${name} 没把说明文字放进 showBig 的就绪回调（文字会与图错帧）`,

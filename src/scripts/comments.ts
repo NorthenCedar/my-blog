@@ -1,10 +1,10 @@
+import { fmtTime, groupReplies, parentIdsOf, postComment, replyLi, toggleReplyForm, type Reply } from './reply-common';
+import { authorNode, identityControls, type Authored } from './visitor-client';
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener}) => {
 // 评论：取列表 + 提交 + **回复**（2026-09-28 站主要求：像 QQ 动态那样能回复）。
 // 全站第二个客户端脚本（第一个是代码复制）。
 // 安全铁律：用户输入一律用 textContent 写进 DOM，**任何地方都不用 innerHTML**。
-
-import { fmtTime, groupReplies, parentIdsOf, postComment, replyLi, toggleReplyForm, type Reply } from './reply-common';
-import { authorNode, identityControls, type Authored } from './visitor-client';
-
 const root = document.querySelector<HTMLElement>('[data-comments]');
 
 if (root) {
@@ -166,3 +166,5 @@ if (root) {
       });
   });
 }
+
+},"[data-comments]");

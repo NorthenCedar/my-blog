@@ -143,7 +143,7 @@ describe('文章页阅读尺 · 装置契约', () => {
     expect(SRC).not.toMatch(/startLoop/);
     const imports = [...CODE.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1]);
     expect(imports.length, '至少要从 rl-core 取降级开关与停帧').toBeGreaterThan(0);
-    expect(imports.every((p) => p === './rl-core'), `只许引 rl-core，实际：${imports.join(', ')}`).toBe(true);
+    expect(imports.every((p) => p === './rl-core' || p === './page-lifecycle'), `只许引 rl-core，实际：${imports.join(', ')}`).toBe(true);
   });
 
   it('零随机：读头位置是「滚动量 + 节节点」的纯函数', () => {

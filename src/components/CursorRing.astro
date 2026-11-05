@@ -108,6 +108,10 @@
 </style>
 
 <script>
+
+import { onPage } from '../scripts/page-lifecycle';
+onPage(({document, addEventListener, matchMedia, requestAnimationFrame, MutationObserver}) => {
+
   (() => {
     const root = document.documentElement;
     const disc = document.querySelector('.cr-disc');
@@ -175,4 +179,6 @@
       { passive: true },
     );
   })();
+
+},".cr-disc");
 </script>

@@ -1,12 +1,12 @@
 import { existsSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-let init: ((doc: Document) => () => void) | undefined;
+let init: ((doc: Document, onActive?: (link: HTMLAnchorElement, changed: boolean) => void) => () => void) | undefined;
 beforeAll(async () => {
   if (existsSync('src/scripts/post-rail.ts')) init = (await import('../src/scripts/post-rail')).initPostRail;
 });
 
-function fixture(clipboard: 'ok' | 'denied' | 'absent' = 'ok') {
+function fixture(clipboard: 'ok' | 'denied' | 'absent' = 'ok', onActive?: (link: HTMLAnchorElement, changed: boolean) => void) {
   class Box extends EventTarget {
     hidden = true;
     disabled = false;
@@ -46,7 +46,7 @@ function fixture(clipboard: 'ok' | 'denied' | 'absent' = 'ok') {
     querySelector: (selector: string) => selector.includes('canonical') ? { href: 'https://northcedar.top/posts/real-note/' }
       : selector === '[data-copy-link]' ? copy : selector === '[data-copy-status]' ? status : null,
   };
-  const dispose = init?.(doc as unknown as Document);
+  const dispose = init?.(doc as unknown as Document, onActive);
   const flush = () => { const work = [...frames.values()]; frames.clear(); work.forEach(fn => fn(0)); };
   return { links, headings, copy, status, view, writes, frames, timers, dispose, flush,
     async clickCopy() { copy.dispatchEvent(new Event('click')); await Promise.resolve(); await Promise.resolve(); },
@@ -54,6 +54,14 @@ function fixture(clipboard: 'ok' | 'denied' | 'absent' = 'ok') {
 }
 
 describe('文章阅读侧栏', () => {
+  it('当前位置回调区分换节与重排，同一节缩放仍能重测指示线',()=>{
+    const calls:{link:HTMLAnchorElement;changed:boolean}[]=[];
+    const page=fixture('ok',(link,changed)=>calls.push({link,changed}));page.flush();
+    expect(calls[0]).toEqual({link:page.links[0],changed:true});
+    page.view.dispatchEvent(new Event('resize'));page.flush();expect(calls[1].changed).toBe(false);
+    page.headings[1].top=100;page.view.dispatchEvent(new Event('scroll'));page.flush();
+    expect(calls[2]).toEqual({link:page.links[1],changed:true});page.dispose?.();
+  });
   it('首屏标记第一节，滚动越过下一标题后更新当前节', () => {
     const page = fixture();
     page.flush();

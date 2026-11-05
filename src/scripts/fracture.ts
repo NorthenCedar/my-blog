@@ -1,3 +1,6 @@
+import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } from './rl-core';
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia}) => {
 /* =============================================================================
  * 装置「裂痕 FRACTURE」（404 页）—— 内页**第十台**装置
  *
@@ -125,8 +128,6 @@
  *     要避开"完美蛛网"（近爆点是粉屑、边缘是整块）；裂纹**不是直尺线**而是会"顿"；
  *     以及最关键的一条 —— 断面**一侧暗、一侧亮**（Dark Edge）。
  * ============================================================================= */
-import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } from './rl-core';
-
 /* ★ 包在 IIFE 里 —— 顶层不许 `return`（ES 模块），而本台要一串不满足条件就退出。
    站上其余带降级链的装置（星座 / 准星 / 显影板）都是这个写法。 */
 (() => {
@@ -816,3 +817,5 @@ import { createActivityGate, prefersReducedMotion, shouldAnimate, startLoop } fr
   );
 })();
 
+
+},"[data-fracture]");

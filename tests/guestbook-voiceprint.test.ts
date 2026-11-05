@@ -1,3 +1,4 @@
+import { unwrapPage } from './page-controller-source';
 /* 留言页声纹带 VOICEPRINT · 契约（2026-10-14）
  *
  * 分三块：① 接缝（comments.ts 派发数据） ② 装置（控制器 + 降级 + 玻璃）
@@ -110,7 +111,7 @@ describe('留言页声纹带 · 静态形态（无 JS 也要完整）', () => {
 
 const rlcore = read('src/scripts/rl-core.ts').replace(/^export /gm, '');
 const coreSrc = read('src/scripts/voiceprint-core.ts').replace(/^export /gm, '');
-const vpSrc = read('src/scripts/voiceprint.ts').replace(/^import .*\r?\n/gm, '');
+const vpSrc = unwrapPage(read('src/scripts/voiceprint.ts')).replace(/^import .*\r?\n/gm, '');
 const VP_CODE = transformSync(`${rlcore}\n${coreSrc}\n${vpSrc}`, { loader: 'ts' }).code;
 
 type Ev = { type: string; fn: (e: any) => void };

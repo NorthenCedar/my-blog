@@ -1,3 +1,6 @@
+
+import { onPage } from './page-lifecycle';
+onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, cancelAnimationFrame, setTimeout, clearTimeout, IntersectionObserver}) => {
 // 弹性流场线（2026-09-30，随 v10.6 原型一起搬进本站）
 //
 // 逐字移植自视觉原型 nc-rhine-v7 v10 的 initRhGrid()，原型那版又是逐字移植自
@@ -409,3 +412,5 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
   }
   raf = requestAnimationFrame(tick);
 }
+
+});

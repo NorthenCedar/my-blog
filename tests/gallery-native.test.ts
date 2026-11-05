@@ -1,3 +1,4 @@
+import {unwrapPage} from './page-controller-source';
 import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -5,7 +6,7 @@ import {createRequire} from 'node:module';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 const require=createRequire(resolve('package.json'));
-const script=readFileSync('src/components/SpiralPlate.astro','utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
+const script=unwrapPage(readFileSync('src/components/SpiralPlate.astro','utf8').match(/<script>([\s\S]*?)<\/script>/)[1]);
 const adapter=resolve('src/scripts/gallery-native.js').replaceAll('\\','/');
 const bundle=require('esbuild').buildSync({stdin:{contents:script+'\nexport {mountOriginalHelix} from '+JSON.stringify(adapter),resolveDir:resolve('src/components'),loader:'ts'},bundle:true,write:false,format:'iife',globalName:'OriginalSpiral',platform:'browser'}).outputFiles[0].text;
 

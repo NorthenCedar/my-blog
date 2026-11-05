@@ -1,0 +1,12 @@
+---
+import '../styles/liquid-glass.css';
+const shapes=[{id:'circle',scale:52.8},{id:'pill',scale:48},{id:'player',scale:62.4}];
+---
+<svg transition:persist="glass-filters" class="glass-defs" width="0" height="0" aria-hidden="true" focusable="false">
+  <defs>{shapes.map(({id,scale})=><filter id={'glass-'+id} x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feImage href={'/glass/'+id+'.png'} x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" result="lens"/>
+    <feGaussianBlur in="SourceGraphic" stdDeviation="0.35" result="soft"/>
+    <feDisplacementMap in="soft" in2="lens" scale={scale} xChannelSelector="R" yChannelSelector="G"/>
+  </filter>)}</defs>
+</svg>
+<style>.glass-defs{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;}</style>
