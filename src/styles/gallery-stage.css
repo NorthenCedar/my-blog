@@ -101,6 +101,8 @@ body.gallery-story .gallery-catalog{pointer-events:auto;}
 @media(max-width:1199px){body.gallery-story .view-hint{display:none;}}
 @media(max-width:999px){body.gallery-story{--music-page-bottom:105px;}}
 
-/* 显影板保留透明导航，选中与悬停沿用本站绿色。 */
-body.gallery-story>.topbar>nav:not(.navpanel)>a:is(:hover,:focus-visible,[aria-current=page]){background:var(--accent);color:var(--paper);border-color:var(--accent);}
+/* 透明导航只覆盖一层淡绿洗底，显影背景仍可透出。 */
+body.gallery-story>.topbar>nav:not(.navpanel)>a:is(:hover,:focus-visible,[aria-current=page]){background:var(--gallery-nav-wash);color:var(--accent-ink);border-color:var(--gallery-nav-line);}
 html.dark body.gallery-story>.topbar>nav:not(.navpanel)>a:is(:hover,:focus-visible,[aria-current=page]){background:var(--paper);color:var(--ink);border-color:var(--hair);}
+
+html:not(.dark).on-develop body.gallery-story>.topbar>nav:not(.navpanel)>a:is(:hover,:focus-visible,[aria-current=page]){color:var(--gallery-bath-ink);border-color:var(--gallery-nav-line);}

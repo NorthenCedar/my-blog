@@ -13,8 +13,9 @@ const light = projectRingLight(ring.fiber);
 const lap = light.length.toFixed(3);
 ---
 
-<div class="mechanical-ring" aria-hidden="true">
-  {/* 两种主题各用原版渲染；亮色光槽转为墨绿，夜间保留原图反光。 */}
+<div class="mechanical-ring" data-ring-frame aria-hidden="true">
+  <div class="ring-motion" data-ring-motion>
+  {/* 两种主题各用原版渲染；亮色沿用原库的色相换色方式，图片结构与材质不重绘，夜间保留原图反光。 */}
   <Image
     class="mechanical-ring-img ring-day"
     src={plate}
@@ -46,12 +47,17 @@ const lap = light.length.toFixed(3);
     <metadata>RhinE / Audio Archive authors · MIT · /licenses/rhine-mechanical-ring.txt</metadata>
     {light.segments.map(({ d, offset }) => (
       <g style={`--ring-offset: ${offset.toFixed(3)};`}>
+        <path class="ring-inlay" d={d} />
         <path class="ring-pulse ring-pulse-halo" d={d} />
         <path class="ring-pulse ring-pulse-core" d={d} />
       </g>
     ))}
   </svg>
+  </div>
 </div>
+<script>
+  import '../scripts/ring-motion';
+</script>
 
 <style>
   .mechanical-ring {
@@ -61,11 +67,14 @@ const lap = light.length.toFixed(3);
     width: var(--plate-w, min(94vw, 1400px, 150vh));
     aspect-ratio: 1400 / 900;
     transform: translate(-50%, -50%);
-    opacity: var(--plate-op, var(--ring-plate-opacity));
+    perspective: var(--ring-perspective);
     pointer-events: none;
     z-index: -1;
   }
+  .ring-motion { width: 100%; height: 100%; transform-origin: center; }
+  :global(body[data-ring-dragging]) { user-select: none; }
   .mechanical-ring :global(img) {
+    opacity: var(--plate-op, var(--ring-plate-opacity));
     display: block;
     width: 100%;
     height: 100%;
@@ -90,7 +99,9 @@ const lap = light.length.toFixed(3);
     width: 100%;
     height: 100%;
     overflow: hidden;
+    opacity: var(--ring-light-opacity);
   }
+  .ring-inlay { stroke: var(--ring-inlay-color); stroke-width: var(--ring-inlay-width); stroke-linecap: round; }
   .ring-pulse {
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -116,7 +127,6 @@ const lap = light.length.toFixed(3);
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .ring-light { display: none; }
-    .ring-pulse { animation: none; }
+    .ring-pulse { display: none; animation: none; }
   }
 </style>

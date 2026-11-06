@@ -91,6 +91,8 @@
   --gallery-topbar-nav-line: #ffffff38;
   --gallery-topbar-hot-line: #ffffff8c;
   --gallery-topbar-current-line: var(--accent-ink);
+  --gallery-nav-wash: #d9efdc40;
+  --gallery-nav-line: #79ad8799;
   --gallery-topbar-bg: linear-gradient(180deg, #00000042, transparent);
   --gallery-entry-bg: radial-gradient(110% 70% at 12% 0%, color-mix(in srgb, var(--accent) 18%, transparent) 0%, transparent 58%), linear-gradient(178deg, var(--dusk-1) 0%, var(--dusk-2) 34%, var(--dusk-3) 62%, var(--dusk-4) 100%);
   /* ★★★ 明暗对比（不是浓淡！）：把薄片的着色**朝着色区间的中点**压缩。
@@ -126,15 +128,19 @@
   --water-light: #ffffff;
   --water-strength: 0.17;
   --water-light-gain: 2.6;
-  /* 留言页机械环：亮银外壳与低饱和墨绿光槽，流光收为短小的暖白亮点。 */
-  --ring-plate-opacity: 0.48;
-  --ring-day-filter: hue-rotate(105deg) saturate(0.55) contrast(1.12);
-  --ring-light-halo: #66887580;
-  --ring-light-core: #fffdf8;
+  /* 留言页：清亮银白机械环；黄绿强调色直接取自站主色卡，不继承图片透明度。 */
+  --ring-plate-opacity: 0.42;
+  --ring-perspective: 1000px;
+  --ring-light-opacity: 1;
+  --ring-inlay-color: #bfe252;
+  --ring-inlay-width: 8px;
+  --ring-day-filter: hue-rotate(45.883deg);
+  --ring-light-halo: #bfe25233;
+  --ring-light-core: #ffffd7;
   --ring-light-halo-width: 6px;
-  --ring-light-core-width: 2px;
+  --ring-light-core-width: 4px;
   --ring-light-halo-length: 24;
-  --ring-light-core-length: 8;
+  --ring-light-core-length: 26;
   --dur-ring-flow: 24s;
   /* 单册场景：只由 AlbumScene 使用，不改变旧砖墙与总入口。 */
   --scene-hud-paper: #fafaf7e6;
@@ -603,6 +609,8 @@ html.dark {
   --cursor-ripple: #ffc082d9;
   /* 夜间原图保留金属反射，微光沿用原版橙晕与暖白光芯；水波采用低亮度琥珀反光。 */
   --ring-plate-opacity: 0.72;
+  --ring-light-opacity: 0.72;
+  --ring-inlay-color: #ef913f;
   --ring-light-halo: #ffb0408c;
   --ring-light-core: #fff6ea;
   --ring-light-halo-width: 9px;
@@ -921,7 +929,7 @@ html.dark{--gallery-film-base:#785737;--gallery-film-shade:#221c17;--gallery-fil
 
 /* 音乐播放器：透光底、折射亮边与内侧暗边共同表达玻璃厚度。 */
 :root {
-  --music-glass: #fafaf70f;
+  --music-glass: #fafaf708;
   --music-glass-bar: #fafaf700;
   --music-glass-bar-fallback: #fafaf700;
   --music-glass-fallback: #fafaf7f5;
@@ -937,7 +945,7 @@ html.dark{--gallery-film-base:#785737;--gallery-film-shade:#221c17;--gallery-fil
   --music-glass-selected: #2d7d4617
 }
 html.dark {
-  --music-glass: #1d202314;
+  --music-glass: #1d20230a;
   --music-glass-bar: #1d202300;
   --music-glass-bar-fallback: #1d202300;
   --music-glass-fallback: #191b1df5;

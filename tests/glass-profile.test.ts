@@ -13,3 +13,12 @@ it('圆形和胶囊的左右折射对称，避免边界接缝',()=>{
     expect(left[0]+right[0]).toBeCloseTo(0,8);expect(left[1]).toBeCloseTo(0,8);
   }
 });
+
+it('胶囊直边沿局部法线折射，四周每一边都有效，外部圆角保持中性',()=>{
+  for(const x of [40,80,112,144,184]){
+    const top=glassVector(x,2,224,52),bottom=glassVector(x,50,224,52);
+    expect(Math.abs(top[0])).toBeLessThan(.001);expect(top[1]).toBeGreaterThan(.5);
+    expect(Math.abs(bottom[0])).toBeLessThan(.001);expect(bottom[1]).toBeLessThan(-.5);
+  }
+  expect(glassVector(0,0,224,52)).toEqual([0,0]);
+});

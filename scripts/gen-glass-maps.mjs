@@ -8,7 +8,7 @@ function png(width,height){
   const rows=Buffer.alloc(height*(width*4+1));
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     const [dx,dy]=glassVector(x+.5,y+.5,width,height),i=y*(width*4+1)+1+x*4;
-    rows[i]=Math.round((.5+dx*.5)*255);rows[i+1]=Math.round((.5+dy*.5)*255);rows[i+2]=128;rows[i+3]=255;
+    rows[i]=Math.round((.5+dx*.5*height/width)*255);rows[i+1]=Math.round((.5+dy*.5)*255);rows[i+2]=128;rows[i+3]=255;
   }
   const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(width);ihdr.writeUInt32BE(height,4);ihdr[8]=8;ihdr[9]=6;
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',deflateSync(rows)),chunk('IEND',Buffer.alloc(0))]);

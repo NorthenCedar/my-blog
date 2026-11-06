@@ -1,12 +1,13 @@
 ---
+import { readFileSync } from 'node:fs';
 import '../styles/liquid-glass.css';
-const shapes=[{id:'circle',scale:52.8},{id:'pill',scale:48},{id:'player',scale:62.4}];
+// 内联位移图与元素坐标绑定，避免外部 feImage 尚未就绪时整块背景向左上平移。
+const shapes=['circle','pill','player'].map(id=>({id,map:'data:image/png;base64,'+readFileSync('public/glass/'+id+'.png').toString('base64')}));
 ---
 <svg transition:persist="glass-filters" class="glass-defs" width="0" height="0" aria-hidden="true" focusable="false">
-  <defs>{shapes.map(({id,scale})=><filter id={'glass-'+id} x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
-    <feImage href={'/glass/'+id+'.png'} x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" result="lens"/>
-    <feGaussianBlur in="SourceGraphic" stdDeviation="0.35" result="soft"/>
-    <feDisplacementMap in="soft" in2="lens" scale={scale} xChannelSelector="R" yChannelSelector="G"/>
+  <defs>{shapes.map(({id,map})=><filter id={'glass-'+id} filterUnits="objectBoundingBox" primitiveUnits="objectBoundingBox" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feImage href={map} x="0" y="0" width="1" height="1" preserveAspectRatio="none" result="lens"/>
+    <feDisplacementMap in="SourceGraphic" in2="lens" scale="0.6" xChannelSelector="R" yChannelSelector="G"/>
   </filter>)}</defs>
 </svg>
 <style>.glass-defs{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;}</style>

@@ -58,18 +58,22 @@ describe('留言页 · 机械环底纹', () => {
     expect(RCSS).toMatch(/aspect-ratio:\s*1400 \/ 900/);
     expect(RCSS).toMatch(/\.ring-light\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0/);
     const reduced = RCSS.slice(RCSS.indexOf('@media (prefers-reduced-motion: reduce)'));
-    expect(reduced).toMatch(/\.ring-light\s*\{\s*display:\s*none/);
-    expect(reduced).toMatch(/\.ring-pulse\s*\{\s*animation:\s*none/);
+    expect(reduced).not.toMatch(/\.ring-light\s*\{\s*display:\s*none/);
+    expect(reduced).toMatch(/\.ring-pulse\s*\{[^}]*animation:\s*none/);
     expect(reduced).not.toMatch(/\.mechanical-ring\s*\{/);
     expect(RCSS).not.toMatch(/#[\da-fA-F]{3,8}\b|rgba?\(/);
   });
 
-  it('声纹、波纹和留言输入管线仍保留', () => {
+  it('机械环交互替代散点装饰，声纹和留言输入管线保留', () => {
     expect(ASTRO).toContain('<Voiceprint />');
-    expect(ASTRO).toContain('<WaterSurface />');
+    expect(ASTRO).not.toContain('FilamentField');
+    expect(ASTRO).not.toContain('WaterSurface');
+    expect(GUEST).not.toContain('data-ripple');
+    expect(GUEST).not.toContain('data-filament-field');
+    expect(GUEST).toContain('data-ring-motion');
     expect(ASTRO).toContain('<CommentSection slug="guestbook" />');
     expect(ASTRO).toContain("import '../scripts/comments'");
-    expect(read('src/components/WaterSurface.astro')).toContain("import '../scripts/ripple'");
+    expect(RING).toContain("import '../scripts/ring-motion'");
   });
 
   it('两页各自只渲染指定底纹，留言页流光保留', () => {

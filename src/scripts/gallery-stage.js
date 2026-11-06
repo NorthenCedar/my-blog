@@ -133,4 +133,4 @@ dialog.addEventListener('close',()=>catalogButton.focus({preventScroll:true}));
 reduce.addEventListener('change',()=>{syncHint();if(reduce.matches)for(const [el,animation]of [...animations]){const to=animation.effect.getKeyframes().at(-1);cancel(el);for(const key of Object.keys(to))if(!['offset','computedOffset','easing','composite'].includes(key))el.style[key]=to[key];} });
 for(const slide of slides)hide(slide);const saved=history.state?.galleryScene;show(Number.isInteger(saved)&&saved>=0&&saved<slides.length?saved:0,1,true);
 
-},"[data-stage]");
+},"body.gallery-story [data-stage]");
