@@ -101,7 +101,12 @@ function updateMap(source:string,node:YAMLMap,values:Record<string,unknown>,newl
     if(encoded===undefined) return bad('字段值无法保存');
     if(current&&typeof current==='object'&&'range'in current&&current.range){
       const [start,end]=current.range as [number,number,number];
-      patches.push({start,end,text:encoded+(source.slice(start,end).endsWith('\n')?newline:'')});
+      // 原值若独占一行（前面就是换行），新值不能照抄原列：顶格的 `- title:` 会落到
+      // 第 0 列，让 `notes:` 下面多出一个文档级根节点，YAML 当场非法（写作台旧版
+      // 用 PyYAML 默认风格写列表就是顶格的）。统一按「键所在列 + 2」缩进。
+      const atLineStart=start===0||source[start-1]==='\n';
+      const text=(atLineStart?' '.repeat(indent+2):'')+encoded;
+      patches.push({start,end,text:text+(source.slice(start,end).endsWith('\n')?newline:'')});
     }else{
       const end=node.range?.[1]??source.length;
       patches.push({start:end,end,text:`${' '.repeat(indent)}${JSON.stringify(key)}: ${encoded}${newline}`});

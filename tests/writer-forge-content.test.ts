@@ -98,6 +98,14 @@ describe('造物台单页文案发布',()=>{
     const bad=structuredClone(value);bad.fields.stages=['只有一条'];expect(()=>planChanges({kind:'forge',key:'forge',base:base(original),value:bad},original,new Map())).toThrow();
     expect(()=>planChanges({kind:'forge',key:'forge',base:base(original),value},original+'别处修改',new Map())).toThrow();
   });
+  it('资料里的列表被顶格写出时也能安全写回',()=>{
+    const original=readFileSync('content/pages/forge.md','utf8').replace(/^ {2}(?=- )/gm,'');
+    const value=readPost(original);
+    value.fields.notes=[{title:'顶格也能改',text:'正文'}];
+    const output=textOf(planChanges({kind:'forge',key:'forge',base:base(original),value},original,new Map()));
+    expect(readPost(output).fields.notes).toEqual(value.fields.notes);
+    expect(output).toContain('\n  [{');
+  });
   it('页面文案不接受上传图片，新项目允许亮暗图和正文图共用既有配额',()=>{
     const value={fields:{},body:'',assets:[{sha256:'a'.repeat(64),alt:'多余的图'}]};
     expect(()=>validateWriterValue('forge',value)).toThrow();
