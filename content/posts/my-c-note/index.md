@@ -1,7 +1,7 @@
 ---
 title: 我的C语言学习笔记
 date: 2026-10-29
-updated: 2026-11-06
+updated: 2026-11-09
 summary: 如标题所示，本文主要是用来记笔记的，有兴趣或者也想学习C语言的小伙伴可以看看
 tags: [个人, 备忘]
 draft: false
@@ -108,6 +108,42 @@ int main()
 ```
    Windows系统下先按 Ctrl + Z，然后再按回车，输入结束
    Linux / Mac (包括WSL)：在行首（或者随便输入后）按 Ctrl + D 结束
+
+21.判断是否是字母的三大金刚
+   要加一个头文件#include <ctype.h>
+   isalpha(c):判断c是不是英文字母
+   islower(c):判断c是不是小写字母
+   isupper(c):判断c是不是大写字母
+```c
+#include <stdio.h>
+#include <ctype.h> // 必须包含这个头文件
+
+int main() {
+    char ch = 'A';
+    
+    if (isalpha(ch)) {
+        printf("%c 是字母\n", ch);
+    }
+    if (isupper(ch)) {
+        printf("%c 是大写字母\n", ch);
+    }
+    if (!islower(ch)) { // 加个感叹号代表“不是”
+        printf("%c 不是小写字母\n", ch);
+    }
+
+
+    // 把字符串全转成大写
+    char str[] = "Hello 123!";
+    for (int i = 0; str[i] != '\0'; i++) {
+        str[i] = toupper(str[i]); 
+    }
+    printf("%s\n", str); // 输出: HELLO 123!
+    
+    // 千万不要写 if (isalpha(ch) == 1)。因为在不同的编译器底层，isalpha 判断为真时，可能返回的是 1，也可能是 2、1024 等任意非零数字
+
+    return 0;
+}
+```
 
 
 
