@@ -43,7 +43,8 @@ Kali Linux 是基于 Debian 的 Linux 发行版，由 Offensive Security 公司�
 
 1. 打开 https://www.kali.org/get-kali/#kali-virtual-machines
 2. 页面上有四个虚拟机选项，依次是 VMware、VirtualBox、Hyper-V、QEMU，选 **VMware** 版。
-![Kali 官网预建虚拟机下载页](./Kali 官网预建虚拟机下载页.jpg)
+![kali](./kali.jpg)
+
 
 3. 下载下来是一个约 3GB 的 `.7z` 压缩包。
 4. 把压缩包解压出来，建议放在桌面或一个单独的文件夹里。解压后你会看到一堆文件，其中有一个后缀是 `.vmx` 的文件，后面要用它。
