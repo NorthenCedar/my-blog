@@ -84,7 +84,20 @@ const CHRONO = (() => {
        两行基线相距 13（字号 11）时它们是**贴着的**（实测图里"9月"压在"25"上）。
        现在 14 / 29，相距 15 > 字号 ⇒ 两行之间有一整行的空气。 */
   const LABEL = 38;
-  const BASE_Y = READOUT + MAX_H;
+
+  /* ★ 2026-11-10 站主：「装置从日改成月了，那个齿不知道为什么高了好多，有点丑」。
+     根因不是齿高变了，是**整台被放大**了：
+       日格档把自然宽度撑到 ~966px（21 格 × 46），再缩到 34vw 去显示 ⇒ 缩放 0.54，
+       齿高 104 落到屏幕上只有 ~56px；
+       换成月格档后自然宽度掉到一两百像素（3 个月 × 46-72），同一支 SVG
+       `width:100%` 反而放大了 2.7 倍 ⇒ 齿 286px、标签 30px，装置变成两三根高塔。
+     ⇒ 竖向按 `vScale = 自然宽 / 966` 归一：齿高压回 ~55px，与日格档**同一个视觉重量**。
+     ★ 读数带/标签带**不跟着缩** —— 它们是字（11/13px），归一后会缩到看不清；
+       跟着字走的还有 hover 读数，缩了就是"齿小了但字也没了"。
+     日格档 vScale 恒为 1，输出与 2026-10-14 逐字一致。 */
+  const DESIGN_W = 966;   // 设计基准宽：日格档 21 格 × 46px（2026-10-14 的样子）
+  const RAIL_W = 520;     // `.chrono` 宽的上界（CSS `min(34vw, 520px)` 的固定那一档）
+  let vScale = 1;
 
   /* ★ 档位（2026-10-15 站主：「让"一格一天"变成"一格一月"，分档走」）。
      为什么必须分档 —— 量过，不是推的（`.chrono` 是 `width:100%` + viewBox
@@ -121,7 +134,7 @@ const CHRONO = (() => {
   /* 齿高上限**从数据推**，不写死 —— 照抄卷尺那条口径「刻度从内容推导」：
      哪天某项数破纪录时，尺自己长高，不用改代码。 */
   const maxChanges = Math.max(1, ...dayBuckets.flatMap((x) => x.teeth));
-  const hOf = (n: number) => MIN_H + (MAX_H - MIN_H) * (n / maxChanges);
+  const hOf = (n: number) => (MIN_H + (MAX_H - MIN_H) * (n / maxChanges)) * vScale;
 
   /* ── 档一：日格（一格一天，格内该天的几版**并排**）────────────────────
      ★ 这条路的输出与 2026-10-14 之前**逐字一致**，不是为了省事，是为了让
@@ -179,14 +192,15 @@ const CHRONO = (() => {
       byMonth.get(mk)!.push(d);
     }
     const groups = [...byMonth.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
-    /* 格宽**从数据反推**：一格要装得下当月最多的"有更新日"那几天。
-       ★ 不写死 46 —— 写死就是"哪天数据一变就顶破"的老毛病（AGENTS §5
-         「拿同一套办法给流场加东西」那一族的反面：常量迟早被数据顶穿）。 */
-    const maxActive = Math.max(
-      1,
-      ...groups.map(([, ds]) => ds.filter((d) => d.count > 0).length),
-    );
-    CELL = Math.max(46, Math.min(72, maxActive * SLOT_PITCH));
+    /* 格宽（2026-11-10 改）：先按"把导轨铺满"排，再夹进 [46, 173]。
+       ★ 旧规则是 `maxActive × SLOT_PITCH`（"格子塞得下当月最忙的那几天"）——
+         它只回答"塞不塞得下"，不回答"这台装置在导轨里还剩多少体量"：
+         3 个月 ⇒ 自然宽 178px，`width:100%` 把它放大 2.7 倍，齿 286px。
+         现在宽度先吃满 520 导轨，竖向再按 DESIGN_W 归一（见 vScale 那段注释），
+         两件事合起来才能"齿高不变、装置不变形"。
+       ★ 上限 173 = 520/3：格太宽时一天的列距会超过 6px，几根齿稀稀拉拉反而散。 */
+    CELL = Math.max(46, Math.min(RAIL_W / groups.length, RAIL_W / 3, 173));
+    vScale = Math.min(1, (groups.length * CELL) / DESIGN_W);
 
     let lastYear = '';
     cells = groups.map(([mk, ds]) => {
@@ -235,9 +249,10 @@ const CHRONO = (() => {
       phaseAcc = base + Math.max(cell.slots.length - 1, 0) * 8 + 90;
     }
   }
+  const BASE_Y = READOUT + MAX_H * vScale;
 
   return {
-    tier, cells, CELL, PITCH, TOOTH_W, MIN_H, BASE_Y, READOUT, LABEL, maxChanges, hOf,
+    tier, cells, CELL, PITCH, TOOTH_W, MIN_H, BASE_Y, READOUT, LABEL, maxChanges, hOf, vScale,
     spanDays,
     W: cells.length * CELL,
     H: BASE_Y + LABEL,
@@ -254,8 +269,10 @@ const CHRONO = (() => {
        齿高这条通道就没了。上面几行算的"总宽"只是它的成因。
        （量法：格内列距 × 缩放比。缩放比 = 盒宽 / viewBox 宽，
          盒宽取 `.chrono` 的上界 min(34vw, 520px) 的 520 那一档。） */
+    /* ★ 月格档的列距不是常量：格里按 31 天均分（`step = inner / dm`），
+       所以这里按"最长的那一个月"算，别再拿 SLOT_PITCH 估（它只用来定格宽下限）。 */
     slotPitchRendered:
-      (tier === 'day' ? PITCH : SLOT_PITCH) * (520 / (cells.length * CELL)),
+      (tier === 'day' ? PITCH : (CELL - 6) / 31) * (520 / (cells.length * CELL)),
     boxWidth: 520,
   };
 })();
