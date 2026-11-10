@@ -12,7 +12,7 @@ async function setup() {
 it('草稿保存到真实数据库并按站主隔离读取，导出保留未知字段',async()=>{
   const s=await setup(); const d=await createDraft(s.db,s.proof,{kind:'post',key:'new-post',base:null,value:value()});
   expect(d.revision).toBe(1);
-  expect((await readDraft(s.db,s.owner,d.id)).value).toEqual(value());
+  expect((await readDraft(s.db,s.owner,d.id)).value).toEqual({...value(),audios:[]});
   expect((await listDrafts(s.db,s.owner)).length).toBe(1);
   await expect(readDraft(s.db,'c'.repeat(32),d.id)).rejects.toMatchObject({status:404});
   expect((await exportDraft(s.db,s.owner,d.id)).draft.value.fields.videos).toEqual([{src:'旧视频'}]);

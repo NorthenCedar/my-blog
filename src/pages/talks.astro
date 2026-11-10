@@ -7,6 +7,7 @@ import PageTitle from '../components/PageTitle.astro';
 import TalkImageViewer from '../components/TalkImageViewer.astro';
 import { renderTalkText } from '../lib/talk-text';
 import { validateTalkVideos } from '../lib/video-assets.mjs';
+import { validateTalkAudio } from '../lib/audio-assets.mjs';
 // 回复区样式（2026-09-28）：全局引入。本页 <style> 是 scoped，
 // 而回复元素是 JS 运行时创建的（没有 data-astro-cid）⇒ 写在本页 style 里不会生效。
 import '../styles/replies.css';
@@ -27,6 +28,11 @@ interface TalkVideo {
   src: string;
   alt: string;
 }
+/** 说说里的语音（2026-11-10）：文件放 content/audio/，这里只写 /audio/<hash>.mp3|wav */
+interface TalkAudio {
+  src: string;
+  label?: string;
+}
 interface Talk {
   id?: string;
   date: string | Date;
@@ -34,6 +40,7 @@ interface Talk {
   href?: string;
   images?: TalkImage[];
   videos?: TalkVideo[];
+  audio?: TalkAudio[];
 }
 interface TalksData {
   intro?: string;
@@ -74,7 +81,7 @@ const slugOf = (t: Talk): string => {
 };
 const rows = items.map((t) => {
   const slug = slugOf(t);
-  return { t, slug, videos: validateTalkVideos(t.videos, `content/pages/talks.md 的 ${slug}`) };
+  return { t, slug, videos: validateTalkVideos(t.videos, `content/pages/talks.md 的 ${slug}`), audio: validateTalkAudio(t.audio, `content/pages/talks.md 的 ${slug}`) };
 });
 // 说说配图：构建期收进来，才能走 Astro 的优化管线（WebP + srcset）
 const talkAssets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/talks/*.{jpg,jpeg,png,webp,avif}', { eager: true });
@@ -140,7 +147,7 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
   </header>
 
   <ol class="talks">
-    {rows.map(({ t, slug, videos }) => (
+    {rows.map(({ t, slug, videos, audio }) => (
       <li class="talk">
         <time datetime={iso(t.date)}>{fmt(t.date)}</time>
         <div class="talk-content">
@@ -148,6 +155,18 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
             <Fragment set:html={renderTalkText(t.text)} />
             {t.href && <> <a href={t.href}>链接</a></>}
           </p>
+          {/* 语音（2026-11-10）：贴在正文后面、配图前面 —— 它是"说出来的那句正文"，
+              不是配图也不是配视频，顺序上该紧跟着文字。 */}
+          {audio.length > 0 && (
+            <div class="talk-audio">
+              {audio.map((a) => (
+                <div class="ap" data-audio data-src={a.src} data-label={a.label}>
+                  <audio controls preload="metadata" src={a.src} aria-label={a.label || '语音'}></audio>
+                </div>
+              ))}
+            </div>
+          )}
+
           {t.images && t.images.length > 0 && (
             <div class="shots" data-columns={t.images.length <= 2 ? t.images.length : t.images.length === 4 ? 2 : 3}>
               {t.images.map((img, i) =>

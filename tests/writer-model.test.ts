@@ -16,7 +16,7 @@ it('结构异常、素材摘要不合法和过多配图被拒绝',()=>{
 });
 it('未完成的草稿可以留空标题和图说，内容与视频等未知字段保持',()=>{
   const value={fields:{title:'',videos:[{src:'/videos/existing.mp4',alt:'旧视频'}]},body:'未写完',assets:[{sha256:'a'.repeat(64),alt:''}]};
-  expect(validateWriterValue('post',value)).toEqual(value);
+  expect(validateWriterValue('post',value)).toEqual({...value,audios:[]});
 });
 it('已发布配图保留原引用，下一次编辑只对新配图计数',()=>{
   const assets=Array.from({length:21},(_,n)=>({sha256:n.toString(16).padStart(64,'0'),alt:'图'})),base={commit:'1'.repeat(40),blobSha:'2'.repeat(40),text:'![已有图](./writer-'+assets[0].sha256+'.webp)'};

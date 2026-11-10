@@ -3,6 +3,8 @@ import { resolve,join } from 'node:path';
 import { planChanges,readPost,writerHash } from '../../src/lib/writer/content.ts';
 import { writerFail,writerId,validateTarget,writerTargetPath,writerAssetDirectory,utf8Length } from '../../src/lib/writer/model.ts';
 import { gitRunner,gitText,remoteHead } from './git.mjs';
+// 语音落在仓库共享的 content/audio/（按内容摘要命名），所以单独放行这一种路径。
+const audioPath=/^content\/audio\/[a-f0-9]{64}\.(?:mp3|wav)$/;
 export function checkedPath(repoDir,path){
   if(path.includes('\\')||path.includes('\0')||path.includes('%')||path.startsWith('/')||path.split('/').some(p=>!p||p==='.'||p==='..')) writerFail(400,'invalid_path','候选路径越界');
   let current=resolve(repoDir);
@@ -13,7 +15,7 @@ export function contentDigest(repoDir,paths){return writerHash(JSON.stringify([.
 export function assertCandidate(repoDir,prepared,run=gitRunner(repoDir)){
   writerId(prepared.jobId);const target=validateTarget(prepared.kind,prepared.key),allowed=new Set(prepared.paths);
   const targetPath=writerTargetPath(target.kind,target.key),directory=writerAssetDirectory(target.kind,target.key);
-  if(allowed.size!==prepared.paths.length||prepared.paths.some(path=>path!==targetPath&&!(directory&&path.startsWith(directory)&&/^writer-[a-f0-9]{64}\.webp$/.test(path.slice(directory.length))))) writerFail(400,'invalid_path','候选文件超出本次内容范围');
+  if(allowed.size!==prepared.paths.length||prepared.paths.some(path=>path!==targetPath&&!(directory&&path.startsWith(directory)&&/^writer-[a-f0-9]{64}\.webp$/.test(path.slice(directory.length)))&&!audioPath.test(path))) writerFail(400,'invalid_path','候选文件超出本次内容范围');
   for(const path of prepared.paths){checkedPath(repoDir,path);const mode=gitText(run,['ls-files','--stage','--',path]).split(' ')[0];if(mode==='120000'||mode==='160000') writerFail(400,'symlink_rejected','候选文件不是普通文件');}
   const result=run(['status','--porcelain=v1','-z','--untracked-files=all']);
   if(result.status!==0) writerFail(502,'git_failed','无法读取工作区状态');
@@ -52,7 +54,7 @@ export function prepare({repoDir,snapshot,assets,jobId}){
   if(utf8Length(JSON.stringify({commit:'0'.repeat(40),blobSha:'0'.repeat(40),text,itemHash:'0'.repeat(64)}))>262144) writerFail(413,'base_too_large','发布后的基线过大，请在本地处理');
   for(const change of changes){
     const destination=checkedPath(repoDir,change.path);
-    if(change.path.endsWith('.webp')&&existsSync(destination)&&writerHash(readFileSync(destination))!==writerHash(change.bytes)) writerFail(409,'asset_collision','同名配图内容不一致，已停止发布');
+    if((change.path.endsWith('.webp')||audioPath.test(change.path))&&existsSync(destination)&&writerHash(readFileSync(destination))!==writerHash(change.bytes)) writerFail(409,'asset_collision','同名素材内容不一致，已停止发布');
     mkdirSync(resolve(destination,'..'),{recursive:true});writeFileSync(destination,change.bytes);
   }
   const prepared={jobId,kind:snapshot.kind,key:snapshot.key,baseHead,paths:changes.map(c=>c.path),contentDigest:contentDigest(repoDir,changes.map(c=>c.path))};

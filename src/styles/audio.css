@@ -1,0 +1,290 @@
+/* 正文里的音频条（站主 2026-11-10：「加一个可以上传音频的功能（mp3 和 wav），
+   并设计一下音频按钮，要和本站视觉风格匹配」）。
+
+   视觉语言取自站内既有的三处，不自造第四种：
+     · 形状 —— comments.css 的输入框：直角（border-radius: 0）、1px --hair 发丝线、
+       底色吃 --paper，不发光、不投影；
+     · 字 —— 时间与标签走 IBM Plex Mono / --fs-mono（与 PageReadout、日志页同族）；
+     · 绿 —— 只有「正在播放的那一段」用 --accent，其余一律墨色/发丝线。
+       和文章里的链接同一条规矩：绿色是注意力，不是装饰。
+
+   ★ 为什么做成「一条横条」而不是圆角播放器卡片：
+     正文是左对齐的窄栏（--measure），一个 48px 高的圆角卡片会像外站组件插进来；
+     横条与正文左缘对齐、高度等于一行半、直角收口，读起来像「引文/脚注」，
+     这正是站内对「非正文内容」的一贯处理（代码块、引用、相册条都是如此）。 */
+
+.ap {
+  --ap-height: 2.75rem;
+  --ap-bar-min: 2px;
+  --ap-bar-max: 18px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  max-width: 34rem;
+  min-height: var(--ap-height);
+  margin: var(--sp-4) 0;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--fs-mono);
+  line-height: 1.2;
+  box-sizing: border-box;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.ap:hover {
+  border-color: var(--ink-2);
+}
+
+.ap:focus-within {
+  border-color: var(--accent-ink);
+}
+
+/* 没有 JS 时原生 <audio controls> 顶上来；有 JS 后它被藏掉，换成下面这套。 */
+.ap:not([data-ap-ready]) > audio {
+  flex: 1;
+  min-width: 0;
+  height: 2rem;
+}
+
+.ap[data-ap-ready] > audio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.ap-play {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--ink-2);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s ease, color 0.18s ease, background-color 0.18s ease;
+}
+
+.ap-play:hover {
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
+}
+
+.ap-play:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+
+.ap-play svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  fill: currentColor;
+  stroke: none;
+}
+
+.ap[data-ap-playing] .ap-play {
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
+  background: var(--accent-wash);
+}
+
+.ap-play .ap-glyph-pause {
+  display: none;
+}
+
+.ap[data-ap-playing] .ap-glyph-play {
+  display: none;
+}
+
+.ap[data-ap-playing] .ap-glyph-pause {
+  display: block;
+}
+
+/* 波形：40 根竖条，高度由 JS 按 src 的哈希定（同一个文件永远同一张波形）。
+   点条即跳转 —— 整条是一个 role="slider"。 */
+.ap-wave {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  height: var(--ap-bar-max);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.ap-wave i {
+  display: block;
+  flex: 1;
+  min-width: var(--ap-bar-min);
+  height: var(--h, 40%);
+  background: var(--ink-2);
+  opacity: 0.45;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+}
+
+/* 已播过的那一段：绿。不加深、不加描边 —— 绿本身就够分辨。 */
+.ap-wave i[data-played] {
+  background: var(--accent);
+  opacity: 1;
+}
+
+.ap[data-ap-playing] .ap-wave i[data-played] {
+  opacity: 0.9;
+}
+
+.ap-wave:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+
+.ap-time {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.ap-time b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.ap-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 12rem;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-dl {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+
+.ap-dl:hover,
+.ap-dl:focus-visible {
+  color: var(--accent-ink);
+}
+
+.ap-dl svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 窄屏：标签让位给时间（手机上「说话内容」比说明文字重要） */
+@media (max-width: 560px) {
+  .ap {
+    gap: var(--sp-2);
+    padding: 0 var(--sp-2);
+  }
+
+  .ap-label {
+    display: none;
+  }
+}
+
+/* 说说页的音频条挂在正文下面，和图片/视频同一套间距。 */
+.talk-audio .ap {
+  margin: var(--sp-3) 0 0;
+  max-width: 100%;
+}
+
+/* 留言里的音频条：比正文里的矮一档，避免和「回复」按钮抢注意力。 */
+.comment-audio .ap,
+.reply-audio .ap {
+  --ap-height: 2.25rem;
+  margin: var(--sp-2) 0 0;
+  max-width: 26rem;
+}
+/* ------------------------------------------------------------------ *
+ * 表单里的「＋ 语音」（2026-11-10）
+ * 视觉：左边方块按钮 + 等宽小字状态，与站内其它次级动作一致；
+ * 不抢「发表」的黑色实心块 —— 语音是附件，不是主体。
+ * 注意选择器要带上表单前缀：.comment-form button / .reply-form button
+ * 是实心样式，只有更具体才压得住。
+ * ------------------------------------------------------------------ */
+.ap-attach {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-4);
+}
+
+.comment-form .ap-attach-btn,
+.reply-form .ap-attach-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: var(--sp-1) var(--sp-3);
+  font: inherit;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.comment-form .ap-attach-btn:hover:not(:disabled),
+.reply-form .ap-attach-btn:hover:not(:disabled) {
+  background: var(--accent-wash);
+  border-color: var(--hair);
+  color: var(--ink);
+}
+
+.comment-form .ap-attach-btn:disabled,
+.reply-form .ap-attach-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ap-attach-status {
+  font-family: var(--fs-mono);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.comment-form .ap-attach-clear,
+.reply-form .ap-attach-clear {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: 0 var(--sp-1);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.comment-form .ap-attach-clear:hover,
+.reply-form .ap-attach-clear:hover {
+  color: var(--accent-ink);
+  border-color: var(--accent-ink);
+}

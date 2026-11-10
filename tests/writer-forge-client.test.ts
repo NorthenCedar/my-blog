@@ -42,7 +42,7 @@ it('页面文案的三条提示和工作手记可编辑，保留未知字段与�
   const {root,saved}=await open('forge',{title:'造物台',description:'旧说明',stages:['一','二','三'],notes:[{title:'手记',text:'原手记'}],future:'保留'});
   expect(input(root,'description')).toBeDefined();expect(input(root,'stage-2')).toBeDefined();expect(input(root,'date')).toBeUndefined();expect(find(root,'添加工作手记')).toBeDefined();
   edit(input(root,'description'),'新说明');edit(input(root,'stage-2'),'第三条新提示');find(root,'添加工作手记').click();edit(input(root,'note-1-title'),'新手记');edit(input(root,'note-1-text'),'新的记录');find(root,'保存草稿').click();await settle();
-  expect(saved.at(-1).value).toEqual({fields:{title:'造物台',description:'新说明',stages:['一','二','第三条新提示'],notes:[{title:'手记',text:'原手记'},{title:'新手记',text:'新的记录'}],future:'保留'},body:'原有\r\n正文\n',assets:[]});
+  expect(saved.at(-1).value).toEqual({fields:{title:'造物台',description:'新说明',stages:['一','二','第三条新提示'],notes:[{title:'手记',text:'原手记'},{title:'新手记',text:'新的记录'}],future:'保留'},body:'原有\r\n正文\n',assets:[],audios:[]});
   expect(root.all().some(n=>n.type==='file')).toBe(false);
 });
 it('发布项目和页面文案显示准确类型与有效摘要，确认前不发起发布',async()=>{

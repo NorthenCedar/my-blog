@@ -2,6 +2,7 @@ import { guardWriterOrigin,writerJson,writerHeaders,writerError,type WriterEnv }
 import { jobRow,claimJob,authorizePush,recordJob,recordDeployment,checkLease,publishedBase,type JobEvent } from '../_lib/writer-jobs';
 import { createWriterRepository,matchesWriterRun } from '../_lib/writer-repository';
 import { readAsset } from '../_lib/writer-assets';
+import { readAudio } from '../_lib/writer-audio';
 import { readTalks } from '../../../src/lib/writer/content';
 import { writerFail,writerId } from '../../../src/lib/writer/model';
 import { readJsonBody } from '../_lib/public-write';
@@ -47,6 +48,16 @@ export const onRequestPost:PagesFunction<WriterEnv>=async({request,env})=>{
       if(!ref) writerFail(404,'asset_missing','配图不属于此快照');
       const image=await readAsset(env.COMMENTS_DB,row.owner,String(p.sha256));
       return new Response(new Uint8Array(image.bytes),{headers:{...writerHeaders,'Content-Type':'image/webp'}});
+    }
+    if(p.action==='audio'){
+      const current=await checkLease(env.COMMENTS_DB,id,lease,runId);
+      if(!['validating','ready'].includes(current.state)) writerFail(409,'job_ended','任务已结束');
+      // 只认本快照里列出的语音：快照即授权清单，不另建关联表。
+      const snapshot=JSON.parse(current.snapshot_json) as { value?: { audios?: { sha256: string; ext: string }[] } };
+      const clip=(snapshot.value?.audios??[]).find(a=>a.sha256===String(p.sha256));
+      if(!clip) writerFail(404,'audio_missing','语音不属于此快照');
+      const audio=await readAudio(env.COMMENTS_DB,row.owner,String(p.sha256));
+      return new Response(new Uint8Array(audio.bytes),{headers:{...writerHeaders,'Content-Type':clip.ext==='wav'?'audio/wav':'audio/mpeg'}});
     }
     if(p.action==='record'){
       const event={state:p.state,runId,commit:p.commit,code:p.code} as JobEvent;

@@ -3,7 +3,9 @@ import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import typegpu from 'unplugin-typegpu/vite';
 import { createVideoDevPlugin } from './src/lib/video-assets.mjs';
+import { createAudioDevPlugin } from './src/lib/audio-assets.mjs';
 import { withPreservedIndent } from './src/lib/markdown-preserve-indent.mjs';
+import { withAudioMarkup } from './src/lib/markdown-audio.mjs';
 import { satteri } from '@astrojs/markdown-satteri';
 
 export default defineConfig({
@@ -18,7 +20,11 @@ export default defineConfig({
     // ★ 2026-11-04：保住段落续行的行首缩进。CommonMark 在**解析阶段**就把续行开头的
     //   空格当缩进吃掉了（mdast 里已经查不到），所以只能包一层处理器、在喂给解析器
     //   之前把行首 1–3 个空格换成不换行空格；换行本身由 prose.css 的 pre-wrap 保住。
-    processor: withPreservedIndent(satteri()),
+    // ★ 2026-11-10：音频条。`!audio[说明](/audio/<hash>.mp3)` 这一行在**解析前**
+    //   换成播放器骨架（理由同下一条：这层包装只拿得到源码字符串）。
+    //   套在缩进处理器**外面** —— 它吐出来的 `<div …>` 以 `<` 开头，
+    //   缩进处理器正会跳过这类行，两者不会互相踩。
+    processor: withAudioMarkup(withPreservedIndent(satteri())),
   },
   image: {
     // 让正文里的图片自动带 srcset/sizes。不加这条，短文那三张 2133px 宽的原图
@@ -28,6 +34,7 @@ export default defineConfig({
   vite: {
     plugins: [
       createVideoDevPlugin(),
+      createAudioDevPlugin(),
       // ★ 2026-10-17：Jelly Slider 主题开关（原版 WebGPU 实现，src/vendor/jelly-slider/）。
       //   TypeGPU 的 'use gpu' 函数体必须在构建时抽取 shader 源码；
       //   没有这个插件，运行时报 "Missing metadata for tgpu.fn function body"。

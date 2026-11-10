@@ -26,6 +26,11 @@ async function assetsFor(ctx,snapshot,lease){
     const bytes=await call(ctx,'asset',{lease,sha256:hash},true);
     if(bytes.length>300*1024||sha256(bytes)!==hash)writerFail(400,'invalid_asset','配图摘要不一致');assets.set(hash,bytes);
   }
+  for(const {sha256:hash}of snapshot.value.audios??[]){
+    if(assets.has(hash))continue;
+    const bytes=await call(ctx,'audio',{lease,sha256:hash},true);
+    if(!bytes.length||bytes.length>1500000||sha256(bytes)!==hash)writerFail(400,'invalid_audio','语音摘要不一致');assets.set(hash,bytes);
+  }
   return assets;
 }
 function gitCredentials(token){

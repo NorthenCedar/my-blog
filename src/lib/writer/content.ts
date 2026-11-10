@@ -139,6 +139,16 @@ function replaceImages(body:string,resolve:(sha:string)=>string,references=false
     return out+line.slice(position);
   }).join('');
 }
+/** 语音在正文里写作 `!audio[说明](writer-audio:<sha>)`，发布时换成 `/audio/<sha>.<ext>`。 */
+function replaceAudio(body:string,resolve:(sha:string)=>string){
+  let fence='';
+  return body.split(/(?<=\n)/).map(line=>{
+    const marker=/^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if(marker){if(!fence) fence=marker;else if(marker[0]===fence[0]&&marker.length>=fence.length) fence='';return line;}
+    if(fence) return line;
+    return line.replace(/writer-audio:([a-f0-9]{64})/g,(_all,sha:string)=>resolve(sha));
+  }).join('');
+}
 const projectImage = z.string().refine(src=>/^writer-asset:[a-f0-9]{64}$/.test(src)||/^(?:\.\/)?[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(src)&&!src.includes('..'),'项目配图必须来自当前项目目录或已上传图片');
 const publishedProject = projectSchema(()=>projectImage);
 const projectMarkdown = new MarkdownIt({html:true});
@@ -202,6 +212,13 @@ export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:
 export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,currentText:string|null,assetBytes:Map<string,Uint8Array>):WriterChange[]{
   const {kind,key}=validateTarget(draft.kind,draft.key),value=validateWriterValue(kind,draft.value,draft.base);validatePublish(kind,value,draft.base);
   const changes:WriterChange[]=[],known=new Map(value.assets.map(a=>[a.sha256,a]));
+  const clips=new Map(value.audios.map(a=>[a.sha256,a]));
+  for(const clip of value.audios){
+    const bytes=assetBytes.get(clip.sha256);if(!bytes||writerHash(bytes)!==clip.sha256) bad('语音缺失或摘要不一致，请重新上传');
+    if(bytes.length>1500000) bad('单条语音不能超过 1.5 MB');
+    changes.push({path:`content/audio/${clip.sha256}.${clip.ext}`,bytes});
+  }
+  const resolveAudio=(sha:string)=>{const clip=clips.get(sha);if(!clip) return bad('正文引用了未保存的语音');return `/audio/${sha}.${clip.ext}`;};
   const directory=writerAssetDirectory(kind,key);
   const galleryReferences=kind==='gallery'?new Set((value.fields.images as {src:string}[]).map(image=>image.src)):null;
   for(const asset of value.assets){
@@ -247,7 +264,7 @@ export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,
     if(original){if(fields.slug!==original.fields.slug) bad('旧文章网址标识不能修改');}
     else if(fields.slug!==undefined&&fields.slug!==key) bad('文章网址标识与目录不一致');
     if(typeof fields.cover==='string'&&fields.cover.startsWith('writer-asset:')) fields.cover=resolve(fields.cover.slice(13));
-    const body=replaceImages(value.body,resolve);
+    const body=replaceAudio(replaceImages(value.body,resolve),resolveAudio);
     // 正文/字段真的变了才把 updated 推到今天；用户手填的值（含手动清空）一律不动。
     const synced=original?advanceUpdated(fields,body,original):fields;
     if(currentText!==null){const s=split(currentText);text=currentText.slice(0,s.offset)+apply(s.header,updateMap(s.header,s.doc.contents as YAMLMap,synced,s.newline))+`---${s.newline}`+body.replace(/\r?\n/g,s.newline);}
@@ -260,6 +277,9 @@ export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,
     const fields={...value.fields,id:key,text:value.body};
     const previousImages=Array.isArray(fields.images)?fields.images:[];
     if(value.assets.length) fields.images=[...previousImages,...value.assets.map(a=>({src:resolve(a.sha256),alt:a.alt}))];
+    // 说说语音整体以草稿里的列表为准（与写作台一致）：删掉就真的删掉，不留孤儿引用。
+    if(value.audios.length) fields.audio=value.audios.map(a=>({src:resolveAudio(a.sha256),...(a.label?{label:a.label}:{})}));
+    else delete fields.audio;
     if(target) patches.push(...updateMap(s.header,target.node,fields,s.newline,4));
     // 插入前固定所有旧 ID，保持既有点赞、回复和通知归属。
     for(const row of s.rows) if(!row.fields.id&&row!==target) patches.push(...updateMap(s.header,row.node,{id:row.key},s.newline,4));

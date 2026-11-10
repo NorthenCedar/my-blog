@@ -147,9 +147,36 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     async function prepareFiles(input:File[]){for(const file of input){if(ticket!==generation)return;const existing=publishedAssetHashes(working.base);if(working.value.assets.filter(a=>!existing.has(a.sha256)).length+pending.length>=writerImageLimit(working.kind))throw Error('本篇新增图片数量已达上限');const result=await prepareWriterImage(file);if(ticket!==generation){URL.revokeObjectURL(result.previewUrl);return;}urls.add(result.previewUrl);pending.push({id:crypto.randomUUID(),blob:result.blob,url:result.previewUrl,alt:'',...result});edit();renderImages();}}
     choose.addEventListener('change',()=>{void perform(()=>files(Array.from(choose.files??[])));choose.value='';});
     imageSection.append(el('h3','配图'),el('p',working.kind==='gallery'?'多选照片后点击“全部上传到相册”，可暂时不填图注。上传后在本册照片中补齐图注，发布前会检查。':working.kind==='project'?'先预览压缩结果并填写说明，再上传。上传后可在项目图库选择主图、暗色替图，或插入正文。图库顺序与下方上传列表独立。':'先预览压缩结果并填写说明，再上传。说说按下方顺序展示；文章内的位置由正文图片引用决定。','writer-note'),choose,button(working.kind==='gallery'?'全部上传到相册':'上传全部配图',()=>perform(uploadAll)),images);
+    // 语音：文章插一行 `!audio[说明](writer-audio:<sha>)` 进正文，说说进 audio 列表，其余类型不给入口。
+    const audioSection=el('div','','writer-images'),audioList=el('div','','writer-image-list'),audioChoose=el('input');
+    audioChoose.type='file';audioChoose.accept='audio/mpeg,audio/wav,.mp3,.wav';audioChoose.setAttribute('aria-label','选择语音');
+    function renderAudio(){
+      if(!Array.isArray(working.value.audios))working.value.audios=[];
+      audioList.replaceChildren();working.value.audios.forEach((clip,index)=>{
+        const card=el('div','','writer-image'),player=el('audio');player.controls=true;player.preload='metadata';player.src='/api/writer/audio?sha256='+clip.sha256;player.setAttribute('aria-label',clip.label||'已上传的语音');card.append(player);
+        const label=field('语音说明');label.input.value=clip.label??'';label.input.addEventListener('input',()=>{clip.label=label.input.value;edit();});card.append(label.label);
+        const actions=el('div','','writer-toolbar');actions.append(button('移除',()=>{working.value.audios.splice(index,1);edit();renderAudio();}));card.append(actions);audioList.append(card);
+      });
+    }
+    async function uploadAudio(file:File){
+      const ext=/\.wav$/i.test(file.name)?'wav':/\.mp3$/i.test(file.name)?'mp3':'';
+      if(!ext)throw Error('请选择 MP3 或 WAV 语音');
+      if(file.size>1_500_000)throw Error('单条语音不能超过 1.5 MB（约 100 秒），请先裁剪');
+      if(!Array.isArray(working.value.audios))working.value.audios=[];
+      if(working.value.audios.length>=9)throw Error('一份草稿最多 9 条语音');
+      const label=(prompt('这条语音的说明（可留空）')??'').trim().slice(0,120);
+      const result=await api<{sha256:string;ext:'mp3'|'wav'}>(`/audio`,{method:'POST',headers:{'Content-Type':ext==='wav'?'audio/wav':'audio/mpeg'},body:file});
+      if(!working.value.audios.some(a=>a.sha256===result.sha256))working.value.audios.push({sha256:result.sha256,ext:result.ext,label});
+      if(working.kind==='post'&&!bodyEditor!.insertAudio('writer-audio:'+result.sha256,label))throw Error('语音已上传，请先在正文里定位光标后再插入');
+      edit();renderAudio();
+    }
+    audioChoose.addEventListener('change',()=>{const picked=audioChoose.files?.[0];audioChoose.value='';if(picked)void perform(()=>uploadAudio(picked));});
+    if(working.kind==='post'||working.kind==='talk'){
+      audioSection.append(el('h3','语音'),el('p',working.kind==='post'?'上传后会把一行语音引用插进正文，发布时原件跟随仓库提交到 content/audio/。单条不超过 1.5 MB。':'上传后按顺序挂在说说下面。单条不超过 1.5 MB。','writer-note'),audioChoose,audioList);
+    }
     const metadata=el('details'),metaSummary=el('summary','保留的原有资料');metadata.append(metaSummary,el('pre',JSON.stringify(working.value.fields,null,2),'writer-note'));
     const deleteDraft=button('删除这份云端草稿',()=>perform(async()=>{if(!confirm(`删除「${working.value.fields.title??working.key}」草稿及其已结束任务？网站上已发布的内容会保留。建议先导出。`))return;await api('/drafts',{method:'POST',body:JSON.stringify({action:'delete',id:working.id,revision:controller!.current().revision})});await controller!.dispose();controller=null;active=null;generation++;releaseUrls();pane.replaceChildren(el('p','草稿已删除，已发布内容仍在网站上。'));await loadList('drafts');}));
-    pane.append(tools,status,backup,fields);if(working.kind!=='forge')pane.append(bodyLabel);pane.append(preview);if(working.kind!=='forge')pane.append(imageSection);pane.append(metadata,conflict,publishing,el('p',options.publish?'保存不会发布，点击发布后还需确认本次内容。':'发布尚未配置；私密草稿仍可保存和导出。','writer-note'),deleteDraft);renderImages();void controller.ready;
+    pane.append(tools,status,backup,fields);if(working.kind!=='forge')pane.append(bodyLabel);pane.append(preview);if(working.kind!=='forge')pane.append(imageSection);if(working.kind==='post'||working.kind==='talk')pane.append(audioSection);pane.append(metadata,conflict,publishing,el('p',options.publish?'保存不会发布，点击发布后还需确认本次内容。':'发布尚未配置；私密草稿仍可保存和导出。','writer-note'),deleteDraft);renderImages();renderAudio();void controller.ready;
   }
   navigation.setAttribute('aria-label','内容分类');for(const [mode,label]of [['drafts','草稿'],['post','文章'],['talk','说说'],['project','造物台项目'],['gallery','相册'],['forge','页面文案'],['jobs','发布记录']])navigation.append(button(label,()=>perform(()=>loadList(mode))));
   const newButtons=el('div','','writer-toolbar');newButtons.append(button('新文章',()=>perform(()=>start('post')),'primary'),button('新说说',()=>perform(()=>start('talk'))),button('新项目',()=>perform(()=>start('project'))),button('新相册',()=>perform(()=>start('gallery'))));sidebar.prepend(newButtons);

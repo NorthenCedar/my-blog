@@ -173,6 +173,12 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
       if(sourceMode){const start=source.selectionStart??raw.length,end=source.selectionEnd??start,md=`\n![${alt.replace(/[\\\[\]]/g,'\\$&')}](${src})\n`;source.setRangeText(md,start,end,'end');source.dispatchEvent(new Event('input',{bubbles:true}));return true;}
       return run((state,dispatch)=>{dispatch?.(state.tr.replaceSelectionWith(schema.nodes.image.create({src,alt})).scrollIntoView());return true;});
     },
+    /** 插入一条语音行 `!audio[说明](src)`：源码与视觉模式都按文本插入，发布前脚本会再按行匹配。 */
+    insertAudio(src:string,label:string){
+      const line=`!audio[${label.replace(/[\\\[\]]/g,'\\$&')}](${src})`;
+      if(sourceMode){const start=source.selectionStart??raw.length,end=source.selectionEnd??start;source.setRangeText(`\n${line}\n`,start,end,'end');source.dispatchEvent(new Event('input',{bubbles:true}));return true;}
+      return run((state,dispatch)=>{dispatch?.(state.tr.insertText(`\n${line}\n`).scrollIntoView());return true;});
+    },
     removeImage(src:string){
       if(sourceMode){
         // 特殊旧文中的原始图片引用也由源码编辑；删除资产时不得改写代码示例或视频。
