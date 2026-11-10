@@ -17,7 +17,7 @@ social:
   - icon: mail
     note: 写信联系
     name: 邮箱
-    href: mailto:a13655515876@163.com
+    href: mailto:bluehour@northcedar.top
   - icon: rss
     note: 订阅新文章
     name: RSS
@@ -82,4 +82,4 @@ presentation:
 
 我在这里写随笔、放照片、记一些用 AI 折腾项目的经历。写得好不好另说，先写。
 
-想联系我，发邮件到 <a13655515876@163.com>。
+想联系我，发邮件到 <bluehour@northcedar.top>。

@@ -277,14 +277,33 @@ const vbBox = PAGE.match(/<svg class="chrono-svg"[^>]*viewBox="0 0 [\d.]+ ([\d.]
 });
 
 describe.skipIf(!hasDist)('日志页 · 走时仪：可点、可降级', () => {
-  it('无 JS 可用：每个日格是 SSR 的 `<a href="#day-…">`，条目侧真的有那个 id', () => {
+  it('无 JS 可用：每个"有更新"的格子是 SSR 的 `<a href="…">`，条目侧真的有那个 id', () => {
+    /* ★ 这条的期望**随档位变**（2026-11-10 第一次真的跨过 45 天阈值 ⇒ 头一回在月格档下跑）：
+       日格档 = 每个有更新的日子一格 ⇒ 锚数 = DATES.length；
+       月格档 = 每个有更新的月份一格，href 指向该月**第一个有更新的日子**
+       （log.astro 里就这么写，`day-…` 每天一个真实存在的 id ⇒ 换档不产生死锚）
+       ⇒ 锚数 = MONTH_KEYS.length。 */
+    const wantAnchors = TIER === 'day' ? DATES.length : MONTH_KEYS.length;
     const hrefs = [...PAGE.matchAll(/<a class="chrono-day"[^>]*href="#([^"]+)"/g)].map((m) => m[1]);
-    expect(hrefs.length).toBe(DATES.length); // 只有"有条目"的日格才挂 href
+    expect(hrefs.length).toBe(wantAnchors);
     const ids = [...PAGE.matchAll(/<li class="entry" id="([^"]+)"/g)].map((m) => m[1]);
-    // 死锚：href 指向的 id 必须存在
+    // 死锚：href 指向的 id 必须存在（两档都查 —— 月格档的"每月一格"同样不许指空）
     expect(hrefs.filter((h) => !ids.includes(h)), '有指向不存在的 id 的死锚').toEqual([]);
-    // 孤儿：每个 id 都要有日格指着它
-    expect(ids.filter((i) => !hrefs.includes(i)), '有条目锚点没被任何日格指着').toEqual([]);
+    if (TIER === 'day') {
+      // 孤儿：每个 id 都要有日格指着它
+      expect(ids.filter((i) => !hrefs.includes(i)), '有条目锚点没被任何日格指着').toEqual([]);
+    } else {
+      /* 月格档里"每个 id 都被指着"**不成立**（按设计只锚每月第一格）⇒ 覆盖判据
+         换成月级：每个有更新的月份都被锚着，且锚的就是该月**最早**那个有更新日。 */
+      const monthFirst = MONTH_KEYS
+        .map((mk) => DATES.filter((d) => d.slice(0, 7) === mk)[0])
+        .map((d) => `day-${d}`)
+        .sort();
+      expect(
+        [...hrefs].sort(),
+        '月格档的锚没落在"该月第一个有更新日"上，或有月份漏锚',
+      ).toEqual(monthFirst);
+    }
     // 重复：同一天多条只能挂一个 id（09-30 那天有 9 条）
     expect(new Set(ids).size, '条目 id 有重复').toBe(ids.length);
   });

@@ -139,7 +139,7 @@ const CHRONO = (() => {
     label: string;
     count: number;
     total: number;
-    slots: { x: number; h: number; day: string; n: number }[];  // x = 格内相对偏移（px）
+    slots: { x: number; h: number; day: string; n: number; delay?: number }[];  // x = 格内相对偏移（px）；delay = 月格档的生长相位（日格档现场算）
     anchor: string | null;
     title: string;
     monthMark: boolean;   // 这一格是该月的第一格 ⇒ 标签带要在这里写月份
@@ -220,6 +220,20 @@ const CHRONO = (() => {
         monthMark: yearMark,
       };
     });
+
+    /* 生长相位（月格档专属）：日格档的固定步长 90ms 隐含"一个月 ≤ 11 个活跃日"
+       的假设，跨过 45 天、换到月格档后它会被数据顶穿 —— 2026-11-10 实测：
+       10 月 22 个活跃日的最后一根齿排在 258ms，11 月第一根却在 180ms，
+       生长波在跨月处**倒退**（断言"相位严格单增"当场红）。
+       ⇒ 改为**累计游标**：每格先占掉自己 (n−1)×8ms 的内错开宽度，再推 90ms 进下一格。
+         格内错开仍是 8ms、格间推进仍是 90ms 起 ⇒ "从左往右长"与"格先于格"两条性质不变，
+         但装得下任意密度的月份。 */
+    let phaseAcc = 0;
+    for (const cell of cells) {
+      const base = phaseAcc;
+      cell.slots.forEach((s, i) => { s.delay = base + i * 8; });
+      phaseAcc = base + Math.max(cell.slots.length - 1, 0) * 8 + 90;
+    }
   }
 
   return {
@@ -324,11 +338,15 @@ const CHRONO = (() => {
                      ★ 两个系数的**相对大小是硬约束**：格内错开必须 < 格间距，
                        否则相邻格会交错（09-30 那格有 9 根齿，跨度 8×ti），
                        一眼看过去就不是"从左往右"而是"逐格来回跳"。
-                       这里是 8ms × 8 = 64ms < 90ms ⇒ 严格单增。断言守着这一条。 */
+                       这里是 8ms × 8 = 64ms < 90ms ⇒ 严格单增。断言守着这一条。
+                     ★ 月格档（2026-11-10 起）："一个月可以有 20+ 个活跃日"会顶穿固定的
+                       di×90 ⇒ 相位在构建期按累计游标先算好，挂进 `s.delay`
+                       （见 cells 组装处那段注释）；日格档没有 delay 字段，
+                       仍走现场公式，输出与 2026-10-14 逐字一致。 */
                   cell.slots.map((s, ti) => (
                     <line
                       class="chrono-tooth"
-                      style={`--tooth-delay:${di * 90 + ti * 8}ms`}
+                      style={`--tooth-delay:${s.delay ?? di * 90 + ti * 8}ms`}
                       x1={cx + s.x}
                       y1={CHRONO.BASE_Y}
                       x2={cx + s.x}

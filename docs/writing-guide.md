@@ -542,7 +542,7 @@ name: 北杉札记
 wordmark: North_Cedar's notes
 intro: 首页那句长简介，可以很长。
 metaDescription: 搜索引擎和分享卡片用的短句，≤ 120 字。
-email: a13655515876@163.com
+email: bluehour@northcedar.top
 github: https://github.com/NorthenCedar
 since: 2026-09-25
 lat: 31.82°N

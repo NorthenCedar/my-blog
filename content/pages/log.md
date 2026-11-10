@@ -13,6 +13,11 @@
 title: 日志
 intro: 本站的更新记录，新的在上面。每次改动都记在这儿 —— 包括踩过的坑。
 items:
+  - date: 2026-11-10
+    version: v2.65
+    changes:
+      - 页脚与关于页的邮箱统一切到 bluehour@northcedar.top
+
   - date: 2026-11-06
     version: v2.64
     changes:
