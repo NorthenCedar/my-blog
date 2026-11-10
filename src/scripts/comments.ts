@@ -1,7 +1,6 @@
 import { fmtTime, groupReplies, parentIdsOf, postComment, replyLi, toggleReplyForm, type Reply } from './reply-common';
 import { authorNode, identityControls, type Authored } from './visitor-client';
 import { onPage } from './page-lifecycle';
-import { audioPicker, audioPlayer } from './audio-attach';
 onPage(({document, window, addEventListener}) => {
 // 评论：取列表 + 提交 + **回复**（2026-09-28 站主要求：像 QQ 动态那样能回复）。
 // 全站第二个客户端脚本（第一个是代码复制）。
@@ -17,10 +16,8 @@ if (root) {
   const form = root.querySelector<HTMLFormElement>('[data-form]')!;
   const submit = root.querySelector<HTMLButtonElement>('[data-submit]')!;
 
-  type Comment = Authored & { body: string; createdAt: string; audio?: string };
+  type Comment = Authored & { body: string; createdAt: string };
   identityControls(form);
-  // 「＋ 语音」放在「发表」左边（语音是留言的附件，不是主体）
-  const pickedAudio = audioPicker(form, () => {}, submit);
 
   const showError = (msg: string) => {
     errorBox.textContent = msg;
@@ -77,8 +74,7 @@ if (root) {
     replies.className = 'reply-list';
 
     // 语音（2026-11-10）：有就画在正文下面，位置与说说页一致
-    const voice = audioPlayer(c.audio ?? '', '', 'comment-audio');
-    li.append(name, time, body, ...(voice ? [voice] : []), btn, replies);
+    li.append(name, time, body, btn, replies);
     if (fresh) list.prepend(li);
     else list.append(li);
     empty.hidden = true;
@@ -142,7 +138,6 @@ if (root) {
       body: String(data.get('body') ?? ''),
       website: String(data.get('website') ?? ''), // 蜜罐
       parentId: 0, // 主表单发的永远是顶层评论；回复走 toggleReplyForm 里的分支
-      audio: pickedAudio() || undefined, // 先单独上传，这里只带 id（见 audio-attach.ts）
     };
 
     submit.disabled = true;
@@ -154,8 +149,6 @@ if (root) {
         setCount();
         // 只清空留言框，**不清空名字** —— 同一个人可能想连着说几句
         (form.elements.namedItem('body') as HTMLTextAreaElement).value = '';
-        // 语音随这条评论一起发出去了，按钮要归位，否则下一条会挂不上（服务端只认未绑定的）
-        form.querySelector<HTMLButtonElement>('.ap-attach-clear')?.click();
 
         /* 2026-10-14：通知「留言页的声纹装置」新来了一条（装置换掉了墨滴，事件名随之换）。
            ★ 派发在**成功之后** —— 失败不该有波形（那等于给失败做庆祝）。

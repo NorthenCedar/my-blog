@@ -13,7 +13,6 @@ import { parseNoticeTarget, recordCommentNotice, recordReplyNotice, validNoticeT
 import { AccountError } from './_lib/visitor-core';
 import { currentAccount, publicUser } from './_lib/visitor-store';
 import { guardPublicWrite, readJsonBody, writeLimitStatements } from './_lib/public-write';
-import { attachAudioPaths, bindCommentAudio } from './_lib/comment-audio';
 import targets from './_generated/comment-targets.json';
 
 const publishedTargets = new Set(targets.comments);
@@ -120,8 +119,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   replies.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id);
 
   const withAuthors = await attachCommentAuthors(comments, replies, env);
-  // 语音（2026-11-10）：和作者信息同一层 —— 前端拿到 record 就能直接画播放条。
-  await attachAudioPaths(env, withAuthors.comments, withAuthors.replies);
   return json(withAuthors);
 };
 
@@ -188,9 +185,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (parentId === 0) {
     if (author) {
       const id = await saveAuthoredComment(request, env, author, 'comment', [slug, name, body, createdAt, ipHash]);
-      const audioPath = await bindCommentAudio(env, payload as Record<string, unknown>, ipHash, 'comment', id, slug);
       await recordCommentNotice(env, { ...notice, parentId: id });
-      return json({ comment: { id, slug, name, body, createdAt, parentId: 0, replyTo: '', audio: audioPath, author: publicUser(author, env) } }, 201);
+      return json({ comment: { id, slug, name, body, createdAt, parentId: 0, replyTo: '', author: publicUser(author, env) } }, 201);
     }
     const inserted = await env.COMMENTS_DB.prepare(
       'INSERT INTO comments (slug, name, body, created_at, ip_hash) VALUES (?, ?, ?, ?, ?) RETURNING id'
@@ -199,8 +195,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       .first<{ id: number }>();
 
     await recordCommentNotice(env, { ...notice, parentId: inserted?.id ?? 0 });
-    const audioPath = await bindCommentAudio(env, payload as Record<string, unknown>, ipHash, 'comment', inserted?.id ?? 0, slug);
-    return json({ comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId: 0, replyTo: '', audio: audioPath, author: null } }, 201);
+    return json({ comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId: 0, replyTo: '', author: null } }, 201);
   }
 
   // ---- 回复（parentId > 0）----（父评论已在限流前校验过）
@@ -208,8 +203,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const id = await saveAuthoredComment(request, env, author, 'reply', [slug, parentId, replyTo, name, body, createdAt, ipHash]);
     // 回复已经落库 ⇒ 再记提醒（失败不影响发表，见 _lib/notices.ts）
     await recordReplyNotice(env, { ...notice, parentId, replyId: id, target: noticeTarget! });
-    const audioPath = await bindCommentAudio(env, payload as Record<string, unknown>, ipHash, 'reply', id, slug);
-    return json({ comment: { id, slug, name, body, createdAt, parentId, replyTo, audio: audioPath, author: publicUser(author, env) } }, 201);
+    return json({ comment: { id, slug, name, body, createdAt, parentId, replyTo, author: publicUser(author, env) } }, 201);
   }
   const inserted = await env.COMMENTS_DB.prepare(
     'INSERT INTO replies (slug, parent_id, reply_to, name, body, created_at, ip_hash) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id'
@@ -219,11 +213,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   await recordReplyNotice(env, { ...notice, parentId, replyId: inserted?.id ?? 0, target: noticeTarget! });
 
-  const audioPath = await bindCommentAudio(env, payload as Record<string, unknown>, ipHash, 'reply', inserted?.id ?? 0, slug);
-
   return json(
 
-    { comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId, replyTo, audio: audioPath, author: null } },
+    { comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId, replyTo, author: null } },
     201
   );
   } catch (error) {

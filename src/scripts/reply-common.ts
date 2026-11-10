@@ -12,7 +12,6 @@
 //（实测文章页 JS 从 5177 涨到 8310，直接顶爆预算）。需要共用的纯函数就写在这个文件里。
 
 import { authorNode, identityControls, type Authored } from './visitor-client';
-import { audioPicker, audioPlayer } from './audio-attach';
 const replyIdentityCleanup = new WeakMap<Element, () => void>();
 const removeReplyForm = (form: Element) => { replyIdentityCleanup.get(form)?.(); replyIdentityCleanup.delete(form); form.remove(); };
 
@@ -23,7 +22,6 @@ export type Reply = Authored & {
   name: string;
   body: string;
   createdAt: string;
-  audio?: string;
 };
 
 /** 建元素的糖：省掉满屏的 createElement + className + textContent 三连 */
@@ -95,9 +93,7 @@ export function replyLi(r: Reply, onReply: () => void, fresh = false): HTMLLIEle
   const btn = el('button', 'reply-btn', '回复');
   btn.type = 'button';
   btn.addEventListener('click', onReply);
-  // 语音（2026-11-10）：让「语音回复」和文字回复长得一样，都能听
-  const voice = audioPlayer(r.audio ?? '', '', 'reply-audio');
-  li.append(meta, body, ...(voice ? [voice] : []), btn);
+  li.append(meta, body, btn);
   return li;
 }
 
@@ -152,7 +148,6 @@ export function toggleReplyForm(
   error.hidden = true;
 
   form.append(name, body, hp, send, cancel, error);
-  const pickedAudio = audioPicker(form, () => {}, send);
   replyIdentityCleanup.set(form, identityControls(form));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -168,7 +163,6 @@ export function toggleReplyForm(
       website: hpInput.value,
       // 回的是哪一条（顶层评论 or 某条回复）—— 服务端据此把提醒落到被回复者账户上
       replyTarget: ctx.target ?? { kind: 'comment', id: ctx.parentId },
-      audio: pickedAudio() || undefined,
     })
       .then((r) => {
         // 回复按**旧的在上**（站主 2026-09-28 拍板，对话要顺着读）⇒ append，不是 prepend
