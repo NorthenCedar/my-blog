@@ -99,7 +99,7 @@ describe('内容层不变量：文件夹名必须是合法 slug（契约 §3）'
 describe('架构原则：主题不持有正文（content-model §2/§7）', () => {
   it('src/ 里不出现站名、邮箱与首页简介', () => {
     // 站点文案的唯一来源是 content/site.md。它曾经硬编码在 index.astro 与 SiteFooter.astro 里。
-    const FORBIDDEN = ['a13655515876@163.com', '北杉札记', '你好，我是郑云嘉', 'North_Cedar'];
+    const FORBIDDEN = ['a13655515876@163.com', '北杉札记', '你好，我是北杉', 'North_Cedar'];
     const files = walkFiles('src', (n) => /\.(astro|ts)$/.test(n));
     expect(files.length).toBeGreaterThan(0);
 

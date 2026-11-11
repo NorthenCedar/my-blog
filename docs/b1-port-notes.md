@@ -12,7 +12,7 @@
 | 567–571 | `.rail-tick` × 5 | 每个是 `<a href="#sN" style="top:X%" data-sec="sN"><i></i><b>NN</b><span class="rail-name">身份/文章/相册/项目/联系</span></a>`；top 分别是 **0 / 28 / 71 / 90 / 97 %** |
 | 576 | `.hud` | 顶栏。左：站名字符串（单行、等宽感）；右：`<i class="rec">` + `<span id="hudSec">01</span> / 05 · <span class="hud-progress" id="hudPct">000%</span>` |
 | 582 | `.band#band`（`aria-hidden="true"`） | 扫描带。内含 `.band-line` / `.band-sweep` / `.band-cap.l` / `.band-cap.r` / `.band-readout` |
-| 596 | `section.tier.tier-1#s1` | **S1 身份舱体**：`.field-item[data-label="身份 · 郑云嘉"]` > `.pod.pod-s1` > `.pod-tag.right`（含 `.rhine-mark` SVG + "POD 01 · 身份"）+ 大字 display + 简介 + `.coord` 坐标行 |
+| 596 | `section.tier.tier-1#s1` | **S1 身份舱体**：`.field-item[data-label="身份 · 北杉"]` > `.pod.pod-s1` > `.pod-tag.right`（含 `.rhine-mark` SVG + "POD 01 · 身份"）+ 大字 display + 简介 + `.coord` 坐标行 |
 | 615 | `section.tier.tier-2#s2` | **S2 最近写的**：`.tier-head`（`.sec` "SECTOR 02" + `<h2>最近写的</h2>`）+ `<li class="field-item">` 列表（每条：日期 / 标题 / 标签；**摘要已砍**） |
 | 654 | `section.tier.tier-3#s3` | **S3 相册**：`.tier-head` + `.field-item` > `.pod` > `.pod-tag`（"CULTURE POD · 标本 82 帧"）+ `.frames` > 主图 + `.f-thumbs`（两个缩略） |
 | 673 | `section.tier.tier-4#s4` | **S4 项目**：`.tier-head` + `.field-item`（**空态**，一行） |
