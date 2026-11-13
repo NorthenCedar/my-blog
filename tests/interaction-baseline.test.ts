@@ -142,9 +142,7 @@ describe('交互基线 · 全站 hover 统一（2026-10-03）', () => {
   it('★ 位移幅度用 token，且两个值与首页一致', () => {
     expect(TOKENS, 'tokens.css 缺 --hover-lift').toMatch(/--hover-lift:\s*-2px/);
     expect(TOKENS, 'tokens.css 缺 --hover-nudge').toMatch(/--hover-nudge:\s*6px/);
-    // 首页原话：nav 上浮 2px、entry 横移 6px ⇒ token 必须与之一致
-    expect(HOME, '首页 nav 的上浮值变了 ⇒ token 要跟着对')
-      .toMatch(/transform:\s*translateY\(-2px\)/);
+    // 导航换成共享滑块；其余悬停装置继续沿用原来的位移幅度。
     expect(HOME, '首页 entry 的横移值变了 ⇒ token 要跟着对')
       .toMatch(/transform:\s*translateX\(6px\)/);
   });

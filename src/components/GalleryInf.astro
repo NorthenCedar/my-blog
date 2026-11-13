@@ -97,8 +97,14 @@ import plate from '../assets/gallery/plates/inf-brush.webp';
        ⚠ 本图的 `mean` 会明显低于百褶 ∞ —— 这不是"更淡"，是**线描与铺满型纹理的差别**：
          本图紧裁后墨迹只占图面 30.5%，铺到屏上只碰到 ~5% 的像素；百褶 ∞ 是一整张褶纸。
          拿两个不同分母的 mean 互比会得出相反结论（这一轮踩过，记在 spec §6.57.4）。
-       ⚠ 留 `--plate-op` / `--plate-w` 两个旋钮：想再淡/再小，改一行内联即可。 */
-    opacity: var(--plate-op, 0.08);
+       ⚠ 留 `--plate-op` / `--plate-w` 两个旋钮：想再淡/再小，改一行内联即可。
+       ★★ 2026-11-13：暗档滤镜与浓度改成连续（--theme-w）——
+          原来 `html.dark` 那条只在松手后成立，拖动全程停在 8% 的原图。 */
+    filter: var(--plate-filter-ink);
+    opacity: calc(
+      var(--plate-op, 0.08) * (1 - var(--theme-w)) +
+        var(--plate-op, var(--gallery-inf-dark-opacity)) * var(--theme-w)
+    );
     pointer-events: none;
     z-index: -1;
   }
@@ -111,10 +117,7 @@ import plate from '../assets/gallery/plates/inf-brush.webp';
     max-width: none;
     object-fit: contain;
   }
-  :global(html.dark) .gallery-inf {
-    filter: var(--ink-plate-dark-filter);
-    opacity: var(--plate-op, var(--gallery-inf-dark-opacity));
-  }
+  /* ★ 2026-11-13：暗档已并入上面的 `.gallery-inf`（滤镜与浓度按权重连续走）。 */
 
   /* ★★ 必须关掉本区三页的百褶 ∞（`.page-inf`，Topbar 渲染、全站内页共用）。
      不关就是两套母题叠在一起（关于页「切片档案」的教训）。

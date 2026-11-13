@@ -11,8 +11,22 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
   const update = () => {
     frame = 0;
     if (!live || !pairs.length) return;
+    const viewportTop = win.visualViewport?.offsetTop ?? 0;
+    const threshold = viewportTop + (win.visualViewport?.height ?? win.innerHeight) * 0.2;
     let next = 0;
-    pairs.forEach(({ heading }, i) => { if (heading.getBoundingClientRect().top <= win.innerHeight * 0.2) next = i; });
+    pairs.forEach(({ heading }, i) => { if (heading.getBoundingClientRect().top <= threshold) next = i; });
+
+    // 跳到紧邻小标题的章节时，船先停在链接指向的标题。
+    const hash = win.location?.hash;
+    if (hash && next > 0) {
+      const index = pairs.findIndex(({ link }) => link.hash === hash);
+      if (index >= 0 && index < next) {
+        const heading = pairs[index].heading;
+        const top = heading.getBoundingClientRect().top - viewportTop;
+        const inset = parseFloat(win.getComputedStyle(heading).scrollMarginTop) || 0;
+        if (top >= inset - 2) next = index;
+      }
+    }
     const changed=next!==current;
     if(changed){
       current = next;
@@ -26,6 +40,9 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
   const schedule = () => { if (live && !frame && pairs.length) frame = win.requestAnimationFrame(update); };
   win.addEventListener('scroll', schedule, { passive: true });
   win.addEventListener('resize', schedule, { passive: true });
+  win.addEventListener('hashchange', schedule);
+  win.visualViewport?.addEventListener('scroll', schedule, { passive: true });
+  win.visualViewport?.addEventListener('resize', schedule, { passive: true });
   const prose = doc.querySelector('.prose');
   const observer = prose && win.ResizeObserver ? new win.ResizeObserver(schedule) : null;
   if (observer && prose) observer.observe(prose);
@@ -63,6 +80,9 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
     observer?.disconnect();
     win.removeEventListener('scroll', schedule);
     win.removeEventListener('resize', schedule);
+    win.removeEventListener('hashchange', schedule);
+    win.visualViewport?.removeEventListener('scroll', schedule);
+    win.visualViewport?.removeEventListener('resize', schedule);
     button?.removeEventListener('click', copy);
   };
 }

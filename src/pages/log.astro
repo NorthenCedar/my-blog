@@ -596,8 +596,14 @@ const CHRONO = (() => {
        本图是实心墨绿（覆盖 24.2%，且明暗跨满 0–255）⇒ 同样 .2 会重得多。
        ⇒ 取站上**自己**的装饰底纹定稿档 8%（文章页方格那轮站主亲选，
          `--deco-plate-coarse` = #2d7d4614 ≈ 7.8%）。实测最深墨点与 ∞ 同档，见探针。
-       `--plate-op` / `--plate-w` 两个旋钮留在层上：想再淡/再小，改一行内联即可。 */
-    opacity: var(--plate-op, 0.08);
+       `--plate-op` / `--plate-w` 两个旋钮留在层上：想再淡/再小，改一行内联即可。
+       ★★ 2026-11-13：暗档滤镜与浓度改成连续（--theme-w）——
+          原来 `html.dark` 那条只在松手后成立，拖动全程停在 8% 的原图。 */
+    filter: var(--plate-filter-ink);
+    opacity: calc(
+      var(--plate-op, 0.08) * (1 - var(--theme-w)) +
+        var(--plate-op, var(--log-inf-dark-opacity)) * var(--theme-w)
+    );
     pointer-events: none;
     z-index: -1;
   }
@@ -609,10 +615,7 @@ const CHRONO = (() => {
     max-width: none;
     object-fit: contain;
   }
-  :global(html.dark) .log-inf {
-    filter: var(--ink-plate-dark-filter);
-    opacity: var(--plate-op, var(--log-inf-dark-opacity));
-  }
+  /* ★ 2026-11-13：暗档已并入上面的 `.log-inf`（滤镜与浓度按权重连续走）。 */
   /* ①「呼吸」的关键帧。★ 每个 from/to 都要**带上居中** ——
      这是"拎成变量"的落点，也是唯一能让动画与居中同时成立的地方。
      ★ 只动 transform：不碰 opacity ⇒ 墨量判据（§6.30 那张差分表）不受影响，

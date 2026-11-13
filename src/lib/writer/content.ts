@@ -207,13 +207,22 @@ export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:
   if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) bad('请填写有效日期');
   if(value.assets.some(a=>!a.alt.trim())) bad('请为每张新增配图填写说明');
   if(kind==='post'&&(typeof fields.title!=='string'||!fields.title.trim()||typeof fields.summary!=='string'||!fields.summary.trim()||fields.summary.length>80||!Array.isArray(fields.tags)||fields.tags.length<1||fields.tags.length>3||fields.tags.some(t=>!(TAGS as readonly unknown[]).includes(t)))) bad('文章需填写标题、80 字内摘要及 1–3 个已登记标签');
+  if(kind==='post'&&fields.cover){
+    if(typeof fields.coverAlt!=='string'||!fields.coverAlt.trim())bad('请填写文章封面说明');
+    if(typeof fields.cover!=='string')bad('文章封面格式不对');
+    const cover=fields.cover as string;
+    if(cover.startsWith('writer-asset:')){
+      if(!value.assets.some(asset=>'writer-asset:'+asset.sha256===cover))bad('文章封面引用了未上传的图片');
+    }else if(cover!== (base && readPost(base.text).fields.cover) &&
+      (!/^(?:\.\/)?[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(cover)||cover.includes('..')))bad('请选择本篇文章目录中的封面图片');
+  }
   if(!value.body.trim()&&!value.assets.length&&!Array.isArray(fields.images)&&!Array.isArray(fields.videos)) bad('请先填写正文或配图');
 }
 export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,currentText:string|null,assetBytes:Map<string,Uint8Array>):WriterChange[]{
   const {kind,key}=validateTarget(draft.kind,draft.key),value=validateWriterValue(kind,draft.value,draft.base);validatePublish(kind,value,draft.base);
   const changes:WriterChange[]=[],known=new Map(value.assets.map(a=>[a.sha256,a]));
   const clips=new Map(value.audios.map(a=>[a.sha256,a]));
-  for(const clip of value.audios){
+  for(const clip of clips.values()){
     const bytes=assetBytes.get(clip.sha256);if(!bytes||writerHash(bytes)!==clip.sha256) bad('语音缺失或摘要不一致，请重新上传');
     if(bytes.length>1500000) bad('单条语音不能超过 1.5 MB');
     changes.push({path:`content/audio/${clip.sha256}.${clip.ext}`,bytes});
@@ -277,9 +286,16 @@ export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,
     const fields={...value.fields,id:key,text:value.body};
     const previousImages=Array.isArray(fields.images)?fields.images:[];
     if(value.assets.length) fields.images=[...previousImages,...value.assets.map(a=>({src:resolve(a.sha256),alt:a.alt}))];
-    // 说说语音整体以草稿里的列表为准（与写作台一致）：删掉就真的删掉，不留孤儿引用。
-    if(value.audios.length) fields.audio=value.audios.map(a=>({src:resolveAudio(a.sha256),...(a.label?{label:a.label}:{})}));
-    else delete fields.audio;
+    // 导入的已发布语音在 fields.audio，私有上传在 audios。追加时保留前者。
+    if (value.audios.length) {
+      const previous = fields.audio ?? target?.fields.audio;
+      const bySource = new Map((Array.isArray(previous) ? previous : []).map(clip => [clip.src, clip]));
+      for (const clip of clips.values()) {
+        const src = resolveAudio(clip.sha256);
+        bySource.set(src, { ...bySource.get(src), src, ...(clip.label ? { label: clip.label } : {}) });
+      }
+      fields.audio = [...bySource.values()];
+    }
     if(target) patches.push(...updateMap(s.header,target.node,fields,s.newline,4));
     // 插入前固定所有旧 ID，保持既有点赞、回复和通知归属。
     for(const row of s.rows) if(!row.fields.id&&row!==target) patches.push(...updateMap(s.header,row.node,{id:row.key},s.newline,4));

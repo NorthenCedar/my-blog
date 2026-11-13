@@ -154,13 +154,14 @@
   display: block;
 }
 
-/* 代码块工具栏（由唯一的客户端脚本注入；JS 关闭时不出现，代码照样可复制） */
+/* 代码块工具栏由文章页脚本注入。无 JavaScript 时展示完整代码。 */
 .code-holder {
   position: relative;
   margin: var(--sp-6) 0;
 }
 .code-holder .astro-code {
   margin: 0;
+  overflow-y: hidden;
 }
 .code-bar {
   display: flex;
@@ -169,7 +170,7 @@
   gap: var(--sp-4);
   background: var(--code-bg);
   border-bottom: 1px solid var(--code-rule);
-  padding: var(--sp-1) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
 }
 /* 语言标注：等宽 + 小号，但**不做全大写、不加字距** —— design-spec §2 明确禁止
    装饰性的全大写标签，只给拉丁 wordmark 留了例外。 */
@@ -178,14 +179,67 @@
   font-size: var(--fs-mono);
   color: var(--on-band-meta);
 }
-.copy-btn {
-  background: none;
-  border: 1px solid var(--code-btn-line);
+.code-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+.code-bar button {
+  --code-action-fill: var(--code-bg);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--sp-6);
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--code-action-fill);
   color: var(--code-fg);
   font-size: var(--fs-xs);
-  padding: 0 var(--sp-2);
+  line-height: 1.25;
+  white-space: nowrap;
+  cursor: pointer;
 }
-.copy-btn:hover {
-  background: var(--code-btn-bg);
-  border-color: var(--code-fg);
+.code-bar .code-fold-btn {
+  --code-action-fill: var(--code-btn-bg);
+  border-color: var(--code-rule);
+}
+.code-bar button:is(:hover, :focus-visible) {
+  --code-action-fill: var(--code-btn-bg);
+  border-color: var(--code-btn-line);
+}
+.code-bar button:focus-visible {
+  outline: 2px solid var(--code-keyword);
+  outline-offset: 2px;
+}
+.code-fold-btn::after {
+  content: '';
+  inline-size: 0.45em;
+  block-size: 0.45em;
+  border-inline-end: 1px solid var(--code-keyword);
+  border-block-end: 1px solid var(--code-keyword);
+  transform: translateY(-0.1em) rotate(45deg);
+}
+.code-fold-btn[aria-expanded='true']::after {
+  transform: translateY(0.1em) rotate(225deg);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .code-fold-btn::after { transition: transform var(--dur-hover) var(--ease-interact); }
+}
+.copy-btn::before {
+  content: '';
+  inline-size: 0.63em;
+  block-size: 0.8em;
+  margin-inline-end: 2px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  box-shadow: 3px -3px 0 -1px var(--code-action-fill), 3px -3px 0 currentColor;
+}
+.code-rest:not([hidden]) {
+  display: contents;
+}
+@media print {
+  .code-rest[hidden] { display: contents; }
+  .code-fold-btn { display: none; }
 }

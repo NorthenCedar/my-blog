@@ -55,6 +55,12 @@ const SceneParams = d.struct({
   /* ★ 2026-10-17 第三轮：地面基准色（rgb = 跟 --paper 走，w = 深色程度 0..1）。
      见 constants.ts 的 GROUND_TINT_* 注释 —— 为什么不是简单相乘。 */
   groundTint: d.vec4f,
+  /* ★ 2026-11-13：**端头的环境色**（rgb = 页面强调色的通道值，w = 是否启用 0/1）。
+     为什么不能复用 `groundTint`：那是纸色 —— 亮档近白、暗档近黑（#0b0b0c），
+     乘出来的端头在暗档必然沉成灰，读不出"背景是橙的"。而站主要的恰恰是
+     「绿色背景下显绿色、橙色背景下显橙色」⇒ 环境色单独一路，由 theme-toggle 按
+     `--accent` 喂（亮 #2d7d46 墨绿 / 暗 #ff7b00 橙），强度在 shader 的 END_GLASS_BLEED。 */
+  endTint: d.vec4f,
   blurEnabled: d.u32,
 });
 
@@ -314,6 +320,51 @@ function sqLength(a: d.v3f) {
   return std.dot(a, a);
 }
 
+/** ★★★ 2026-11-12 站主：「（主题开关）不要影子了」「我只是说那个软条的影子不要」。
+ *  只关**投影**（软条沿光线投到地面上的那片又宽又虚的衰减），槽与接触遮蔽一概不动。
+ *  ⇒ 0 = 不投影；想要影子回来改成 1（原版力度）。
+ *  ⚠ 这是唯一该调的旋钮。别再走"把地面 alpha 撤掉"那条路（第一版那么干过，
+ *    槽一起消失，软条看起来浮在纸面上），也**别**去动 `applyAO` ——
+ *    槽壁的暗部就是它算出来的，动了槽就散了。 */
+const SHADOW_STRENGTH = 0;
+
+/** ★★ 2026-11-13 站主：「软条的那个槽和背景的颜色保持一致」——**这一句按"槽的底色"理解，不是"把槽压平"**。
+ *
+ *  ⚠⚠ 教训（同一天实测）：我第一版把这个数压到 0.12，站主立刻驳回 ——
+ *     「你看原来的软条，他的槽是有阴影的，而且整个是有立体感的」
+ *     「你看你现在改的一点立体感都没有」。
+ *     ⇒ 槽＝这个开关**全部**的立体感来源：内壁的暗部、上下沿的亮边、接触遮蔽都由它出来。
+ *       压它就是压立体感。
+ *  ⇒ 只能取 1（原版力度）。这个常量留着是为了让"我要更淡的槽"这件事有一个**明确位置**，
+ *    但量级的上限是 1、往下调必须先跟站主确认"你是要平掉立体感吗"。
+ *  ⚠ 刻度墨（`percentageSample`）不受它影响，永远顶满。 */
+const GROUND_INK = 1;
+
+/** ★★ 2026-11-13 站主：「这个软条左半部分不是白色的，是透明的，所以在绿色背景下就要显绿色，
+ *  橙色背景下显橙色」。
+ *
+ *  ⚠⚠ 教训（同一天实测）：给端头**真 alpha**（0.16）之后，画布下方的页面底纹确实透出来了，
+ *     但站主当场否掉：「你看你现在改的一点立体感都没有」—— 因为端头的
+ *     **折射**没了：它变成一片能透光的塑料，玻璃厚度、内壁、高光全部消失。
+ *  ⇒ 端头要的是"折射出来的背景色"，不是"透明"。
+ *     实现留在 `rayMarch` 的果冻光学里（reflection 随主题取色），alpha 必须保持 1。
+ *  ⇒ 这个常量固定 1，只作为"别再走真透明那条路"的记号。 */
+const END_GLASS_ALPHA = 1;
+
+/** ★★ 2026-11-13（站主选「甲」）：端头**保持折射**，只调取色。
+ *
+ *  原话：「软条左半部分不是白色的，是透明的，所以在绿色背景下就要显绿色，橙色背景下显橙色」，
+ *  紧接着又否掉了"真 alpha"那版（「一点立体感都没有」）。
+ *  ⇒ 把「背景的色调」做成**环境色渗进反射项**，而不是让果冻透光：
+ *    · 加色不是乘法 —— 暗档的 `groundTint` 是 #0b0b0c，乘什么都会归零；加法才能让暗底读出橙；
+ *    · 只在球根那一小段（`END_GLASS_SPAN` 世界单位内）生效 —— 带身的橙/墨绿一点不动；
+ *    · 强度压得很低（0.22）—— 玻璃透出来的是"背景的色调"，不是一块色板；
+ *    · 平方一下遮罩，让色集中在球根、到带身平滑归零。
+ *  ⚠ 颜色由 `theme-toggle.ts` 按 `--accent` 喂（亮档墨绿 / 暗档橙，正好是软条本体的反色相）。
+ *  ⚠ 别再动 alpha（试过并回滚）；也别把 endTint 乘进 groundTint —— 那会把地面和槽一起染色。 */
+const END_GLASS_BLEED = 0.22;
+const END_GLASS_SPAN = 0.62;
+
 function getFakeShadow(position: d.v3f, lightDir: d.v3f): d.v3f {
   'use gpu';
   const jellyColor = layout.$.sceneParams.jellyColor;
@@ -355,7 +406,13 @@ function getFakeShadow(position: d.v3f, lightDir: d.v3f): d.v3f {
       std.saturate((1 - finalUV.x) * featherSharpness) *
       std.saturate((1 - finalUV.y) * featherSharpness) *
       std.saturate(finalUV.y);
-    const influence = std.saturate((1 - lightDir.y) * 2) * uvEdgeFeather;
+    /* ★ 就是这里：投影的"影响度"乘上站主的开关。0 时整支返回 1（无影子），
+       但 `bezierTexture` 那条采样链一个字没删 —— 要回影子只需改上面那个常量。
+       ⚠ `calculateLighting` 全文只被**地面**调用（果冻本体走 rayMarch 里那套折射/散射），
+         所以这一处归零不会把软条自己的明暗一起抹平。 */
+    const shadowStrength = d.f32(SHADOW_STRENGTH);
+    const influence =
+      std.saturate((1 - lightDir.y) * 2) * uvEdgeFeather * shadowStrength;
     return std.mix(
       d.vec3f(1),
       std.mix(shadowColor, d.vec3f(1), std.saturate(data.x * contrast + shadowOffset)),
@@ -596,32 +653,31 @@ function renderBackground(
     std.saturate(std.mix(groundRgb, textColor, percentageSample.x)) *
     (1 + highlights * highlightGain);
 
-  /* ★★ 2026-10-17 第五轮：这一层改成**直接算 alpha**（不再返回 1）。
-     第五轮第二版（站主：「为什么这个边缘有锯齿那么糊」「为什么还有个灰色的小框，
-     而且影子还是只在框内，被截断了」）。第一版错在哪，值得记下来：
+  /* ★★★ 2026-11-12 站主（第二轮，纠正我的第一次改法）：
+     「那个槽呢？？？我只是说那个软条的影子不要，就是这部分不要」
+     ⇒ 第一版我把**整个地面层的 alpha 撤了**（只留百分比刻度），结果槽也跟着消失，
+       软条看起来是"浮在纸面上"的。错了：要走的只有**投在地上的那片软影**，
+       槽（凹槽 + 槽壁的暗部 + 接触遮蔽）必须原样留着。
 
-       · 第一版按"区域"分区：`y < 0.05` 当槽内、固定 0.30；否则按 shade 算。
-         **判据是错的** —— 整块可见地面都在 `rectangleCutoutDist` 挖出来的那个碗里
-         （盒子 x 半宽 1.2、z 半宽 0.4，比整个取景还大）⇒ `inGroove` 恒为 1
-         ⇒ **整块画布被刷了一层 30% 的纸色膜**（实测全画面 alpha 恒 0.298）。
-         那层膜在纯纸白上看不出来，在 ∞ 底纹上就是一个矩形 —— 站主说的"灰色小框"。
-       · 那层膜还顺带把画布边界变成了"影子的墙"：影子铺到边框就被膜收住，
-         看起来"只在框内、被截断"。
-
-     现在的模型只有一句：**alpha = 这块地面比纸暗多少**。
-       · 纸白 ⇒ alpha 0 ⇒ 页面与底纹原样透出（画布外/画布内逐字节相同）；
-       · 越暗 ⇒ alpha 越大 ⇒ 底纹按比例退到后面；
-       · 因为是"乘影"合成（`src = graded − tint·(1−a)`），叠在纸面上时合成结果
-         **逐像素还原成 `graded`** —— 影子的深浅只由 `graded` 决定，alpha 只管底纹透出多少。
-     ⇒ 所以调影子深浅要去调地面比例曲线的 `gamma`，不在 alpha 上做文章。
+     两条通路分得很清楚，所以不用再动 alpha：
+       · **槽** = 几何 —— `rectangleCutoutDist` 在 `sdPlane` 上挖出的凹槽，
+         加上 `applyAO` 的接触遮蔽，暗部全部来自 `litGround` 的亮度；
+       · **软影** = `getFakeShadow` 沿光线方向把 `bezierTexture` 投到地面上的那片衰减
+         （就是站主截图里那条又宽又虚的竖带）⇒ 已在那里把强度归零，见 `SHADOW_STRENGTH`。
+     ⚠ 所以这里回到第五轮那套「alpha = 这块地面比纸暗多少」：
+       纸白 ⇒ alpha 0 ⇒ 底纹原样透出；越暗 ⇒ alpha 越大。
+       因为是乘影合成（`src = graded − tint·(1−a)`），叠在纸面上时合成结果逐像素还原成
+       `graded` —— 影子的深浅只由 `graded` 决定，alpha 只管底纹透出多少。
+       调影子深浅去调地面比例曲线的 `gamma`，不在 alpha 上做文章。
      ⚠ 果冻本体在 `rayMarch` 里返回 alpha = 1（不透明），两者走同一条合成公式。 */
   const lumaK = d.vec3f(0.299, 0.587, 0.114);
   const paperLum = std.max(std.dot(tint.rgb, lumaK), d.f32(0.02));
   const dark = std.saturate(1.0 - std.dot(litGround, lumaK) / paperLum);
 
-  /* alpha 直接取"比纸暗多少"：这样叠在纸面上时合成结果**逐像素等于**不透明那版，
-     只有底纹的透出比例跟着浓度走。刻度墨单独顶到满浓度（否则会与纸混在一起）。 */
-  const a = std.max(dark, std.saturate(percentageSample.x));
+  /* alpha 直接取"比纸暗多少"：叠在纸面上时合成结果**逐像素等于**不透明那版，
+     只有底纹的透出比例跟着浓度走。刻度墨单独顶到满浓度（否则会与纸混在一起）。
+     ★ 2026-11-13：整条乘 `GROUND_INK`（见常量处的注释）—— 站主要"槽和背景同色"。 */
+  const a = std.max(dark * GROUND_INK, std.saturate(percentageSample.x));
 
   return d.vec4f(litGround, a);
 }
@@ -701,7 +757,15 @@ function rayMarch(rayOrigin: d.v3f, rayDirection: d.v3f, uv: d.v2f) {
            给它真 alpha 会让整条软条变成塑料片，端头与带身的接缝也会裂。 */
       const glassGrey = std.saturate(d.vec3f(hitPosition.y + 0.2));
       const glassPaper = tint.rgb * (0.62 + 0.62 * std.saturate(hitPosition.y + 0.2));
-      const reflection = std.mix(glassPaper, glassGrey, tint.w);
+      /* ★★ 2026-11-13（站主选「甲」）：端头的**环境色渗入**。
+         加法（不是乘）：暗档 `tint` 近黑，乘什么都是黑；只有加才能让暗底读出一层橙。
+         遮罩按到球根中心的 x 距离算，平方让色收在球根、平滑归零到带身 ——
+         带身是高饱和果冻（橙/墨绿），掺进背景色就糊成脏色了。 */
+      const endTint = layout.$.sceneParams.endTint;
+      const capX = layout.$.endCap.z;
+      const capMask = std.saturate(d.f32(1) - std.abs(hitPosition.x - capX) / END_GLASS_SPAN);
+      const envBleed = endTint.rgb * (END_GLASS_BLEED * capMask * capMask * endTint.w);
+      const reflection = std.mix(glassPaper, glassGrey, tint.w) + envBleed;
 
       const eta = 1 / JELLY_IOR;
       const k = 1 - eta * eta * (1 - cosi * cosi);
@@ -732,10 +796,14 @@ function rayMarch(rayOrigin: d.v3f, rayDirection: d.v3f, uv: d.v2f) {
         refractedColor = env * T + scatter;
       }
 
-      /* ★★ 2026-10-17 第五轮：果冻本体**不透明**（alpha = 0，见片元里的 `color.w` 判据），
-         地面层才走半透明墨影。果冻折射到的仍是"纸色的地面"（解析求交得到的 env）——
-         而画面背后真正的页面是纸色 + ∞ 底纹，两者只差一层极淡的底纹，观感一致。 */
-      return d.vec4f(std.mix(refractedColor, reflection, F), 1);
+      /* ★★ 2026-11-13（站主：「软条左半部分不是白色的，是透明的，所以在绿色背景下就要显
+         绿色，橙色背景下显橙色」）—— 这条**不走真 alpha**。
+         试过了：端头给 0.16 的 alpha，页面上确实透出背景，但站主当场否掉
+         「你看你现在改的一点立体感都没有」—— 折射、玻璃厚度、内壁高光一起没了。
+         ⇒ 端头要的是"**折射出来的**背景色"，那属于光学（reflection / refractedColor），
+           不是把果冻变成半透片。alpha 恒 1。
+         ⚠ 想调端头的色相：去动上面 `glassPaper` 那一支的取色，别动这里。 */
+      return d.vec4f(std.mix(refractedColor, reflection, F), d.f32(END_GLASS_ALPHA));
     }
 
     if (distanceFromOrigin > backgroundDist) {
@@ -912,6 +980,8 @@ export async function setupScene(root: TgpuRoot, context: GPUCanvasContext) {
       color: d.vec3f(1, 1, 1),
     },
     groundTint: GROUND_TINT_LIGHT,
+    /* 默认不渗色（w=0）：没有 `--accent` 可取时渲染结果与旧行为逐像素一致。 */
+    endTint: d.vec4f(0, 0, 0, 0),
     blurEnabled: 0,
   });
 
@@ -1157,6 +1227,14 @@ export async function setupScene(root: TgpuRoot, context: GPUCanvasContext) {
     set groundTint(v: d.v4f) {
       sceneParamsUniform.patch({
         groundTint: v,
+      });
+      wake();
+    },
+    /* ★ 2026-11-13：端头环境色（rgb = 强调色，w = 启用）。与 groundTint 同理，
+       停帧状态下只 patch 不 wake，切主题会"看起来没反应"。 */
+    set endTint(v: d.v4f) {
+      sceneParamsUniform.patch({
+        endTint: v,
       });
       wake();
     },

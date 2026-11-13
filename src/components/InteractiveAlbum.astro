@@ -1,0 +1,164 @@
+---
+import PhotoWall from './PhotoWall.astro';
+import AlbumIndexHeading from './AlbumIndexHeading.astro';
+
+interface Props {
+  album: {
+    id: string;
+    title: string;
+    titleEn?: string;
+    date: string;
+    total: number;
+    layout: 'dome' | 'infinite';
+    frames: { alt: string; src: string; files: { w: number; h: number; url: string }[] }[];
+  };
+  no: number;
+}
+
+const { album, no } = Astro.props;
+---
+
+<section class="interactive-album" data-album-scene data-interactive-album data-layout={album.layout}>
+  <header class="album-heading">
+    <a href="/gallery/#gallery-overview" class="liquid-glass" data-album-return>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
+      相册
+    </a>
+    <span class="album-name" aria-hidden="true">{album.title}</span>
+    <button type="button" class="liquid-glass" data-album-toggle hidden aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>
+      <span data-album-toggle-label>查看全部</span>
+    </button>
+  </header>
+  <div class="album-stage" data-album-stage hidden aria-label={`${album.title}的互动陈列`}>
+    <div class="album-view" data-album-view></div>
+    <p class="album-hint">拖动浏览 · 点图放大</p>
+  </div>
+  <AlbumIndexHeading album={album} no={no} />
+  <PhotoWall albums={[album]} />
+</section>
+
+<style>
+  .interactive-album {
+    position: relative;
+    max-width: var(--wrap);
+    margin-inline: auto;
+    padding: var(--sp-7) var(--gutter) var(--sp-8);
+  }
+  :global(body:has([data-interactive-album][data-scene="interactive"])) { overflow: hidden; }
+  :global(body:has([data-interactive-album][data-scene="interactive"]) > :is(.topbar, .site-menu-dialog, .foot)) {
+    display: none;
+  }
+  .interactive-album[data-scene="interactive"] { max-width: none; padding: 0; }
+  [data-scene="interactive"] :global(.scene-title) {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    pointer-events: none;
+  }
+  [data-scene="interactive"] .album-heading {
+    position: absolute;
+    z-index: 2;
+    inset: 0 0 auto;
+    max-width: none;
+    padding: var(--sp-3) var(--gutter);
+    pointer-events: none;
+  }
+  :global(body:has(> #lb.on[data-tile-open])) [data-scene="interactive"] :is(.album-heading, .album-hint) {
+    visibility: hidden;
+  }
+  [data-scene="interactive"] .album-heading .liquid-glass { pointer-events: auto; }
+  .album-heading {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+  .album-name {
+    margin: 0;
+    overflow: hidden;
+    color: var(--muted);
+    font: inherit;
+    font-size: var(--fs-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .album-heading svg {
+    width: 1.1em;
+    height: 1.1em;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+  }
+  .album-hint { color: var(--muted); font-size: var(--fs-sm); }
+  .album-heading .liquid-glass {
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    min-height: 44px;
+    padding-inline: var(--sp-3);
+    border: 0;
+    border-radius: 999px;
+    background: var(--liquid-tint);
+    color: var(--ink);
+    font: inherit;
+    font-size: var(--fs-sm);
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .album-heading button.liquid-glass { justify-self: end; }
+  [data-scene="interactive"] .album-heading .liquid-glass {
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
+    transition: background var(--dur-hover) var(--ease-interact);
+  }
+  [data-scene="interactive"] .album-heading .liquid-glass:is(:hover, :focus-visible) {
+    background: var(--paper);
+  }
+  .album-stage {
+    position: relative;
+    display: grid;
+    width: 100%;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  /* 初始化期间测量画布的真实宽高，索引仍可使用。 */
+  .album-stage[data-loading] { position: absolute; inset-inline: 0; visibility: hidden; }
+  .album-view { position: absolute; inset: 0; isolation: isolate; }
+  .album-hint {
+    position: absolute;
+    z-index: 1;
+    inset-inline: var(--sp-3);
+    bottom: var(--sp-2);
+    margin: 0;
+    text-align: center;
+    pointer-events: none;
+  }
+  [hidden], .album-heading button[hidden], .interactive-album :global(.wf[hidden]) { display: none; }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-scene="interactive"] .album-stage,
+    [data-scene="index"] :global(:is(.scene-title, .wf)) {
+      animation: album-view-in 360ms var(--ease-interact) both;
+    }
+  }
+  @keyframes album-view-in { from { opacity: .2; } }
+  @media (max-width: 640px) {
+    .album-heading { gap: var(--sp-2); }
+    .album-hint {
+      inset-inline: var(--sp-3) auto;
+      padding: var(--sp-1) var(--sp-2);
+      border-radius: 999px;
+      background: var(--paper);
+      font-size: var(--fs-xs);
+    }
+  }
+</style>
+
+<script>
+  import '../scripts/interactive-album';
+</script>

@@ -1,6 +1,7 @@
 import { onPage } from './page-lifecycle';
-import { createArchiveMotion } from './archive-motion';
+import { createArchiveMotion, createArchiveViewMotion } from './archive-motion';
 import { primeMotion } from './motion-loader';
+import { createCollectionLayoutMorph } from '../vendor/leibox/collection-layout-morph';
 
 export function initArchiveFilters(doc: Document): () => void {
   const bar = doc.querySelector<HTMLFormElement>('[data-filters]');
@@ -16,6 +17,12 @@ export function initArchiveFilters(doc: Document): () => void {
   const rows = [...box.querySelectorAll<HTMLLIElement>('.index li')];
   const groups = [...box.querySelectorAll<HTMLElement>('.yeargroup')];
   const motion = createArchiveMotion(box), unprime = primeMotion(bar);
+  const views = bar.querySelector<HTMLElement>('[data-archive-views]');
+  const viewMotion = createArchiveViewMotion(box, rows);
+  const unmountViews = views && createCollectionLayoutMorph(views, box, update => {
+    motion.finish();
+    viewMotion.run(update);
+  });
   const listeners: (()=>void)[] = [];
   let dir = -1, composing = false, live = true, signature = '';
   const on = (target: EventTarget, name: string, listener: EventListener) => {
@@ -41,10 +48,11 @@ export function initArchiveFilters(doc: Document): () => void {
         const ul = group.querySelector('.index')!;
         [...ul.children].sort((a,b) => String((a as HTMLElement).dataset.date).localeCompare(String((b as HTMLElement).dataset.date))*dir).forEach(row => ul.append(row));
       }
-      count.textContent = shown === rows.length ? '共 ' + shown + ' 篇' : '筛出 ' + shown + ' / ' + rows.length + ' 篇';
+      count.textContent = shown === rows.length ? '' : '筛出 ' + shown + ' / ' + rows.length + ' 篇';
       empty.hidden = shown > 0;
       desc.setAttribute('aria-pressed',String(dir === -1)); asc.setAttribute('aria-pressed',String(dir === 1));
     };
+    viewMotion.cancel();
     if (animate) motion.run(update); else update();
   }
   bar.hidden = false;
@@ -56,8 +64,16 @@ export function initArchiveFilters(doc: Document): () => void {
   on(bar,'submit',event=>event.preventDefault());
   on(bar.querySelector('[data-clear]')!,'click',()=>{q.value='';year.value='all';month.value='all';dir=-1;apply();q.focus();});
   apply(false);
-  const dispose = () => { if(!live)return;live=false;listeners.forEach(off=>off());unprime();motion.dispose(); };
-  const hide = (event: PageTransitionEvent) => { motion.finish(); if(!event.persisted){dispose();doc.defaultView?.removeEventListener('pagehide',hide);} };
+  const dispose = () => {
+    if (!live) return;
+    live = false;
+    listeners.forEach(off => off());
+    unmountViews?.();
+    viewMotion.dispose();
+    unprime();
+    motion.dispose();
+  };
+  const hide = (event: PageTransitionEvent) => { viewMotion.cancel(); motion.finish(); if(!event.persisted){dispose();doc.defaultView?.removeEventListener('pagehide',hide);} };
   doc.defaultView?.addEventListener('pagehide',hide);
   return () => { dispose();doc.defaultView?.removeEventListener('pagehide',hide); };
 }

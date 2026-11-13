@@ -95,7 +95,15 @@ describe('相册 ∞ · 挂法角色（与百褶 ∞ 同角色，只有母题不
        本图**紧裁到墨迹框** ⇒ 层宽 = 墨迹宽 ⇒ 51vw / 733px 两个上限就是"同档"的落点。 */
     const block = COMP_CODE.match(/\.gallery-inf\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(block, '取宽丢了与日志页同档的公式').toMatch(/width:\s*var\(--plate-w,\s*min\(51vw,\s*733px,\s*250vh\)\)/);
-    expect(block, '缺 --plate-op 旋钮（想再淡一档时没地方拧）').toMatch(/opacity:\s*var\(--plate-op,\s*0\.08\)/);
+    /* ★★ 2026-11-13：浓度不再是单个 `var(--plate-op, 0.08)` —— 亮暗两档之间要连续插值，
+       写法变成两个端点的 calc。判据跟着意图走，守三件事（缺一条都会退回"松手才跳"）：
+         ① `--plate-op` 旋钮还在（想再淡一档仍有地方拧）；
+         ② 亮档端点仍是 0.08；
+         ③ 暗档端点接 `--gallery-inf-dark-opacity`，且整条按 `--theme-w` 加权。 */
+    expect(block, '缺 --plate-op 旋钮（想再淡一档时没地方拧）').toMatch(/var\(--plate-op,\s*0\.08\)/);
+    expect(block, '暗档端点没接 --gallery-inf-dark-opacity').toMatch(/var\(--plate-op,\s*var\(--gallery-inf-dark-opacity\)\)/);
+    expect(block, '浓度没有按 --theme-w 加权 ⇒ 拖动中不会连续变').toMatch(/opacity:\s*calc\(/);
+    expect(block, '浓度没有按 --theme-w 加权 ⇒ 拖动中不会连续变').toMatch(/--theme-w/);
   });
 
   it('★★ 比例必须与素材的**紧裁框**一致（改素材忘改 CSS 会把墨迹拉扁）', () => {
@@ -161,7 +169,7 @@ describe('相册 ∞ · 产物', () => {
     expect(hasDist, '先 npm run build').toBe(true);
     for (const p of ['gallery/人像/index.html', 'gallery/spiral/index.html']) {
       const html = pageHtml(p);
-      expect(html, `${p} 的 body 缺 gallery-inf-plate`).toContain('class="chrome-page gallery-inf-plate"');
+      expect(html, `${p} 的 body 缺 gallery-inf-plate`).toMatch(/<body\b[^>]*class="[^"]*\bgallery-inf-plate\b/);
       expect(html, `${p} 产物里没有 .gallery-inf 这一层`).toContain('class="gallery-inf"');
       expect((html.match(/class="gallery-inf"/g) ?? []).length, `${p} 的底纹层应恰好一个`).toBe(1);
     }

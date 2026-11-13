@@ -120,6 +120,16 @@ export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
   const paintTip = (progress: number) => {
     const color = mixThemeColor(preview.colors.light['--jelly-tip-light'], preview.colors.dark['--jelly-tip-dark'], progress);
     scene.jellyColor = d.vec4f(...colorChannels(color), 1);
+    /* ★★ 2026-11-13（站主选「甲」：「端头保持现在这样，只调取色 —— 让它在暗底上偏一点橙、
+       亮底上偏一点绿，不动 alpha」）。
+       取 `--accent`：亮档 #2d7d46 墨绿、暗档 #ff7b00 橙，正好是软条本体
+       （`--jelly-tip` 亮橙 / 暗墨绿）的**反色相** ⇒ 端头与带身不糊成一片。
+       强度不在这里乘 —— 旋钮在 scene.ts 的 `END_GLASS_BLEED`（拖拽中间态也走这条混色）。 */
+    const envLight = preview.colors.light['--accent'];
+    const envDark = preview.colors.dark['--accent'];
+    if (envLight && envDark) {
+      scene.endTint = d.vec4f(...colorChannels(mixThemeColor(envLight, envDark, progress)), 1);
+    }
   };
   const paintProgress = (progress: number) => {
     preview.update(progress);

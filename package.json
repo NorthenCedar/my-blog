@@ -24,8 +24,11 @@
   "dependencies": {
     "@astrojs/rss": "^4.0.19",
     "@astrojs/sitemap": "^3.7.4",
+    "@hugeicons/core-free-icons": "4.3.3",
+    "@hugeicons/react": "1.1.10",
     "@typegpu/noise": "0.12.1",
     "@typegpu/sdf": "0.12.1",
+    "@use-gesture/react": "10.3.1",
     "astro": "^7.3.5",
     "gsap": "3.15.1",
     "markdown-it": "14.3.3",
@@ -39,8 +42,11 @@
     "prosemirror-schema-list": "1.5.1",
     "prosemirror-state": "1.4.4",
     "prosemirror-view": "1.42.7",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "typegpu": "0.12.8",
     "unplugin-typegpu": "0.12.6",
+    "vgpu": "0.3.1",
     "wgpu-matrix": "3.4.2",
     "yaml": "2.9.1"
   },

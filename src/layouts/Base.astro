@@ -8,6 +8,7 @@ import '../styles/prose.css';
 import '../styles/audio.css';
 import '../styles/links.css';
 import '../styles/transition.css';
+import '../vendor/react-bits/TechText.css';
 // 全站 hover 统一基线（2026-10-03 站主：「把本站所有鼠标悬停的效果都改成主页那样」）。
 // ★ 必须排在 base/prose/links **之后**：它只给参数（时长+曲线），
 //   各页原有的颜色与形态仍以先引入的规则为准 —— 同特异性下后者胜，
@@ -49,7 +50,7 @@ interface Props {
    */
   bodyClass?: string;
   /**
-   * 外壳形态（三选一）：
+   * 外壳形态：
    *   不传 / `'band'`  = 深色带 + 品牌行 + 页脚（旧外壳，其余 10 页在用）
    *   `'console'`      = 首页专用：刻度尺 / HUD / 扫描带 / OS 状态条
    *   `'page'`         = 内页（文章 / 相册 / 项目共用）：浅色顶栏 + 切片档案背景，
@@ -164,13 +165,18 @@ const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('
         ② 深色模式的 `dark` 类（2026-10-17）：规则与 src/scripts/theme.ts 的 getTheme()
            逐字对应（localStorage.theme > prefers-color-scheme）。不在这里挂上，
            选了深色的访客每次进站都会先闪一下纸白。
-        ★★ 为什么**并进同一块**而不是各写一个 <script>：文章页的脚本条数预算
+        ★★ 为什么**并进同一块**而不是各写一个 script 块：文章页的脚本条数预算
            （tests/build-output.test.ts「文章页脚本数量与体积都在预算内」，上限 5 条）
            —— 各写一块就是 6 条，当场红。两块都是"首帧前的同步小片段"、同一个用途，
            合成一块天经地义；**标签数少了，内联字节一个没多**（代码原样搬过来）。
            ⚠ 别为了看清楚再拆成两块 —— 那会撞那条预算，而且不是"预算太紧"，
              是这个页面上的脚本本来就该合并（5 条里已经有 4 条 module）。
-        ⚠ 两块各自带 try/catch（隐私模式下 localStorage 会抛）：一块抛了不许拖累另一块。 */}
+        ⚠ 两块各自带 try/catch（隐私模式下 localStorage 会抛）：一块抛了不许拖累另一块。
+        ⚠⚠ 上面注释里**不许出现字面的 script 标签**（本行已改成"script 块"）——
+           Astro dev 的依赖扫描器按 HTML 语义扫 script 标签，认不得 JSX 注释，
+           会把注释文本当成脚本抽出来 ⇒ PARSE_ERROR ⇒ **跳过整个依赖预打包** ⇒
+           react / gsap 等裸导入在 dev 全挂（菜单没动画、点阵不渲染）。
+           2026-11-13 站主报障「菜单没动画／点阵失灵」的真根因，就是这个。 */}
     <script is:inline data-astro-rerun>try{var r=document.documentElement.classList,t=localStorage.getItem('theme');if(t==='dark'||!t&&matchMedia('(prefers-color-scheme: dark)').matches)r.add('dark')}catch{}try{for(var[k,c]of[['pt',['pt-on','pt-play']],['tsl-nav',['tsl-in']]])if(sessionStorage.getItem(k)){sessionStorage.removeItem(k);r.add(...c)}}catch{}</script>
   </head>
   <body
@@ -185,7 +191,9 @@ const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('
     {/* chrome='console'（首页）自带刻度尺 / HUD / 扫描带 / OS 状态条；
         chrome='page'（内页）自带浅色顶栏 + 切片档案背景 —— 两者都不渲染旧的深色 Band。
         不传 chrome 的 10 页走原路径，产物逐字节不变。 */}
-    {chrome === 'page' && <Topbar wordmark={site.wordmark} current={current} />}
+    {(chrome === 'page' || chrome === 'console') && (
+      <Topbar wordmark={site.wordmark} current={current} home={chrome === 'console'} />
+    )}
     {/* ★ `plate` 槽：**视口装饰层**，必须挂在 `.shell` **之外**（2026-10-03 加）。
         为什么不能用普通 slot（`slot` 会落进 `.shell` 内部）：
           页面过渡 `html.pt-play .shell { animation: pt-shell … }` 会给 `.shell`
@@ -230,6 +238,7 @@ const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('
       // 页面过渡的点击拦截（每一页都加载 ⇒ Astro 会抽成同源共享 chunk）。
       import '../scripts/transition';
       import '../scripts/nav-drawer';
+      import '../scripts/tech-heading-loader';
       /* 消息提醒：挂在**这一块**而不是 Topbar 里单独一块 ——
          ① 首页的 console 外壳也走这个布局，共享块天然覆盖；
          ② 文章页那条「脚本条数与体积预算」按 `<script>` 处数算，多开一块就直接顶线。
@@ -237,15 +246,17 @@ const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('
          不引入访客账户客户端；来源文案和落点由服务端生成，守住既有字节预算。 */
       import '../scripts/notices';
       import '../scripts/music-player';
-      /* 正文/说说/留言里的音频条（2026-11-10）。
+      /* 正文和说说里的音频条。
          只在这一页真有 [data-audio] 时才按需加载：播放器（波形绘制、键盘、单曲互斥）
          体积不小，挂进首屏静态闭包会把文章页、相册页、螺旋盘页一起顶过预算。
          运行期 import 不计首屏静态闭包 —— 没有语音的页面一分也不付。 */
       const audioNow = (): void => {
-        void import('../scripts/audio-player').then((m) => m.upgradeAudio());
+        if (document.querySelector('[data-audio]')) {
+          void import('../scripts/audio-player').then((m) => m.upgradeAudio());
+        }
       };
-      if (document.querySelector('[data-audio]')) audioNow();
-      document.addEventListener('ap:refresh', audioNow);
+      audioNow();
+      document.addEventListener('astro:page-load', audioNow);
     </script>
   </body>
 </html>

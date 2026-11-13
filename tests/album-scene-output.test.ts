@@ -6,12 +6,15 @@ const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
 const manifest = JSON.parse(read('public/gallery/manifest.json'));
 
 describe('单册空间陈列产物', () => {
-  it('每册按自己的清单模式渲染，英文名进入画布且没有改网址', () => {
-    for (const album of manifest.albums) {
+  it('所有布局共用照片索引标题、册号和日期', () => {
+    for (const [index, album] of manifest.albums.entries()) {
       const html = read(`dist/gallery/${album.id}/index.html`);
       expect(html).toContain('data-album-scene');
       expect(html).toContain(`data-layout="${album.layout}"`);
-      expect(html).toContain(album.titleEn || album.title);
+      expect(html).toContain('照片索引');
+      expect(html).toContain('PLATE ' + String(index + 1).padStart(2, '0'));
+      expect(html).toContain(`datetime="${album.date}"`);
+      expect(html.match(/<h1\b[^>]*>([^<]+)<\/h1>/)?.[1]).toBe(album.titleEn || album.title);
       expect(html.match(/<h1\b/g)).toHaveLength(1);
     }
   });
@@ -27,14 +30,22 @@ describe('单册空间陈列产物', () => {
       }
       // 页面不在 HTML 里预挂启动态；脚本没跑时没有隐藏照片。
       expect(html).not.toMatch(/<section[^>]*class="[^"]*scene-on/);
-      expect(html).toContain('data-scene-toggle');
-      expect(html).toContain('data-scene-home');
+      if (album.layout === 'dome' || album.layout === 'infinite') {
+        expect(html).toContain('data-interactive-album');
+        expect(html).toContain('data-album-toggle');
+        expect(html).toContain('data-album-return');
+        expect(html).toMatch(/<div class="topbar"[^>]*>[\s\S]*?<main\b/);
+        expect(html).toContain('data-nav-open');
+      } else {
+        expect(html).toContain('data-scene-toggle');
+        expect(html).toContain('data-scene-home');
+      }
       expect(html).toContain('查看全部');
     }
   });
   it('生成清单保留展示选项与真实像素宽，新字段不污染首页照片池', () => {
     for (const album of manifest.albums) {
-      expect(['scatter', 'slices','wall']).toContain(album.layout);
+      expect(['scatter', 'slices', 'dome', 'infinite', 'wall']).toContain(album.layout);
       expect(typeof album.titleEn).toBe('string'); // 新相册可以省略英文名，清单写空串。
       for (const frame of album.frames) {
         for (const file of frame.files) expect(file.actualW).toBeGreaterThan(0);

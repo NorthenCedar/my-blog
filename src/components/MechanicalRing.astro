@@ -1,20 +1,14 @@
 ---
 /** 留言页的机械环底纹。
  * 通过 Base 的 plate 槽挂在 .shell 外，避免页面过渡改变 fixed 的包含块。
- * 静态金属渲染与光槽数据来自 RhinE，许可和来源见 assets/tags/plates/README.md。
+ * 静态金属渲染来自 RhinE，许可和来源见 assets/tags/plates/README.md。
  */
 import { Image } from 'astro:assets';
 import plate from '../assets/tags/plates/mechanical-ring.webp';
 import nightPlate from '../assets/tags/plates/mechanical-ring-night.webp';
-import ring from '../assets/tags/plates/ring.json';
-import { projectRingLight } from '../lib/mechanical-ring';
-
-const light = projectRingLight(ring.fiber);
-const lap = light.length.toFixed(3);
 ---
 
-<div class="mechanical-ring" data-ring-frame aria-hidden="true">
-  <div class="ring-motion" data-ring-motion>
+<div class="mechanical-ring" aria-hidden="true">
   {/* 两种主题各用原版渲染；亮色沿用原库的色相换色方式，图片结构与材质不重绘，夜间保留原图反光。 */}
   <Image
     class="mechanical-ring-img ring-day"
@@ -37,27 +31,7 @@ const lap = light.length.toFixed(3);
     loading="eager"
     decoding="async"
   />
-  <svg
-    class="ring-light"
-    viewBox={`0 0 ${ring.resolution.join(' ')}`}
-    fill="none"
-    focusable="false"
-    style={`--ring-lap: ${lap};`}
-  >
-    <metadata>RhinE / Audio Archive authors · MIT · /licenses/rhine-mechanical-ring.txt</metadata>
-    {light.segments.map(({ d, offset }) => (
-      <g style={`--ring-offset: ${offset.toFixed(3)};`}>
-        <path class="ring-inlay" d={d} />
-        <path class="ring-pulse ring-pulse-halo" d={d} />
-        <path class="ring-pulse ring-pulse-core" d={d} />
-      </g>
-    ))}
-  </svg>
-  </div>
 </div>
-<script>
-  import '../scripts/ring-motion';
-</script>
 
 <style>
   .mechanical-ring {
@@ -66,67 +40,39 @@ const lap = light.length.toFixed(3);
     top: 50%;
     width: var(--plate-w, min(94vw, 1400px, 150vh));
     aspect-ratio: 1400 / 900;
+    /* ★★ 2026-11-13 站主报障「留言页的底纹为什么跑上面去了」：交叉淡入改造后
+       day / night 两张 img 都在**文档流**里，各占容器宽 × 9/14 的高度，
+       把 fixed 容器从 450 高撑到 900 —— day 图被顶到视口上缘外。
+       修复：两图同格叠放（grid-area 1/1），容器高度重新由 aspect-ratio 决定。 */
+    display: grid;
+    grid-template: 1fr / 1fr;
     transform: translate(-50%, -50%);
-    perspective: var(--ring-perspective);
     pointer-events: none;
     z-index: -1;
   }
-  .ring-motion { width: 100%; height: 100%; transform-origin: center; }
-  :global(body[data-ring-dragging]) { user-select: none; }
   .mechanical-ring :global(img) {
-    opacity: var(--plate-op, var(--ring-plate-opacity));
+    grid-area: 1 / 1;
     display: block;
     width: 100%;
     height: 100%;
     max-width: none;
     object-fit: contain;
   }
-  .mechanical-ring :global(img.ring-night) {
-    display: none;
-  }
+  /* ★★ 2026-11-13：两张图原来靠 `display: none/block` 在 `html.dark` 下整块换 ——
+     拖动软条时那是松手才发生的一次跳变（整屏大图从绿环瞬变铜环）。
+     现在两层**同时在场、按 --theme-w 交叉**：亮档只见 day、暗档只见 night，
+     中间是两张同构图的叠加 —— 因为两张完全重合并共用同一浓度，叠加结果就是线性交叉，
+     不会有第三张"叠影"。 */
   .mechanical-ring :global(img.ring-day) {
     filter: var(--ring-day-filter);
+    opacity: calc(var(--plate-op, var(--ring-plate-light-opacity)) * (1 - var(--theme-w)));
   }
-  :global(html.dark) .mechanical-ring :global(img.ring-day) {
-    display: none;
-  }
-  :global(html.dark) .mechanical-ring :global(img.ring-night) {
-    display: block;
-  }
-  .ring-light {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    opacity: var(--ring-light-opacity);
-  }
-  .ring-inlay { stroke: var(--ring-inlay-color); stroke-width: var(--ring-inlay-width); stroke-linecap: round; }
-  .ring-pulse {
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    animation: ring-flow var(--dur-ring-flow) linear infinite;
-  }
-  .ring-pulse-halo {
-    stroke: var(--ring-light-halo);
-    stroke-width: var(--ring-light-halo-width);
-    stroke-dasharray: var(--ring-light-halo-length) calc(var(--ring-lap) - var(--ring-light-halo-length));
-  }
-  .ring-pulse-core {
-    stroke: var(--ring-light-core);
-    stroke-width: var(--ring-light-core-width);
-    stroke-dasharray: var(--ring-light-core-length) calc(var(--ring-lap) - var(--ring-light-core-length));
-  }
-  @keyframes ring-flow {
-    from { stroke-dashoffset: var(--ring-offset); }
-    to { stroke-dashoffset: calc(var(--ring-offset) - var(--ring-lap)); }
+  .mechanical-ring :global(img.ring-night) {
+    opacity: calc(var(--plate-op, var(--ring-plate-dark-opacity)) * var(--theme-w));
   }
   @media (max-width: 767px) {
     .mechanical-ring {
       width: var(--plate-w, min(96vw, 700px, 150vh));
     }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .ring-pulse { display: none; animation: none; }
   }
 </style>

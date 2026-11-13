@@ -13,6 +13,21 @@ beforeEach(() => {
 });
 afterEach(() => { dispose(); dispose = () => {}; vi.restoreAllMocks(); document.body.replaceChildren(); });
 describe('归档筛选的连续操作', () => {
+  it('列表与封面同步切换，连点使用最后一次选择并保留文章链接', () => {
+    const controls = document.createElement('div');
+    controls.dataset.archiveViews = '';
+    controls.innerHTML = '<button id="list-tab" data-view="list">列表</button><button id="card-tab" data-view="card">封面</button>';
+    document.querySelector('[data-filters]')!.append(controls);
+    const original = document.querySelector('#a a');
+    const [list, card] = controls.querySelectorAll('button');
+    dispose = initArchiveFilters(document);
+    card.click();
+    expect(controls.dataset.view).toBe('card');
+    list.click();
+    expect(controls.dataset.view).toBe('list');
+    expect(list.getAttribute('aria-selected')).toBe('true');
+    expect(document.querySelector('#a a')).toBe(original);
+  });
   it('筛选、空结果和清空都同步给出准确结果', () => {
     dispose = initArchiveFilters(document);
     type('甲');

@@ -1,0 +1,39 @@
+/* 展开的播放器与浮动导航共用一份玻璃材质，定位和圆角各自由组件控制。 */
+.music-glass,
+body > .topbar[data-scroll-topbar][data-topbar-scrolled]::before {
+  border: 1px solid var(--music-glass-edge);
+  background-color: var(--music-glass-fallback);
+  box-shadow: 0 12px 36px var(--music-glass-shadow), 0 2px 6px var(--music-glass-shade),
+    inset 0 1px 1px var(--music-glass-glint), inset 0 -1px 1px var(--music-glass-inner);
+}
+
+.music-glass::before,
+body > .topbar[data-scroll-topbar][data-topbar-scrolled]::before {
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--music-glass-glint) 10%, transparent),
+    transparent 18%, transparent 82%, var(--music-glass-inner));
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .music-glass,
+  body > .topbar[data-scroll-topbar][data-topbar-scrolled]::before {
+    background-color: var(--music-glass);
+  }
+
+  .music-glass::before,
+  body > .topbar[data-scroll-topbar][data-topbar-scrolled]::before {
+    backdrop-filter: blur(5px) saturate(1.12);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .music-glass,
+  body > .topbar[data-scroll-topbar][data-topbar-scrolled]::before {
+    background-color: var(--music-glass-fallback);
+  }
+
+  .music-glass::before,
+  body > .topbar[data-scroll-topbar][data-topbar-scrolled]::before {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

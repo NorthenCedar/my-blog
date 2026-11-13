@@ -183,6 +183,13 @@ async function serve() {
 }
 
 describe('开发期视频只读服务', () => {
+  it('将视频封面交给后续静态资源路由', async () => {
+    const video = await asset();
+    const get = await serve();
+    const response = await get(video.src.replace('.mp4', '.poster.jpg') + '?v=1');
+    expect(response.body.toString()).toBe('后续路由');
+  });
+
   it('GET 返回原件，HEAD 只有同等元数据，没有正文', async () => {
     const video = await asset();
     const get = await serve();

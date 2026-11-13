@@ -172,13 +172,19 @@ function instanced(base: BufferGeometry, count: number): InstancedBufferGeometry
 export async function createFinScene(
   canvas: HTMLCanvasElement,
   palette: FinPalette,
-): Promise<FinScene> {
-  const renderer = new WebGLRenderer({
-    canvas,
+): Promise<FinScene | null> {
+  const context = canvas.getContext('webgl2', {
     antialias: true,
     alpha: true,
     powerPreference: 'high-performance',
+    failIfMajorPerformanceCaveat: true,
   });
+  if (!context) return null;
+  const debug = context.getExtension('WEBGL_debug_renderer_info');
+  const device = debug ? String(context.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : '';
+  // 某些浏览器允许软件 WebGL，但后处理足以让换页停顿；此时使用已有静态图。
+  if (/swiftshader|llvmpipe|softpipe|software|basic render driver/i.test(device)) return null;
+  const renderer = new WebGLRenderer({ canvas, context, antialias: true, alpha: true });
   renderer.outputColorSpace = SRGBColorSpace;
   /* ★★ 原版是 `NoToneMapping`（Stage.ts:162）—— 它自己做 grade：exposure 1.5
      → Khronos PBR Neutral → sat 0.7（LOOK）。而 ACES 对暖色有**系统性偏黄**：
@@ -247,8 +253,10 @@ export async function createFinScene(
   /* ── 雕塑（鳍片）── */
   const finGeo = instanced(new BoxGeometry(1, 1, 1), FIN_COUNT);
   const relayMotion=createRelayMotion(FIN_COUNT);
-  const relayAttribute=new InstancedBufferAttribute(relayMotion.values,1);
+  const relayAttribute=new InstancedBufferAttribute(relayMotion.poses,4);
+  const liftAttribute=new InstancedBufferAttribute(relayMotion.lift,1);
   finGeo.setAttribute('aRelay',relayAttribute);
+  finGeo.setAttribute('aRelayLift',liftAttribute);
   let relayTarget=0;
 
   /* 脉冲：16 槽环形缓冲（原点填 -99 ⇒ age 恒为负 ⇒ 初始无脉冲） */
@@ -427,7 +435,8 @@ export async function createFinScene(
   function resize(nw: number, nh: number, ndpr: number) {
     w = Math.max(1, Math.floor(nw));
     h = Math.max(1, Math.floor(nh));
-    dpr = Math.min(ndpr, 2);
+    // 限制全屏后处理的总像素数，高 DPI 下仍以 CSS 尺寸铺满画布。
+    dpr = Math.min(ndpr, 2, Math.sqrt(1_650_000 / (w * h)));
     renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
     // ★ composer 必须**单独**设尺寸：它有两张内部缓冲，只设 renderer 不够
@@ -462,6 +471,7 @@ export async function createFinScene(
     const step = Math.min(dtMs, 50) / 1000;
     relayMotion.advance(relayTarget,step,U.uFlow.value);
     relayAttribute.needsUpdate=true;
+    liftAttribute.needsUpdate=true;
     if(location.search.includes('qa=1')){
       canvas.dataset.relay=relayMotion.progress.toFixed(4);
       if(relayMotion.info){
@@ -537,9 +547,11 @@ export async function createFinScene(
     picker.dispose();
     finGeo.dispose();
     finMat.dispose();
+    finDepth.dispose();
     key.shadow.map?.dispose();
+    composer.dispose();
     renderer.dispose();
-    renderer.forceContextLoss?.();
+    // 浏览器在画布脱离后回收上下文。主动丢失上下文会同步等待 GPU 完成已提交的帧。
   }
 
   assembleT0 = 0;

@@ -130,9 +130,8 @@ function getArchive(): Promise<{ year: string; posts: PostMeta[] }[]>;
 `SiteHeader` `SiteFooter` `PostBand`（黑带标题）`PostIndex`（超大标题堆叠）`Toc` `TagChips` `DraftBadge` `ReadTime` `ProseStyles`
 
 - **接口**：只有 props，没有取数、没有全局状态。所以同一个 `PostIndex` 能同时服务首页 / 标签页 / 归档页 —— 这是深度带来的杠杆。
-- **唯一的例外**：`src/scripts/copy-code.ts` —— 约 30 行的渐进增强脚本。
-  它在代码块**外面**套一条工具栏（语言标注 + 复制按钮），不改代码本身，**JS 关闭时工具栏不出现、代码照样可选可复制**。
-  （设计初稿写的是"不改 DOM 结构"，实现时发现要放工具栏就得加一层包裹 —— 改的是这份文档，不是偷偷越界。）
+- 文章代码块由 `src/scripts/copy-code.ts` 渐进增强。工具栏显示语言、复制按钮和长代码块的折叠按钮。
+  脚本折叠第六行之后的节点，并保留原始文本供复制。关闭 JavaScript 时，完整代码由服务端直接渲染。
 
 ### 1.6 `src/styles/`（三个文件，换主题的唯一入口）
 
@@ -187,7 +186,7 @@ function getArchive(): Promise<{ year: string; posts: PostMeta[] }[]>;
 | 任何 UI 组件库 / 图标库 | ❌ | 唯一需要的图标是一个内联 SVG |
 | `@shikijs/transformers` | ❌ | 代码高亮用 Astro 内置的 Shiki，不加行号也不需要 transformers |
 
-**运行时（发给浏览器的 JS）**：只有一个代码复制按钮。目标 < 1 KB，无框架、无 polyfill。
+**代码工具栏**由原生脚本增强，无框架、无 polyfill。文章页脚本总量由 `tests/build-output.test.ts` 校验。
 
 ---
 

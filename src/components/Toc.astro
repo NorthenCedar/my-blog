@@ -1,5 +1,6 @@
 ---
 import type { Heading } from '../lib/post-meta';
+import { SAILING_SHIP_PATHS } from '../vendor/leibox/sailing-toc-ship.mjs';
 
 interface Props {
   headings: Heading[];
@@ -9,20 +10,37 @@ const { headings } = Astro.props;
 {headings.length > 0 && (
   <nav class="toc" aria-label="本文目录">
     <h2 class="label">本文目录</h2>
-    <div class="toc-index"><span class="toc-marker" data-toc-marker aria-hidden="true" hidden></span><ol>
-      {headings.map((h) => (
-        <li class={`lv${h.depth}`}><a href={`#${h.id}`}>{h.text}</a></li>
-      ))}
-    </ol></div>
+    <div class="toc-index">
+      <div class="st-visual" aria-hidden="true">
+        <svg class="st-rail" viewBox="0 0 90 100" preserveAspectRatio="none" focusable="false">
+          <path class="st-route" d="M22 6V94" />
+          <circle class="st-end" cx="22" cy="6" r="3.5" />
+          <circle class="st-end-dot" cx="22" cy="6" r="1" />
+          <circle class="st-end" cx="22" cy="94" r="3.5" />
+          <circle class="st-end-dot" cx="22" cy="94" r="1" />
+        </svg>
+        <div class="st-ship" hidden>
+          <svg class="st-wake" viewBox="0 0 100 88" focusable="false">
+            <ellipse cx="51" cy="79" rx="24" ry="6" />
+            <ellipse cx="51" cy="79" rx="45" ry="12" />
+          </svg>
+          <svg viewBox="0 0 100 88" focusable="false">
+            {SAILING_SHIP_PATHS.map((d, index) => <path class:list={{ 'st-line': [1, 2, 10].includes(index) }} d={d} />)}
+          </svg>
+        </div>
+      </div>
+      <ol>
+        {headings.map((h) => (
+          <li class={'lv' + h.depth}><a class="st-link" href={'#' + h.id}>{h.text}</a></li>
+        ))}
+      </ol>
+    </div>
   </nav>
 )}
 
 <style>
-  .toc-index{position:relative;overflow:hidden;}
-  .toc-marker{position:absolute;left:0;top:0;width:2px;height:1px;background:var(--accent-ink);transform-origin:0 0;pointer-events:none;z-index:1;}
-  .toc-marker[hidden]{display:none;}
-  .toc[data-toc-enhanced] a[aria-current="location"]{border-left-color:transparent;}
   .toc {
+    --st-rail-width: calc(var(--sp-7) + var(--sp-5));
     border-top: 1px solid var(--ink);
     border-bottom: 1px solid var(--hair);
     padding: var(--sp-4) 0;
@@ -33,54 +51,98 @@ const { headings } = Astro.props;
     font-weight: 600;
     margin: 0 0 var(--sp-2);
   }
+  .toc-index {
+    position: relative;
+    overflow: clip;
+  }
   ol {
     list-style: none;
     margin: 0;
-    padding: 0;
-    columns: 1;
-    column-gap: var(--sp-6);
+    padding: var(--sp-5) var(--sp-3) var(--sp-5) var(--st-rail-width);
+    max-block-size: min(48svh, 28rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--hair) transparent;
     font-size: var(--fs-sm);
   }
   li.lv3 {
-    padding-left: var(--sp-4);
+    padding-inline-start: var(--sp-3);
     color: var(--muted);
   }
-  a {
+  .st-link {
     display: block;
-    border-left: 2px solid transparent;
-    padding-left: var(--sp-2);
+    padding-block: var(--sp-1);
     color: inherit;
     text-decoration: none;
+    overflow-wrap: anywhere;
+    transition: transform .32s cubic-bezier(.22, 1, .36, 1), color .2s;
   }
-  a:hover {
-    color: var(--accent-ink);
-    text-decoration: underline;
+  .st-link:hover, .st-link[aria-current='location'] { color: var(--accent-ink); }
+  .st-link:hover { text-decoration: underline; }
+  .st-link:focus-visible { outline-offset: -2px; }
+  .toc[data-toc-enhanced] .st-link[aria-current='location'] { transform: translateX(var(--sp-2)); }
+
+  .st-visual {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--st-rail-width);
+    pointer-events: none;
+    visibility: hidden;
   }
-  a[aria-current="location"] {
-    color: var(--accent-ink);
-    border-left-color: var(--accent-ink);
-    font-weight: 600;
+  .toc[data-toc-enhanced] .st-visual { visibility: visible; }
+  .st-rail {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
   }
-  a:focus-visible { outline-offset: -2px; }
-  @media (min-width: 860px) {
-    ol {
-      columns: 2;
-    }
+  .st-route {
+    fill: none;
+    stroke: var(--muted);
+    stroke-width: 1.1;
+    stroke-dasharray: 3 3;
+    opacity: .65;
   }
-  /* 站主 2026-09-26 的折中：宽屏下把目录压成「横向索引条」——
-     去掉标题、两列改四列、压缩纵向留白。**不碰版心**（宽度仍是 shell 宽），
-     窄屏行为完全不变（窄屏上「本文目录」这个标题对可发现性有用，不能一起删）。
-     为什么值得做：1440 下 5 个条目原本撑出 140px 高、右列只放得下 2 项、下半块是空的。 */
-  @media (min-width: 1440px) {
-    .label {
-      display: none;
-    }
-    ol {
-      columns: 4;
-    }
-    .toc {
-      padding: var(--sp-2) 0;
-      margin-bottom: var(--sp-6);
-    }
+  .st-end {
+    fill: var(--paper);
+    stroke: var(--muted);
+    stroke-width: 1.1;
+  }
+  .st-end-dot { fill: var(--muted); }
+  .st-ship {
+    position: absolute;
+    top: 0;
+    left: calc(var(--st-rail-width) * 16 / 90);
+    width: calc(var(--st-rail-width) * 64 / 90);
+    aspect-ratio: 1;
+    transform-origin: center;
+    will-change: transform;
+  }
+  .st-ship svg { width: 100%; height: 100%; overflow: visible; }
+  .st-ship path {
+    fill: var(--paper);
+    stroke: var(--accent-ink);
+    stroke-width: 1.1;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .st-ship path.st-line { fill: none; }
+  .st-wake {
+    position: absolute;
+    inset: 0;
+  }
+  .st-wake ellipse {
+    fill: none;
+    stroke: var(--accent-ink);
+    stroke-width: .65;
+    opacity: 0;
+  }
+  @media (max-width: 767px) {
+    .toc { --st-rail-width: calc(var(--sp-7) + var(--sp-2)); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .st-link { transition: none; }
   }
 </style>

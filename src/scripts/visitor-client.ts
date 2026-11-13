@@ -32,12 +32,17 @@ export function setViewer(user: Visitor | null) {
 export function loadViewer() {
   if (loading) return loading;
   const startedAt = version;
-  return loading = fetch('/api/account', { cache: 'no-store' }).then(async response => {
+  const request = fetch('/api/account', { cache: 'no-store' }).then(async response => {
     if (!response.ok) throw new Error('账户服务暂时不可用');
     const data = await response.json();
     if (version === startedAt) setViewer(data.user ?? null);
     return viewer;
-  }).catch(() => viewer);
+  }).catch(() => {
+    // 暂时失败允许下一次读取重试，不能清掉其间登录产生的新缓存。
+    if (loading === request) loading = undefined;
+    return viewer;
+  });
+  return loading = request;
 }
 export function defaultAvatar(kind: string, id: number) {
   // 保留六个槽位的顺序，匿名留言刷新后仍是同一个图案。

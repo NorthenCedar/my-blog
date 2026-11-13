@@ -23,7 +23,7 @@ const hasDist = existsSync(join(DIST, 'index.html'));
 
 const SRC = readFileSync(join(ROOT, 'src/components/NavDrawer.astro'), 'utf8');
 
-describe('移动端抽屉 · 横向溢出（AGENTS 那条未修缺陷）', () => {
+describe('全站导航抽屉 · 横向溢出', () => {
   it('抽屉有 overflow:hidden 的固定层外壳（这是修复的根因判据）', () => {
     expect(SRC, '缺 .navshell 包裹层 —— 溢出根因没被处理').toMatch(/class="navshell"/);
     // 壳必须是 fixed + inset:0 + overflow:hidden，三者缺一不可
@@ -51,8 +51,12 @@ describe('移动端抽屉 · 横向溢出（AGENTS 那条未修缺陷）', () =>
   });
 
   it('关闭态仍是 translateX(100%) 滑出（滑入动画没被修掉）', () => {
-    expect(SRC).toMatch(/transform:\s*translateX\(100%\)/);
-    expect(SRC).toMatch(/transform:\s*translateX\(0\)/);
+    const original = readFileSync(join(ROOT, 'src/vendor/react-bits/StaggeredMenu.tsx'), 'utf8');
+    const styles = readFileSync(join(ROOT, 'src/vendor/react-bits/StaggeredMenu.css'), 'utf8');
+    expect(styles).toMatch(/\.fixed-wrapper\s*\{[^}]*position:\s*fixed[^}]*overflow:\s*hidden/);
+    expect(original).toMatch(/gsap\.set\(\[panel, \.\.\.preLayers\], \{ xPercent: offscreen/);
+    expect(original).toMatch(/xPercent: 0, duration: 0\.5, ease: 'power4\.out'/);
+    expect(original).toMatch(/const all: HTMLElement\[\] = \[\.\.\.layers, panel\];\s*[^]*?gsap\.to\(all, \{\s*xPercent: offscreen,\s*duration: 0\.32/);
   });
 
   it('打开态选择器跨了壳 —— 用后代而非同级兄弟', () => {
@@ -81,9 +85,10 @@ describe('移动端抽屉 · 横向溢出（AGENTS 那条未修缺陷）', () =>
     }
   });
 
-  it('桌面隐藏规则把壳也一起藏（漏了它，桌面会出现一个空的 fixed 层）', () => {
-    const m = SRC.match(/\.navtog,\s*\.navbtn,\s*\.navshell,\s*\.navmask,\s*\.navpanel\s*\{[^}]*display:\s*none/);
-    expect(m, '桌面隐藏列表里没有 .navshell').toBeTruthy();
+  it('抽屉在关闭后隐藏，原生弹窗和无脚本模式分别控制可见性', () => {
+    expect(SRC).toMatch(/\.navshell\s*\{[^}]*visibility:\s*hidden/);
+    expect(SRC).toMatch(/\.navtog:checked\s*~\s*\.navshell\s*\{\s*visibility:\s*visible/);
+    expect(SRC).toMatch(/\.site-menu-dialog:modal\s*\{\s*pointer-events:\s*auto/);
   });
 });
 
@@ -104,7 +109,7 @@ describe.skipIf(!hasDist)('产物里的抽屉', () => {
     const html = readFileSync(join(DIST, 'about', 'index.html'), 'utf8');
     const iShell = html.indexOf('class="navshell"');
     const iMask = html.indexOf('class="navmask"');
-    const iPanel = html.indexOf('class="navpanel"');
+    const iPanel = html.indexOf('class="navpanel staggered-menu-panel"');
     expect(iShell).toBeGreaterThan(-1);
     expect(iMask, '遮罩不在壳内').toBeGreaterThan(iShell);
     expect(iPanel, '面板不在壳内').toBeGreaterThan(iShell);
@@ -142,7 +147,7 @@ describe('内页顶栏 · 不得建立 fixed 的包含块（手机端抽屉点�
     for (const prop of ['backdrop-filter', 'filter', 'transform', 'perspective', 'will-change', 'contain']) {
       expect(body, `.topbar 上出现了 ${prop} ⇒ 抽屉会被压扁/盖住（手机端点不出菜单）`).not.toContain(prop);
     }
-    expect(body, '顶栏要留 position:relative 给玻璃层当定位祖先').toMatch(/position:\s*relative/);
+    expect(body, '顶栏跟随滚动并为玻璃层提供定位祖先').toMatch(/position:\s*sticky/);
     expect(body, '顶栏的底线上色归玻璃层，这里只占位').toMatch(/border-bottom:\s*1px solid transparent/);
   });
 
@@ -201,25 +206,10 @@ describe('汉堡按钮 · 自动深色下必须可见（2026-10-08）', () => {
   const NAV = readFileSync(join(ROOT, 'src/components/NavDrawer.astro'), 'utf8');
   const BASE = readFileSync(join(ROOT, 'src/layouts/Base.astro'), 'utf8');
 
-  it('★ 汉堡是内联 SVG 图元（不是 background / border / box-shadow 画的块）', () => {
+  it('菜单图标用内联 SVG 和 currentColor，在自动深色下保留图形', () => {
     const svg = NAV.match(/<svg[^>]*class="bars"[^>]*>([\s\S]*?)<\/svg>/);
-    expect(svg, '汉堡必须是 <svg class="bars"> —— 背景块在自动深色下会整条消失').toBeTruthy();
-    const path = svg![1].match(/<path[^>]*d="([^"]+)"[^>]*stroke="currentColor"/);
-    expect(path, '三条线要用 <path stroke="currentColor">（图元才会被自动深色保留）').toBeTruthy();
-    /* 几何：**上短下长**（13 / 18 / 18），中心间距 6px，线心落在半像素 ⇒ 在整像素行上渲染。
-       ⚠ 这三个数字与改动前的 `::before(top:-6, w13) / 自身(w18) / ::after(top:+6, w18)` 逐个对应
-         —— 注意**短的那条在最上面**（第一版 SVG 我把它放到了中间，是靠改前/改后的
-         逐像素对照才发现的：`_probe/_nav-check.mjs` 读到 y=156 的线从 13px 变成了 18px）。
-         动了任何一个数字，汉堡的形状就变了（不是等价改写）。 */
-    expect(path![1], '三条线的几何变了（应为 上13 / 中18 / 下18，间距 6px）')
-      .toBe('M0 0.5h13M0 6.5h18M0 12.5h18');
-    /* svg 高度必须是偶数：40px 按钮里居中后 top 才是整数 ⇒ 1px 线不跨行、不发虚 */
-    const h = NAV.match(/<svg[^>]*class="bars"[^>]*height="(\d+)"/);
-    expect(Number(h?.[1]), 'svg 高度取奇数时居中出现半像素偏移，1px 线会糊成两行').toBe(14);
-    /* 反向：不许再用"背景块"那套画法（漏一条就等于根因还在） */
-    expect(NAV, '汉堡又用 background: currentColor 画了 —— 自动深色下整条消失')
-      .not.toMatch(/\.navbtn\s+\.bars[^{]*\{[^}]*background/);
-    expect(NAV, '汉堡又用 ::before/::after 画线段了 —— 那是旧写法（背景块）').not.toMatch(/\.navbtn\s+\.bars::/);
+    expect(svg?.[1]).toMatch(/<path[^>]*d="M1 7h12M7 1v12"[^>]*stroke="currentColor"/);
+    expect(NAV).not.toMatch(/\.navbtn\s+\.bars[^{]*\{[^}]*background|\.navbtn\s+\.bars::/);
   });
 
   it('★ head 声明 color-scheme: light dark（挡住自动深色，也是深色模式的前提）', () => {

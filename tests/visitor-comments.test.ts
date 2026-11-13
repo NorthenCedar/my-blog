@@ -30,6 +30,28 @@ describe('评论的账户身份与匿名兼容', () => {
     expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM comments').get()?.n).toBe(0);
     expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM comment_authors').get()?.n).toBe(0);
   });
+  it.each(['anonymous', 'account'])('父评论在写入前被删除时拒绝 %s 回复', async identity => {
+    const s = setup();
+    const registration = identity === 'account' ? await accountPost({
+      request: s.request('account', { action: 'register', username: 'reader', password: 'a-long-password-for-this-account' }),
+      env: s.env,
+    } as never) : null;
+    const cookie = registration?.headers.get('Set-Cookie')?.split(';')[0];
+    s.sqlite.exec("INSERT INTO comments (slug,name,body,created_at,ip_hash) VALUES ('guestbook','访客','原文','2026-10-19','old')");
+    const batch = s.env.COMMENTS_DB.batch;
+    s.env.COMMENTS_DB.batch = async statements => {
+      s.sqlite.exec('DELETE FROM comments WHERE id=1');
+      return batch(statements);
+    };
+    const response = await onRequestPost({
+      request: s.request('comments', { slug: 'guestbook', name: '读者', body: '回复', parentId: 1, identity }, cookie),
+      env: s.env,
+    } as never);
+    expect(response.status).toBe(400);
+    expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM replies').get()?.n).toBe(0);
+    expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM comment_authors').get()?.n).toBe(0);
+  });
+
   it('尚未执行账户迁移时，既有匿名留言仍可读取', async () => {
     const { sqlite, db } = visitorDatabase(false); close.push(() => sqlite.close());
     sqlite.prepare("INSERT INTO comments (slug,name,body,created_at,ip_hash) VALUES ('guestbook','旧访客','仍然可见','2026-10-19','old')").run();

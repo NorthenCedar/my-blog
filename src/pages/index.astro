@@ -6,7 +6,7 @@
  *   这个文件不以「本站旧首页」为源去逼近原型，而是**以原型文件为源**：
  *   结构、类名、CSS、JS 一律照抄原型，只在下面这几处做接驳 —— 因为它们是
  *   「原型里的占位」与「本站的真实数据」的接口，不换就上不了线：
- *     ① 导航      href="#" / "#s2"  → NAV_LINKS 的真实路由
+ *     ① 导航      使用全站统一菜单
  *     ② 文章      原型 3 条 demo    → content/posts 的真实文章（可点进正文）
  *     ③ 站名/自述 原型写死的文案     → content/site.md（主题不持有文案，有测试守着）
  *     ④ 素材路径  ./inf-mask.png 等 → 站内 /art/…（图片一律进仓库，零第三方请求）
@@ -29,9 +29,7 @@
 import { getEntry } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import BootIntro from '../components/BootIntro.astro';
-import NavDrawer from '../components/NavDrawer.astro';
 import HomeLog from '../components/HomeLog.astro';
-import { NAV_LINKS } from '../lib/nav';
 import { getVisiblePosts } from '../lib/posts';
 import { getSite } from '../lib/site';
 import { sortLogItems } from '../lib/log-order';
@@ -146,10 +144,11 @@ const titleLines: { ch: string; i: number }[][] = (() => {
           本站多一层 Base 的全局 .shell（max-width + padding），会把**背景一起框窄**。
           不加这条，首屏就是"中间一块"而不是整屏（站主 2026-09-30 报过）。
           ★ 不写 width:100vw —— vw 含滚动条宽度 ⇒ 横向溢出。 */}
+  <div class="home-sky">
   <header class="band" id="s1">
     {/* 真 3D DNA：three.js 把 canvas 注入这里。模型 /dna-slim.glb 走 public/。
         空容器 ⇒ 没 WebGL / 加载失败时首屏只是没有模型，其余照常。 */}
-    <div class="dna-stack" id="dnaStack" aria-hidden="true"></div>
+    <div class="dna-window"><div class="dna-stack" id="dnaStack" aria-hidden="true"></div></div>
 
     <div class="band-core" aria-hidden="true"></div>
     <div class="band-grid" aria-hidden="true"></div>
@@ -207,19 +206,6 @@ const titleLines: { ch: string; i: number }[][] = (() => {
               值来自 astro.config 的 site ⇒ 不是写死的第二个真相。 */}
           {domain && <small>{domain}</small>}
         </div>
-        {/* 原型的 nav 是 flex-wrap 的胶囊按钮（横排）。
-            ≤1023px 由站点抽屉接管（纯 CSS、零 JS）：原型靠 nav flex-wrap 换行，
-            本站导航有 9 项，换行会占掉半屏，抽屉更干净 —— 这是本站在原型之上的一处加法。 */}
-        <nav aria-label="主导航">
-          {NAV_LINKS.map((l) => (
-            <a href={l.href} aria-current={l.key === 'index' ? 'page' : undefined}>{l.label}</a>
-          ))}
-          <a href="/rss.xml">RSS</a>
-        </nav>
-        {/* 主题开关（Jelly Slider）不在首页 —— 2026-10-17 站主拍板「按钮只放在关于页」⇒
-            那 462 KB 的渲染器 chunk 只被 /about/ 引用。见 src/pages/about.astro 的 .theme-dock
-            （页面右上角；2026-10-17 第二轮从右栏 FIG.05 搬上去的）。 */}
-        <NavDrawer current="index" />
       </div>
 
       {/* 首屏 ∞ 落款：官方描边 logo（左环＋、右环−）。
@@ -267,7 +253,8 @@ const titleLines: { ch: string; i: number }[][] = (() => {
 
   {/* ===== 晨昏带（原型 v4）：深墨绿 → 暖灰绿 → 灰白 → 纸白 =====
        末段渐隐到 transparent（不是 --paper），否则背景层会被这条硬边一刀切断。 */}
-  <div class="dusk" aria-hidden="true"></div>
+    <div class="dusk" aria-hidden="true"></div>
+  </div>
 
   {/* ===== 纸白正文区（原型 .paper-wrap）=====
        百褶 ∞ 底纹 position:fixed 挂视口 ⇒ 滚动时始终居中（原型 v9.1 定案）。
@@ -411,6 +398,8 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     )}
   </div>
 
+  {/* 时间切片末端自动进入相册，点阵应在入口之前可见。 */}
+
   {/* ===== S6 · TIME SLICE 时间切片（主页收尾装置，SECTOR 06）=====
        参考：抖音 @afterimage 的「时间切片」（蝴蝶穿过嵌套方框隧道，每个时刻
        留一片残影，尽头落成标本）+ wodniack.dev 的门户机制（滚到底 → 滚进窗口）。
@@ -485,13 +474,6 @@ const titleLines: { ch: string; i: number }[][] = (() => {
     </div>
   </section>
 
-  {/* ★ 站主 2026-10-02 第七轮：「把主页下面这一栏删了」（参考截图里那行
-       左「本站已经运行 …」右「总访问量（PV）… 总访客数（UV）…」）。
-       ⇒ 连同它的 .foot / .foot-in 版式一起删掉，主页底部不再有页脚。
-       ★ 内页（SiteFooter → SiteStats，深色底）不受影响，那是站主 2026-09-26
-         单独要求「在每页最底部」的，只撤主页这一处。
-       ★ since 仍然要留在 Base 的入参里给内页用，所以不从内容层删。 */}
-
   {/* ===== 动效（照抄原型，去掉原型调试面板那三件事）=====
        三件：① 指针视差（只写 --mx/--my 两个 CSS 变量，位移全交给 CSS）
              ② 百褶 ∞ 只在纸白区显形（它是 fixed 挂视口的，不限定会飘到首屏/页脚）
@@ -530,17 +512,20 @@ onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, 
 
       /* 2) 百褶 ∞：fixed 挂视口 ⇒ 必须限定只在纸白区里出现。滚动时零 JS 参与。
             ★ 淡入淡出靠 CSS 的 transition（.paper-inf）。第一次隐藏必须**瞬时**：
-              此刻先把过渡摘掉、强制一次样式计算把 opacity:0 定下来，再把过渡交还 CSS，
-              否则开场会在首屏正中"淡出"一个幽灵 ∞。之后每次切换都会走过渡。 */
+              此刻先把过渡摘掉、强制一次样式计算把浓度定下来，再把过渡交还 CSS，
+              否则开场会在首屏正中"淡出"一个幽灵 ∞。之后每次切换都会走过渡。
+            ★★ 2026-11-13：显隐改成变量 `--paper-inf-show`（0/1），不再直接写 opacity ——
+              opacity 现在是「显隐 × 亮暗档插值」的 calc，inline 覆盖会把它整条顶掉，
+              拖动软条时这层就不跟手了。 */
       const paperWrap = document.querySelector('.paper-wrap');
       const paperInf = document.querySelector('.paper-inf');
       if (paperWrap && paperInf && 'IntersectionObserver' in window) {
         paperInf.style.transition = 'none';
-        paperInf.style.opacity = '0';
+        paperInf.style.setProperty('--paper-inf-show', '0');
         paperInf.getBoundingClientRect(); /* 强制样式计算：让上面这组值成为"当前值" */
         paperInf.style.removeProperty('transition');
         new IntersectionObserver((es) => {
-          for (const e of es) paperInf.style.opacity = e.isIntersecting ? '' : '0';
+          for (const e of es) paperInf.style.setProperty('--paper-inf-show', e.isIntersecting ? '1' : '0');
         }, { rootMargin: '0px 0px -30% 0px', threshold: 0 }).observe(paperWrap);
       }
 
@@ -623,6 +608,16 @@ import '../scripts/time-slice';
 import { initHomeLog } from '../scripts/home-log';
 import { onPage } from '../scripts/page-lifecycle';
 onPage(({document, addEventListener}) => {
+    const bar = document.querySelector<HTMLElement>('.home-topbar');
+    const hero = document.querySelector('#s1');
+    if (bar && hero) {
+      // 透光顶栏跨过首屏下沿时，切换到正文的文字颜色。
+      const updateInk = () => bar.toggleAttribute('data-topbar-over-hero',
+        hero.getBoundingClientRect().bottom > bar.getBoundingClientRect().top + bar.clientHeight / 2);
+      addEventListener('scroll', updateInk, { passive: true });
+      addEventListener('resize', updateInk, { passive: true });
+      updateInk();
+    }
     const logRoot = document.querySelector<HTMLElement>('[data-home-log]');
     if (logRoot) {
       const disposeLog = initHomeLog(logRoot);
@@ -717,7 +712,7 @@ onPage(({document, addEventListener}) => {
     right: 0;
     bottom: 0;
     height: 46vh;
-    background: linear-gradient(0deg, #2d7d460b, transparent);
+    background: linear-gradient(0deg, var(--home-wash-ink), transparent);
   }
   /* 72px 呼吸网格：只动 opacity ⇒ 不重绘网格，合成器驱动 */
   .bg-grid {
@@ -725,8 +720,8 @@ onPage(({document, addEventListener}) => {
     inset: 0;
     opacity: 0.5;
     background-image:
-      linear-gradient(90deg, #7fd89a12 1px, transparent 1px),
-      linear-gradient(0deg, #7fd89a12 1px, transparent 1px);
+      linear-gradient(90deg, var(--home-grid-ink) 1px, transparent 1px),
+      linear-gradient(0deg, var(--home-grid-ink) 1px, transparent 1px);
     background-size: 72px 72px;
     transform: translate3d(
       calc(var(--mx) * var(--shift-c) * 2),
@@ -749,7 +744,7 @@ onPage(({document, addEventListener}) => {
     background: repeating-radial-gradient(
       circle at 50% 50%,
       transparent 0 118px,
-      #1a1a1a12 118px 119px
+      var(--home-ring-ink) 118px 119px
     );
     transform: translate3d(
         calc(var(--mx) * var(--shift-a)),
@@ -765,6 +760,13 @@ onPage(({document, addEventListener}) => {
      ★ 原型 v10.3 那个根本坑：**先缩放、再按 k 折算平移**。
        three 的 object.position 在父空间里平移、不受自身 scale 影响 ⇒
        先平移后缩放会让螺旋轴被推离旋转中心 k 倍 ⇒ 屏幕上"左右移来移去"。 */
+  .dna-window {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    mask-image: linear-gradient(var(--ink) 78%, transparent 99%);
+  }
   .dna-stack {
     position: absolute;
     right: -6vw;
@@ -849,10 +851,10 @@ onPage(({document, addEventListener}) => {
        fixed 让这层纸不随滚动走，滚到底也不会露出下面的色带。 */
     background: linear-gradient(
         180deg,
-        #fafaf7eb 0%,
+        var(--paper-fade) 0%,
         var(--paper) 18%,
         var(--paper) 82%,
-        #fafaf7eb 100%
+        var(--paper-fade) 100%
       )
       fixed;
     /* ★ 同 .band：逃出 .shell 的宽度，好让里面的 .section 按原型那样自己居中 */
@@ -870,7 +872,15 @@ onPage(({document, addEventListener}) => {
     aspect-ratio: 1572 / 878;
     transform: translate(-50%, -50%);
     background: url('/art/inf-orig.webp') center / contain no-repeat;
-    opacity: 0.2;
+    /* ★★ 2026-11-13：浓度 = 显隐 × 亮暗档插值。
+       显隐仍由 JS 通过 `--paper-inf-show` 切 0/1（原来是直接写 inline opacity，
+       那样会把这里的 calc 整条顶掉）；亮暗档由 --theme-w 连续插值，
+       拖动软条时这层跟着一起变浓度，不再等松手才跳。 */
+    opacity: calc(
+      var(--paper-inf-show, 1) *
+        (var(--pleat-light-opacity) * (1 - var(--theme-w)) + var(--pleat-dark-opacity) * var(--theme-w))
+    );
+    filter: var(--plate-filter-pleat);
     /* ★ 2026-09-30 第六轮（站主报「百褶 ∞ 是突然闪出来的」）——
        显隐由下面那段的 IntersectionObserver 切换 opacity 来做，但这里没有过渡 ⇒ 硬切。
        加一条过渡即可「淡入淡出」；初值的那次隐藏由 JS 临时摘掉过渡来规避（见脚本 2），
@@ -880,6 +890,9 @@ onPage(({document, addEventListener}) => {
     z-index: -1;
     will-change: opacity;
   }
+  /* 拖动期间这层的 900ms 过渡由 tokens.css 里那条全局
+     `html.theme-previewing * { transition: none !important }` 统一摘掉 ——
+     不在这儿单独写一条，是为了让「谁在动过渡」只有一处可查。 */
 
   /* ====================== 弹性流场线（移植 wodniack.dev <a-waves>）======================
      原型的三个关键约束（漏一个就会"鼠标放上去就没了"）：
@@ -973,7 +986,7 @@ onPage(({document, addEventListener}) => {
      一根线都没有，反而是黑色实心多边形糊在首屏上。 */
   .rh-grid :global(path) {
     fill: none;
-    stroke: var(--on-band-sub);
+    stroke: var(--home-flow-ink);
     stroke-width: var(--home-flow-width);
     vector-effect: non-scaling-stroke;
     opacity: var(--home-flow-path-opacity);
@@ -989,23 +1002,17 @@ onPage(({document, addEventListener}) => {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    /* ★ 2026-11-13：前景三色映射到 `--band-*`（亮暗两档都在 body 层声明）——
+       原来只有暗档在 `.band` 上覆盖，拖动软条时文字一直是白的、松手才变深。 */
+    --on-band: var(--band-ink);
+    --on-band-sub: var(--band-sub);
+    --on-band-meta: var(--band-meta);
+    --logo-ink: var(--band-logo);
     color: var(--on-band);
     perspective: 1400px;
-    /* ★ 底色必须是**半透明**的（原型 v5.4 最终值）：实心色会把压在后面的
-       .bg 循环动效完全闷死，整张深场变成一块没有呼吸的死色。 */
-    background:
-      radial-gradient(110% 70% at 12% 0%, #2d7d462e 0%, transparent 58%),
-      radial-gradient(90% 60% at 88% 88%, #e877220f 0%, transparent 62%),
-      linear-gradient(
-        178deg,
-        #090c0cee 0%,
-        #101814e0 34%,
-        #1a251fcc 62%,
-        #34413ab3 100%
-      );
     isolation: isolate;
   }
-  /* 顶部弹性留白保持在文档流中，导航位置随视口高度伸缩。
+  /* 顶部弹性留白保持在文档流中，站名位置随视口高度伸缩。
      它和正文共用 .band 的整幅渐变；单独着色会在留白底边产生横向接缝。 */
   .band-core {
     flex: 1;
@@ -1019,8 +1026,8 @@ onPage(({document, addEventListener}) => {
     z-index: 0;
     opacity: 0.5;
     background-image:
-      linear-gradient(90deg, #ffffff0a 1px, transparent 1px),
-      linear-gradient(0deg, #ffffff0a 1px, transparent 1px);
+      linear-gradient(90deg, var(--home-band-grid-ink) 1px, transparent 1px),
+      linear-gradient(0deg, var(--home-band-grid-ink-v) 1px, transparent 1px);
     background-size: 64px 64px;
     transform: translate3d(
       calc(var(--mx) * var(--shift-c) * 2),
@@ -1035,11 +1042,14 @@ onPage(({document, addEventListener}) => {
     z-index: 1;
     pointer-events: none;
     border-radius: 14px;
-    border: 1px solid var(--dglass-line);
-    background: linear-gradient(160deg, #ffffff14, #ffffff05);
-    /* ★ 前缀必须写在标准属性**之前**，否则 esbuild 会删掉标准那条 */
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.1);
-    backdrop-filter: blur(var(--glass-blur)) saturate(1.1);
+    border: 1px solid var(--home-glass-line);
+    /* ★ 2026-11-13：两档同一条渐变，只有两个色标 token 在变 ⇒ 拖动软条时玻璃跟着连续换色。 */
+    background: linear-gradient(160deg, var(--home-glass-a), var(--home-glass-b));
+    /* ★ 前缀必须写在标准属性**之前**，否则 esbuild 会删掉标准那条
+       ★ 2026-11-13：模糊与饱和度也按 --theme-w 连续收到 0 —— 暗档原来是整条
+       `backdrop-filter: none`（跳变），现在 w=1 时 blur(0) saturate(1) 与 none 等价。 */
+    -webkit-backdrop-filter: blur(calc(var(--glass-blur) * (1 - var(--theme-w)))) saturate(calc(1 + 0.1 * (1 - var(--theme-w))));
+    backdrop-filter: blur(calc(var(--glass-blur) * (1 - var(--theme-w)))) saturate(calc(1 + 0.1 * (1 - var(--theme-w))));
     transition: transform 140ms linear;
     will-change: transform;
   }
@@ -1058,12 +1068,15 @@ onPage(({document, addEventListener}) => {
       rotateY(calc(var(--mx) * var(--tilt))) rotateX(calc(var(--my) * var(--tilt) * -1));
   }
   .band-glass.g2 {
-    top: 47%; right: 26%; width: min(15vw, 164px); height: min(20vh, 140px); opacity: 0.72;
+    /* 浓度也按权重走：亮 0.72 → 暗 0.28（原暗档是单独一条 opacity，会跳） */
+    top: 47%; right: 26%; width: min(15vw, 164px); height: min(20vh, 140px);
+    opacity: calc(0.72 * (1 - var(--theme-w)) + 0.28 * var(--theme-w));
     transform: translate3d(calc(var(--mx) * 34px), calc(var(--my) * 34px), 0)
       rotateY(calc(var(--mx) * var(--tilt)));
   }
   .band-glass.g3 {
-    top: 15%; right: 30%; width: min(10vw, 110px); height: min(13vh, 92px); opacity: 0.5;
+    top: 15%; right: 30%; width: min(10vw, 110px); height: min(13vh, 92px);
+    opacity: calc(0.5 * (1 - var(--theme-w)) + 0.18 * var(--theme-w));
     transform: translate3d(calc(var(--mx) * 44px), calc(var(--my) * 44px), 0)
       rotateY(calc(var(--mx) * var(--tilt)));
   }
@@ -1075,7 +1088,7 @@ onPage(({document, addEventListener}) => {
     border-radius: inherit;
     background: radial-gradient(
       60% 55% at calc(50% + var(--mx) * 40%) calc(50% + var(--my) * 40%),
-      #ffffff26,
+      var(--home-glass-glint),
       transparent 70%
     );
   }
@@ -1092,14 +1105,14 @@ onPage(({document, addEventListener}) => {
   .slice-frame {
     position: absolute;
     border-radius: 10px;
-    border: 1px solid #ffffff1f;
+    border: 1px solid var(--home-slice-line);
     pointer-events: none;
     /* 最外那层给一点绿晕 —— TIME SLICE 的 .tsl-ring 用的也是这一档
        （--accent 系 + drop-shadow），两处同源，不新造颜色。 */
     box-shadow: 0 0 12px -3px var(--deco-orbit-strong);
   }
   .slice-frame:nth-of-type(1) { inset: 9%; }
-  .slice-frame:nth-of-type(2) { inset: 20%; border-color: #ffffff14; box-shadow: none; }
+  .slice-frame:nth-of-type(2) { inset: 20%; border-color: var(--home-slice-line-2); box-shadow: none; }
   /* ★ 内容层必须显式抬到 `.band-glass::after`（游走高光，inset:0）**之上**：
      伪元素默认盖在子元素上，不抬的话指针一动，高光就从读数上扫过去。 */
   .slice-core {
@@ -1171,77 +1184,7 @@ onPage(({document, addEventListener}) => {
     color: var(--on-band-meta);
     font-size: 0.7rem;
   }
-  /* 导航 = 原型胶囊按钮（不是下划线文字链）：悬停位移 + 亮边 + 掠光 */
-  nav {
-    display: flex;
-    gap: 0.35rem;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-  nav a {
-    position: relative;
-    padding: 0.42rem 0.82rem;
-    border-radius: 999px;
-    font-size: var(--fs-sm);
-    color: var(--on-band-sub);
-    border: 1px solid transparent;
-    overflow: hidden;
-    /* ★ 2026-09-30 第五轮补：原型第 78 行有一条全局 `a{color:inherit;text-decoration:none}`，
-       上一轮我按「不搬全局 reset」的原则整体没带 ⇒ 首页导航成了全站唯一带下划线的链接
-       （其余组件 Topbar / NavDrawer / PostIndex / Toc / 首页 .entry a 都各自补过这一条）。
-       这里按同样的局部写法补上，不改全局 base.css。 */
-    text-decoration: none;
-    transition:
-      transform var(--dur-tap) var(--ease-interact),
-      color var(--dur-tap) var(--ease-interact),
-      background-color var(--dur-tap) var(--ease-interact),
-      border-color var(--dur-tap) var(--ease-interact);
-  }
-  /* 掠光：悬停时一道斜光从左扫到右 */
-  nav a::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: linear-gradient(115deg, transparent 30%, #ffffff26 50%, transparent 70%);
-    transform: translateX(-120%);
-    transition: transform var(--dur-hover) var(--ease-glass);
-  }
-  nav a:hover,
-  nav a:focus-visible {
-    color: var(--on-band);
-    background: #ffffff14;
-    border-color: var(--dglass-line);
-    transform: translateY(-2px);
-  }
-  nav a:hover::before,
-  nav a:focus-visible::before {
-    transform: translateX(120%);
-  }
-  /* 当前页：淡绿底 + 绿描边（不是下划线）。
-     ★ 三段值**照搬原型**（原型 nav a[aria-current] 那一行）。
-       上一轮我把它们换成了 --on-band / #2d7d4624 / #4caf5059，结果「主页」那两个字不会变绿 ——
-       站主 2026-09-30 报的就是这条。别再"统一到 token"：原型就是直接写 #4caf50 系字面量。
-       深色 band 上用亮绿合法（对 --ink 6.26:1），tests/tokens.test.ts 的白名单里已登记。 */
-  nav a[aria-current] {
-    color: var(--accent-bright);
-    background: #4caf5014;
-    border-color: #4caf5038;
-  }
-  /* ---------- 窄屏：横排胶囊交给抽屉（站主 2026-10-01 定案）----------
-     ★ 站主原话：「把手机端的（那排 主页/关于/归档/…/RSS）去掉，留导航菜单就行」。
-     ★ 这是**补漏**不是新设计：内页那两套外壳早就这么做了 ——
-         Brandline:61 与 Topbar:167 都在 `max-width: 1023px` 把横排 nav 藏掉。
-         首页当时没写，于是手机上「10 个胶囊 + 抽屉汉堡」同时出现（截图里一眼能看到）。
-     ★ 断点取 1023 而不是 767，是为了对齐 NavDrawer 自己的门控：
-       抽屉在 ≤1023 接管；这里若写 767，768–1023 会落进「有汉堡、横排也还在」的矛盾档。
-     ★ 本文件是 scoped `<style>`，选择器会被编译成 `.topbar[data-astro-cid-…] > nav[data-astro-cid-…]`
-       ⇒ 只命中首页这个 nav，碰不到 NavDrawer 内的 `<nav class="navpanel">`（不同 cid）。 */
-  @media (max-width: 1023px) {
-    .topbar > nav {
-      display: none;
-    }
-  }
+
   .band-copy {
     margin-top: auto;
     padding-bottom: 2.6rem;
@@ -1256,9 +1199,7 @@ onPage(({document, addEventListener}) => {
      ★ 四个时刻全部走 tokens.css 的 --bi-*（第八版：时间轴只有一处定义，覆盖层与首屏共用）。
      ★ 几段故意重叠：幕布 3400 收完，而线长到 4600、页头 3450–4070、揭帘 4150–5100、
        逐字 4400–5550 ⇒ 观感是"幕布收拢的同时线在长、内容在成形"，不是"揭幕完再放一段"。 */
-  /* 页头（字标 + 导航）：幕布从上边缘先揭开它 ⇒ 不给门控就会**闪一下**。
-     只动 opacity、不动 transform —— .topbar 里有抽屉（NavDrawer），给它 transform 会
-     让它变成 fixed 后代的包含块，那是另一个坑。 */
+  /* 字标和右上角菜单随幕布一起出现。菜单只做淡入，固定抽屉继续以视口为包含块。 */
   :global(html.boot-on:not(.boot-mini)) .topbar {
     animation: topbar-in 620ms var(--ease) calc(var(--bi-copy-at) - 700ms) backwards;
   }
@@ -1314,7 +1255,9 @@ onPage(({document, addEventListener}) => {
   .eyebrow i {
     width: 6px;
     height: 6px;
-    background: var(--signal);
+    background: var(--home-eyebrow-dot);
+    /* 暗档原来单独加一圈铜色光晕；改成 token 之后亮档是透明圈（视觉等同没有）。 */
+    box-shadow: 0 0 0 3px var(--home-eyebrow-halo);
     border-radius: 50%;
     display: block;
     box-shadow: 0 0 8px 2px #e8772266;
@@ -1352,44 +1295,34 @@ onPage(({document, addEventListener}) => {
      ★ 三处一起删干净（DOM / 样式 / keyframes），不留死样式、不留孤儿动画：
        `@keyframes hint` 已从 tests/b2-motion.test.ts 的动效清单里同步移除（它是契约，不是备注）。 */
 
-  /* ====================== 晨昏带 ====================== */
-  .dusk {
+  /* 首屏和晨昏带取同一张色场，底纹在到达边缘以前退场。 */
+  .home-sky {
     position: relative;
-    /* ★★ 2026-09-30 第六轮（站主报「身份下面衔接」那条）——
-       必须和 .band / .paper-wrap 一样**逃出 Base 的 .shell**（max-width: --wrap = 82rem = 1312px）。
-       原型的 .dusk 是顶层元素、天生满宽；本站它被包在 .shell 里，而 .shell 的内边距在首页
-       被清零了 ⇒ **窄视口下看不出来**，一旦视口宽于 1312px，.dusk 就被框成「中间 1312px 一段」：
-       它上面满宽的深墨绿场、下面满宽的纸白区都在，只有晨昏带两侧露出纸白
-       ⇒ 上下各出现一条竖向硬边，看起来就是「没接上」（站主截图那条白边）。
-       实测（1680×900 窗口，CDP elementFromPoint 逐点）：
-         修前 本站 .dusk x=173 w=1312，x<173 命中 main（纸白）
-         同条件 原型 .dusk x=0   w=1658（满宽）
-       ★ 不写 width:100vw —— vw 含滚动条宽度 ⇒ 横向溢出（与 .band 同理）。 */
-    margin-inline: calc(50% - 50vw);
-    height: min(46vh, 400px);
-    background: linear-gradient(
-      180deg,
-      var(--dusk-4) 0%,
-      var(--dusk-5) 30%,
-      var(--dusk-6) 58%,
-      #ecebe4b8 78%,
-      #fafaf747 92%,
-      transparent 100%
-    );
-    -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 74%, #0000008c 90%, transparent 100%);
-    mask-image: linear-gradient(180deg, #000 0%, #000 74%, #0000008c 90%, transparent 100%);
+    --dusk-depth: clamp(7rem, 23svh, 17rem);
   }
-  .dusk::before {
+  .home-sky::before {
     content: '';
     position: absolute;
-    inset: 0;
-    opacity: 0.5;
-    background-image:
-      linear-gradient(90deg, #ffffff14 1px, transparent 1px),
-      linear-gradient(0deg, #ffffff14 1px, transparent 1px);
-    background-size: 72px 72px;
-    -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 72%);
-    mask-image: linear-gradient(180deg, #000 0%, transparent 72%);
+    inset: 0 calc(50% - 50vw);
+    pointer-events: none;
+    background:
+      radial-gradient(110% 64% at 12% 0%, var(--home-sky-halo, transparent), transparent 56%),
+      linear-gradient(180deg,
+        var(--home-sky-top) 0%,
+        var(--home-sky-high) calc((100% - var(--dusk-depth)) * 0.34),
+        var(--home-sky-mid) calc((100% - var(--dusk-depth)) * 0.62),
+        var(--home-sky-low) calc(100% - var(--dusk-depth) * 1.65),
+        var(--home-sky-edge) calc(100% - var(--dusk-depth)),
+        var(--home-sky-fade) calc(100% - var(--dusk-depth) * 0.48),
+        var(--paper) 100%);
+  }
+  .dusk {
+    position: relative;
+    margin-inline: calc(50% - 50vw);
+    height: var(--dusk-depth);
+  }
+  .band-grid, .rh-grid {
+    mask-image: linear-gradient(var(--ink) 0% 72%, transparent 100%);
   }
 
   /* ====================== 字母滚动带 ======================

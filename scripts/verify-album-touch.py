@@ -10,7 +10,7 @@ exec((__import__('pathlib').Path(__file__).parent / 'verify-visitor-accounts.py'
 ROOT = Path(__file__).resolve().parent.parent
 manifest = json.loads((ROOT / 'public/gallery/manifest.json').read_bytes())
 albums = [a for a in manifest['albums'] if a['layout'] == 'scatter']
-slices = next(a for a in manifest['albums'] if a['layout'] == 'slices')
+slices = next((a for a in manifest['albums'] if a['layout'] == 'slices'), None)
 shots = Path(mkdtemp(prefix='northcedar-album-shots-')) if '--screenshots' in sys.argv else None
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -32,7 +32,8 @@ def check(name, passed, detail=None):
     results[name] = {'passed': bool(passed), 'detail': detail}
     print(('PASS ' if passed else 'FAIL ') + name + ' ' + json.dumps(detail, ensure_ascii=False), flush=True)
 
-with TemporaryDirectory(prefix='northcedar-album-chrome-') as profile:
+# Windows 上 Chrome 子进程可能在主进程退出后短暂持有会话文件。
+with TemporaryDirectory(prefix='northcedar-album-chrome-', ignore_cleanup_errors=True) as profile:
     with socket.socket() as sock: sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
     proc = subprocess.Popen([r'C:/Program Files/Google/Chrome/Application/chrome.exe', '--headless=new', '--disable-gpu', '--no-proxy-server', '--no-first-run', '--no-default-browser-check', f'--remote-debugging-port={port}', '--remote-allow-origins=*', f'--user-data-dir={profile}', 'about:blank'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=0x08000000)
     print('独立 Chrome PID：' + str(proc.pid), flush=True)
@@ -75,7 +76,10 @@ with TemporaryDirectory(prefix='northcedar-album-chrome-') as profile:
             point = js('(()=>{const r=document.querySelector(' + json.dumps(selector) + ').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()')
             tap(point['x'], point['y'])
         def reset():
-            tap_element('[data-scene-home]'); js('window.__touchTrace=[]')
+            tap_element('[data-scene-home]')
+            # 回中本身有缓动，下一次拖动要从实际归零的相机开始。
+            wait('(() => {const s=document.querySelector("[data-scene-world]").style;const x=s.getPropertyValue("--scene-pan-x"),y=s.getPropertyValue("--scene-pan-y");return !x||Math.abs(parseFloat(x))<.1&&Math.abs(parseFloat(y))<.1})()')
+            js('window.__touchTrace=[]')
         def pan():
             return js('(()=>{const s=document.querySelector("[data-scene-world]").style;return {x:parseFloat(s.getPropertyValue("--scene-pan-x")),y:parseFloat(s.getPropertyValue("--scene-pan-y")),dragging:document.querySelector("[data-scene-viewport]").classList.contains("dragging"),scroll:scrollY,lightbox:document.querySelector(".lb").classList.contains("on"),touchAction:getComputedStyle(document.querySelector("[data-scene-viewport]")).touchAction}})()')
         def drag(dx, dy, x=195, y=450, cancel=False):
@@ -128,13 +132,16 @@ with TemporaryDirectory(prefix='northcedar-album-chrome-') as profile:
             reset(); held,_ = drag(0,-120)
             check(label + '返回展览仍可上拖', abs(held['y']+120)<2, held)
             screenshot(label + '-上拖')
-        goto(slices)
-        initial = js('document.querySelector(".wf figure").style.getPropertyValue("--scene-x")')
-        held, trace = drag(0,-180)
-        check('切片保留纵向原生手势', js('document.querySelector(".wf figure").style.getPropertyValue("--scene-x")')==initial and 'pan-y' in held['touchAction'] and any(e['type']=='pointercancel' for e in trace), {'touchAction':held['touchAction'],'trace':trace})
-        reset(); drag(-150,0); time.sleep(.6)
-        check('切片横拖切换照片', js('parseFloat(document.querySelector(".wf figure").style.getPropertyValue("--scene-x"))<0'), js('document.querySelector("[data-scene-status]").textContent'))
-        screenshot('切片-横拖')
+        if slices:
+            goto(slices)
+            initial = js('document.querySelector(".wf figure").style.getPropertyValue("--scene-x")')
+            held, trace = drag(0,-180)
+            check('切片保留纵向原生手势', js('document.querySelector(".wf figure").style.getPropertyValue("--scene-x")')==initial and 'pan-y' in held['touchAction'] and any(e['type']=='pointercancel' for e in trace), {'touchAction':held['touchAction'],'trace':trace})
+            reset(); drag(-150,0); time.sleep(.6)
+            check('切片横拖切换照片', js('parseFloat(document.querySelector(".wf figure").style.getPropertyValue("--scene-x"))<0'), js('document.querySelector("[data-scene-status]").textContent'))
+            screenshot('切片-横拖')
+        else:
+            print('当前没有使用悬浮切片的已发布相册，跳过切片触摸检查。', flush=True)
         cdp('Emulation.setDeviceMetricsOverride', dict(width=1280,height=900,deviceScaleFactor=1,mobile=False))
         cdp('Emulation.setTouchEmulationEnabled', {'enabled':False})
         goto(albums[0])

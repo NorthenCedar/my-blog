@@ -1,6 +1,7 @@
 ---
 import { MUSIC_PLAYLIST } from '../lib/music';
 import GlassFilters from './GlassFilters.astro';
+import '../styles/music-panel-glass.css';
 import musicOrder from '../../content/music-order.json';
 if (musicOrder.playlist !== MUSIC_PLAYLIST) throw new Error('音乐顺序配置与歌单编号不一致');
 ---
@@ -54,12 +55,8 @@ if (musicOrder.playlist !== MUSIC_PLAYLIST) throw new Error('音乐顺序配置�
   .music button{pointer-events:auto;color:inherit;border:0;background:transparent;min-width:44px;min-height:44px;padding:var(--sp-2);border-radius:50%;transition:background .18s,transform .18s}
   .music button:focus-visible,.music input:focus-visible,.music a:focus-visible{outline:2px solid var(--music-glass-accent);outline-offset:3px}
   .music svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
-  .music-glass{isolation:isolate;border:1px solid var(--music-glass-edge);background:var(--music-glass-fallback);box-shadow:0 12px 36px var(--music-glass-shadow),0 2px 6px var(--music-glass-shade),inset 0 1px 1px var(--music-glass-glint),inset 0 -1px 1px var(--music-glass-inner)}
-  .music-glass::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:linear-gradient(135deg,color-mix(in srgb,var(--music-glass-glint) 10%,transparent),transparent 18%,transparent 82%,var(--music-glass-inner));pointer-events:none}
-  @supports(backdrop-filter:blur(1px)){
-    .music-glass{background:var(--music-glass)}
-    .music-glass::before{backdrop-filter:blur(5px) saturate(1.12)}
-  }
+  .music-glass{isolation:isolate}
+  .music-glass::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none}
 
   .music-bar{position:relative;display:flex;align-items:center;gap:var(--sp-2);width:100%;height:52px;max-width:100%;padding:6px;border-radius:999px;pointer-events:none;transition:opacity .14s,visibility 0s}
   .music .music-play{display:grid;place-items:center;min-width:40px;min-height:40px;width:40px;height:40px;padding:0;flex-shrink:0;color:var(--music-glass-accent)}
@@ -123,6 +120,6 @@ if (musicOrder.playlist !== MUSIC_PLAYLIST) throw new Error('音乐顺序配置�
   @keyframes music-open{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
   @media(max-width:600px){.music-panel{max-height:calc(100dvh - 108px)}}
   @media(max-height:540px){.music-panel{display:block;overflow:auto;overscroll-behavior:contain;padding:var(--sp-3);border-radius:22px}.music .music-status{margin:var(--sp-1) 0}.music-controls{margin-bottom:var(--sp-1)}.music-list{margin:var(--sp-1) 0}.music-footer{padding:0}}
-  @media(prefers-reduced-transparency:reduce){.music-glass,.music-bar,.music[data-music-open] .music-bar{background:var(--music-glass-fallback)}.music-glass::before{backdrop-filter:none}}
+  @media(prefers-reduced-transparency:reduce){.music-bar,.music[data-music-open] .music-bar{background:var(--music-glass-fallback)}}
   @media(prefers-reduced-motion:reduce){.music.is-playing .music-signal i,.music-panel{animation:none}.music button,.music-bar,.music[data-dock-yielding] .music-bar,.music-list :global(button){transition:none}}
 </style>

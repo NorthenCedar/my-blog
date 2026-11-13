@@ -8,6 +8,19 @@ import { withPreservedIndent } from './src/lib/markdown-preserve-indent.mjs';
 import { withAudioMarkup } from './src/lib/markdown-audio.mjs';
 import { satteri } from '@astrojs/markdown-satteri';
 
+/* ★★ 2026-11-13：Vite 依赖预打包缓存按进程分工目录，禁止互相覆写。
+   事故复盘：`astro dev --force` 是长驻进程，内存里持有启动时那份 deps 的 browserHash；
+   同一时间我跑 `npm install` / `astro build` / `vitest`，它们共用默认的
+   `node_modules/.vite/deps`，把 dev 那份 _metadata.json 与产物文件整个改掉 ⇒
+   dev 页面里懒加载的 @hugeicons/* 与 vgpu 一律 504 Outdated Optimize Dep，
+   标签页 FlowingMenu 与友链 ShapeWaves 动效静默消失（站主报「修 bug 修坏了别的功能」）。
+   ⇒ dev 独占 `node_modules/.vite-dev`；一次性 CLI（build/sync）用 `.vite-cli`；
+   vitest 另在 vitest.config.ts 里覆盖成 `.vite-vitest`。三者互不干扰。
+   ⚠ 别合并回一个目录：只要 dev 长驻，任何别的 Vite 进程写同目录都会重现这个 504。 */
+const viteCacheDir = process.argv.includes('dev')
+  ? 'node_modules/.vite-dev'   // 长驻 dev server 独占
+  : 'node_modules/.vite-cli';  // build / sync / preview / vitest（vitest 另在 vitest.config.ts 覆盖）
+
 export default defineConfig({
   // 站点正式地址（2026-09-25 绑定自有域名 northcedar.top）。
   // 换域名时只改这一行 —— robots.txt、sitemap、canonical 全都从它派生。
@@ -32,6 +45,7 @@ export default defineConfig({
     layout: 'constrained',
   },
   vite: {
+    cacheDir: viteCacheDir,
     plugins: [
       createVideoDevPlugin(),
       createAudioDevPlugin(),

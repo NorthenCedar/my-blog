@@ -145,12 +145,54 @@ function upgrade(root: HTMLElement): void {
 
   play.addEventListener('click', toggle);
 
-  wave.addEventListener('click', (event) => {
-    if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+  /* 进度：点一下跳过去，**按住拖动连续改写**（站主 2026-11-12：「语音条改成可拖动变进度的」）。
+     用 Pointer Events 而不是 mouse/touch 两套：`setPointerCapture` 之后指针滑出波形、
+     甚至滑出窗口，事件仍然回到这一条 —— 拖到一半丢事件的话手感就是"拽断了"。
+     `touch-action: none`（audio.css）挡住移动端的滚动手势，否则竖着拖会变成翻页。 */
+  const ratioAt = (clientX: number): number | null => {
     const rect = wave.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    if (!rect.width) return null;
+    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  };
+  const seek = (clientX: number): void => {
+    if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+    const ratio = ratioAt(clientX);
+    if (ratio === null) return;
     audio.currentTime = ratio * audio.duration;
     paint();
+  };
+  let scrubbing = false;
+  wave.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    // 元数据还没到（duration = NaN）时先催一次，下一次按住就能拖。
+    if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
+      audio.load();
+      return;
+    }
+    scrubbing = true;
+    root.dataset.apScrubbing = '';
+    try { wave.setPointerCapture(event.pointerId); } catch { /* 老浏览器没有捕获也照样能点 */ }
+    seek(event.clientX);
+  });
+  wave.addEventListener('pointermove', (event) => {
+    if (scrubbing) seek(event.clientX);
+  });
+  const endScrub = (event: PointerEvent): void => {
+    if (!scrubbing) return;
+    scrubbing = false;
+    delete root.dataset.apScrubbing;
+    if (wave.hasPointerCapture?.(event.pointerId)) wave.releasePointerCapture(event.pointerId);
+  };
+  wave.addEventListener('pointerup', endScrub);
+  wave.addEventListener('pointercancel', endScrub);
+  wave.addEventListener('lostpointercapture', () => {
+    scrubbing = false;
+    delete root.dataset.apScrubbing;
+  });
+  /* 键盘/读屏触发的 click 没有坐标（detail === 0，clientX 恒为 0）——
+     那种情况交给下面的 keydown，别把它当成"点到最左边"。 */
+  wave.addEventListener('click', (event) => {
+    if (!scrubbing && event.detail !== 0) seek(event.clientX);
   });
 
   wave.addEventListener('keydown', (event) => {
@@ -177,6 +219,7 @@ function upgrade(root: HTMLElement): void {
     paint();
   });
   audio.addEventListener('timeupdate', paint);
+  audio.addEventListener('durationchange', paint);
   audio.addEventListener('loadedmetadata', paint);
   audio.addEventListener('error', () => {
     root.removeAttribute('data-ap-playing');
@@ -192,14 +235,4 @@ export function upgradeAudio(root: ParentNode = document): void {
   for (const node of root.querySelectorAll<HTMLElement>('[data-audio]:not([data-ap-ready])')) {
     upgrade(node);
   }
-}
-
-if (typeof document !== 'undefined') {
-  upgradeAudio();
-  // 评论是异步取回来的：新插进来的音频条要能自己长出来。
-  document.addEventListener('voiceprint:new', (event) => {
-    const detail = (event as CustomEvent<{ comment?: { audio?: string } }>).detail;
-    if (detail?.comment?.audio) upgradeAudio();
-  });
-  document.addEventListener('ap:refresh', () => upgradeAudio());
 }

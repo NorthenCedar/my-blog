@@ -3,7 +3,7 @@ import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 
 const tokens = postcss.parse(readFileSync('src/styles/tokens.css', 'utf8'));
-const home = postcss.parse(readFileSync('src/styles/home-dark.css', 'utf8'));
+const home = readFileSync('src/pages/index.astro', 'utf8');
 
 // 这里只验证实际色板的共享契约；背景模糊、布局及手势由真实浏览器验收。
 function darkPalette(pageClass: string) {
@@ -25,17 +25,14 @@ function darkPalette(pageClass: string) {
 }
 
 describe('相册显影板的暗色橙色', () => {
-  it('和首页实际首屏使用同一组橙色及渐变停靠点', () => {
-    let background = '';
-    home.walkRules((rule) => {
-      if (!rule.selectors.includes('html.dark body.chrome-console .band')) return;
-      rule.walkDecls('background', (declaration) => { background = declaration.value; });
-    });
-    expect(background).not.toBe('');
-    const gradient = background.slice(background.lastIndexOf('linear-gradient('));
+  it('与首页首屏共享四档橙色，首页另有过渡到正文的渐变色', () => {
+    const sky = home.match(/\.home-sky::before\s*\{([^}]+)\}/)?.[1] ?? '';
+    expect(sky).toContain('var(--home-sky-edge)');
+    const names = [...sky.matchAll(/var\((--home-sky-(?:top|high|mid|low))\)/g)].map(m => m[1]);
+    expect(names).toHaveLength(4);
     const homepage = darkPalette('chrome-console');
     const gallery = darkPalette('gallery-inf-plate');
-    expect(gallery.expand(gallery.values.get('--gallery-bath-bg')!).replace(/\s+/g, ''))
-      .toBe(homepage.expand(gradient).replace(/\s+/g, ''));
+    const galleryColors = gallery.expand(gallery.values.get('--gallery-bath-bg')!).match(/#[\da-f]{6}\b/gi);
+    expect(names.map(name => homepage.expand(`var(${name})`))).toEqual(galleryColors);
   });
 });

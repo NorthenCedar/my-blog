@@ -21,7 +21,6 @@ async function run() {
     '[data-fin-infinity]': host,
     '[data-fin-view]': { hidden: true },
     '[data-fin-cv]': { addEventListener() {}, getBoundingClientRect: host.getBoundingClientRect },
-    '[data-fin-static]': { setAttribute() {}, removeAttribute() {} },
   };
   const scene = state.scene = {
     // 这个返回值代表场景按当前可见几何给出的命中结果。
@@ -35,6 +34,8 @@ async function run() {
   vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: () => '#ffffff' }));
   vi.stubGlobal('getSelection', () => selection);
   vi.stubGlobal('devicePixelRatio', 1);
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0));
+  vi.stubGlobal('cancelAnimationFrame', clearTimeout);
   vi.stubGlobal('WebGLRenderingContext', class {});
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   vi.stubGlobal('MutationObserver', class { observe() {} disconnect() {} });

@@ -2,6 +2,7 @@
 import { getEntry } from 'astro:content';
 import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
+import { getSite } from '../lib/site';
 import PageTitle from '../components/PageTitle.astro';
 import infInk from '../assets/links/inf-ink.png';
 
@@ -24,6 +25,7 @@ interface Group {
 interface LinksData {
   title?: string;
   intro?: string;
+  waveText?: string;
   mine?: Item;
   apply?: string[];
   groups?: Group[];
@@ -31,6 +33,8 @@ interface LinksData {
 const entry = await getEntry('pages', 'links');
 const d = (entry?.data ?? {}) as unknown as LinksData;
 const groups = d.groups ?? [];
+const { wordmark } = await getSite();
+const waveText = d.waveText?.trim() || wordmark;
 const isExternal = (h: string) => /^https?:/i.test(h);
 ---
 
@@ -80,57 +84,111 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     <canvas class="const-bg" data-const-bg aria-hidden="true"></canvas>
   </Fragment>
 
-  <header class="pagehead">
+  <header class="pagehead links-heading">
     <PageTitle>友链</PageTitle>
     {d.intro && <p class="lede">{d.intro}</p>}
   </header>
 
-  {d.mine && (
-    <section class="mine">
-      <p class="sec">本站</p>
-      <a class="card card-mine" href={d.mine.href} {...(isExternal(d.mine.href) ? { rel: 'noopener' } : {})}>
-        <span class="name">{d.mine.name}</span>
-        {d.mine.desc && <span class="desc">{d.mine.desc}</span>}
-        <span class="url">{d.mine.href.replace(/^https?:\/\//, '')}</span>
-      </a>
-    </section>
-  )}
+  <div class="links-directory">
+    {groups.map((g, gi) => (
+      <section class="group">
+        <h2 class="sec">{g.title}</h2>
+        {g.note && <p class="note">{g.note}</p>}
+        {g.items.length > 0 ? (
+          <ul class="cards">
+            {g.items.map((it) => (
+              <li>
+                <a class="card" href={it.href} {...(isExternal(it.href) ? { rel: 'noopener' } : {})}>
+                  <span class="name">{it.name}</span>
+                  {it.desc && <span class="desc">{it.desc}</span>}
+                  <span class="url">{it.href.replace(/^https?:\/\//, '')}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="empty" data-group={gi}>这一组还空着 —— 想换友链的去<a href="/guestbook/">留言</a>。</p>
+        )}
+      </section>
+    ))}
+    <div class="links-waves" data-links-waves={waveText} aria-hidden="true"></div>
+  </div>
 
-  {groups.map((g, gi) => (
-    <section class="group">
-      <p class="sec">{g.title}</p>
-      {g.note && <p class="note">{g.note}</p>}
-      {g.items.length > 0 ? (
-        <ul class="cards">
-          {g.items.map((it) => (
-            <li>
-              <a class="card" href={it.href} {...(isExternal(it.href) ? { rel: 'noopener' } : {})}>
-                <span class="name">{it.name}</span>
-                {it.desc && <span class="desc">{it.desc}</span>}
-                <span class="url">{it.href.replace(/^https?:\/\//, '')}</span>
-              </a>
-            </li>
+  <div class="links-info">
+    {d.mine && (
+      <section class="mine">
+        <h2 class="sec">本站</h2>
+        <a class="card card-mine" href={d.mine.href} {...(isExternal(d.mine.href) ? { rel: 'noopener' } : {})}>
+          <span class="name">{d.mine.name}</span>
+          {d.mine.desc && <span class="desc">{d.mine.desc}</span>}
+          <span class="url">{d.mine.href.replace(/^https?:\/\//, '')}</span>
+        </a>
+      </section>
+    )}
+
+    {d.apply && d.apply.length > 0 && (
+      <section class="apply">
+        <h2 class="sec">怎么换</h2>
+        <ol>
+          {d.apply.map((t) => (
+            <li>{t}</li>
           ))}
-        </ul>
-      ) : (
-        <p class="empty" data-group={gi}>这一组还空着 —— 想换友链的去<a href="/guestbook/">留言</a>。</p>
-      )}
-    </section>
-  ))}
+        </ol>
+      </section>
+    )}
+  </div>
 
-  {d.apply && d.apply.length > 0 && (
-    <section class="apply">
-      <p class="sec">怎么换</p>
-      <ol>
-        {d.apply.map((t) => (
-          <li>{t}</li>
-        ))}
-      </ol>
-    </section>
-  )}
 </Base>
 
 <style>
+  .pagehead.links-heading { padding-block: var(--sp-6); }
+  .pagehead.links-heading::before, .pagehead.links-heading::after { top: var(--sp-6); }
+
+  .links-directory {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .links-directory .group .sec { margin-block-start: var(--sp-5); }
+  .links-waves {
+    --links-waves-size: clamp(5rem, 15vw, 14rem);
+    display: flex;
+    align-items: flex-end;
+    min-block-size: var(--links-waves-size);
+    /* 点阵在第一组后，友站卡片紧接页头。 */
+    grid-row: 2;
+    margin-block: var(--sp-5) 0;
+    overflow: hidden;
+    border-radius: var(--sp-3);
+    background: var(--links-mosaic-bg);
+  }
+  .links-waves:empty {
+    background-image: radial-gradient(circle, var(--links-mosaic-base) 1px, transparent 1.5px);
+    background-size: var(--sp-2) var(--sp-2);
+  }
+  .links-waves :global(.ln-footer-art) {
+    height: var(--links-waves-size);
+    margin: 0;
+    color: var(--links-mosaic-base);
+  }
+  .links-waves :global(.ln-footer-art-fallback) { max-width: none; }
+
+  .links-info {
+    display: grid;
+    gap: var(--sp-5);
+    margin-block: var(--sp-6);
+  }
+  .links-info .sec { margin-top: 0; }
+  @media (min-width: 768px) {
+    .links-info:has(.mine):has(.apply) {
+      grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+      gap: var(--sp-6);
+    }
+    .links-info:has(.mine) .apply {
+      padding-inline-start: var(--sp-5);
+      border-inline-start: 1px solid var(--hair);
+    }
+  }
+
   /* ===================================================================
    * 底纹层（PAGE PLATE）—— 墨笔 ∞ **替代**百褶 ∞（站主 2026-10-05 拍板）
    *
@@ -155,8 +213,16 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     /* ★ 透明度 .09：站内装饰底纹定稿档是 8%（`--deco-plate-coarse` = #2d7d4614
        = 20/255 ≈ 7.8%，文章页方格那轮站主亲选）。本图墨笔的浓淡层次比方格丰富，
        略抬一档到 9% 让笔锋看得出来，但**不回到百褶 ∞ 的 .2** —— 那一档配的是
-       "近白米色呢喃"的素材，本图是不透明墨，.2 会把「纸白阅读底」压过去。 */
-    opacity: var(--plate-op, 0.09);
+       "近白米色呢喃"的素材，本图是不透明墨，.2 会把「纸白阅读底」压过去。
+       ★★ 2026-11-13：暗档不再靠 `html.dark` 整条替换 —— 那时拖动软条全程是 9% 的原图，
+       松手那一瞬才跳到 17% 的铜色。现在滤镜按 --theme-w 连续化（`--plate-filter-ink`），
+       浓度写成两个端点的 calc：亮 9% → 暗 17%。`--plate-op` 仍是人工旋钮，
+       只要它被内联设了值，两项取同一个数、结果就等于它（乘 (1-w) + w = 1）。 */
+    filter: var(--plate-filter-ink);
+    opacity: calc(
+      var(--plate-op, 0.09) * (1 - var(--theme-w)) +
+        var(--plate-op, var(--links-plate-dark-opacity)) * var(--theme-w)
+    );
     pointer-events: none;
     z-index: -1;
   }
@@ -168,10 +234,6 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     height: 100%;
     max-width: none;
     object-fit: contain;
-  }
-  :global(html.dark) .inf-ink-plate {
-    filter: var(--ink-plate-dark-filter);
-    opacity: var(--plate-op, var(--links-plate-dark-opacity));
   }
 
   /* 装置画布：与底纹同层（同 z-index:-1），DOM 在后 ⇒ 连线画在墨笔 ∞ **之上**、正文之下。
@@ -210,8 +272,9 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   }
   .sec {
     margin: var(--sp-8) 0 var(--sp-3);
-    font-size: var(--fs-xs);
-    letter-spacing: 0.08em;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    letter-spacing: 0.04em;
     color: var(--muted);
     border-left: 3px solid var(--accent);
     padding-left: 0.6em;
@@ -268,9 +331,6 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     border-color: var(--accent);
     background: var(--accent-wash);
   }
-  .card-mine {
-    max-width: 320px;
-  }
   .name {
     font-weight: 700;
   }
@@ -282,6 +342,7 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     font-size: var(--fs-xs);
     color: var(--accent-ink);
     font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
   }
   .empty {
     margin: 0;
@@ -297,6 +358,7 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     color: var(--ink);
   }
   .apply li {
+    overflow-wrap: anywhere;
     margin-bottom: 0.4em;
   }
   @media (max-width: 767px) {
@@ -309,10 +371,11 @@ const isExternal = (h: string) => /^https?:/i.test(h);
        装置**不**关掉：指针在触屏上够不着，但那 5 颗亮星构成的静态星图本身是氛围
        —— 与说说页浮游同口径（背景要的是"更轻"，不是"没有"）。 */
     .inf-ink-plate {
-      opacity: var(--plate-op, 0.06);
-    }
-    :global(html.dark) .inf-ink-plate {
-      opacity: var(--plate-op, var(--links-plate-dark-mobile-opacity));
+      /* 窄屏暗档同样连续（暗档端点从 17% 降到 12%）。 */
+      opacity: calc(
+        var(--plate-op, 0.06) * (1 - var(--theme-w)) +
+          var(--plate-op, var(--links-plate-dark-mobile-opacity)) * var(--theme-w)
+      );
     }
   }
 </style>
@@ -321,4 +384,5 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   // 本页的装置「星座 CONSTELLATION」（2026-10-05）：靠近的点连出细线，停留越久连得越多。
   // 与说说页同样放进这一个 <script> ⇒ Astro 并进同一产物，不新增标签。
   import '../scripts/constellation';
+  import '../scripts/links-waves';
 </script>

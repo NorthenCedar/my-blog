@@ -5,7 +5,7 @@ import {coverPresentation,type GalleryAlbum} from '../src/lib/gallery-stage';
 const read=(p:string)=>readFileSync(p,'utf8');
 const manifest=JSON.parse(read('public/gallery/manifest.json'));
 const html=read('dist/gallery/index.html');
-const covers=[...html.matchAll(/<section[^>]*data-gallery-album="([^"]+)"[\s\S]*?<\/section>/g)];
+const covers=[...html.matchAll(/<li[^>]*data-gallery-album="([^"]+)"[\s\S]*?<\/li>/g)];
 const fixture=(title='新册',id='new / 册'):GalleryAlbum=>({id,title,date:'2026-11-01',total:1,frames:[{alt:'封面',files:[{w:800,h:1184,url:'/small.webp'},{w:1280,h:1184,url:'/large.webp'}]}]});
 
 describe('相册封面 · 内容模型',()=>{
@@ -26,41 +26,34 @@ describe('相册封面 · 内容模型',()=>{
   });
 });
 
-describe('相册舞台 · 正式产物',()=>{
-  it('显影板第一幕，原盘第二幕，每本相册自动生成一幕，只有一个 h1',()=>{
-    const kinds=[...html.matchAll(/data-kind="([^"]+)"/g)].map(m=>m[1]);
-    expect(kinds).toEqual(['develop','spiral',...manifest.albums.map(()=> 'album')]);
+describe('相册总览 · 正式产物',()=>{
+  it('每本已发布相册都有目录入口，弧形封面位于第二幕',()=>{
     expect(covers.map(m=>m[1])).toEqual(manifest.albums.map((a:GalleryAlbum)=>a.id));
     expect((html.match(/<h1\b/g)??[]).length).toBe(1);
     expect(html).toContain('gallery-inf-plate gallery-story');
-    expect((html.match(/class="film-backdrop"/g)??[]).length).toBe(1);
-    expect(html).not.toContain('class="gallery-inf"');
+    if (manifest.albums.length > 1) expect(html).toMatch(/data-cover-arc[^>]*hidden/);
   });
-  it('封面、分行册名和图注都是本册真链接，无 JS 时也能进入相册',()=>{
+  it('每项使用本册所选封面和真实网址，无 JS 时也能进入相册',()=>{
     expect(covers.length).toBeGreaterThan(0);
     covers.forEach((match,index)=>{
       const album=manifest.albums[index],seg=match[0],href=`/gallery/${encodeURIComponent(album.id)}/`;
-      expect((seg.match(new RegExp('href="'+href+'"','g'))??[]).length).toBe(3);
+      expect(seg).toContain(`href="${href}"`);
       expect(seg).toContain(`${album.total} 张照片`);
-      expect(seg).toContain(album.date.replaceAll('-','.'));
-      expect(seg).toContain(`data-slide="${index+2}"`);
-      expect(seg).toContain(`>${String(index+1).padStart(2,'0')}</span>`);
-      const title=seg.match(/<h2[\s\S]*?<\/h2>/)![0].replace(/<svg[\s\S]*?<\/svg>/g,'').replace(/<[^>]+>/g,'');
-      expect(title).toBe(album.title);
-      expect(seg).toContain('data-draw');
+      expect(seg).toContain(`src="${coverPresentation(album,index)?.thumbnail}"`);
+      expect(seg).toContain('data-album-title');
     });
   });
-  it('全量原盘照片兼作显影素材；保留公共导航和站点统计，主题开关只留在关于页',()=>{
-    const total=manifest.albums.reduce((n:number,a:GalleryAlbum)=>n+a.total,0);
-    expect((html.match(/data-sp-item="/g)??[]).length).toBe(total);
-    expect((html.match(/data-bath-src(?:\s|>)/g)??[]).length).toBe(1);
-    for(const hook of ['data-spiral','id="splb"','data-gallery-site-meta','class="topbar','class="foot'])expect(html).toContain(hook);
-    const page=read('src/pages/gallery/index.astro');
-    expect(page).toContain('<SpiralPlate mode="embed" />');
-    const script=read('src/scripts/gallery-stage.js');
-    expect(html).not.toContain('data-gallery-theme');
-    expect(script).not.toContain('setTheme');
-    expect(script).not.toMatch(/Jelly|typegpu|three/);
+  it('显影盘在弧形封面之前，从清单取横幅照片而不预载整册',()=>{
+    const bath=html.indexOf('data-bath-frames=');
+    expect(bath).toBeGreaterThan(-1);
+    expect(bath).toBeLessThan(html.indexOf('data-cover-arc'));
+    expect(html).toMatch(/data-slide="0" data-kind="develop"/);
+    expect(html).toMatch(/data-slide="1" data-kind="arc"/);
+    expect(html).toContain('data-advance');
+    expect(html).toContain('href="/gallery/spiral/"');
+    expect(html).not.toContain('data-sp-item=');
+    expect(html).not.toContain('data-bath-src');
+    for(const hook of ['class="topbar','class="foot'])expect(html).toContain(hook);
   });
   it('新主题声明限于相册页，新增根 token 不改变全站普通属性',()=>{
     const css=read('src/styles/gallery-stage.css');
@@ -72,5 +65,17 @@ describe('相册舞台 · 正式产物',()=>{
       expect(block[1].split(';').filter(Boolean).every(declaration=>declaration.trim().startsWith('--'))).toBe(true);
     }
     expect(read('src/scripts/gallery-stage.js')).toContain('[data-notices][aria-expanded="true"]');
+  });
+});
+
+describe('相册 · 换页样式', () => {
+  it.each([
+    ['src/pages/gallery/index.astro', ['styles/gallery-stage.css', 'vendor/react-bits/CircularGallery.css']],
+    ['src/pages/gallery/[album].astro', ['vendor/react-bits/DomeGallery.css', 'vendor/react-bits/InfiniteMenu.css']],
+  ])('%s 把舞台与展览样式交给页面响应', (page, styles) => {
+    const frontmatter = read(page).split(/^---\s*$/m)[1];
+    for (const style of styles) {
+      expect(frontmatter).toContain(`import '../../${style}';`);
+    }
   });
 });

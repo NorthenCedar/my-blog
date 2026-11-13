@@ -1,7 +1,9 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 const DIST='dist';
-export function jsClosure(pagePath: string, options: { dynamic?: boolean } = {}): { code: string; files: string[] } {
+export const isSiteMenuEntry = (path: string) => /(?:^|[/\\])staggered-site-menu\.[^/\\]+\.js$/.test(path);
+export const isTechHeadingEntry = (path: string) => /(?:^|[/\\])tech-headings\.[^/\\]+\.js$/.test(path);
+export function jsClosure(pagePath: string, options: { dynamic?: boolean; skipMenu?: boolean; skipTechHeading?: boolean } = {}): { code: string; files: string[] } {
   const html = readFileSync(pagePath, 'utf8');
   const inline = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
   const files: string[] = [];
@@ -19,7 +21,10 @@ export function jsClosure(pagePath: string, options: { dynamic?: boolean } = {})
     // 老正则一个都匹配不到 ⇒ three 与 GLTFLoader 两个 chunk 会被误判成「没页面引用的孤儿」。
     // 现在三种引号（" ' `）与静态/动态两种写法都覆盖。
     for (const m of code.matchAll(/(?:import|from)\s*\(?\s*(["'`])([^"'`]+?\.js)\1/g)) {
-      if (options.dynamic === false && /^import\s*\(/.test(m[0])) continue;
+      if (/^import\s*\(/.test(m[0]) && (
+        options.dynamic === false || (options.skipMenu && isSiteMenuEntry(m[2]))
+        || (options.skipTechHeading && isTechHeadingEntry(m[2]))
+      )) continue;
       load(m[2]);
     }
   };

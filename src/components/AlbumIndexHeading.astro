@@ -1,0 +1,74 @@
+---
+interface Props {
+  album: { title: string; titleEn?: string; total: number; date: string };
+  no: number;
+}
+const { album, no } = Astro.props;
+const title = album.titleEn || album.title;
+---
+<header class:list={['scene-title', { 'scene-title-long': title.length > 28 }]}>
+  <div class="scene-heading">
+    <span class="scene-kicker" aria-hidden="true">照片索引</span>
+    <h1 lang={album.titleEn ? 'en' : undefined}>{title}</h1>
+  </div>
+  <div class="scene-edition">
+    <span class="scene-plate">PLATE {String(no).padStart(2, '0')}</span>
+    <p>{album.title} <span aria-hidden="true">/</span> {album.total} 帧 <span aria-hidden="true">/</span> <time datetime={album.date}>{album.date}</time></p>
+  </div>
+</header>
+
+<style>
+  .scene-title {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: var(--sp-5);
+    margin-top: var(--sp-5);
+    padding: clamp(var(--sp-5), 6vw, var(--sp-8)) clamp(var(--sp-4), 4vw, var(--sp-7));
+    border: 1px solid var(--glass-line);
+    border-radius: var(--sp-4);
+    background: radial-gradient(ellipse at 90% 100%, var(--accent-wash), transparent 66%), var(--glass-bg);
+  }
+  h1 {
+    margin: 0;
+    font-family: Archivo, 'IBM Plex Sans', sans-serif;
+    font-size: clamp(var(--fs-title), 7vw, 5.4rem);
+    font-weight: 600;
+    letter-spacing: var(--ls-title);
+    line-height: var(--lh-title);
+    overflow-wrap: anywhere;
+  }
+  p { margin: var(--sp-2) 0 0; color: var(--muted); font-size: var(--fs-sm); }
+  p span { padding-inline: var(--sp-2); color: var(--hair); }
+  .scene-plate { font-family: 'IBM Plex Mono', monospace; font-size: var(--fs-xs); color: var(--muted); }
+  .scene-kicker {
+    display: block;
+    margin-bottom: var(--sp-3);
+    color: var(--accent-ink);
+    font: var(--fs-xs) 'IBM Plex Mono', monospace;
+    letter-spacing: 0.16em;
+  }
+  .scene-edition { text-align: end; }
+  @media (max-width: 680px) {
+    .scene-title { grid-template-columns: 1fr; gap: var(--sp-3); }
+    .scene-edition { text-align: start; }
+  }
+  :global(.scene-on) .scene-title {
+    display: block;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: center;
+  }
+  :global(.scene-on) h1 { font-size: var(--scene-display); font-weight: 500; letter-spacing: var(--scene-tracking); }
+  :global(.scene-on) .scene-title-long h1 { font-size: var(--scene-display-long); line-height: var(--lh-heading); }
+  :global(.scene-on[data-layout='slices']) h1 { font-size: var(--fs-title); }
+  :global(.scene-on) .scene-kicker { display: none; }
+  :global(.scene-on) .scene-edition { display: flex; flex-direction: column-reverse; align-items: center; }
+  :global(.scene-on) p { margin: var(--sp-4) 0 var(--sp-2); }
+  @media (max-width: 680px) {
+    :global(.scene-on[data-layout='slices']) p { margin-block: var(--sp-2); }
+    :global(.scene-on[data-layout='slices']) .scene-plate { display: none; }
+  }
+</style>

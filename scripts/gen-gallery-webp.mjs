@@ -97,7 +97,17 @@ for (const album of parsed) {
     const n = idx + 1;                       // 该帧在所属相册里的序号（1 起）
     const rel = img.src.replace(/^\.\//, '');
     const srcPath = join(GALLERY, album.name, rel);
-    if(await realpath(srcPath).catch(()=>null)!==resolve(srcPath))fail(`源图不存在或使用了目录外链接：${album.name}/${rel}`);
+    /* ★ 2026-11-13 修（本机 verify 假红）：Windows 下 `realpath()` 把盘符规范成 `D:`，
+       而 `resolve()` 用的是 cwd 里的小写 `d:` ⇒ 字符串比较**对任何正常文件都不相等**，
+       构建在第一个相册第一张图上就报「源图不存在或使用了目录外链接」而退出 1。
+       判据本身要守的是「不许用符号链接指向目录外」，不是盘符大小写 ——
+       改成：以相册目录的 canonical 路径拼出期望值，两边按平台归一大小写后比。 */
+    const canonicalDir = await realpath(join(GALLERY, album.name));
+    const canonicalSrc = await realpath(srcPath).catch(() => null);
+    const normalize = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
+    if (!canonicalSrc || normalize(canonicalSrc) !== normalize(join(canonicalDir, rel))) {
+      fail(`源图不存在或使用了目录外链接：${album.name}/${rel}`);
+    }
     const st = await stat(srcPath).catch(() => null);
     if (!st) fail(`源图不存在: ${srcPath}`);
     const sourceBytes = await readFile(srcPath);

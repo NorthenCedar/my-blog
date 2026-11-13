@@ -167,26 +167,111 @@ describe('画布透明通路（2026-10-17 第五轮）', () => {
   const scene = stripComments(read('../src/vendor/jelly-slider/scene.ts'));
   const taa = stripComments(read('../src/vendor/jelly-slider/taa.ts'));
 
-  it('alpha 由"比纸暗多少"直接算出来，不再有分区/上限', () => {
+  /* ★★★ 2026-11-12 站主：「（主题开关）不要影子了」。原话是「我只是说那个软条的影子不要」，
+     而我的第一版把**整个地面层的 alpha** 撤了（只留百分比刻度）—— 结果槽（软条坐进去的
+     那个凹槽）跟着一起消失，软条看起来浮在纸面上（站主截图当场指出：「那个槽呢？？？」）。
+
+     ⇒ 最终口径：alpha 通路**一个字不动**（还是第五轮那套"比纸暗多少"），
+       只把**投影**那一支的强度归零（`getFakeShadow` 的 `SHADOW_STRENGTH`）。
+       槽的暗部来自几何（`rectangleCutoutDist`）+ `applyAO` 的接触遮蔽，与投影无关。
+
+     这一组因此变成四条**互相咬住**的判据：alpha 还在 / 有影子就必炸 / AO 不许被顺手删掉 /
+     那个强度开关只作用在 influence 上（不是把整支函数短路）。 */
+  it('地面层的 alpha 仍在，且槽的立体感不许被压平（站主两次纠正）', () => {
     expect(
       scene.includes('const dark = std.saturate(1.0 - std.dot(litGround, lumaK) / paperLum);'),
-      'alpha 必须从地面最终色的亮度算（纸白 = 0、越暗越大）',
+      'alpha 回不到"比纸暗多少"，槽的暗部就没了 —— 站主的原话是「那个槽呢？？？」',
     ).toBe(true);
+    /* ★★★ 2026-11-13 两次纠正的结论，别再走回头路：
+       第一次（2026-11-12）「那个槽呢？？？」= 整层撤 alpha，槽消失；
+       第二次（同一天）我把 `dark` 乘了 0.12 想"让槽和背景同色"⇒「你看原来的软条，
+       他的槽是有阴影的，而且整个是有立体感的」「你看你现在改的一点立体感都没有」。
+       ⇒ 槽就是这个开关**全部**的立体感来源（内壁暗部 + 上下亮边 + 接触遮蔽），
+         系数只能是 1。派生量能调，这个系数不能。 */
     expect(
-      scene.includes('const a = std.max(dark, std.saturate(percentageSample.x));'),
-      '刻度墨必须单独顶到满浓度，否则会和纸混在一起',
+      scene.includes('const a = std.max(dark * GROUND_INK, std.saturate(percentageSample.x));'),
+      '刻度墨必须单独顶到满浓度，且槽的墨影要走 GROUND_INK',
     ).toBe(true);
+    const ink = Number(/const GROUND_INK = ([\d.]+);/.exec(scene)?.[1]);
+    expect(ink, 'GROUND_INK 没找到，判据会空转').toBeGreaterThan(0);
+    expect(ink, '槽的墨影被压过 ⇒ 立体感会一起没（站主：「一点立体感都没有」）').toBe(1);
     expect(
       /GROOVE_ALPHA|SHADOW_ALPHA_MAX|inGroove/.test(scene),
       '分区判据（inGroove / 固定膜 / 上限）已删 —— 它把整块画布刷成了一层纸色膜',
     ).toBe(false);
-    /* 第五轮第一版还给 alpha 封了顶（`min(..., 0.55)`）。上限在**乘影**模型里是个假旋钮：
-       叠在纸面上时合成结果逐像素还原成 `graded`，alpha 只管底纹透出多少 ⇒
-       封顶既不改深浅，又让"底纹从哪开始透"在没有影子的地方突然跳一下。 */
     expect(
       /std\.min\(\s*(dark|a)\s*,/.test(scene),
       'alpha 不许封顶 —— 上限在乘影模型里只是个假旋钮',
     ).toBe(false);
+  });
+
+  it('★ 端头 alpha 恒 1，环境色只能"渗进反射"（站主 2026-11-13 选甲）', () => {
+    /* 三轮口径，按时间：
+       ①「左半部分不是白色的，是透明的，所以在绿色背景下就要显绿色」→ 我给了真 alpha；
+       ②「你看你现在改的一点立体感都没有」→ 回滚（折射/厚度/高光一起没了）；
+       ③ 站主选「甲」：「端头保持现在这样，我只调取色 —— 让它在暗底上偏一点橙、
+          亮底上偏一点绿，不动 alpha」。
+       ⇒ 唯一允许的通道：`endTint`（取 `--accent`）以**加色**掺进 `reflection`。 */
+    const glass = Number(/const END_GLASS_ALPHA = ([\d.]+);/.exec(scene)?.[1]);
+    expect(glass, 'END_GLASS_ALPHA 没找到').toBe(1);
+    expect(
+      /const jellyAlpha\s*=/.test(scene),
+      '不许再有 jellyAlpha 这类"整段降 alpha"的中间量',
+    ).toBe(false);
+    expect(
+      /hitPosition\.x - sliderMin\.x\) \/ 0\.5/.test(scene),
+      '按 x 渐变的 alpha 蒙版不许回来 —— 它把球根削成了半透塑料',
+    ).toBe(false);
+
+    /* 强度与范围：只要"背景透出来的一点色调"，不是把端头染成色板。 */
+    const bleed = Number(/const END_GLASS_BLEED = ([\d.]+);/.exec(scene)?.[1]);
+    expect(bleed, 'END_GLASS_BLEED 没找到，判据会空转').toBeGreaterThan(0);
+    expect(bleed, '渗色再大就不像玻璃了').toBeLessThanOrEqual(0.35);
+    const span = Number(/const END_GLASS_SPAN = ([\d.]+);/.exec(scene)?.[1]);
+    expect(span, 'END_GLASS_SPAN 没找到').toBeGreaterThan(0);
+    expect(span, '遮罩太宽会把色渗到带身上（高饱和果冻会糊成脏色）').toBeLessThanOrEqual(0.9);
+
+    /* ★ 必须是**加法**：暗档 groundTint 近黑（#0b0b0c），乘上去一律归零 —— 读不出橙。 */
+    expect(scene, '端头渗色没并进 reflection').toMatch(
+      /const reflection\s*=\s*std\.mix\(glassPaper, glassGrey, tint\.w\) \+ envBleed/,
+    );
+    expect(scene, '渗色必须走 endTint 的加色').toMatch(/const envBleed = endTint\.rgb \*/);
+    expect(scene, '遮罩要收在球根（平方）').toMatch(/capMask \* capMask/);
+    expect(scene, 'endTint 没进 uniform').toMatch(/endTint: d\.vec4f,/);
+    expect(scene, '缺 setter ⇒ 切主题时喂不进去').toMatch(/set endTint\(v: d\.v4f\)/);
+
+    /* 颜色从 token 取，不写死：亮档 `--accent` 墨绿、暗档橙，正好是软条本体的反色相。 */
+    const toggle = read('../src/scripts/theme-toggle.ts');
+    /* 两档都必须是 --accent：只断 "文件里出现过 --accent" 会被"改了一半"骗过去
+       （变异验证第一版就是因此 MISS 的）。 */
+    expect(toggle, '端头环境色（亮档）没走 --accent').toMatch(
+      /const envLight = preview\.colors\.light\['--accent'\]/,
+    );
+    expect(toggle, '端头环境色（暗档）没走 --accent').toMatch(
+      /const envDark = preview\.colors\.dark\['--accent'\]/,
+    );
+    expect(toggle, '没把混色结果喂给 scene.endTint').toMatch(/scene\.endTint = d\.vec4f\(/);
+  });
+
+  it('★ 软条投在地上的软影被关掉，但投影那条采样链没被删（可一键回来）', () => {
+    const src = read('../src/vendor/jelly-slider/scene.ts');
+    expect(
+      /const SHADOW_STRENGTH = 0;/.test(src),
+      '站主要「不要影子」⇒ 投影强度必须是 0；改成 1 就等于回到原版',
+    ).toBe(true);
+    expect(
+      /const influence\s*=\s*std\.saturate\(\(1 - lightDir\.y\) \* 2\) \* uvEdgeFeather \* shadowStrength/.test(
+        scene,
+      ),
+      '强度开关要乘在 influence 上（而不是把整支函数 return 1）—— 否则 bezierTexture 采样与 feather 会一起被删，回不去',
+    ).toBe(true);
+    /* 反面：`applyAO` 是槽壁的暗部来源，**不许**被"顺手"删掉或短路 */
+    expect(scene.includes('applyAO(GROUND_ALBEDO * litColor, posOffset, newNormal)'), '槽壁的 AO 被删了？').toBe(true);
+    /* 正面：投影确实走的是那条 bezier 采样（判据不是空转） */
+    expect(
+      /textureSampleLevel\(\s*layout\.\$\.bezierTexture/.test(scene),
+      'bezierTexture 投影采样不见了，判据空转',
+    ).toBe(true);
   });
 
   it('renderBackground 真的把 alpha 送出来（不是恒 1）', () => {
@@ -262,7 +347,17 @@ describe('画布透明通路（2026-10-17 第五轮）', () => {
     expect(-top, '画布上下应多留至少 24px，投影尾部才不会贴着边界').toBeGreaterThanOrEqual(24);
     expect(component).toContain(`height="${h}"`);
     expect(component).toContain(`height: ${h}px`);
-    expect(read('../src/pages/about.astro')).toContain(`height:${h + top}px`);
+    /* ★ 2026-11-12：按钮搬进顶栏后，关于页的 `.theme-dock` 连同样式一起删了，
+       原来这条 `about.astro` 含 `height:${h + top}px` 的断言随之作废。换成新的几何契约：
+       顶栏小窗高 52px、画布上移 56px ⇒ 窗口在画布本地坐标里正好是 y 56…108 那一条软条。
+       两个数必须一起改：只改一个，裁出来的就是空地面（或把软条切掉一半）。 */
+    const navTop = Number(/top:\s*calc\(-(\d+)px \* var\(--tt-s\)\)/.exec(component)?.[1] ?? 0);
+    const navH = Number(/height:\s*calc\((\d+)px \* var\(--tt-s\)\)/.exec(component)?.[1] ?? 0);
+    expect(navTop, '画布上移量要落在软条顶部（theme-toggle.ts 注释里的 y≈56）').toBe(56);
+    expect(navH, '小窗高度要盖住整条软条，又不把顶栏撑高（≈52）').toBe(52);
+    expect(read('../src/pages/about.astro'), '关于页不该再有主题开关的专属定位块').not.toContain(
+      'theme-dock',
+    );
     const root = { createUniform: () => ({ patch() {} }) };
     const camera = (height: number, degrees: number, target: number) => new CameraController(root as any,
       d.vec3f(0.024, 2.7, 1.9), d.vec3f(0, target, 0), d.vec3f(0, 1, 0), degrees * Math.PI / 180, 220, height);
@@ -622,9 +717,10 @@ describe('链条关在槽内（2026-10-18 第十一轮）', () => {
        末段自然朝右。实测：tipDeg 172° → 37°，segMax 1.42 → 1.05。 */
     expect(
       /for \(let i = 1; i < this\.n - 1; i\+\+\) \{/.test(slider) &&
-        /#pos\[i\]\.x = lo;/.test(slider) &&
-        /#pos\[i\]\.x = hi;/.test(slider),
-      '内点必须被夹进 [lo, hi] —— 这是"末段不许朝左"唯一的可行实现',
+        /px\[i\] = lo;/.test(slider) &&
+        /px\[i\] = hi;/.test(slider),
+      '内点必须被夹进 [lo, hi] —— 这是"末段不许朝左"唯一的可行实现' +
+        '（2026-11-13 扁平化后写的是 px[i]，物理态存于 Float64Array）',
     ).toBe(true);
   });
 

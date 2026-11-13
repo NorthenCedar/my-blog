@@ -1,224 +1,190 @@
 ---
-/**
- * 移动端导航抽屉（≤1023px 显示；桌面隐藏）。
- *
- * 无 JS 仍可用 checkbox + label 开合；共享外壳加载 nav-drawer.ts 后，
- * 补齐关闭按钮、Esc、焦点恢复和背景隔离，不增加 HTML script 条数。
- *
- * 无障碍取舍（如实记）：
- *   · checkbox 本体 `opacity:0` 但仍可聚焦，带 `aria-label="导航菜单"` ⇒ 屏幕阅读器能念到并切换；
- *   · 关闭时面板用 `visibility:hidden` 而不是 `opacity:0` —— 否则链接仍在 Tab 序里，
- *     键盘用户会 Tab 进一块看不见的面板（这是"透明菜单"最常见的坑）。
- */
 import { NAV_LINKS, type NavKey } from '../lib/nav';
+import { getSite } from '../lib/site';
+import '../vendor/react-bits/StaggeredMenu.css';
 
 interface Props {
   current?: NavKey;
 }
+
 const { current } = Astro.props;
-const id = 'nav-toggle';
+const { email, github } = await getSite();
+const labels: Record<NavKey, string> = {
+  index: 'Home', about: 'About', archive: 'Posts', links: 'Links', talks: 'Talks',
+  guestbook: 'Wall', gallery: 'Album', forge: 'Forge', log: 'Log', tags: 'Tags',
+};
+const socialLinks = [
+  { href: github, label: 'GitHub' },
+  { href: `mailto:${email}`, label: 'Email' },
+  { href: '/rss.xml', label: 'RSS' },
+];
 ---
 
-<input type="checkbox" id={id} class="navtog" aria-label="导航菜单" />
-{/* ★★ 2026-10-08：汉堡从「三个 `background: currentColor` 的方块」改成**内联 SVG**。
-    起因：站主发来手机截图「暗色模式看不到主页导航菜单的按钮」。
-    根因是手机 Chrome 的**自动深色**（Auto Dark，系统深色 + 站点没声明 color-scheme 时触发）
-    只反「背景类绘制」、保留「前景（文字 / 图元）」——
-    于是白色背景块被反成近黑、落在深墨绿的首页首屏上，**整枚汉堡凭空消失**；
-    同一行同为白色的站名是**文字**、被保留 ⇒ 截图里"站名在、按钮不在"。
-    （实测见 `_probe/_nav-swatch.js` 的六种画法标定：背景块 / border-top / box-shadow /
-      背景图渐变**全部被反掉**，只有**内联 SVG** 与**文字字符**活下来。
-      判读脚本 `_probe/_nav-check.mjs`，出图 `_probe/_cdp-autodark.mjs`。）
-    ★ 几何逐像素保持：三条线 **13 / 18 / 18 px（上面那条最短）**、中心间距 6px、1px 粗，
-      与原来那套 `::before(top:-6, w13) / 自身(w18) / ::after(top:+6, w18)` 逐个对应
-      （第一版我把短的那条画到了中间，是靠改前/改后的逐像素对照抓回来的）。
-      svg 取 18×14（**高度必须是偶数**）⇒ 它在 40px 的按钮里居中后 top 落在整像素上，
-      线心 y=0.5 / 6.5 / 12.5 换算到屏幕正是 156 / 162 / 168 三行，与改动前逐行相同。
-    ⚠ 别再改回 background / border / box-shadow —— 那三种在自动深色下都会消失。
-      这条有个护栏：`tests/nav-drawer-overflow.test.ts` 的「汉堡必须是 SVG 图元」。 */}
-<label for={id} class="navbtn" aria-hidden="true">
-  <svg class="bars" width="18" height="14" viewBox="0 0 18 14" fill="none" aria-hidden="true">
-    <path d="M0 0.5h13M0 6.5h18M0 12.5h18" stroke="currentColor" stroke-width="1" />
+<input type="checkbox" id="nav-toggle" class="navtog" aria-label="Open menu" aria-controls="site-menu" />
+<label for="nav-toggle" class="navbtn sm-toggle" aria-hidden="true" lang="en">
+  <span>Menu</span>
+  <svg class="bars" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+    <path d="M1 7h12M7 1v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
   </svg>
 </label>
-{/* ★ 2026-10-03 新增这层壳（站主「修 navpanel 溢出」）。
-    根因：关闭态的 .navpanel 是 `position:fixed; right:0; transform:translateX(100%)`，
-    整块被推到视口右缘之外 304–320px。而**Chrome 会把 fixed 元素超出视口的量
-    计入文档的滚动宽度**（与规范有出入），`visibility:hidden` 不挡这个，
-    连 `html{overflow-x:clip}` 也挡不住 —— 实测 clip 已生效（计算值就是 clip）
-    而 scrollX 仍是 304。
-    正解：给它一个 `position:fixed; inset:0; overflow:hidden` 的祖先壳，
-    滑出部分被壳裁掉 ⇒ 不再产生滚动宽度。
-    实测（`_probe/_measure-all.mjs`，判据 scrollTo(99999,0) 后看 scrollX）：
-      修前390→304· 768→320 · 1280→0
-      修后 390→0 · 768→0 · 1280→0
-    ⚠ 壳本身不能吃点击：mask/panel 各自恢复 pointer-events。 */}
-<dialog class="navshell" aria-label="导航菜单" open>
-  <label for={id} class="navmask" aria-hidden="true"></label>
-  <nav class="navpanel" aria-label="主导航（展开）">
-    <button type="button" class="navclose" data-nav-close hidden>关闭菜单</button>
-    <p class="navpanel-title">导航菜单</p>
-    {NAV_LINKS.map((l) => (
-      <a href={l.href} aria-current={current === l.key ? 'page' : undefined}>{l.label}</a>
-    ))}
-    <a href="/rss.xml">RSS</a>
-  </nav>
-</dialog>
+<button class="nav-trigger sm-toggle" type="button" lang="en" data-nav-open aria-label="Open menu" aria-haspopup="dialog" hidden>
+  <span>Menu</span>
+  <svg class="bars" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+    <path d="M1 7h12M7 1v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+  </svg>
+</button>
 
-<style>
-  /* 桌面：整块不参与布局（PC 走 Brandline / Topbar 里那排横排链接） */
-  .navtog,
-  .navbtn,
-  .navshell,
-  .navmask,
+<div class="navshell" id="site-menu" data-staggered-menu lang="en">
+  <label for="nav-toggle" class="navmask" aria-hidden="true"></label>
+  <nav class="navpanel staggered-menu-panel" aria-label="主导航">
+    <label class="navclose sm-toggle" for="nav-toggle" aria-hidden="true">Close ×</label>
+    <div class="sm-panel-inner">
+      <ul class="sm-panel-list" data-numbering>
+        {NAV_LINKS.map(link => (
+          <li class="sm-panel-itemWrap">
+            <a class="sm-panel-item" href={link.href} aria-current={current === link.key ? 'page' : undefined}>
+              <span class="sm-panel-itemLabel">{labels[link.key]}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      <div class="sm-socials" aria-label="Social links">
+        <h3 class="sm-socials-title">Socials</h3>
+        <ul class="sm-socials-list">
+          {socialLinks.map(link => (
+            <li><a class="sm-socials-link" href={link.href}>{link.label}</a></li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  </nav>
+</div>
+
+<style is:global>
+  @font-face {
+    font-family: Geist;
+    src: url('/fonts/geist-variable.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+  }
+  :is(.navbtn, .nav-trigger, .navshell, .site-staggered) {
+    font-family: Geist, sans-serif;
+    font-size: 1rem;
+    letter-spacing: normal;
+  }
+  .navtog {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .navbtn[hidden], .nav-trigger[hidden], .navtog[hidden] { display: none; }
+  :is(.navbtn, .nav-trigger, .site-staggered .sm-toggle) {
+    padding: 0;
+    color: inherit;
+    white-space: nowrap;
+  }
+  /* 造物台与相册的页面级按钮字体会继承正文，菜单始终使用导航字体。 */
+  body :is(button.nav-trigger, .navbtn, .navclose, .site-staggered .sm-toggle) {
+    font: 500 1rem/1 Geist, sans-serif;
+  }
+  .nav-trigger[data-menu-mounted] { visibility: hidden; }
+  .navtog:focus-visible + .navbtn, .nav-trigger:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 4px;
+  }
+
+  .navshell {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: 40;
+  }
+  .navmask {
+    position: absolute;
+    inset: 0;
+  }
   .navpanel {
-    display: none;
+    position: absolute;
+    pointer-events: none;
+    opacity: 1;
+    --sm-num-opacity: 1;
   }
-  @media (max-width: 1023px) {
-    /* ★ 2026-10-03：抽屉壳（站主「修 navpanel 溢出」）。
-       这层的唯一职责是**裁掉关闭态滑出视口的面板**。
-       为什么必须真的裁：Chrome 把 fixed 元素超出视口的量计入文档滚动宽度，
-       `visibility:hidden` 不挡、`html{overflow-x:clip}` 也不挡（实测 clip 计算值生效
-       而 scrollX 仍 304）。所以只能靠一个 overflow:hidden 的祖先。
-       `pointer-events:none` + 子元素各自 auto ⇒ 壳本身不吃点击，
-       关闭时 mask/panel 都是 visibility:hidden 也不吃。 */
-    .navshell {
-      display: block;
-      position: fixed;
-      inset: 0;
-      margin: 0;
-      padding: 0;
-      border: 0;
-      width: 100%;
-      height: 100%;
-      max-width: none;
-      max-height: none;
-      background: transparent;
-      color: inherit;
-      z-index: 40;
-      overflow: hidden;
-      pointer-events: none;
+  .navshell .navclose {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+    z-index: 1;
+    color: var(--ink);
+  }
+  .navtog:checked ~ .navshell { visibility: visible; }
+  .navtog:checked ~ .navshell .navmask { pointer-events: auto; }
+  .navtog:checked ~ .navshell .navpanel { pointer-events: auto; }
+
+  .site-menu-dialog {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    background: transparent;
+    pointer-events: none;
+    z-index: 40;
+  }
+  .site-menu-dialog:modal { pointer-events: auto; }
+  .site-menu-dialog::backdrop { background: transparent; }
+  html:has(.site-menu-dialog:modal, .navtog:checked) { overflow: hidden; }
+
+  .site-staggered { line-height: 1.5; }
+  .site-staggered .staggered-menu-header { padding: var(--sp-4) var(--gutter); }
+  .site-staggered .sm-logo { visibility: hidden; }
+  .site-staggered .sm-toggle {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+  .site-menu-dialog { --site-menu-toggle-ink: var(--site-menu-anchor-ink, var(--ink)); }
+  .site-menu-dialog:has(.sm-toggle[aria-expanded='true']) { --site-menu-toggle-ink: var(--ink); }
+  :is(.site-staggered, .navshell) .staggered-menu-panel {
+    background: var(--nav-panel-surface);
+    color: var(--ink);
+    overscroll-behavior: contain;
+  }
+  :is(.site-staggered, .navshell) :is(.sm-panel-item, .sm-socials-link) { color: var(--ink); }
+  :is(.site-staggered, .navshell) :is(.sm-panel-item, .sm-socials-link):is(:hover, :focus-visible, [aria-current='page']) {
+    color: var(--accent-ink);
+  }
+  .site-staggered .sm-toggle:focus-visible { outline-color: currentColor; }
+  :is(.site-staggered, .navshell) .sm-panel-item:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: -2px;
+  }
+  .navshell { --sm-accent: var(--accent-ink); }
+  @media (min-width: 1025px) {
+    :is(.site-staggered, .navshell) :is(.staggered-menu-panel, .sm-prelayers) {
+      width: calc(100vw / 3);
     }
-    .navshell:not([open]) { display: none; }
-    .navshell::backdrop { background: transparent; }
-    .navtog {
-      /* 视觉上藏起来，但**保持可聚焦**（键盘 Space 开合） */
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      opacity: 0;
-      margin: 0;
-      pointer-events: none;
-      display: block;
+    :is(.site-staggered, .navshell) :is(.staggered-menu-panel, .sm-prelayer) {
+      border-radius: var(--sp-2) 0 0 var(--sp-2);
     }
-    .navbtn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 40px;
-      height: 40px;
-      margin-left: auto;
-      color: inherit;
-    }
-    /* 汉堡：三横线（中间那条稍短，和站上的刻度线气质一致）。
-       ★★ 2026-10-08 改成 SVG **图元**（原来是三条 `background: currentColor` 的 1px 方块）。
-       原因见模板里那段注释：手机 Chrome 的自动深色会把「背景类绘制」反掉
-       （背景色 / border / box-shadow 全中），只有 SVG 图元与文字能活下来。
-       形状（18 / 13 / 18，间距 6px，1px 粗）与配色（currentColor ⇒ 跟随顶栏）都没变。 */
-    .navbtn .bars {
-      display: block;
-    }
-    .navtog:focus-visible + .navbtn {
-      outline: 3px solid var(--accent-ink);
-      outline-offset: 3px;
-    }
-    .navmask {
-      display: block;
-      position: absolute;
-      inset: 0;
-      z-index: 40;
-      opacity: 0;
-      visibility: hidden;
-      background: rgb(26 26 26 / 35%);
-      transition: opacity var(--dur-fast) linear, visibility var(--dur-fast) linear;
-    }
-    .navpanel {
-      display: block;
-      /* ★ 由 fixed 改absolute —— 这是让壳的 overflow:hidden 真正生效的那一步。
-         原理：**fixed 元素只被「建立固定定位包含块」的祖先裁剪**（祖先有 transform /
-         filter / will-change / contain 之类），光有 overflow:hidden 裁不住它。
-         改成 absolute 后，包含块就是那个 fixed 的壳（壳自身 inset:0 铺满视口），
-         于是壳的 overflow:hidden 生效 ⇒ 关闭态 translateX(100%) 滑出的部分被裁掉。
-         几何不变：壳铺满视口 ⇒ absolute 的 inset:0 / top-right-bottom 仍贴视口边。 */
-      position: absolute;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 41;
-      width: min(78vw, 320px);
-      padding: var(--sp-4);
-      overflow-y: auto;
-      background: var(--paper);
-      border-left: 1px solid var(--hair);
-      box-shadow: -12px 0 28px rgb(26 26 26 / 12%);
-      transform: translateX(100%);
-      visibility: hidden;
-      transition: transform var(--dur) var(--ease), visibility var(--dur) var(--ease);
-    }
-    .navpanel-title {
-      margin: 0 0 var(--sp-3);
-      font-size: var(--fs-xs);
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      border-left: 3px solid var(--accent);
-      padding-left: 0.6em;
-    }
-    .navclose {
-      display: block;
-      margin: 0 0 var(--sp-3) auto;
-      padding: var(--sp-2) var(--sp-3);
-      border: 1px solid var(--hair);
-      background: var(--paper);
-      color: var(--ink);
-      font: inherit;
-    }
-    .navclose[hidden] { display: none; }
-    .navpanel a {
-      display: block;
-      padding: 0.7em 0;
-      font-size: var(--fs-body);
-      color: var(--ink);
-      text-decoration: none;
-      border-bottom: 1px solid var(--hair);
-    }
-    .navpanel a[aria-current='page'] {
-      color: var(--accent-ink);
-    }
-    /* 打开态：checkbox 一被勾上，遮罩淡入、面板滑入
-       ★ 2026-10-03：原选择器是 `.navtog:checked ~ .navmask`（同级兄弟），
-         加了 .navshell 这层壳之后 mask/panel 变成壳的**子**元素，`~` 不再匹配
-         ⇒ 抽屉会打不开。改成后代选择器。
-         `:has()` 在此不必需：checkbox 仍是壳的兄弟，`~ .navshell` 足够定位到壳，
-         再用空格 descendant 进去。 */
-    .navtog:checked ~ .navshell .navmask {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
-    }
-    .navtog:checked ~ .navshell .navpanel {
-      transform: translateX(0);
-      visibility: visible;
-      pointer-events: auto;
-    }
-    /* 面板打开时锁滚动（body 由 Base 提供，靠 html 层的 :has 兜住） */
-    html:has(.navtog:checked) {
-      overflow: hidden;
+    .site-menu-dialog:modal .staggered-menu-panel,
+    .navtog:checked ~ .navshell .staggered-menu-panel {
+      box-shadow: -16px 0 42px var(--nav-panel-shadow);
     }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .navmask,
-    .navpanel {
-      transition: none;
-    }
+  @media (max-width: 1024px) {
+    .site-staggered .sm-logo { visibility: visible; }
+    .site-staggered:not([data-open]) .sm-logo { visibility: hidden; }
+    .site-staggered[data-open] .sm-logo-img { filter: none; }
   }
 </style>

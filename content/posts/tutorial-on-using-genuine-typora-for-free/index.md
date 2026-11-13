@@ -4,6 +4,8 @@ date: 2026-09-27
 summary: 本文主要介绍如何免费使用正版的Typora
 tags: [教程, 工具]
 draft: false
+cover: ./image-20260928001055091.png
+coverAlt: Typora 窗口中央的激活成功提示
 ---
 
 ## 1.下载

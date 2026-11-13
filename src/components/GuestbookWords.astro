@@ -1,0 +1,72 @@
+---
+const words = `
+  amber atlas avenue baker beacon birch bluehour bloom breeze brook cabin canvas
+  carbon cedar chalk cinema clay cloud coast comet compass coral corner copper
+  cosmos creek current dawn delta drift dune echo ember fern field film fjord
+  flora fog forest fossil fox frame frost garden glass glint grain grove harbor
+  haze hearth heron hill horizon inlet iris island juniper kiln lagoon lantern
+  laurel leaf letter linen lichen lilac linden lunar maple marble meadow mercury
+  mist moss museum nectar neon night north notebook oasis ocean ochre orbit
+  orchard paper pebble pine pixel planet pollen pond prism quartz quiet rain
+  reed reef relay ridge river ripple root rose salt satin seed shale shell
+  shore signal slate snow solstice sparrow spectrum spring station stone story
+  studio summit sundial switch thyme tide timber trace trail transit twilight
+  velvet violet voyage water wave willow wind winter wren zenith zinc
+`.trim().split(/\s+/);
+
+const fallback = Array.from({ length: 48 }, (_, row) =>
+  Array.from({ length: 52 }, (_, col) => '.' + words[(row * 23 + col) % words.length]).join(' ')
+);
+---
+
+<div class="guestbook-words" data-guestbook-words data-words={words.join(' ')} aria-hidden="true">
+  <div class="word-drift" data-word-drift>
+    <div class="word-fallback">{fallback.map((row) => <div class="word-row">{row}</div>)}</div>
+    <canvas data-word-base></canvas>
+    <canvas data-word-trail></canvas>
+  </div>
+</div>
+
+<script>
+  import '../scripts/guestbook-words';
+</script>
+
+<style>
+  .guestbook-words {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+    user-select: none;
+    color: var(--guestbook-words-base);
+    font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+    font-size: var(--guestbook-words-size);
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+  }
+
+  .word-drift {
+    position: absolute;
+    inset: -48px -80px;
+    column-gap: var(--sp-4);
+    row-gap: var(--sp-1);
+  }
+  .word-drift canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  [data-word-trail] { color: var(--guestbook-words-hover); }
+  .word-fallback { white-space: nowrap; word-spacing: var(--sp-3); }
+  .word-row { margin-bottom: var(--sp-1); }
+  .word-row:nth-child(even) { text-indent: -5ch; }
+  [data-rendered] .word-fallback { visibility: hidden; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .word-drift { animation: word-drift var(--guestbook-words-duration) ease-in-out infinite; }
+    [data-paused] .word-drift { animation-play-state: paused; }
+  }
+  @keyframes word-drift {
+    from, to { transform: translate(-66px, 0); }
+    25% { transform: translate(0, -40px); }
+    50% { transform: translate(66px, 0); }
+    75% { transform: translate(0, 40px); }
+  }
+</style>

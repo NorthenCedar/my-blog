@@ -19,7 +19,7 @@ export function createNavigator(count){
 }
 export const swipeIntent=(dx,dy)=>Math.abs(dy)>=46&&Math.abs(dy)>Math.abs(dx)*1.15?(dy<0?1:-1):0;
 export const wheelPixels=(delta,mode,height)=>delta*(mode===1?18:mode===2?height:1);
-export function mountWheelNavigation(element,{scene,blocked,flip,nativeScroll=()=>false,inside=event=>!!event.target.closest('[data-spiral]'),height=()=>innerHeight,now=()=>performance.now()}){
+export function mountWheelNavigation(element,{scene,blocked,flip,passThrough=()=>false,nativeScroll=()=>false,inside=event=>!!event.target.closest('[data-spiral]'),height=()=>innerHeight,now=()=>performance.now()}){
   let pageWheel=createWheelIntent(),previousRegion=null;
   const ignored=event=>event.defaultPrevented||event.ctrlKey||event.metaKey||blocked();
   const pageInput=event=>{
@@ -30,6 +30,7 @@ export function mountWheelNavigation(element,{scene,blocked,flip,nativeScroll=()
   };
   element.addEventListener('wheel',event=>{
     if(ignored(event))return;
+    if(passThrough(event))return;
     if(nativeScroll(event)){event.stopPropagation();return;}
     if(scene()==='spiral'&&inside(event)){if(previousRegion!=='helix')pageWheel=createWheelIntent();previousRegion='helix';return;}
     // 只拦住原舞台中的外围留白；照片内的事件完整交给本站原组件。

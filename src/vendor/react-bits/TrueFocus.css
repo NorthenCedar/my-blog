@@ -1,0 +1,53 @@
+/* 取自 React Bits TrueFocus.css 的四角框。等宽标签用 CSS 移动同一只框。 */
+.true-focus { position: relative; }
+.true-focus > .focus-frame {
+  position: absolute;
+  pointer-events: none;
+  inset: 2px auto 2px 2px;
+  inline-size: calc(50% - 2px);
+}
+.true-focus:has(> button:nth-of-type(2):is([aria-selected='true'], [aria-pressed='true'], [aria-current='true'])) > .focus-frame {
+  transform: translateX(100%);
+}
+.true-focus:has(> button[data-pick]):not(:has(> button[aria-current='true'])) > .focus-frame { visibility: hidden; }
+.true-focus.stage-nav > .focus-frame { inline-size: calc((100% - 6px) / 3); inset-block-end: calc(var(--stage-nav-offset) + 2px); }
+.true-focus.stage-nav:has(> button:nth-of-type(2)[aria-current='step']) > .focus-frame { transform: translateX(100%); }
+.true-focus.stage-nav:has(> button:nth-of-type(3)[aria-current='step']) > .focus-frame { transform: translateX(200%); }
+.true-focus .focus-corner {
+  position: absolute;
+  box-sizing: border-box;
+  width: var(--sp-2);
+  height: var(--sp-2);
+  border: 1px solid var(--accent-ink);
+}
+.true-focus .top-left {
+  top: 0;
+  left: 0;
+  border-right: none;
+  border-bottom: none;
+}
+.true-focus .top-right {
+  top: 0;
+  right: 0;
+  border-left: none;
+  border-bottom: none;
+}
+.true-focus .bottom-left {
+  bottom: 0;
+  left: 0;
+  border-right: none;
+  border-top: none;
+}
+.true-focus .bottom-right {
+  bottom: 0;
+  right: 0;
+  border-left: none;
+  border-top: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .true-focus > .focus-frame { transition: transform .5s cubic-bezier(.65, 0, .35, 1); }
+  .true-focus > button { transition: filter .5s ease, color var(--dur-hover) var(--ease-interact); }
+  .true-focus > button:is([aria-selected='false'], [aria-pressed='false']):not(:hover, :focus-visible),
+  .true-focus:has(> button[aria-current='true']) > button[aria-current='false']:not(:hover, :focus-visible),
+  .true-focus.stage-nav > button:not([aria-current='step'], :hover, :focus-visible) { filter: blur(1.2px); }
+}

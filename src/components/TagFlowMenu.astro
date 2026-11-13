@@ -1,0 +1,102 @@
+---
+import { renderToString } from 'react-dom/server';
+import { tagFlowMenu, type TagFlowMenuItem } from './tag-flow-menu';
+import gallery from '../../public/gallery/manifest.json';
+
+interface Props { items: TagFlowMenuItem[]; articles?: boolean; }
+const { items, articles = false } = Astro.props;
+const photos = [...new Set(gallery.albums.flatMap(({ frames }) =>
+  frames.flatMap(({ files }) => files.at(-1)?.url ?? []),
+))];
+---
+
+<div
+  class:list={['tag-flow', { 'tag-flow-posts': articles }]}
+  style={'--tag-flow-rows: ' + items.length}
+  data-tag-flow-articles={articles ? '' : undefined}
+  data-tag-flow-menu={JSON.stringify(items)}
+  data-tag-flow-photos={JSON.stringify(photos)}
+  set:html={renderToString(tagFlowMenu(items, photos.length > 0, articles))}
+></div>
+
+<script>
+  import '../scripts/tag-flow-menu';
+</script>
+
+<style>
+  /* ★★ 2026-11-13：`--tag-flow-band` 原来声明在 `.tag-flow` 上，暗档靠
+     `html.dark .tag-flow` 整条替换 —— 拖动软条时 `html.dark` 不成立，整条飘带
+     全程停在亮档的绿。改成两端都声明在根元素上：预览模块只采样 root / body，
+     声明在 `.tag-flow` 这种深层元素上它根本读不到（见 theme-preview.ts 头注释）。
+     `--tag-band-glow` 仍是 `color-mix(...)` 表达式，但它的输入是插值后的
+     `--tag-flow-band`，会在每帧重新求值，所以跟着一起走。 */
+  :global(html) {
+    --tag-flow-band: var(--accent-ink);
+  }
+
+  :global(html.dark) {
+    --tag-flow-band: var(--accent);
+  }
+
+  .tag-flow {
+    /* 官方示例用 600px 排四行，本站按标签数维持同样的行高。 */
+    block-size: calc(var(--tag-flow-rows) * 150px);
+    margin-inline: calc(50% - 50vw + var(--sp-2));
+    font-family: Geist, sans-serif;
+  }
+
+  .tag-flow-posts :global(.flowing-menu__link) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1fr);
+  }
+
+  .tag-flow-posts :global(.flowing-menu__label) {
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: clamp(1.25rem, 3vw, 3.75rem);
+  }
+
+  @media (max-width: 680px) {
+    .tag-flow-posts :global(.flowing-menu__link) {
+      grid-template-columns: minmax(0, 1fr);
+      align-content: center;
+      gap: var(--sp-2);
+    }
+    .tag-flow-posts :global(.flowing-menu__index) { display: none; }
+    .tag-flow-posts :global(.flowing-menu__end) { justify-self: center; }
+  }
+
+  .tag-flow :global(.flowing-menu__band) {
+    --tag-band-edge: clamp(1rem, 4vw, 3.5rem);
+    --tag-band-glow: color-mix(in srgb, var(--tag-flow-band) 70%, var(--on-ink));
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      var(--ink) var(--tag-band-edge),
+      var(--ink) calc(100% - var(--tag-band-edge)),
+      transparent
+    );
+    background-image: linear-gradient(
+      to right,
+      var(--tag-band-glow),
+      transparent calc(var(--tag-band-edge) * 1.5),
+      transparent calc(100% - var(--tag-band-edge) * 1.5),
+      var(--tag-band-glow)
+    );
+  }
+
+  .tag-flow :global(.flowing-menu__part-text) {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: 0;
+  }
+
+  .tag-flow :global(.tag-flow-title) {
+    padding-inline: 0.4em;
+  }
+
+  .tag-flow :global(.tag-flow-photo) {
+    background-color: color-mix(in srgb, var(--paper) 22%, transparent);
+    filter: grayscale(1);
+  }
+</style>

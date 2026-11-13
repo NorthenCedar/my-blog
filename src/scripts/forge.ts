@@ -34,6 +34,23 @@ export function initForge(body: HTMLElement): () => void {
   const update = () => { pending=0;const progress=clamp((scrollY-start)/distance);if(scene)scene.setProgress(progress);else draw(progress); };
   const measure = () => { if(!hero||!stage)return;start=hero.getBoundingClientRect().top+scrollY;distance=Math.max(1,hero.offsetHeight-stage.offsetHeight);update(); };
   const theme = () => { const value=document.documentElement.classList.contains('dark')?'dark':'light';scene?.setTheme(value); };
+  /* ★ 拖动软条时 ∞ 的反光跟手（站主 2026-11-13）。mixed 里没有 `--forge-break-glint`
+     （它两档都是 var() 引用、进不了预览的纯 hex 表），这里拿它两端的实际目标
+     （亮档 --forge-light-key、暗档 --accent）自己按进度插值补进表再交给场景。 */
+  const hexLerp = (a: string, b: string, t: number): string => {
+    const n = (h: string) => [0, 2, 4].map(i => parseInt(h.slice(1 + i, 3 + i), 16));
+    const A = n(a), B = n(b);
+    return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('');
+  };
+  const preview = (event: Event) => {
+    const detail = (event as CustomEvent<{ progress?: number; mixed?: Record<string, string> }>).detail;
+    if (!scene || !detail?.mixed) return;
+    const w = detail.progress ?? 0;
+    const mixed = { ...detail.mixed };
+    const glintA = mixed['--forge-light-key'], glintB = mixed['--accent'];
+    if (glintA && glintB) mixed['--forge-break-glint'] = hexLerp(glintA, glintB, w);
+    scene.setPreview(mixed, w);
+  };
   const motion = (value:boolean) => {
     scrollLock.setReady(Boolean(scene)&&!value);
     if(value)projectDialogs?.finishMotion();
@@ -41,6 +58,7 @@ export function initForge(body: HTMLElement): () => void {
     scene?.setReduced(value);measure();
   };
   document.addEventListener('themechange',theme,options);
+  document.addEventListener('themepreview',preview,options);
   reducedQuery.addEventListener('change',event=>motion(event.matches),options);
   window.addEventListener('scroll',()=>{if(!pending)pending=requestAnimationFrame(update);},{...options,passive:true});
   window.addEventListener('resize',measure,{...options,passive:true});

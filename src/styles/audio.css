@@ -2,16 +2,21 @@
    并设计一下音频按钮，要和本站视觉风格匹配」）。
 
    视觉语言取自站内既有的三处，不自造第四种：
-     · 形状 —— comments.css 的输入框：直角（border-radius: 0）、1px --hair 发丝线、
-       底色吃 --paper，不发光、不投影；
+     · 形状 —— 无边框、无底色：播放键是方角描边小按钮，波形与时间直接排在正文里；
      · 字 —— 时间与标签走 IBM Plex Mono / --fs-mono（与 PageReadout、日志页同族）；
      · 绿 —— 只有「正在播放的那一段」用 --accent，其余一律墨色/发丝线。
        和文章里的链接同一条规矩：绿色是注意力，不是装饰。
 
-   ★ 为什么做成「一条横条」而不是圆角播放器卡片：
-     正文是左对齐的窄栏（--measure），一个 48px 高的圆角卡片会像外站组件插进来；
-     横条与正文左缘对齐、高度等于一行半、直角收口，读起来像「引文/脚注」，
-     这正是站内对「非正文内容」的一贯处理（代码块、引用、相册条都是如此）。 */
+   ★ 2026-11-12 站主：「语音条外面那个长方形的框是什么，去掉」——
+     原先整条套着 1px --hair 直角外框，视觉上像插进来一个组件卡片。
+     现在外框与底色一并撤掉，只留播放键、波形、时间三项，与正文同一条基线。
+
+   ★ 2026-11-12（第二轮）站主：「去掉播放键的正方形框，改成圆形按钮」+
+     「语音条改成可拖动变进度的」。两处一起改：
+       · 播放键 —— 2rem 正圆（border-radius: 50%），仍是 1px 描边、无投影，
+         与站上其它圆控件（点赞胶囊、播放器圆钮）同一族；
+       · 波形 —— 视觉不变（40 根竖条），但**命中区**从 18px 条高抬到 1.75rem，
+         否则拖动时手指/指针很容易滑出去；拖动逻辑在 src/scripts/audio-player.ts。 */
 
 .ap {
   --ap-height: 2.75rem;
@@ -24,25 +29,17 @@
   max-width: 34rem;
   min-height: var(--ap-height);
   margin: var(--sp-4) 0;
-  padding: 0 var(--sp-3);
-  border: 1px solid var(--hair);
-  border-radius: 0;
-  background: var(--paper);
+  padding: 0;
+  background: transparent;
   color: var(--ink);
   font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: var(--fs-mono);
   line-height: 1.2;
   box-sizing: border-box;
-  transition: border-color 0.18s ease, background-color 0.18s ease;
 }
 
-.ap:hover {
-  border-color: var(--ink-2);
-}
-
-.ap:focus-within {
-  border-color: var(--accent-ink);
-}
+/* 外框撤掉后不再有整条的 hover/focus 边框反馈；
+   焦点与悬停的可见反馈交给播放键与波形自身（.ap-play:hover / .ap-wave:focus-visible）。 */
 
 /* 没有 JS 时原生 <audio controls> 顶上来；有 JS 后它被藏掉，换成下面这套。 */
 .ap:not([data-ap-ready]) > audio {
@@ -67,7 +64,7 @@
   height: 2rem;
   padding: 0;
   border: 1px solid var(--ink-2);
-  border-radius: 0;
+  border-radius: 50%;
   background: transparent;
   color: var(--ink);
   font: inherit;
@@ -92,6 +89,16 @@
   stroke: none;
 }
 
+/* ★ 暂停那枚图元是**两条竖线**（path 只给 M9 6v12M16 6v12），没有填充面积 ——
+   上面那条 `fill: currentColor; stroke: none` 会让它变成一片空白（按下播放后按钮像空的）。
+   ⇒ 单独给它 stroke。（2026-11-12 顺手修，站主截图里正是"播放中按钮没有图标"） */
+.ap-play .ap-glyph-pause {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
 .ap[data-ap-playing] .ap-play {
   border-color: var(--accent-ink);
   color: var(--accent-ink);
@@ -111,7 +118,9 @@
 }
 
 /* 波形：40 根竖条，高度由 JS 按 src 的哈希定（同一个文件永远同一张波形）。
-   点条即跳转 —— 整条是一个 role="slider"。 */
+   整条是一个 role="slider"：点即跳转，按住拖动连续改进度（audio-player.ts）。
+   命中区 1.75rem 高、竖条居中 —— 竖条本身只有 18px，只按条高取命中，
+   拖动时指针一滑出条带就断，手上会觉得"卡住"。 */
 .ap-wave {
   position: relative;
   display: flex;
@@ -119,9 +128,18 @@
   gap: 2px;
   flex: 1;
   min-width: 0;
-  height: var(--ap-bar-max);
+  height: 1.75rem;
   cursor: pointer;
   touch-action: none;
+}
+
+/* 拖动中：已播段回到满浓度（手指/指针盖住波形，需要更强反馈）。
+   ⚠ 这里**不写** `cursor: grabbing`：站上的原生光标由 `html.cursor-none` 全站接管，
+   任何 `cursor:` 都是重复暗示；而且 build-output 的白名单只放行
+   none/auto/text/default/inherit/not-allowed/pointer，`grab(bbing)` 历史上就被否过。
+   拖动反馈交给「已播段满浓度 + 游标」这两样，别再往这儿加 cursor。 */
+.ap[data-ap-scrubbing] .ap-wave i[data-played] {
+  opacity: 1;
 }
 
 .ap-wave i {

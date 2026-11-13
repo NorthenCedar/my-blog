@@ -19,6 +19,28 @@ it('页面作用域注销全局监听、媒体查询和观察器，异步回调�
   expect(disconnect).toHaveBeenCalledTimes(1);expect(disposed).toBe(1);
   expect(scope.requestAnimationFrame(()=>frames++)).toBe(0);expect(frames).toBe(0);
 });
+it('主动取消后离页不重复清理，仍在运行的任务随页面释放', () => {
+  const win = new Window();
+  vi.spyOn(win, 'setTimeout').mockReturnValue(1);
+  vi.spyOn(win, 'setInterval').mockReturnValue(2);
+  vi.spyOn(win, 'requestAnimationFrame').mockReturnValue(3);
+  const clearTimeout = vi.spyOn(win, 'clearTimeout').mockImplementation(() => {});
+  const clearInterval = vi.spyOn(win, 'clearInterval').mockImplementation(() => {});
+  const cancelFrame = vi.spyOn(win, 'cancelAnimationFrame').mockImplementation(() => {});
+  Object.defineProperty(win, 'requestIdleCallback', { value: undefined });
+  const page = createPageScope(win as any, win.document as any);
+  const timer = page.window.setTimeout(() => {}, 100);
+  page.window.setInterval(() => {}, 100);
+  const frame = page.window.requestAnimationFrame(() => {});
+  page.window.clearTimeout(timer);
+  page.window.cancelAnimationFrame(frame);
+  expect(page.window.requestIdleCallback).toBeUndefined();
+  page.dispose();
+  expect(clearTimeout.mock.calls).toEqual([[1]]);
+  expect(clearInterval.mock.calls).toEqual([[2]]);
+  expect(cancelFrame.mock.calls).toEqual([[3]]);
+});
+
 it('首屏只挂载一次，替换页面时先清理，再为目标页重新挂载',async()=>{
   vi.resetModules();const win=new Window();win.document.body.innerHTML='<button data-probe>一</button>';
   vi.stubGlobal('window',win);vi.stubGlobal('document',win.document);vi.stubGlobal('PageTransitionEvent',win.PageTransitionEvent);

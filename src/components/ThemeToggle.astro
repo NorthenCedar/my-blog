@@ -4,18 +4,28 @@
  * 原版代码在 src/vendor/jelly-slider/（三处本站改动见各文件 ★ 标注），
  * 接入逻辑在 src/scripts/theme-toggle.ts，主题契约见 src/scripts/theme.ts。
  *
- * ★ 2026-10-17 两处站主口径：
- *   · 「按钮只放在关于页」⇒ 本组件**只被 src/pages/about.astro 引用**（页面右上角
- *     的 `.theme-dock`；2026-10-17 第二轮从右栏 FIG.05 搬上去，文字全部删除）；
- *     顶栏 / 首页 / 内页顶栏都不挂它 —— 那个 ~460 KB 的渲染器 chunk 于是只被 /about/ 引用。
- *   · 下面 <script> 是**懒加载**：等页面空闲了再去拉那个 chunk，不占关于页首屏。
+ * ★ 2026-11-12 站主：「把关于页这个改亮色暗色的按钮移到顶部导航拦，不要影子了」。
+ *   ⇒ 三件事一起改：
+ *     · 位置：从关于页的 `.theme-dock`（绝对定位在场景右上）搬进 `components/Topbar.astro`，
+ *       于是**所有内页**都能切主题，不再只有关于页有；
+ *     · 形态：新增 `variant="nav"` —— 画布仍是 220×200（内部渲染尺寸一个字没动，
+ *       改了会拉伸，见 theme-toggle.ts 的 W/H 注释），但用一个 52px 高的窗口
+ *       把中间那条软条裁出来（上下本来全是透明），按 0.8 缩放塞进 46px 高的顶栏；
+ *     · 影子：ground 那一层不再输出不透明度（`src/vendor/jelly-slider/scene.ts`），
+ *       软条下面那片软影没有了，裁切边界上也就不会留一条硬线。
+ *   ⚠ 懒加载保留：那个 ~459 KB 的渲染器 chunk 仍然只在**空闲时**拉，且只拉一次。
  *
  * 无 WebGPU 的浏览器降级为普通文字开关（主题照样切）。
  * 无障碍：role=switch + aria-checked + 键盘可操作；canvas 纯装饰 aria-hidden。
  */
+interface Props {
+  /** 'dock' = 关于页那种原尺寸；'nav' = 顶栏用的裁切小窗。 */
+  variant?: 'dock' | 'nav';
+}
+const { variant = 'dock' } = Astro.props;
 ---
 <div
-  class="theme-toggle"
+  class:list={['theme-toggle', variant === 'nav' && 'theme-toggle--nav']}
   data-theme-toggle
   role="switch"
   aria-checked="false"
@@ -102,6 +112,32 @@ onPage(({document, window, addEventListener, setTimeout}) => {
   }
   .theme-toggle:focus-visible {
     outline: 2px solid var(--accent);
+  }
+  /* ★ 2026-11-12：顶栏用的小窗版本。
+     画布内部仍是 220×200（渲染尺寸写在 theme-toggle.ts，改这里不会改渲染），
+     canvas 本地 y≈56…108 那一条正好是软条 —— 用一个 52px 的窗口把它裁出来，
+     上下两截（本来就是透明）不占顶栏高度。
+     `--tt-s` 是整体缩放：顶栏 46px 高，0.8 时窗口 41.6px；手机档再缩到 0.58。 */
+  .theme-toggle--nav {
+    --tt-s: 0.8;
+    position: relative;
+    flex: none;
+    width: calc(220px * var(--tt-s));
+    height: calc(52px * var(--tt-s));
+    overflow: hidden;
+  }
+  .theme-toggle--nav canvas {
+    position: absolute;
+    left: 0;
+    top: calc(-56px * var(--tt-s));
+    width: 220px;
+    height: 200px;
+    margin: 0;
+    transform: scale(var(--tt-s));
+    transform-origin: 0 0;
+  }
+  @media (max-width: 767px) {
+    .theme-toggle--nav { --tt-s: 0.58; }
   }
   /* 无 WebGPU 降级开关：极简 pill，不伪装成果冻 */
   .theme-toggle :global(.tt-fallback) {

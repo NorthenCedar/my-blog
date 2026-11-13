@@ -76,7 +76,8 @@ varying float vTip;
    片元侧只需要那五个 varying（通过 varying 传过来），所以拆开最干净。 */
 export const FIN_VERTEX_ATTRS = /* glsl */ `
 attribute float aIndex;
-attribute float aRelay;
+attribute vec4 aRelay;
+attribute float aRelayLift;
 `;
 
 export const FIN_VERTEX = /* glsl */ `

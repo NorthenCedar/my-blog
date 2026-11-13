@@ -12,11 +12,46 @@ import { d, std } from 'typegpu';
 
 const BEZIER_TEXTURE_SIZE = [256, 128] as const;
 
+/* ★ 本站加（2026-11-13）：物理热路径的纯 JS 数学替身。
+ * typegpu 的 std.smoothstep / std.clamp / std.saturate 在 CPU 侧带 GPU 代码生成
+ * 的分发开销 —— 微基准 10 万次：std.smoothstep 35.7ms，等价纯 JS 1.4ms（25 倍）。
+ * 公式与 cpuSmoothstep / cpuSaturate 一致（t=clamp((x−e0)/(e1−e0)), t²(3−2t)），
+ * 只用在积分与约束投影里；GPU 侧的 'use gpu' 代码仍走 std.*，互不影响。 */
+const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const smoothstepJS = (e0: number, e1: number, x: number) => {
+  const t = clamp01((x - e0) / (e1 - e0));
+  return t * t * (3 - 2 * t);
+};
+
 export class Slider {
   #root: TgpuRoot;
+  /* ★ 本站改（2026-11-13）：物理状态从 d.v2f[] 换成扁平 Float64Array。
+   *
+   * 病灶（CPU profile 实测，归档页"有概率卡死"的真凶）：
+   *   setInitial 的首帧沉降最多跑 240 步 × 6 子步 × 16 轮约束 ≈ 320 万次
+   *   `#pos[i] = d.vec2f(...)` 对象分配，且 vec2f 的 x/y 是 getter
+   *   （profile 里 get x 196ms + get y 185ms）⇒ 首帧一条 ~640ms 长任务，
+   *   主线程冻结，视觉上就是"打开页面卡死"。
+   *
+   * 修法不是切片/降精度，而是**同一套数学换个存法**：
+   *   #px/#py（当前位置）与 #qx/#qy（Verlet 的 prev）是纯数值数组，
+   *   积分与约束投影零分配、零 getter，同样的步数同样的结果。
+   *   #pos 降级为「发布缓存」：只在 #publish 里从扁平数组同步一次
+   *   （17 个对象/帧，可忽略），供 points getter（CPU 命中测试）
+   *   与 GPU buffer 上传读取。
+   * ⚠ `_probe/_slider_sim.py` 是这套物理的逐行移植，数学没变，那边不用动。 */
   #pos: d.v2f[];
   #normals: d.v2f[];
-  #prev: d.v2f[];
+  #px: Float64Array;
+  #py: Float64Array;
+  #qx: Float64Array;
+  #qy: Float64Array;
+  /* ★ 本站加（2026-11-13）：每步重算一次的「点位常量」。
+   * 拱形权重与弯折强度只依赖 i、archEdgeDeadzone、bendingStrength/Exponent，
+   * 与位置、迭代轮次无关 —— 原来却在 16 轮 × 15 点里反复 sin/pow（首帧 240 步
+   * ≈ 35 万次 Math.pow）。每 #step 开头各算 17 个值，语义不变、参数仍可运行期改。 */
+  #archProfile: Float64Array;
+  #bendK: Float64Array;
   #invMass: Float32Array;
   #targetX: number;
   #controlPoints: d.v2f[];
@@ -72,15 +107,23 @@ export class Slider {
     this.#pos = Array.from({ length: this.n });
     this.#controlPoints = Array.from({ length: this.n - 1 });
     this.#normals = Array.from({ length: this.n });
-    this.#prev = Array.from({ length: this.n });
+    this.#px = new Float64Array(this.n);
+    this.#py = new Float64Array(this.n);
+    this.#qx = new Float64Array(this.n);
+    this.#qy = new Float64Array(this.n);
+    this.#archProfile = new Float64Array(this.n);
+    this.#bendK = new Float64Array(this.n);
     this.#invMass = new Float32Array(this.n);
 
     for (let i = 0; i < this.n; i++) {
       const t = i / (this.n - 1);
       const x = start[0] * (1 - t) + end[0] * t;
       const y = start[1] * (1 - t) + end[1] * t + this.#yOffset;
+      this.#px[i] = x;
+      this.#py[i] = y;
+      this.#qx[i] = x;
+      this.#qy[i] = y;
       this.#pos[i] = d.vec2f(x, y);
-      this.#prev[i] = d.vec2f(x, y);
       this.#normals[i] = d.vec2f(0, 1);
       this.#invMass[i] = i === 0 || i === this.n - 1 ? 0 : 1;
       if (i < this.n - 1) {
@@ -237,18 +280,26 @@ export class Slider {
         (lengths[segment] - lengths[segment - 1] || 1)) / samples;
       const px = this.anchor.x + dx * t;
       const py = curve(t, lo);
-      this.#pos[i] = d.vec2f(px, py);
-      this.#prev[i] = d.vec2f(px, py);
+      this.#px[i] = px;
+      this.#py[i] = py;
+      this.#qx[i] = px;
+      this.#qy[i] = py;
     }
     let stable = 0;
     for (let i = 0; i < 240 && stable < 4; i++) {
       this.#step(1 / 60);
-      const movement = Math.max(...this.#pos.map((p, index) =>
-        Math.hypot(p.x - this.#prev[index].x, p.y - this.#prev[index].y)));
+      let movement = 0;
+      for (let j = 0; j < this.n; j++) {
+        const mx = this.#px[j] - this.#qx[j];
+        const my = this.#py[j] - this.#qy[j];
+        const m = Math.sqrt(mx * mx + my * my);
+        if (m > movement) movement = m;
+      }
       stable = movement < 1e-5 ? stable + 1 : 0;
     }
     // 首帧与前一物理帧一致；剩余速度不能在显示后再把初态顶开。
-    this.#prev = this.#pos.map(p => d.vec2f(p.x, p.y));
+    this.#qx.set(this.#px);
+    this.#qy.set(this.#py);
     this.#publish();
   }
 
@@ -256,7 +307,8 @@ export class Slider {
    * ★ 本站加（2026-10-17 第七轮）：当前链条各点的**只读快照**。
    *
    * 给 CPU 侧的指针命中测试用（`scene.ts` 的 `eventHandler.hitTest`）：
-   * `#pos` 就是物理积分后的真实形状 —— 被压缩时会拱起、跟手时会弯，
+   * 这里返回的是**发布缓存**（每次 #publish 从物理态同步），就是积分后的
+   * 真实形状 —— 被压缩时会拱起、跟手时会弯，
    * 用固定矩形做命中区会在链条拱起来时"点得到空处"，在它趴下时又"整块都能点"。
    * ⚠ 这是内部数组本身，不是拷贝 —— 别在调用方改它。
    */
@@ -274,11 +326,23 @@ export class Slider {
 
   #step(dt: number) {
     const h = dt / this.substeps;
-    const damp = std.clamp(this.damping, 0, 0.999);
+    const damp = Math.min(0.999, Math.max(0, this.damping));
     const compression = Math.max(
       0,
       1 - Math.abs(this.#targetX - this.anchor[0]) / this.totalLength,
     );
+
+    // 点位常量每步只算一次（原来在 16 轮迭代 × 6 子步里重复几十万次）。
+    const edge = this.archEdgeDeadzone;
+    const bend = this.#bendK;
+    const arch = this.#archProfile;
+    for (let i = 1; i < this.n - 1; i++) {
+      const t = i / (this.n - 1);
+      const window = smoothstepJS(edge, 1 - edge, t) * smoothstepJS(edge, 1 - edge, 1 - t);
+      arch[i] = Math.sin(Math.PI * t) * window;
+      const distFromCenter = Math.abs(t - 0.5) * 2;
+      bend[i] = this.bendingStrength * (0.05 + 0.95 * distFromCenter ** this.bendingExponent);
+    }
 
     for (let s = 0; s < this.substeps; s++) {
       this.#integrate(h, damp, compression);
@@ -287,6 +351,10 @@ export class Slider {
   }
 
   #publish(dispatchBezier = true) {
+    // 先同步发布缓存：points getter（命中测试）与 GPU 上传读的都是这份
+    for (let i = 0; i < this.n; i++) {
+      this.#pos[i] = d.vec2f(this.#px[i], this.#py[i]);
+    }
     this.#computeNormals();
     this.#computeControlPoints();
     this.#updateGPUBuffer();
@@ -296,47 +364,62 @@ export class Slider {
   }
 
   #integrate(h: number, damp: number, compression: number) {
-    for (let i = 0; i < this.n; i++) {
-      const px = this.#pos[i].x;
-      const py = this.#pos[i].y;
-
+    const n = this.n;
+    const px = this.#px;
+    const py = this.#py;
+    const qx = this.#qx;
+    const qy = this.#qy;
+    const vscale = 1 - damp;
+    const h2 = h * h;
+    const floorY = this.baseY + this.#yOffset;
+    for (let i = 0; i < n; i++) {
       // Pin endpoints
       if (i === 0) {
-        this.#pos[i] = d.vec2f(this.anchor[0], this.anchor[1] + this.#yOffset);
-        this.#prev[i] = d.vec2f(this.anchor[0], this.anchor[1] + this.#yOffset);
+        px[i] = this.anchor[0];
+        py[i] = this.anchor[1] + this.#yOffset;
+        qx[i] = px[i];
+        qy[i] = py[i];
         continue;
       }
-      if (i === this.n - 1) {
-        this.#pos[i] = d.vec2f(this.#targetX, 0.08 + this.#yOffset);
-        this.#prev[i] = d.vec2f(this.#targetX, 0.08 + this.#yOffset);
+      if (i === n - 1) {
+        px[i] = this.#targetX;
+        py[i] = 0.08 + this.#yOffset;
+        qx[i] = px[i];
+        qy[i] = py[i];
         continue;
       }
 
       // Verlet integration with damping
-      const vx = (px - this.#prev[i].x) * (1 - damp);
-      const vy = (py - this.#prev[i].y) * (1 - damp);
+      const vx = (px[i] - qx[i]) * vscale;
+      const vy = (py[i] - qy[i]) * vscale;
 
       // Arch bias in middle section only
       let ay = 0;
       if (compression > 0) {
-        const t = i / (this.n - 1);
-        const edge = this.archEdgeDeadzone;
-        const window = std.smoothstep(edge, 1 - edge, t) * std.smoothstep(edge, 1 - edge, 1 - t);
-        const profile = Math.sin(Math.PI * t) * window;
-        ay = this.archStrength * profile * compression;
+        ay = this.archStrength * this.#archProfile[i] * compression;
       }
 
-      this.#prev[i] = d.vec2f(px, py);
-      this.#pos[i] = d.vec2f(px + vx, py + vy + ay * h * h);
+      qx[i] = px[i];
+      qy[i] = py[i];
+      px[i] += vx;
+      py[i] += vy + ay * h2;
 
       // Keep above baseline
-      if (this.#pos[i].y < this.baseY + this.#yOffset) {
-        this.#pos[i] = d.vec2f(this.#pos[i].x, this.baseY + this.#yOffset);
+      if (py[i] < floorY) {
+        py[i] = floorY;
       }
     }
   }
 
   #projectConstraints() {
+    // 展平端头的刚度每轮都一样，先饱和一次；不要在最内层循环里走 std.saturate。
+    const flatK = clamp01(this.endFlatStiffness);
+    const floorY = this.baseY + this.#yOffset;
+    const flatCount = Math.min(this.endFlatCount, this.n - 2);
+    const bend = this.#bendK;
+    const rest2 = 2 * this.restLen;
+    const py = this.#py;
+    const invMass = this.#invMass;
     for (let it = 0; it < this.iterations; it++) {
       // Segment length constraints
       for (let i = 0; i < this.n - 1; i++) {
@@ -345,27 +428,24 @@ export class Slider {
 
       // Bending resistance (stronger at ends)
       for (let i = 1; i < this.n - 1; i++) {
-        const t = i / (this.n - 1);
-        const distFromCenter = Math.abs(t - 0.5) * 2;
-        const strength = distFromCenter ** this.bendingExponent;
-        const k = this.bendingStrength * (0.05 + 0.95 * strength);
-        this.#projectDistance(i - 1, i + 1, 2 * this.restLen, k);
+        this.#projectDistance(i - 1, i + 1, rest2, bend[i]);
       }
 
       // Flatten ends
       if (this.endFlatCount > 0) {
-        const count = Math.min(this.endFlatCount, this.n - 2);
-        for (let i = 1; i <= count; i++) {
-          this.#projectLineY(i, this.baseY + this.#yOffset, this.endFlatStiffness);
+        for (let i = 1; i <= flatCount; i++) {
+          if (invMass[i] > 0) py[i] += (floorY - py[i]) * flatK;
         }
-        for (let i = this.n - 1 - count; i < this.n - 1; i++) {
-          this.#projectLineY(i, this.baseY + this.#yOffset, this.endFlatStiffness);
+        for (let i = this.n - 1 - flatCount; i < this.n - 1; i++) {
+          if (invMass[i] > 0) py[i] += (floorY - py[i]) * flatK;
         }
       }
 
       // Re-pin endpoints
-      this.#pos[0] = d.vec2f(this.anchor[0], this.anchor[1] + this.#yOffset);
-      this.#pos[this.n - 1] = d.vec2f(this.#targetX, 0.08 + this.#yOffset);
+      this.#px[0] = this.anchor[0];
+      this.#py[0] = this.anchor[1] + this.#yOffset;
+      this.#px[this.n - 1] = this.#targetX;
+      this.#py[this.n - 1] = 0.08 + this.#yOffset;
 
       /* ★★ 本站加（2026-10-18 第十一轮，站主截图：软条中段拱成一团、端头竖成一片）。
        *
@@ -412,20 +492,27 @@ export class Slider {
        */
       const lo = Math.min(this.anchor[0], this.#targetX);
       const hi = Math.max(this.anchor[0], this.#targetX);
+      const px = this.#px;
       for (let i = 1; i < this.n - 1; i++) {
-        if (this.#pos[i].x < lo) {
-          this.#pos[i].x = lo;
-        } else if (this.#pos[i].x > hi) {
-          this.#pos[i].x = hi;
+        if (px[i] < lo) {
+          px[i] = lo;
+        } else if (px[i] > hi) {
+          px[i] = hi;
         }
       }
     }
   }
 
   #projectDistance(i: number, j: number, rest: number, k: number) {
-    const dx = this.#pos[j].x - this.#pos[i].x;
-    const dy = this.#pos[j].y - this.#pos[i].y;
-    const len = Math.hypot(dx, dy);
+    const px = this.#px;
+    const py = this.#py;
+    const dx = px[j] - px[i];
+    const dy = py[j] - py[i];
+    /* ★ 本站改（2026-11-13）：Math.hypot → sqrt(dx²+dy²)。
+       hypot 为防溢出做内部缩放，比 sqrt 慢约两个数量级；约束投影每步被调
+       ~3000 次、首帧沉降最多 240 步 ⇒ 仅这一行就是 ~200ms。
+       本站坐标量级在 1e-8..2 之间，防溢出保护用不上，数值差异在 1e-16 级。 */
+    const len = Math.sqrt(dx * dx + dy * dy);
 
     if (len < 1e-8) return;
 
@@ -438,46 +525,42 @@ export class Slider {
     const c1 = (w1 / wsum) * k;
     const c2 = (w2 / wsum) * k;
 
-    this.#pos[i] = d.vec2f(this.#pos[i].x + dx * diff * c1, this.#pos[i].y + dy * diff * c1);
-    this.#pos[j] = d.vec2f(this.#pos[j].x - dx * diff * c2, this.#pos[j].y - dy * diff * c2);
-  }
-
-  #projectLineY(i: number, yTarget: number, k: number) {
-    if (i <= 0 || i >= this.n - 1 || this.#invMass[i] <= 0) return;
-    this.#pos[i] = d.vec2f(
-      this.#pos[i].x,
-      this.#pos[i].y + (yTarget - this.#pos[i].y) * std.saturate(k),
-    );
+    px[i] += dx * diff * c1;
+    py[i] += dy * diff * c1;
+    px[j] -= dx * diff * c2;
+    py[j] -= dy * diff * c2;
   }
 
   #computeNormals() {
     const n = this.n;
+    const px = this.#px;
+    const py = this.#py;
     const eps = 1e-6;
     for (let i = 0; i < n; i++) {
       let dx: number;
       let dy: number;
 
       if (i === 0 && n > 1) {
-        dx = this.#pos[1].x - this.#pos[0].x;
-        dy = this.#pos[1].y - this.#pos[0].y;
+        dx = px[1] - px[0];
+        dy = py[1] - py[0];
       } else if (i === n - 1 && n > 1) {
-        dx = this.#pos[n - 1].x - this.#pos[n - 2].x;
-        dy = this.#pos[n - 1].y - this.#pos[n - 2].y;
+        dx = px[n - 1] - px[n - 2];
+        dy = py[n - 1] - py[n - 2];
       } else {
-        dx = this.#pos[i + 1].x - this.#pos[i - 1].x;
-        dy = this.#pos[i + 1].y - this.#pos[i - 1].y;
+        dx = px[i + 1] - px[i - 1];
+        dy = py[i + 1] - py[i - 1];
       }
 
       let len = Math.hypot(dx, dy);
       if (len < eps) {
         if (i > 0) {
-          dx = this.#pos[i].x - this.#pos[i - 1].x;
-          dy = this.#pos[i].y - this.#pos[i - 1].y;
+          dx = px[i] - px[i - 1];
+          dy = py[i] - py[i - 1];
           len = Math.hypot(dx, dy);
         }
         if (len < eps && i < n - 1) {
-          dx = this.#pos[i + 1].x - this.#pos[i].x;
-          dy = this.#pos[i + 1].y - this.#pos[i].y;
+          dx = px[i + 1] - px[i];
+          dy = py[i + 1] - py[i];
           len = Math.hypot(dx, dy);
         }
         if (len < eps) {
@@ -493,22 +576,26 @@ export class Slider {
   }
 
   #computeControlPoints() {
+    const px = this.#px;
+    const py = this.#py;
     for (let i = 0; i < this.n - 1; i++) {
-      const A = this.#pos[i];
-      const B = this.#pos[i + 1];
+      const ax = px[i];
+      const ay = py[i];
+      const bx = px[i + 1];
+      const by = py[i + 1];
 
       const nA = this.#normals[i];
       const nB = this.#normals[i + 1];
 
       if (i === 0 || i === this.n - 2) {
-        this.#controlPoints[i] = d.vec2f((A.x + B.x) * 0.5, (A.y + B.y) * 0.5);
+        this.#controlPoints[i] = d.vec2f((ax + bx) * 0.5, (ay + by) * 0.5);
         continue;
       }
 
       if (std.dot(nA, nB) > 0.99) {
         // Nearly parallel normals; midpoint fallback prevents explosions.
         // tiny offset opposite to the normal (any of them)
-        this.#controlPoints[i] = d.vec2f((A.x + B.x) * 0.5, (A.y + B.y) * 0.5);
+        this.#controlPoints[i] = d.vec2f((ax + bx) * 0.5, (ay + by) * 0.5);
         continue;
       }
 
@@ -516,20 +603,20 @@ export class Slider {
       const tB = d.vec2f(nB.y, -nB.x);
 
       // Solve A + t*tA = B - s*tB  ->  t*tA + s*tB = (B - A)
-      const dx = B.x - A.x;
-      const dy = B.y - A.y;
+      const dx = bx - ax;
+      const dy = by - ay;
       const denom = tA.x * tB.y - tA.y * tB.x; // cross(tA, tB)
 
       if (Math.abs(denom) <= 1e-6) {
         // Nearly parallel tangents; midpoint fallback prevents explosions.
-        this.#controlPoints[i] = d.vec2f((A.x + B.x) * 0.5, (A.y + B.y) * 0.5);
+        this.#controlPoints[i] = d.vec2f((ax + bx) * 0.5, (ay + by) * 0.5);
         continue;
       }
 
       // t = cross(B - A, tB) / cross(tA, tB)
       const t = (dx * tB.y - dy * tB.x) / denom;
-      const cx = A.x + t * tA.x;
-      const cy = A.y + t * tA.y;
+      const cx = ax + t * tA.x;
+      const cy = ay + t * tA.y;
       this.#controlPoints[i] = d.vec2f(cx, cy);
     }
   }

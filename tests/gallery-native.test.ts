@@ -33,6 +33,7 @@ function environment(reduced=false){
   vp.dataset.spMode='embed';vp.rect={left:0,top:0,right:900,bottom:340,width:900,height:340};
   const items=Array.from({length:82},(_,i)=>{const item=new Node(),a=new Node(),img=new Node();item.offsetWidth=196;item.item=item;a.item=item;img.item=item;item.dataset={spItem:String(i),albumTitle:'相册',no:String(i+1).padStart(3,'0'),cap:'照片'+i};a.setAttribute('href','big-'+i);item.querySelector=selector=>selector==='img'?img:a;return item});
   const singles={'[data-spiral]':vp,'[data-sp-rig]':rig,'[data-sp-mark]':new Node(),'[data-sp-note]':new Node(),'[data-sp-hud-pos]':new Node(),'[data-sp-hud-album]':new Node(),'[data-sp-hud-no]':new Node(),'[data-sp-hud-cap]':new Node()};
+  const scrub=new Node();vp.querySelector=selector=>selector==='[data-sp-scrub]'?scrub:null;
   const ids=Object.fromEntries(['splb','splbImg','splbAlbum','splbCap','splbNo','splbClose','splbPrev','splbNext'].map(name=>[name,new Node()]));
   doc.querySelector=selector=>singles[selector]??null;doc.querySelectorAll=selector=>selector==='[data-sp-item]'?items:[];doc.getElementById=name=>ids[name]??null;
   host.querySelector=doc.querySelector;host.querySelectorAll=doc.querySelectorAll;
@@ -41,8 +42,25 @@ function environment(reduced=false){
   vm.runInContext(bundle,context);const api=context.OriginalSpiral.mountOriginalHelix(host);api.setActive(true);
   const advance=(count=240)=>{for(let i=0;i<count;i++){time+=16;for(const [n,timer]of [...timers])if(timer.at<=time){timers.delete(n);timer.fn()}const current=[...frames.values()];frames.clear();for(const fn of current)fn(time)}};
   function click(index=null){const target=index===null?vp:items[index].querySelector('img');vp.fire('pointerdown',{target,pointerType:'mouse',button:0,pointerId:1,clientX:100});vp.fire('pointerup',{target:vp,pointerId:1});}
-  return {doc,window,root,vp,items,api,ids,advance,click,prefetched,hud:()=>singles['[data-sp-hud-pos]'].textContent};
+  return {doc,window,root,vp,items,api,ids,advance,click,prefetched,scrub,
+    mark:()=>Number(singles['[data-sp-mark]'].style['--p']),hud:()=>singles['[data-sp-hud-pos]'].textContent};
 }
+test('定位刻度连续追随，途中改向从当前画面接续并落到指定帧',()=>{
+  const e=environment();
+  e.scrub.valueAsNumber=41;e.scrub.fire('input');
+  assert.equal(e.mark(),0);
+  e.advance(8);
+  assert(e.mark()>0&&e.mark()<40/81);
+  assert.equal(e.scrub.value,'41');
+  assert.match(e.scrub.getAttribute('aria-valuetext'),/第 41 张.*照片40/);
+  const midway=e.mark();
+  e.scrub.valueAsNumber=18;e.scrub.fire('input');
+  assert.equal(e.mark(),midway);
+  e.advance();
+  assert.equal(e.mark(),17/81);assert.equal(e.hud(),'018 / 082');
+  e.api.step(1);e.advance();
+  assert.equal(e.scrub.value,'19');assert.equal(e.hud(),'019 / 082');
+});
 test('首次点图按原站放大，再点同一张打开原灯箱，关闭后焦点回到盘面',async()=>{
   const e=environment();e.click(0);assert(e.items[0].classList.contains('zoom'));assert.equal(e.api.lightboxOpen,false);
   e.click(0);await Promise.resolve();assert.equal(e.api.lightboxOpen,true);assert.equal(e.ids.splbImg.src,'big-0');assert.equal(e.ids.splbCap.textContent,'照片0');

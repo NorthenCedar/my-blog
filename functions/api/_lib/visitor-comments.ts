@@ -1,19 +1,31 @@
 import { fail } from './visitor-core';
 import { ACCOUNT_FIELDS, LIVE_ACCOUNT_SQL, guardWrite, publicUser, requireAccount, sessionToken, writeProof, type Account, type VisitorEnv } from './visitor-store';
 
+export const replyParentExists = 'EXISTS (SELECT 1 FROM comments WHERE slug=? AND id=?)';
+export const missingReplyParent = '要回复的留言不存在（可能已被删除）';
+
 export async function saveAuthoredComment(request: Request, env: VisitorEnv, author: Account, kind: 'comment' | 'reply', values: unknown[]) {
   const sql = kind === 'comment'
     ? 'INSERT INTO comments (slug, name, body, created_at, ip_hash) SELECT ?,?,?,?,?'
     : 'INSERT INTO replies (slug, parent_id, reply_to, name, body, created_at, ip_hash) SELECT ?,?,?,?,?,?,?';
+  const proof = await writeProof(request, author);
+  const parentCheck = kind === 'reply' ? ' AND ' + replyParentExists : '';
+  const bindings = kind === 'reply' ? [...values, ...proof, values[0], values[1]] : [...values, ...proof];
   try {
     const results = await env.COMMENTS_DB.batch([
-      env.COMMENTS_DB.prepare(`${sql} WHERE ${LIVE_ACCOUNT_SQL} RETURNING id`).bind(...values, ...await writeProof(request, author)),
+      env.COMMENTS_DB.prepare(`${sql} WHERE ${LIVE_ACCOUNT_SQL}${parentCheck} RETURNING id`).bind(...bindings),
       // 条件 INSERT 没有命中时，用 NOT NULL 约束令整批事务回滚，不能留下匿名记录或复用旧 id。
       env.COMMENTS_DB.prepare('INSERT INTO comment_authors (kind,comment_id,user_id) VALUES (?, CASE WHEN changes() = 1 THEN last_insert_rowid() ELSE NULL END, ?)').bind(kind, author.id),
     ]);
     return (results[0].results[0] as { id: number }).id;
   } catch (error) {
-    if (/NOT NULL constraint failed: comment_authors.comment_id/i.test(String(error))) return fail(401, '登录已过期，请重新登录；编辑的内容会保留');
+    if (/NOT NULL constraint failed: comment_authors.comment_id/i.test(String(error))) {
+      if (kind === 'reply') {
+        const live = await env.COMMENTS_DB.prepare(`SELECT 1 WHERE ${LIVE_ACCOUNT_SQL}`).bind(...proof).first();
+        if (live) return fail(400, missingReplyParent);
+      }
+      return fail(401, '登录已过期，请重新登录；编辑的内容会保留');
+    }
     throw error;
   }
 }

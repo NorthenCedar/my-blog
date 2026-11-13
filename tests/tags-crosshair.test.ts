@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TAGS } from '../src/tag-registry';
+import { parse as parseYaml } from 'yaml';
 import { readPostFrontmatter, visiblePosts } from './content-invariants.test';
 import { RUNTIME_DEPS_ALLOWED } from './_deps';
 
 /* 标签区共用装置契约：2026-10-19 接手原关于页的交互百褶无限环。
- * 保留准星、矩阵、槽位隔离与内容验证；留言页独立保留机械环。
+ * 验证标签底纹、内容与布局，以及独立准星组件的契约。
  */
 const ROOT = process.cwd();
 const DIST = join(ROOT, 'dist');
@@ -25,7 +26,6 @@ const XH_ASTRO = read('src/components/Crosshair.astro');
 const XH_TS = read('src/scripts/crosshair.ts');
 const HOVER = read('src/styles/hover.css');
 
-const IDX_CSS = strip(IDX);
 const ONE_CSS = strip(ONE);
 const PLATE_CSS = strip(PLATE_ASTRO);
 const XH_CSS = strip(XH_ASTRO);
@@ -38,16 +38,6 @@ const XH_TS_CODE = strip(XH_TS);
 const IDX_HTML = hasDist ? readFileSync(join(DIST, 'tags', 'index.html'), 'utf8') : '';
 const ONE_HTML = hasDist ? readFileSync(join(DIST, 'tags', 'AI', 'index.html'), 'utf8') : '';
 const ARCHIVE_HTML = hasDist ? readFileSync(join(DIST, 'archive', 'index.html'), 'utf8') : '';
-
-/* 本页（/tags/AI/）该有几格 —— 从内容源派生，**不写死**。
- * ★ 2026-10-11：原来是 `toBe(2)`，删掉 ai-built-this-blog 后当场红。
- *   格子数本来就是「该标签下生产可见文章数」的**投影**，写死等于让判据跟内容源
- *   各说各话 —— 与总览页把 `toBe(8)` 改成从 TAGS 派生是同一个路数（见上方注释）。
- * 口径必须与页面一致：页面走 getPostsByTag → getVisiblePosts，
- * 生产环境**过滤草稿**，所以这里也用 visiblePosts()（否则加了草稿文章会误红）。 */
-const AI_POST_COUNT = visiblePosts(readPostFrontmatter()).filter((p) =>
-  p.tags.includes('AI'),
-).length;
 
 describe('标签区 · 交互百褶环挂载契约', () => {
   it('复用原百褶环，保留交互控制器和静态后备图', () => {
@@ -75,54 +65,18 @@ describe('标签区 · 交互百褶环挂载契约', () => {
   });
 });
 
-describe('标签区 · 两页共用同一个装置与矩阵', () => {
+describe('标签区 · 共用底纹与流动菜单', () => {
   it('★ 两页都挂同一个 TagsPlate（站主原话：「共用一套实现」）', () => {
     for (const [name, src] of [['tags/index.astro', IDX], ['tags/[tag].astro', ONE]] as const) {
       expect(src, `${name} 没挂 plate 槽`).toMatch(/<Fragment slot="plate"><TagsPlate \/><\/Fragment>/);
       expect(src, `没 import TagsPlate`).toMatch(/import TagsPlate from '\.\.\/\.\.\/components\/TagsPlate\.astro'/);
     }
-    /* 单标签页有**两条渲染路径**（正常 / 空态），两条都要挂上 ——
-       漏一条那条路径就没底纹，而且构建照常成功（站上吃过这个亏）。 */
-    expect((ONE.match(/<TagsPlate \/>/g) ?? []).length, '单标签页两条路径都要挂 TagsPlate').toBe(2);
-    /* 共用点必须在组件里**只有一份**（不是两页各抄一份 markup/样式） */
-    expect(PLATE_NC, 'TagsPlate 里必须挂 Crosshair 装置').toContain('<Crosshair />');
-    expect((PLATE_NC.match(/<Crosshair \/>/g) ?? []).length, 'Crosshair 只该挂一次').toBe(1);
+    expect(PLATE_NC).not.toContain('<Crosshair');
   });
 
-  it('★ 两页都是矩阵：格数、列数档、每格是完整方框', () => {
-    /* 标签总览：4/3/2 三档；单标签页：3/2/1（那边一格里是"标题+摘要"，要更宽） */
-    expect(IDX_CSS).toMatch(/repeat\(var\(--mx-cols, 4\), minmax\(0, 1fr\)\)/);
-    expect(IDX_CSS).toMatch(/--mx-cols:\s*3/);
-    expect(IDX_CSS).toMatch(/--mx-cols:\s*2/);
-    expect(ONE_CSS).toMatch(/repeat\(var\(--mx-cols, 3\), minmax\(0, 1fr\)\)/);
-    expect(ONE_CSS).toMatch(/--mx-cols:\s*2/);
-    expect(ONE_CSS).toMatch(/--mx-cols:\s*1/);
-
-    /* ★ 每一格是**完整方框** + `margin: 0 -1px -1px 0` 把自己的边框压到邻格下面
-       ⇒ 内部线 1px（不是 2px）。这条选法的理由写在两页注释里（未填满的行不能出现
-       "横贯全宽的线下面只画了一半"）。 */
-    for (const [name, css] of [['tags/index.astro', IDX_CSS], ['tags/[tag].astro', ONE_CSS]] as const) {
-      const cell = css.match(/\.(tag|post)-cell\s*\{([^}]*)\}/)?.[2] ?? '';
-      expect(cell, `${name} 没读到格子的样式块`).toBeTruthy();
-      expect(cell, `${name} 格子必须是完整方框（四边同宽）`).toMatch(/border:\s*1px solid var\(--hair\)/);
-      expect(cell, `${name} 格子缺负外边距 ⇒ 相邻边框会叠成 2px`).toMatch(/margin:\s*0 -1px -1px 0/);
-      expect(cell, `${name} 格子必须透空，让底纹透出来`).toMatch(/background:\s*transparent/);
-    }
-
-    /* 悬停的过渡参数在基线层（`hover.css`），形态在本页 —— 但**不许进位移组**：
-       格子有边框，整格在格内平移会和自己的边框脱开。
-       ★ 按**段落标题**切片，不按"某某选择器 + { }"去匹配 ——
-         选择器清单在花括号**外面**，抓声明块永远抓不到它（第一版就栽在这）。 */
-    const sec3 = HOVER.slice(HOVER.indexOf('3. 文字型链接'), HOVER.indexOf('4. 卡片/条目'));
-    const sec4 = HOVER.slice(HOVER.indexOf('4. 卡片/条目'), HOVER.indexOf('5. 表单控件'));
-    expect(sec3, 'hover 基线第 3 段（文字型链接）里没有 .tag-matrix a').toContain('.tag-matrix a');
-    expect(sec3, 'hover 基线第 3 段里没有 .post-matrix a').toContain('.post-matrix a');
-    expect(sec4, '矩阵格不该进"横向轻推"那一组（会和自己的边框脱开）').not.toContain('.tag-matrix a');
-    expect(sec4, '矩阵格不该进"横向轻推"那一组').not.toContain('.post-matrix a');
-    /* 降级档也要带上（各页悬停的 reduced-motion 名单是逐族枚举的，漏了就"啪"一下跳） */
-    const rm = HOVER.slice(HOVER.indexOf('prefers-reduced-motion: reduce'));
-    expect(rm, 'reduced-motion 名单漏了 .tag-matrix a').toContain('.tag-matrix a');
-    expect(rm, 'reduced-motion 名单漏了 .post-matrix a').toContain('.post-matrix a');
+  it('总览和详情共用流动菜单组件', () => {
+    expect(IDX).toContain('<TagFlowMenu items={items} />');
+    expect(ONE).toContain('<TagFlowMenu items={items} articles />');
   });
 
   it('★ 单标签页不再复用 PostIndex（归档页按 `.index li` 取行，改它=改归档）', () => {
@@ -253,7 +207,7 @@ describe('标签区 · 构建产物', () => {
       expect((html.match(/data-pleated-infinity/g) ?? []), `标签 ${tag || '总览'} 缺百褶环`).toHaveLength(1);
       expect(html).toMatch(/<canvas\b/);
       expect(html).toContain('pleated-infinity');
-      expect(html).toContain('data-crosshair');
+      expect(html).not.toContain('data-crosshair');
       expect(html).not.toMatch(/ceramic-infinity|class="tags-infinity"/);
       const scripts = [...html.matchAll(/<script[^>]+src="(\/_astro\/[^"]+\.js)"/g)]
         .map(m => readFileSync(join(DIST, m[1]), 'utf8'));
@@ -262,19 +216,29 @@ describe('标签区 · 构建产物', () => {
     }
   });
 
-  it('总览页：矩阵格数与标签注册表一致 + 百褶环 + 准星', () => {
-  expect(hasDist, '先 npm run build').toBe(true);
-    /* ★ 2026-10-10：原来写死 `toBe(8)`，加第9 个标签 `项目` 时当场红了。
-       格子数本来就是 TAGS 的**投影**，写死等于让它跟注册表各说各话 ——
-       改成从注册表派生：注册表加了标签而页面没跟上（或反过来）才会红，
-       而「忘了同步注册表」这类事故另有 post-meta.test.ts 守着。 */
-    expect((IDX_HTML.match(/<li class="tag-cell"/g) ?? []).length,
-      '标签总览的格数必须等于注册表里的标签数').toBe(TAGS.length);
-    expect(IDX_HTML, '缺矩阵容器').toMatch(/class="tag-matrix"/);
+  it('总览页：流动菜单从已发布文章派生标签行、链接和篇数', () => {
+    expect(hasDist, '先 npm run build').toBe(true);
+    expect(IDX_HTML).toContain('data-tag-flow-menu');
+    expect(IDX_HTML).toContain('class="flowing-menu" style="background-color:transparent;');
+    expect(IDX_HTML).not.toContain('class="flowing-menu__divider"');
+    const posts = visiblePosts(readPostFrontmatter());
+    const rows = [...IDX_HTML.matchAll(/<li class="flowing-menu__item">([\s\S]*?)<\/li>/g)].map((match) => match[1]);
+    let tagsWithPosts = 0;
+    for (const tag of TAGS) {
+      const count = posts.filter((p) => p.tags.includes(tag)).length;
+      if (!count) continue;
+      tagsWithPosts++;
+      const row = rows.find((row) => row.includes('href="/tags/' + encodeURIComponent(tag) + '/"'));
+      expect(row, '标签缺少链接：' + tag).toBeDefined();
+      expect(row).toContain('>' + tag + '</span>');
+      expect(row).toContain('class="flowing-menu__meta">' + count + ' 篇</span>');
+      const part = row?.match(/class="flowing-menu__part">([\s\S]+?)<\/div>/)?.[1];
+      expect(part?.match(/class="tag-flow-title"/g), tag + '的色带必须包含所有已发布文章').toHaveLength(count);
+      expect(part?.match(/data-tag-flow-photo=/g), tag + '的标题后应有照片胶囊').toHaveLength(count);
+    }
+    expect(rows).toHaveLength(tagsWithPosts);
     expect(IDX_HTML, '缺底纹层').toMatch(/data-pleated-infinity/);
     expect(IDX_HTML, '底纹必须走构建期优化管线（srcset）').toMatch(/<img[^>]*srcset="[^"]*"/);
-    expect(IDX_HTML, '缺准星').toMatch(/class="crosshair"[^>]*data-crosshair|data-crosshair[^>]*class="crosshair"/);
-    expect(IDX_HTML, '准星三条元素要一起产出').toMatch(/class="ch-dot"/);
     expect(IDX_HTML, 'body 上没有 tags-plate ⇒ 通用内页底纹没被关掉').toMatch(/<body[^>]*class="[^"]*tags-plate/);
     /* 内容必须服务端渲染完整（装置是装饰，不许承担内容） */
     for (const t of ['AI', '建站', '摄影', '钢琴']) {
@@ -285,24 +249,27 @@ describe('标签区 · 构建产物', () => {
     expect(ONE_HTML, '单标签页的页头标题没在正文流里').toMatch(/<header class="pagehead"[^>]*><h1[^>]*>AI<\/h1>/);
   });
 
-  it('单标签页：文章矩阵 + 同一套底纹与准星；归档页不受影响', () => {
-    /* 判据守**关系**（格子数 = 内容源投影），不守「上一版有几篇」这个数字。
-       内容源本身为空时下面会红 —— 那是「AI 标签下没文章」的真事故，不是假阳性。 */
-    expect(AI_POST_COUNT, '内容源里 AI 标签下没有可见文章，本页本该只有空态').toBeGreaterThan(0);
-    expect(
-      (ONE_HTML.match(/<li class="post-cell"/g) ?? []).length,
-      `AI 标签下的格数必须等于内容源里 AI 标签的可见文章数（${AI_POST_COUNT}）`,
-    ).toBe(AI_POST_COUNT);
-    expect(ONE_HTML, '缺文章矩阵容器').toMatch(/class="post-matrix"/);
-    expect(ONE_HTML, '缺底纹层').toMatch(/data-pleated-infinity/);
-    expect(ONE_HTML, '缺准星').toMatch(/data-crosshair/);
-    expect(ONE_HTML, 'body 上没有 tags-plate').toMatch(/<body[^>]*class="[^"]*tags-plate/);
-    /* 两页共用同一份实现 ⇒ 准星的**标记结构**必须逐字相同 */
-    const grab = (h: string) => h.match(/<div class="crosshair"[\s\S]*?<\/div>/)?.[0] ?? '';
-    expect(grab(ONE_HTML), '两页的准星标记不一致 ⇒ 不是同一套实现').toBe(grab(IDX_HTML));
-    /* 文章信息一条没少（少了摘要/标签就是丢内容） */
-    expect(ONE_HTML, '文章摘要丢了').toMatch(/class="p-sum"/);
-    expect(ONE_HTML, '标签行丢了').toMatch(/class="p-tags"/);
+  it('每个标签详情按文章列出标题和链接，色带滚动对应文章摘要', () => {
+    const posts = visiblePosts(readPostFrontmatter()).map(post => {
+      const file = read('content/posts/' + post.slug + '/index.md');
+      const frontmatter = parseYaml(file.match(/^---\r?\n([\s\S]+?)\r?\n---\r?\n/)![1]);
+      return { ...post, ...frontmatter, slug: frontmatter.slug ?? post.slug };
+    });
+    const htmlText = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+    for (const tag of TAGS) {
+      const tagged = posts.filter(post => post.tags.includes(tag));
+      if (!tagged.length) continue;
+      const html = readFileSync(join(DIST, 'tags', tag, 'index.html'), 'utf8');
+      const rows = [...html.matchAll(/<li class="flowing-menu__item">([\s\S]*?)<\/li>/g)].map(match => match[1]);
+      expect(rows, tag).toHaveLength(tagged.length);
+      for (const post of tagged) {
+        const row = rows.find(row => row.includes('href="/posts/' + post.slug + '/"'));
+        expect(row, post.title).toBeDefined();
+        expect(row).toContain('>' + htmlText(post.title) + '</span>');
+        expect(row).toContain('class="tag-flow-title">' + htmlText(post.summary) + '</span>');
+      }
+    }
   });
 
   it('运行时依赖只许住在白名单里（红线）', () => {

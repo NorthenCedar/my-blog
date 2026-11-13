@@ -14,6 +14,7 @@ function fixture(clipboard: 'ok' | 'denied' | 'absent' = 'ok', onActive?: (link:
     attrs = new Map<string, string>();
     top = 0;
     getAttribute(name: string) { return this.attrs.get(name) ?? null; }
+    get hash() { return this.attrs.get('href') ?? ''; }
     setAttribute(name: string, value: string) { this.attrs.set(name, value); }
     removeAttribute(name: string) { this.attrs.delete(name); }
     getBoundingClientRect() { return { top: this.top }; }
@@ -30,6 +31,9 @@ function fixture(clipboard: 'ok' | 'denied' | 'absent' = 'ok', onActive?: (link:
   let nextId = 0;
   const view = Object.assign(new EventTarget(), {
     innerHeight: 900,
+    visualViewport: Object.assign(new EventTarget(), { offsetTop: 0, height: 900 }),
+    location: { hash: '' },
+    getComputedStyle: () => ({ scrollMarginTop: '32px' }),
     navigator: { clipboard: clipboard === 'absent' ? undefined : { writeText: async (text: string) => {
       if (clipboard === 'denied') throw new Error('用户拒绝复制');
       writes.push(text);
@@ -71,6 +75,23 @@ describe('文章阅读侧栏', () => {
     page.view.dispatchEvent(new Event('scroll'));
     page.flush();
     expect(page.links.map(link => link.getAttribute('aria-current'))).toEqual([null, 'location', null]);
+  });
+
+  it('手机视觉视口偏移时仍优先停在跳转目标，继续滚动后跟随下一节', () => {
+    const page = fixture();
+    page.view.visualViewport.offsetTop = 420;
+    page.view.visualViewport.height = 844;
+    page.view.location.hash = '#section-1';
+    page.headings[0].top = -100;
+    page.headings[1].top = 452;
+    page.headings[2].top = 520;
+    page.flush();
+    expect(page.links[1].getAttribute('aria-current')).toBe('location');
+    page.headings[1].top = 430;
+    page.view.visualViewport.dispatchEvent(new Event('scroll'));
+    page.flush();
+    expect(page.links[2].getAttribute('aria-current')).toBe('location');
+    page.dispose?.();
   });
 
   it('滚动事件合并到一帧，重排后按最新标题位置计算', () => {

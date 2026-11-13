@@ -73,7 +73,6 @@ if (root) {
     const replies = document.createElement('ul');
     replies.className = 'reply-list';
 
-    // 语音（2026-11-10）：有就画在正文下面，位置与说说页一致
     li.append(name, time, body, btn, replies);
     if (fresh) list.prepend(li);
     else list.append(li);

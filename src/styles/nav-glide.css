@@ -1,0 +1,52 @@
+nav[aria-label='主导航'] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-1);
+  --nav-glide-ink: var(--muted);
+  --nav-glide-hot: var(--ink);
+  --nav-glide-current: var(--accent-ink);
+  --nav-glide-fill: color-mix(in srgb, var(--accent) 10%, transparent);
+  --nav-glide-edge: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+nav[aria-label='主导航'] > a {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--nav-glide-ink);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-heading);
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-interact);
+}
+
+nav[aria-label='主导航'] > a:is(:hover, :focus-visible) { color: var(--nav-glide-hot); }
+nav[aria-label='主导航'] > a[aria-current='page'] { color: var(--nav-glide-current); font-weight: 600; }
+nav[aria-label='主导航'] > a:focus-visible { outline: 2px solid var(--nav-glide-current); outline-offset: 2px; }
+nav[aria-label='主导航']:not(.nav-glide-ready) > a:is(:hover, :focus-visible, [aria-current='page']) {
+  border-color: var(--nav-glide-edge);
+  background: var(--nav-glide-fill);
+}
+
+.nav-glide-pill {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 0;
+  height: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--nav-glide-edge);
+  border-radius: 999px;
+  background: var(--nav-glide-fill);
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 1023px) { nav[aria-label='主导航'] { display: none; } }
+@media (prefers-reduced-motion: reduce) { nav[aria-label='主导航'] > a { transition: none; } }

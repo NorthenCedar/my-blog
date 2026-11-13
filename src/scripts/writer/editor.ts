@@ -10,11 +10,11 @@ import { el,button,field,download,errorText,SAVE_LABELS } from './ui';
 import { JOB_LABELS } from './publish';
 import { showWriterStorage } from './storage';
 import { mountWriterBody } from './body-editor';
-import { restoreImageAssets } from './markdown';
+import { restoreImageAssets, writerBodyImages } from './markdown';
 import { mountProjectFields,mountForgeFields,renderForgePreview,projectImageReferences } from './forge-editor';
 type Api=typeof writerApi;
 type Store=ReturnType<typeof createRecoveryStore>;
-type PendingImage={id:string;blob:Blob;alt:string;url:string;width?:number;height?:number;originalSize?:number};
+type PendingImage={id:string;blob:Blob;alt:string;url:string;cover?:boolean;width?:number;height?:number;originalSize?:number};
 type Options={user:{id:string;nickname:string};publish:boolean;onPublish?:(draft:WriterDraft,host:HTMLElement)=>Promise<void>;onJob?:(id:string)=>Promise<void>};
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,options:Options){
@@ -31,7 +31,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
   const newValue=(kind:WriterKind):WriterValue=>({fields:kind==='gallery'?{title:'',titleEn:'',date:today(),images:[],layout:'scatter',draft:true}:kind==='post'?{title:'',date:today(),summary:'',tags:[],draft:false}:kind==='project'?{title:'',summary:'',tagline:'',category:'',status:'',order:0,tags:[],visual:'image',effect:'auto',images:[],links:[]}:kind==='talk'?{date:today()}:{},body:'',assets:[]});
   function markdownExport(){if(!controller)return;const d=controller.current();const text=d.kind!=='talk'?`---\n${Object.entries(d.value.fields).map(([k,v])=>JSON.stringify(k)+': '+JSON.stringify(v)).join('\n')}\n---\n${d.value.body}`:d.value.body;download(`${d.key}.md`,text,'text/markdown;charset=utf-8');}
   async function recoveryExport(name:string,copy:RecoveryRecord){
-    const pendingImages=await Promise.all((copy.pendingImages??[]).map(async image=>{const bytes=new Uint8Array(await image.blob.arrayBuffer()),hash=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes));return {id:image.id,alt:image.alt,mime:image.blob.type,sha256:Array.from(hash,b=>b.toString(16).padStart(2,'0')).join(''),bytes:btoa(Array.from(bytes,b=>String.fromCharCode(b)).join(''))};}));
+    const pendingImages=await Promise.all((copy.pendingImages??[]).map(async image=>{const bytes=new Uint8Array(await image.blob.arrayBuffer()),hash=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes));return {id:image.id,alt:image.alt,cover:image.cover,mime:image.blob.type,sha256:Array.from(hash,b=>b.toString(16).padStart(2,'0')).join(''),bytes:btoa(Array.from(bytes,b=>String.fromCharCode(b)).join(''))};}));
     download(`${name}-recovery.json`,JSON.stringify({format:'northcedar-writer-recovery-1',copy:{...copy,pendingImages}}));
   }
   async function flush(){if(controller?.isDirty())await controller.saveNow();}
@@ -81,17 +81,16 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     const knownImages=new Map(working.value.assets.map(asset=>[asset.sha256,asset]));
     const tools=el('div','','writer-toolbar'),fields=el('div','','writer-fields'),bodyLabel=el('section','','writer-composer'),preview=el('article','','writer-preview'),images=el('div','','writer-images'),imageSection=el('section'),publishing=el('section'),conflict=el('section','','writer-conflict');
     preview.hidden=true;conflict.hidden=true;
-    const storeCopy=async(copy:RecoveryCopy)=>{const key=recoveryKey(options.user.id,working);await recovery.put({...copy,key,user:options.user.id,draftId:working.id,pendingImages:pending.map(({id,blob,alt})=>({id,blob,alt}))});if(restore&&restore.key!==key)await recovery.remove(restore.key);};
+    const storeCopy=async(copy:RecoveryCopy)=>{const key=recoveryKey(options.user.id,working);await recovery.put({...copy,key,user:options.user.id,draftId:working.id,pendingImages:pending.map(({id,blob,alt,cover})=>({id,blob,alt,cover}))});if(restore&&restore.key!==key)await recovery.remove(restore.key);};
     const edit=()=>{if(controller){if(bodyEditor)working.value.body=bodyEditor.getMarkdown();const restored=restoreImageAssets(working.value.body,working.value.assets,knownImages);if(restored.length!==working.value.assets.length){working.value.assets=restored;renderImages();}controller.edit(working.value);if(!preview.hidden)renderPreview();}};
     const resolveImage=(source:string)=>{
       if(source.startsWith('writer-asset:')){const sha=source.slice(13);return knownImages.has(sha)?imageUrl(sha):null;}
       if(!working.base)return null;let path:string;
-      if(working.kind==='project'||working.kind==='gallery'){
+      if(working.kind==='post'||working.kind==='project'||working.kind==='gallery'){
         const name=source.replace(/^\.\//,'');
         if(!/^[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(name)||name.includes('..'))return null;
         path=`${writerAssetDirectory(working.kind,working.key)}${name}`;
       }
-      else if(source.startsWith('./')&&working.kind!=='forge')path=`${writerAssetDirectory(working.kind,working.key)}${source.slice(2)}`;
       else if(working.kind==='talk')path='src/assets/talks/'+source;else return null;
       return `/api/writer/content?commit=${working.base.commit}&image=${encodeURIComponent(path)}`;
     };
@@ -106,10 +105,71 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     const publish=button('发布',()=>perform(async()=>{if(pending.length)throw Error('还有等待确认的配图，请先上传或放弃后再发布');projectFields?.validate();galleryFields?.validate();await galleryFields?.prepare();if(working.kind==='gallery'){working.value.fields.draft=false;edit();}const current=await controller!.saveNow();if(options.onPublish)await options.onPublish(current,publishing);else showError(Error('发布暂不可用，草稿仍可保存和导出'));}),'primary');publish.disabled=!options.publish;
     tools.append(save,toggle,button('下载 Markdown',markdownExport),button('导出完整草稿',()=>perform(async()=>{await flush();const data=await api('/drafts?id='+working.id+'&export=1');download(`${working.key}-draft.json`,JSON.stringify(data));})),publish);
     const setField=(name:string,title:string,type='text',wide=false)=>{const f=field(title,type,wide);f.input.name=name;f.input.value=String(working.value.fields[name]??'');f.input.addEventListener('input',()=>{working.value.fields[name]=f.input.value;edit();});fields.append(f.label);return f.input;};
+    const postCover = el('section','','writer-image wide');
+    const coverImage = el('img');
+    const coverAlt = field('封面说明');
+    const coverSelect = el('select');
+    const pendingCovers = el('div');
+    function refreshCover() {
+      const src = String(working.value.fields.cover ?? '');
+      const url = resolveImage(src);
+      if (url) coverImage.src = url;
+      else coverImage.removeAttribute('src');
+      coverImage.hidden = !url;
+      coverAlt.label.hidden = !src;
+      coverImage.alt = coverAlt.input.value = String(working.value.fields.coverAlt ?? '');
+      coverSelect.value = src;
+      if (coverSelect.selectedIndex < 0) coverSelect.selectedIndex = 0;
+    }
+    function setCover(src: string, alt: string) {
+      working.value.fields.cover = src;
+      working.value.fields.coverAlt = alt;
+      refreshCover();
+      edit();
+    }
+    function coverChoices() {
+      const choices = writerBodyImages(bodyEditor!.getMarkdown());
+      for (const asset of working.value.assets) {
+        const src = 'writer-asset:'+asset.sha256;
+        if (!choices.has(src)) choices.set(src,asset.alt);
+      }
+      const hint = el('option','从正文或已上传图片中选一张');
+      hint.value = '';
+      coverSelect.replaceChildren(hint);
+      for (const [src, alt] of choices) if (resolveImage(src)) {
+        const option = el('option',alt || src.split('/').at(-1));
+        option.value = src;
+        option.dataset.alt = alt;
+        coverSelect.append(option);
+      }
+      coverSelect.value = String(working.value.fields.cover ?? '');
+      if (coverSelect.selectedIndex < 0) coverSelect.selectedIndex = 0;
+    }
     if(working.kind==='post'){setField('title','标题','text',true);const summary=setField('summary','摘要（80 字以内）','text',true);summary.maxLength=80;}
     if(working.kind==='post'||working.kind==='talk')setField('date','日期','date');
     if(working.kind==='post'){
       setField('updated','更新日期（可选）','date');const tagLabel=el('label','标签（按住 Ctrl 或在手机列表中选择，最多 3 个）','writer-field wide'),select=el('select');select.multiple=true;select.size=4;for(const tag of tags){const option=el('option',tag);option.value=tag;option.selected=Array.isArray(working.value.fields.tags)&&working.value.fields.tags.includes(tag);select.append(option);}select.addEventListener('change',()=>{if(select.selectedOptions.length>3){showError(Error('标签最多选择 3 个'));return;}working.value.fields.tags=Array.from(select.selectedOptions,o=>o.value);edit();});tagLabel.append(select);fields.append(tagLabel);
+      const coverUpload = el('input');
+      coverUpload.type = 'file';
+      coverUpload.accept = 'image/jpeg,image/png,image/webp';
+      coverUpload.name = 'post-cover-upload';
+      coverUpload.setAttribute('aria-label','上传文章封面');
+      coverUpload.addEventListener('change',()=>{
+        void perform(()=>files(Array.from(coverUpload.files??[]),true));
+        coverUpload.value='';
+      });
+      coverSelect.setAttribute('aria-label','选择文章封面');
+      coverSelect.addEventListener('focus',coverChoices);
+      coverSelect.addEventListener('change',()=>{
+        if(coverSelect.value)setCover(coverSelect.value,coverSelect.selectedOptions[0].dataset.alt??'');
+      });
+      coverAlt.input.addEventListener('input',()=>{
+        working.value.fields.coverAlt=coverImage.alt=coverAlt.input.value;
+        edit();
+      });
+      postCover.append(el('h3','文章封面'),coverImage,coverSelect,coverUpload,coverAlt.label,button('清除封面',()=>{setCover('','');coverSelect.value='';}),pendingCovers);
+      fields.append(postCover);
+      refreshCover();
     }
     if(working.kind==='gallery'){galleryFields=mountGalleryFields(fields,{value:working.value,onChange:edit,resolveImage,index:working.base?.galleryIndex??0});galleryDestroy=()=>galleryFields?.destroy();}
     if(working.kind==='project')projectFields=mountProjectFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage});
@@ -117,34 +177,39 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     else bodyEditor=mountWriterBody(bodyLabel,working.value.body,{onChange:edit,resolveImage,onImageFiles:input=>void perform(()=>files(input)),onError:showError});
     const move=(from:number,to:number)=>{if(to<0||to>=working.value.assets.length)return;const [item]=working.value.assets.splice(from,1);working.value.assets.splice(to,0,item);edit();renderImages();};
     async function upload(image:PendingImage){
-      if(working.kind==='gallery'&&!pending.includes(image))return;
+      if(!pending.includes(image))return;
       if(working.kind!=='gallery'&&!image.alt.trim())throw Error('请先填写图片说明');
-      const result=await api<{sha256:string}>('/assets',{method:'POST',headers:{'Content-Type':'image/webp'},body:image.blob});if(ticket!==generation||working.kind==='gallery'&&!pending.includes(image))return;
+      const result=await api<{sha256:string}>('/assets',{method:'POST',headers:{'Content-Type':'image/webp'},body:image.blob});if(ticket!==generation||!pending.includes(image))return;
       if(!working.value.assets.some(a=>a.sha256===result.sha256))working.value.assets.push({sha256:result.sha256,alt:image.alt});
       knownImages.set(result.sha256,working.value.assets.find(a=>a.sha256===result.sha256)!);
-      if(working.kind==='post'&&!bodyEditor!.insertImage('writer-asset:'+result.sha256,image.alt))throw Error('图片已上传，请完成当前文字输入后再次点击“上传并添加”；待添加图片会保留。');
+      if(working.kind==='post'){
+        const src='writer-asset:'+result.sha256;
+        if(image.cover)setCover(src,image.alt);
+        else if(!bodyEditor!.insertImage(src,image.alt))throw Error('图片已上传，请完成当前文字输入后再次点击“上传并添加”；待添加图片会保留。');
+      }
       galleryFields?.addUploaded(result.sha256,image.alt,{width:image.width,height:image.height});
       pending=pending.filter(p=>p!==image);URL.revokeObjectURL(image.url);urls.delete(image.url);edit();renderImages();
     }
     function renderImages(){
       projectFields?.refreshAssets();galleryFields?.refreshAssets();
-      images.replaceChildren();(working.kind==='gallery'?[]:working.value.assets).forEach((asset,index)=>{
+      images.replaceChildren();pendingCovers.replaceChildren();(working.kind==='gallery'?[]:working.value.assets).forEach((asset,index)=>{
         const card=el('div','','writer-image');card.dataset.imageId=asset.sha256;const image=el('img');image.src=imageUrl(asset.sha256);image.alt=asset.alt||'已上传的配图';card.append(image);
         const alt=field('图片说明');alt.input.value=asset.alt;alt.input.addEventListener('input',()=>{asset.alt=alt.input.value;image.alt=asset.alt||'已上传的配图';edit();});card.append(alt.label);
         const actions=el('div','','writer-toolbar'),handle=button('按住拖动',()=>{});handle.dataset.imageHandle='';handle.setAttribute('aria-label',`拖动第 ${index+1} 张配图`);
         handle.addEventListener('pointerdown',event=>{if(event.button!==0)return;handle.setPointerCapture(event.pointerId);card.dataset.dragging='';});
         handle.addEventListener('pointerup',event=>{if(!handle.hasPointerCapture(event.pointerId))return;delete card.dataset.dragging;handle.releasePointerCapture(event.pointerId);const target=document.elementFromPoint(event.clientX,event.clientY)?.closest<HTMLElement>('[data-image-id]');const to=working.value.assets.findIndex(a=>a.sha256===target?.dataset.imageId);if(to>=0)move(index,to);});handle.addEventListener('pointercancel',()=>delete card.dataset.dragging);
         actions.append(handle,button('上移',()=>move(index,index-1)),button('下移',()=>move(index,index+1)),button('移除',()=>{const source='writer-asset:'+asset.sha256;if(working.kind==='gallery'&&Array.isArray(working.value.fields.images)&&working.value.fields.images.some((i:any)=>i.src===source)){showError(Error('请先移除图库项，再解除上传资产引用'));return;}if(working.kind==='project'&&projectImageReferences(working.value,source)){showError(Error('请先从项目图库的主图或暗色替图中移除这张图片，再删除配图。'));return;}if((working.kind==='post'||working.kind==='project')&&!bodyEditor!.removeImage(source))return;working.value.assets.splice(index,1);if(working.value.fields.cover===`writer-asset:${asset.sha256}`){working.value.fields.cover='';working.value.fields.coverAlt='';}edit();renderImages();}));
-        if(working.kind==='post')actions.append(button('设为封面',()=>{working.value.fields.cover='writer-asset:'+asset.sha256;working.value.fields.coverAlt=asset.alt;edit();showError(Error('已设为封面，请保存草稿后发布'));}));if(working.kind==='project')actions.append(button('插入项目正文',()=>{if(bodyEditor!.insertImage('writer-asset:'+asset.sha256,asset.alt))edit();}));card.append(actions);images.append(card);
+        if(working.kind==='post')actions.append(button('设为封面',()=>setCover('writer-asset:'+asset.sha256,asset.alt)));if(working.kind==='project')actions.append(button('插入项目正文',()=>{if(bodyEditor!.insertImage('writer-asset:'+asset.sha256,asset.alt))edit();}));card.append(actions);images.append(card);
       });
       for(const image of pending){const card=el('div','','writer-image'),previewImage=el('img');previewImage.src=image.url;previewImage.alt=image.alt||'上传前的压缩预览';card.append(previewImage,el('p',`${image.width??''} × ${image.height??''} · 压缩后 ${Math.ceil(image.blob.size/1024)} KiB${image.originalSize?' / 原图 '+Math.ceil(image.originalSize/1024)+' KiB':''}`,'writer-note'));
-        const alt=field('图片说明（上传前必填）');alt.input.value=image.alt;alt.input.addEventListener('input',()=>{image.alt=alt.input.value;edit();});if(working.kind!=='gallery')card.append(alt.label,button('上传并添加',()=>perform(()=>upload(image)),'primary'));card.append(button('放弃这张',()=>{pending=pending.filter(p=>p!==image);URL.revokeObjectURL(image.url);urls.delete(image.url);edit();renderImages();}));images.append(card);}
+        const alt=field(image.cover?'封面说明（上传前必填）':'图片说明（上传前必填）');alt.input.value=image.alt;alt.input.addEventListener('input',()=>{image.alt=alt.input.value;edit();});if(working.kind!=='gallery')card.append(alt.label,button(image.cover?'上传为封面':'上传并添加',()=>perform(()=>upload(image)),'primary'));card.append(button('放弃这张',()=>{pending=pending.filter(p=>p!==image);URL.revokeObjectURL(image.url);urls.delete(image.url);edit();renderImages();}));(image.cover?pendingCovers:images).append(card);}
+      if(working.kind==='post'&&bodyEditor){refreshCover();coverChoices();}
     }
     const choose=el('input');choose.type='file';choose.accept='image/jpeg,image/png,image/webp';choose.multiple=true;choose.setAttribute('aria-label','选择配图');
     let fileQueue=Promise.resolve(),uploadBatch:Promise<void>|null=null;
-    function files(input:File[]){const task=fileQueue.then(()=>prepareFiles(input));fileQueue=task.catch(()=>{});return task;}
-    async function uploadAll(){if(uploadBatch)return uploadBatch;uploadBatch=(async()=>{for(const image of [...pending]){if(ticket!==generation)return;await upload(image);}})().finally(()=>{uploadBatch=null;});return uploadBatch;}
-    async function prepareFiles(input:File[]){for(const file of input){if(ticket!==generation)return;const existing=publishedAssetHashes(working.base);if(working.value.assets.filter(a=>!existing.has(a.sha256)).length+pending.length>=writerImageLimit(working.kind))throw Error('本篇新增图片数量已达上限');const result=await prepareWriterImage(file);if(ticket!==generation){URL.revokeObjectURL(result.previewUrl);return;}urls.add(result.previewUrl);pending.push({id:crypto.randomUUID(),blob:result.blob,url:result.previewUrl,alt:'',...result});edit();renderImages();}}
+    function files(input:File[],cover=false){const task=fileQueue.then(()=>prepareFiles(input,cover));fileQueue=task.catch(()=>{});return task;}
+    async function uploadAll(){if(uploadBatch)return uploadBatch;uploadBatch=(async()=>{for(const image of pending.filter(image=>!image.cover)){if(ticket!==generation)return;await upload(image);}})().finally(()=>{uploadBatch=null;});return uploadBatch;}
+    async function prepareFiles(input:File[],cover:boolean){for(const file of input){if(ticket!==generation)return;const existing=publishedAssetHashes(working.base);if(working.value.assets.filter(a=>!existing.has(a.sha256)).length+pending.length>=writerImageLimit(working.kind))throw Error('本篇新增图片数量已达上限');const result=await prepareWriterImage(file);if(ticket!==generation){URL.revokeObjectURL(result.previewUrl);return;}urls.add(result.previewUrl);pending.push({id:crypto.randomUUID(),blob:result.blob,url:result.previewUrl,alt:'',cover,...result});edit();renderImages();}}
     choose.addEventListener('change',()=>{void perform(()=>files(Array.from(choose.files??[])));choose.value='';});
     imageSection.append(el('h3','配图'),el('p',working.kind==='gallery'?'多选照片后点击“全部上传到相册”，可暂时不填图注。上传后在本册照片中补齐图注，发布前会检查。':working.kind==='project'?'先预览压缩结果并填写说明，再上传。上传后可在项目图库选择主图、暗色替图，或插入正文。图库顺序与下方上传列表独立。':'先预览压缩结果并填写说明，再上传。说说按下方顺序展示；文章内的位置由正文图片引用决定。','writer-note'),choose,button(working.kind==='gallery'?'全部上传到相册':'上传全部配图',()=>perform(uploadAll)),images);
     // 语音：文章插一行 `!audio[说明](writer-audio:<sha>)` 进正文，说说进 audio 列表，其余类型不给入口。

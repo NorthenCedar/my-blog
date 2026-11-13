@@ -17,6 +17,7 @@ export async function writerFixture(options: { owner?: boolean; configured?: boo
     try { sqlite.exec(readFileSync('migrations/0008_writer_forge.sql', 'utf8')); sqlite.exec('COMMIT'); }
     catch (error) { sqlite.exec('ROLLBACK'); throw error; }
   }
+  sqlite.exec(readFileSync('migrations/0012_writer_audio.sql', 'utf8'));
   closers.push(() => sqlite.close());
   const owner = 'b'.repeat(32), token = 'a'.repeat(64);
   sqlite.prepare('INSERT INTO visitor_accounts(id,username,nickname,password_hash,recovery_hash,created_at) VALUES(?,?,?,?,?,?)')

@@ -14,6 +14,8 @@ prototype/_shots/
 #   （此前靠 ~/.config/git/ignore 挡着 —— 那是**全局**配置，
 #     换机器 clone 的人没有，文件就会直接进库。仓库的忽略规则不能依赖仓库外的设置。）
 .claude/
+# WorkBuddy 的本机会话记忆保留在本机。
+/.workbuddy/memory/
 # wrangler types 生成的 Cloudflare 运行时类型（604 KB）。
 # 需要编辑器类型提示时跑 `npx wrangler types` 重新生成；不进仓库，避免每次升级 wrangler 都产生巨型 diff。
 worker-configuration.d.ts

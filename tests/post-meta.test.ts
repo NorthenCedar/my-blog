@@ -171,6 +171,12 @@ describe('slugIssues —— 契约 §3 的 URL 片段规则', () => {
     expect(r.warnings[0]).toContain('不一致');
   });
 
+  it('拒绝两个文件夹最终使用同一个文章网址', () => {
+    const { errors } = slugIssues([{ id: 'shared-url' }, { id: 'another-post', slug: 'shared-url' }]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/another-post.*shared-url.*同一个/);
+  });
+
   it('文件夹名与 slug 一致时不告警', () => {
     expect(slugIssues([{ id: 'same-name', slug: 'same-name' }]).warnings).toEqual([]);
   });

@@ -5,14 +5,11 @@
  *   · 构建完成后**只**把被发布页面真正引用的那些复制到 `dist/audio/`，
  *     草稿与没人用的原件不会上线；
  *   · `astro dev` 下由中间件直接读原件（带 Range，音频要能拖时间轴）。
- *
- * ★ 与访客音频的分工（2026-11-10）：
- *   这里管**作者自己发的内容**（文章、说说）—— 文件随仓库走，大小只受仓库限制；
- *   访客在留言/评论里传的音频走 D1（functions/api/audio.ts，上限 1.5 MB），
- *   因为访客没有仓库的写权限。两条路的播放器是同一个组件。
  */
 
-import { readdir, readFile, stat, unlink, writeFile, mkdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { byteRange, exportReferencedMedia, statIfPresent } from './media-export.mjs';
 import { join, resolve } from 'node:path';
 
 const NAME = /^([a-f0-9]{64})\.(mp3|wav)$/;
@@ -20,15 +17,6 @@ const MANIFEST = '.exported-audio.json';
 const MAX_BYTES = 24 * 1024 * 1024; // 24 MB：一集播客的量级，再大就该换个地方放了
 
 const TYPES = { mp3: 'audio/mpeg', wav: 'audio/wav' };
-
-async function statIfPresent(path) {
-  try {
-    return await stat(path);
-  } catch (error) {
-    if (error.code === 'ENOENT') return undefined;
-    throw error;
-  }
-}
 
 /**
  * 说说 frontmatter 里的 `audio:` 一栏。
@@ -75,73 +63,18 @@ async function readAudio(sourceDir, name) {
   if (info.size > MAX_BYTES) throw new Error(`音频原件超过 ${MAX_BYTES / 1024 / 1024} MB：${name}`);
   const bytes = await readFile(path);
   if (!sniff(match[2], bytes)) throw new Error(`音频内容与扩展名不符（${match[2]}）：content/audio/${name}`);
+  if (bytes.length > MAX_BYTES) throw new Error(`音频原件超过 ${MAX_BYTES / 1024 / 1024} MB：${name}`);
+  if (createHash('sha256').update(bytes).digest('hex') !== match[1]) {
+    throw new Error(`音频 SHA-256 摘要与文件名不符：content/audio/${name}`);
+  }
   return { name, contentType: TYPES[match[2]], bytes };
 }
 
-function collectNames(html, into, context) {
-  for (const match of html.matchAll(/\/audio\/([a-f0-9]{64}\.(?:mp3|wav))/g)) {
-    try {
-      into.add(audioName(`/audio/${match[1]}`, context));
-    } catch {
-      /* 正文里出现的裸文本链接不算引用 */
-    }
-  }
-}
-
-async function collectPages(directory, names) {
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) await collectPages(path, names);
-    else if (entry.isFile() && entry.name.endsWith('.html')) collectNames(await readFile(path, 'utf8'), names, path);
-  }
-}
-
-async function readManifest(outputDir) {
-  const path = join(outputDir, MANIFEST);
-  const info = await statIfPresent(path);
-  if (!info) return [];
-  if (!info.isFile() || info.isSymbolicLink()) throw new Error(`音频导出清单必须是普通文件：${path}`);
-  const manifest = JSON.parse(await readFile(path, 'utf8'));
-  if (manifest.version !== 1 || !Array.isArray(manifest.files) || !manifest.files.every((name) => typeof name === 'string' && NAME.test(name))) {
-    throw new Error(`音频导出清单无效：${path}`);
-  }
-  return manifest.files;
-}
-
-/** 以最终 HTML 为发布清单：草稿和未引用原件不会被复制到公开目录。 */
-export async function exportAudioAssets({ rootDir = process.cwd(), distDir = join(rootDir, 'dist') } = {}) {
-  const names = new Set();
-  await collectPages(distDir, names);
-  const sourceDir = join(rootDir, 'content/audio');
-  const outputDir = join(distDir, 'audio');
-  const directory = await statIfPresent(outputDir);
-  if (directory && (!directory.isDirectory() || directory.isSymbolicLink())) throw new Error(`音频输出目录必须是普通目录：${outputDir}`);
-  const previous = await readManifest(outputDir);
-  const files = [...names].sort();
-  const audios = [];
-  for (const name of files) audios.push(await readAudio(sourceDir, name));
-  for (const name of new Set([...files, ...previous])) {
-    const path = join(outputDir, name);
-    const info = await statIfPresent(path);
-    if (info && (!info.isFile() || info.isSymbolicLink())) throw new Error(`音频输出目标必须是普通文件：${path}`);
-  }
-  await mkdir(outputDir, { recursive: true });
-  for (const audio of audios) await writeFile(join(outputDir, audio.name), audio.bytes);
-  for (const name of previous) {
-    if (!names.has(name) && (await statIfPresent(join(outputDir, name)))) await unlink(join(outputDir, name));
-  }
-  await writeFile(join(outputDir, MANIFEST), `${JSON.stringify({ version: 1, files })}\n`);
-  return { exported: files.length };
-}
-
-function byteRange(header, size) {
-  const match = /^bytes=(\d*)-(\d*)$/.exec(header);
-  if (!match || (!match[1] && !match[2])) return undefined;
-  const first = match[1] ? Number(match[1]) : undefined;
-  const last = match[2] ? Number(match[2]) : undefined;
-  const start = first ?? Math.max(0, size - last);
-  const end = first === undefined || last === undefined ? size - 1 : Math.min(last, size - 1);
-  return start < size && start <= end ? { start, end } : undefined;
+export function exportAudioAssets({ rootDir = process.cwd(), distDir = join(rootDir, 'dist') } = {}) {
+  return exportReferencedMedia({
+    rootDir, distDir, folder: 'audio', tag: 'audio', manifest: MANIFEST,
+    pattern: NAME, getName: audioName, read: readAudio,
+  });
 }
 
 /** 只在 astro dev 安装；生产预览直接使用 dist 内按引用导出的静态原件。 */

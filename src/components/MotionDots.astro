@@ -1,0 +1,31 @@
+---
+interface Props {
+  mode: 'streaks' | 'mosaic';
+  mark?: string;
+}
+const { mode, mark } = Astro.props;
+---
+
+<div class="motion-dots" data-motion-dots={mode} data-mark={mark} aria-hidden="true">
+  <canvas></canvas>
+</div>
+
+<script>
+  import '../scripts/motion-dots';
+</script>
+
+<style>
+  .motion-dots {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+    color: var(--motion-dots-ink, var(--accent));
+    background-image: radial-gradient(circle at center, currentColor 1px, transparent 1.5px);
+    background-size: var(--sp-5) var(--sp-5);
+    opacity: 0.22;
+  }
+  .motion-dots[data-ready] { background-image: none; opacity: 1; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>

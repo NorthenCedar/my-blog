@@ -1,5 +1,6 @@
 ---
 import PhotoWall from './PhotoWall.astro';
+import AlbumIndexHeading from './AlbumIndexHeading.astro';
 import { scatterLayout } from '../scripts/album-scene-core';
 
 type File = { w: number; h: number; actualW?: number; url: string };
@@ -8,22 +9,17 @@ type Album = { id: string; title: string; titleEn?: string; layout?: 'scatter' |
 interface Props { album: Album; no: number }
 const { album, no } = Astro.props;
 const layout = album.layout ?? 'scatter';
-const title = album.titleEn || album.title;
 const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src));
 ---
 
 <section class="album-scene" data-album-scene data-layout={layout} data-placements={JSON.stringify(placements)}>
   <div class="scene-bar">
-    <a class="scene-back liquid-glass" href="/gallery/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg><span>相册</span></a>
+    <a class="scene-back liquid-glass" href="/gallery/#gallery-overview" data-album-return><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg><span>相册</span></a>
     <span class="scene-name">{album.title}</span>
     <button class="liquid-glass" type="button" data-scene-toggle hidden aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg><span data-scene-toggle-label>查看全部</span></button>
   </div>
   <div class="scene-viewport" data-scene-viewport role="group" aria-label={`${album.title}，互动照片陈列`} aria-describedby="scene-help" tabindex="-1">
-      <header class:list={['scene-title', { 'scene-title-long': title.length > 28 }]}>
-        <h1 lang={album.titleEn ? 'en' : undefined}>{title}</h1>
-        <p>{album.title} <span aria-hidden="true">/</span> {album.total} 帧 <span aria-hidden="true">/</span> {album.date}</p>
-        <span class="scene-plate">PLATE {String(no).padStart(2, '0')}</span>
-      </header>
+    <AlbumIndexHeading album={album} no={no} />
     <div class="scene-world" data-scene-world></div>
   </div>
   {/* 同一组真实链接和灯箱：增强时只把 .wf 放进画布，灯箱始终在变换层之外。 */}
@@ -40,6 +36,11 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
       </>}
       <button class="liquid-glass liquid-glass--round" type="button" data-scene-home aria-label={layout === 'slices' ? '回到第一张' : '回到中心'} title={layout === 'slices' ? '回到第一张' : '回到中心'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1 7M4 4v6h6"/></svg></button>
     </div>
+    {layout === 'slices' && album.total > 1 &&
+      <div class="scene-ruler">
+        <input data-scene-scrub type="range" min="1" max={album.total} value="1" aria-label="相册照片位置" />
+      </div>
+    }
   </div>
 </section>
 
@@ -61,11 +62,37 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
   .scene-actions button:focus-visible { outline: 2px solid var(--on-band); outline-offset: calc(-1 * var(--sp-1)); }
   .scene-actions button:disabled { color: var(--on-band-sub); opacity: var(--scene-disabled-opacity); }
   .scene-bar [hidden], .scene-controls[hidden] { display: none; }
-  .scene-title { text-align: center; padding: var(--sp-7) 0; }
-  .scene-title h1 { margin: 0; font-family: Archivo, 'IBM Plex Sans', sans-serif; font-size: var(--fs-title); font-weight: 600; letter-spacing: var(--ls-title); line-height: var(--lh-title); overflow-wrap: anywhere; }
-  .scene-title p { margin: var(--sp-4) 0 var(--sp-2); color: var(--muted); font-size: var(--fs-sm); }
-  .scene-title p span { padding-inline: var(--sp-2); color: var(--hair); }
-  .scene-plate { font-family: 'IBM Plex Mono', monospace; font-size: var(--fs-xs); color: var(--muted); }
+  .scene-ruler {
+    margin: 0 var(--sp-2);
+    padding-inline: var(--sp-2);
+    background: repeating-linear-gradient(90deg, var(--hair) 0 1px, transparent 1px 7px) center / 100% var(--sp-2) no-repeat;
+    pointer-events: auto;
+  }
+  .scene-ruler input {
+    display: block;
+    width: 100%;
+    height: var(--sp-4);
+    margin: 0;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  .scene-ruler input::-webkit-slider-thumb {
+    appearance: none;
+    width: var(--sp-2); height: var(--sp-3);
+    border: 0; border-radius: 999px; background: var(--accent);
+  }
+  .scene-ruler input::-moz-range-thumb {
+    width: var(--sp-2); height: var(--sp-3);
+    border: 0; border-radius: 999px; background: var(--accent);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .scene-view-changed.scene-on .scene-viewport { animation: scene-exhibit-in 360ms var(--ease-glass) both; }
+    .scene-view-changed:not(.scene-on) :global(.scene-title),
+    .scene-view-changed:not(.scene-on) :global(.wf) { animation: scene-index-in 390ms var(--ease-glass) both; }
+  }
+  @keyframes scene-exhibit-in { from { opacity: 0.2; } }
+  @keyframes scene-index-in { from { opacity: 0.18; translate: 0 var(--sp-2); } }
   .scene-controls { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding-block: var(--sp-3); border-top: 1px solid var(--hair); }
   .scene-controls p { margin: 0; font-size: var(--fs-xs); color: var(--muted); }
   .scene-actions { display: flex; align-items: center; gap: var(--sp-2); }
@@ -117,12 +144,10 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
     position: absolute; left: 50%; top: 50%; width: 0; height: 0;
     transform: translate3d(var(--scene-pan-x, 0px), var(--scene-pan-y, 0px), 0) scale(var(--scene-scale, 1));
   }
-  .scene-on .scene-title {
+  .scene-on :global(.scene-title) {
     position: absolute; width: var(--scene-title-width); padding: 0;
     transform: translate(-50%, -50%); pointer-events: none;
   }
-  .scene-on .scene-title h1 { font-size: var(--scene-display); font-weight: 500; letter-spacing: var(--scene-tracking); }
-  .scene-on .scene-title-long h1 { font-size: var(--scene-display-long); line-height: var(--lh-heading); }
   :global(.album-scene.scene-on .wf),
   :global(.album-scene.scene-on .wf .plate),
   :global(.album-scene.scene-on .wf .plate-body) { display: contents; transform-style: preserve-3d; }
@@ -155,8 +180,7 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
 
   .scene-on[data-layout='slices'] .scene-viewport { perspective: var(--scene-perspective); touch-action: pan-y pinch-zoom; }
   .scene-on[data-layout='slices'] .scene-world { top: calc(50% + var(--scene-slice-center-shift)); transform: none; transform-style: preserve-3d; }
-  .scene-on[data-layout='slices'] .scene-title { top: var(--sp-5); left: 50%; transform: translateX(-50%); width: min(var(--scene-title-width), calc(100vw - var(--gutter) * 2)); }
-  .scene-on[data-layout='slices'] .scene-title h1 { font-size: var(--fs-title); }
+  .scene-on[data-layout='slices'] :global(.scene-title) { top: var(--sp-5); left: 50%; transform: translateX(-50%); width: min(var(--scene-title-width), calc(100vw - var(--gutter) * 2)); }
   :global(.album-scene.scene-on[data-layout='slices'] .wf .plate-body > figure) {
     width: min(var(--scene-slice-width), 74vw, calc(var(--scene-photo-height) * var(--scene-photo-ratio) + var(--scene-paper-edge) * 2));
     opacity: var(--scene-opacity, 0); transition: opacity var(--scene-fade-duration) var(--ease-interact);
@@ -174,9 +198,7 @@ const placements = scatterLayout(album.id, album.frames.map((frame) => frame.src
     .scene-on .scene-bar { left: var(--sp-3); right: var(--sp-3); top: var(--sp-3); }
     .scene-on .scene-back { flex: 0; white-space: nowrap; }
     .scene-on .scene-controls { left: var(--sp-3); right: var(--sp-3); bottom: 84px; }
-    .scene-on[data-layout='slices'] .scene-title { top: var(--scene-mobile-title-top); }
-    .scene-on[data-layout='slices'] .scene-title p { margin-block: var(--sp-2); }
-    .scene-on[data-layout='slices'] .scene-title .scene-plate { display: none; }
+    .scene-on[data-layout='slices'] :global(.scene-title) { top: var(--scene-mobile-title-top); }
     :global(.album-scene.scene-on[data-layout='slices'] .wf .plate-body .frame) {
       width: min(calc(100% - var(--scene-paper-edge) * 2), calc(var(--scene-mobile-photo-height) * var(--scene-photo-ratio)));
     }

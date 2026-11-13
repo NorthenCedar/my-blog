@@ -11333,3 +11333,821 @@ Base启用ClientRouter，关闭其默认淡入，继续原有900ms墨色过渡�
 站主指出重建外形偏离原作，明确要求使用仓库原资产。撤回自建网格、WebGL场景与控制器，恢复原始渲染图片及原SVG光槽，资产字节不改。亮色换色采用原draw.js的hueMatrix等价CSS hue-rotate，目标黄绿#BFE252的色相74.583减原橙色28.7，角度45.883度；取消灰度、反差和亮度重塑。保留常态追光与完整槽线，暗色原图保持。
 
 倾斜归一化目标从7度系数收为4，实际范围约±2度；拖动平面角从65收至12度，拖动中轻倾1.5度，松手阻尼归位。文字、链接、声纹、表单保护及离页清理保留。限制角度回归可咬住原65度行为；恢复留言页完整闭包163KiB与不加载three的约束。
+
+### 6.153 留言页英文词阵（2026-11-11）
+
+核对 Cloudflare Registrar 实际加载的 `_landing-app.BYfnBVe7.js` 和 `_page.CWwBjuCt.css`。整片字纹在 48 秒内依次经过左、上、右、下四个位置。鼠标路径以 110 像素半径对字符分别着色，样本约 1.33 秒衰减，实测停手后拖尾恢复底色。留言页用自选词表，亮色用墨绿，暗色用本站强调色 `--accent`（`#ff7b00`），在正文实际字行及表单边缘逐字符压低高亮。减少动态效果模式展示静态词阵。机械环保留日夜渲染图，叠在词阵上方，撤下流光、倾斜和拖动。
+
+### 6.154 点阵与局部交互（2026-11-11）
+
+React Bits 首页的 Hero 使用 [Dot Grid](https://reactbits.dev/backgrounds/dot-grid)，页尾的 FooterWaves 使用 [Shape Waves](https://reactbits.dev/backgrounds/shape-waves) 混合圆、方、三角与反白字形。本站将低对比度短划点阵留在归档页头，将圆、方、三角构成的站名反白点阵放在友链页末。后者按鼠标经过的位置留一串逐渐变暗的亮斑，约 0.9 秒消散。指针影响收敛后停帧，触屏与减少动态模式显示静态图案。
+
+参考 LeiBox 的[弹性面板缩放](https://leibox.pantoria.cn/docs/animations/elastic-panel-resize)与[立体按压按钮](https://leibox.pantoria.cn/docs/animations/tactile-push-button)的反馈节奏。代码区展开 460 毫秒、收起 380 毫秒，起步留出可见的缓动时间。归档排序按钮在按住时轻压，松手后恢复。
+
+后续可试的页面落点
+
+- **归档**参考 LeiBox 的[列表卡片堆叠切换](https://leibox.pantoria.cn/docs/animations/collection-layout-morph)，筛选和排序后让仍在视口里的条目从原位置滑到新位置。年份卷尺仍跟随实际分组。
+- **说说**复用文章代码区的高度缓动，让评论面板沿当前内容展开。点赞和回复可沿用归档按钮的短按压反馈。
+- **友链**已有星座底纹，空白优先通过排版处理。宽屏可把「本站」资料卡与申请说明放在同一行，朋友列表作为下一段，窄屏按阅读顺序纵排。
+
+
+### 6.155 导航、首页衔接与相册定位（2026-11-11）
+
+桌面导航参考 [Pill Nav 的 Glide 预设](https://reactbits.dev/components/pill-nav?preset=glide&itemStyle=plain&hoverEffect=glide&indicator=pill&bounce=0.2&stretch=0.44)：同一个胶囊随指针或键盘焦点移动，快速改变方向时从当前画面接续。窄屏保留原抽屉。首页的首屏和晨昏带共用一个色场；线纹和 DNA 在首屏边缘前淡出，色场继续淡入纸面。
+
+参考 React Bits Pro 的 [Components](https://pro.reactbits.dev/docs/components)、[Blocks](https://pro.reactbits.dev/docs/blocks) 和 [Application UI](https://pro.reactbits.dev/docs/app-ui) 的相册展示、分区与控件。螺旋盘右侧的分段刻度按帧直接定位；切片相册底部也能拖动或用键盘跳到任意照片。单册索引增加独立的标题区，切换陈列时加入过渡，展览和索引继续共用同一批照片和灯箱。
+
+### 6.156 具体相册的穹顶与照片星球（2026-11-12）
+
+「一些风景」采用 React Bits 的 Dome Gallery，「人像」采用 Infinite Menu。穹顶和照片球共用半透明模糊底幕、居中圆角大图和右上角胶囊关闭按钮，支持左右箭头和键盘翻图。两种陈列铺满顶栏以下的视口，中文册名与「查看全部」叠在画布上。点击照片时将屏幕位置交给灯箱，大图解码后隐藏对应原片并从该位置展开。每次大图解码完成时，散片镜头、切片序列、穹顶或照片球同步移向本册当前照片。关闭时按当前原片的投影位置和圆角收回，原片仍在视野外时淡出。两种陈列都从相册清单读取同一批缩略图和大图。未启用动效或浏览器无法启动照片球时直接显示索引。散片、悬浮切片和照片墙依然由原渲染路径处理，写作台保存的 `layout` 决定单册样式。
+
+相册总览用 React Bits 的 Circular Gallery 排列实际相册封面，横向拖动后吸附到相册，点击封面沿用目录链接进入单册。页面纵向自然滚动，目录始终由服务端生成。每次发布构建从相册清单生成封面、目录和单册路由，使用已选封面或本册首图。独立螺旋盘仍可从目录进入。
+
+相册总览复用整屏显影盘和分幕翻页，横幅缩略图取自发布清单。滚轮向下翻到弧形封面，再往下可逐册翻阅封面。弧形封面与目录按发布清单收录新相册。独立螺旋盘的定位条把选中照片交给同一套弹簧，游标跟随连续位置，途中帧不覆盖读者选中的刻度。
+
+### 关于页 · 章节和手机版
+
+手机将立体底纹的同源静帧放入联系区，技术栈和语言统计压缩为连续阅读段落。桌面保留原有三段鳍片接力，读到个人介绍时底纹淡下。固定章节导航加入个人介绍，点击章节使用原生平滑滚动，选中指示随滚动滑动。社交链接沿用服务端标记，跟手光照移植自 React Bits [Spotlight Card](https://reactbits.dev/components/spotlight-card) 的衰减与跟随逻辑。语言比例条在首次进入视口时展开，个人介绍的照片入口从已发布相册清单取前三本的封面。减少动态效果时直接显示读数与当前位置。
+
+### 全站导航 · Staggered Menu
+
+首页、普通内页和旧版页头共用同一份导航清单。首页 Menu 位于首屏右上角，与内页共用顶栏内边距和横向留白。桌面从右侧展开，手机使用满宽面板。React Bits [Staggered Menu](https://reactbits.dev/components/staggered-menu) 的 TypeScript 和 CSS 原文件放在 src/vendor/react-bits。官网 Geist 字体、64px 大写菜单、序号和 GSAP 开合时序沿用示例，颜色接入本站主题。桌面面板宽度由原组件限制在 260 至 420px，1024px 及以下满宽。首次操作前按需加载，原生弹窗处理背景隔离和 Esc，关闭时焦点回到菜单。英文导航、GitHub、Email 和 RSS 读取本站链接。减少动态模式直接到达开合终态，无脚本时使用同一份服务端链接。
+
+### 6.157 归档页 · React Bits 原版点阵（2026-11-12）
+
+归档页头使用 React Bits 首页 [Hero](https://github.com/DavidHDev/react-bits/blob/main/src/components/landingnew/Hero/Hero.jsx) 的 [Dot Grid](https://reactbits.dev/backgrounds/dot-grid)。TypeScript 和 CSS 原文件保存在 src/vendor/react-bits。点径、间距、扰动、拉伸和回弹参数沿用 Hero，颜色读取本站主题。点阵覆盖页头全宽，向边缘淡出，静止后停帧。触屏、减少动态或无法启用 WebGL 2 时显示静态点阵。
+
+搜索、年月、排序和结果状态共用一块筛选区，手机按搜索、年月、排序分行。文章列表仍按实际年份生成，沿用现有布局过渡和年份卷尺。
+
+### 6.158 说说 · 评论折叠与点赞（2026-11-12）
+
+评论区和异步评论列表沿用 React Bits [Thought Line](https://reactbits.dev/micro/thought-line) 的网格折叠规则，开合 350 毫秒，收起后表单退出键盘焦点并保留草稿。评论计数、身份、回复和错误重试继续复用现有逻辑。减少动态时直接切换。
+
+点赞按钮使用 React Bits [Pulse Heart](https://reactbits.dev/micro/pulse-heart) 原组件，图标引用指向同版本的本地 Hugeicons 模块。按钮接近视口时加载，颜色使用本站主题。实际计数取服务端响应，失败回滚，快速重复按压共用一次提交。
+
+### 6.159 友链 · React Bits 页尾水波点阵（2026-11-12）
+
+将参考站 [FooterWaves](https://github.com/DavidHDev/react-bits/blob/main/src/components/landingnew/Footer/FooterWaves.jsx) 移到友链页头下方。圆、方、三角点阵和扩散、衰减由原版 [Shape Waves](https://reactbits.dev/backgrounds/shape-waves) 渲染。FooterWaves 接收内容层英文短字标和站点配色，校准静态图的字形居中。触屏无指针扰动，减少动态或无法启用 WebGPU 时用原版 SVG。星座和手绘墨笔仍作为页面底纹。
+
+桌面并排显示本站资料和交换说明，再接友链分组。手机依次显示本站资料、交换说明和分组，友链内容从原清单读取。
+
+### 6.160 文章 · Sailing TOC 帆船目录（2026-11-12）
+
+文章目录接入 LeiBox [Sailing TOC](https://leibox.pantoria.cn/docs/animations/sailing-toc) 的船身矢量路径、弹簧、虚线弯道和尾波。目录接近视口时加载驱动。驱动适配本站正文滚动、移动端视觉视口和目录的实际行高，保留章节原生锚点、地址栏及前后退。桌面显示在文章右栏，手机在正文上方用同一条单列航线。长目录只在需要时滚到活动项。减少动态时直接定位并停止尾波。无目录的文章仍只显示原有阅读工具。
+
+### 6.161 标签区 · React Bits 流动菜单（2026-11-12）
+
+标签总览使用 [Flowing Menu](https://reactbits.dev/components/flowing-menu) 的官方动效，文章标题和照片通过 React 节点交替渲染。按参考页实测比例每行高 150px，Geist 标签居中。常态只显示文字，底色透明，取消分隔线和自动开场色带。悬停色带铺满整行，行间无空隙，左右辉光延伸到视口边缘，亮色墨绿，暗色采用站主指定的橙色 #ff7b00。该标签的全部文章标题按日期从新到旧滚动，标题之间用胶囊照片分隔。每次进入页面时按需从完整相册随机抽取，每行循环的副本共用同一组照片，抽完前整页不重复。服务端输出原生链接，细指针设备在菜单进入视口后启用动效。标签详情保留格线矩阵，按实际篇数安排列宽，页头可返回总览。两页沿用百褶环，移除十字准星。
+
+### 6.162 导航关闭后恢复播放器（2026-11-12）
+
+菜单打开时的模态对话框会暂时隐藏播放器。关闭动画结束后，承载菜单入口的对话框恢复为非模态，播放器重新显示。播放器通过原生模态状态判断遮罩，并继续识别散片和螺旋盘灯箱。
+
+### 6.163 暗色首页 · 橙色渐变恢复（2026-11-12）
+
+首屏和晨昏带共用一层渐变。暗色的光晕别名移到定义光晕颜色的同一个作用域，浏览器可解析完整背景。暗色仍以暖橙衬黑色流场与前景文字，晨昏带淡入深色正文。
+
+### 6.164 关于页 · Shape Waves 首屏（2026-11-12）
+
+桌面把介绍和镂空字标水波并排，水波覆盖约 60% 的视口高度。指针扰动、扩散与衰减沿用 React Bits Shape Waves 原组件。触屏、减少动态或 WebGPU 不可用时用带字标的静态点阵。首屏只加载可见的装置，离开页面后释放渲染器。
+
+联系入口贴在首屏下缘。技术栈与语言统计并入同一章节，桌面并排、手机纵排，保留旧锚点。个人经历、兴趣和真实相册封面接在下方，章节导航沿用平滑滚动和滑动指示。
+
+### 6.165 关于页恢复、菜单宽度与相册返回位置（2026-11-12）
+
+关于页恢复立体无限符号和联系、技术栈、语言统计、个人介绍的独立章节。关于页与归档共用 React Bits Dot Grid 加载器。关于页点阵在无限符号下方，按当前主题配色，触屏和减少动态时用静态底纹。
+
+桌面主菜单的面板和前置色条占视口三分之一，手机使用原全宽布局。相册页在当前浏览历史条目保存分幕位置、弧形盘选中的相册链接与目录滚动位置。浏览器后退时恢复该条目的状态，弧形盘从该封面开始，分幕直接显示已保存的场景。普通页面的滚动位置由 Astro 的历史导航恢复。
+
+### 6.166 关于页底纹和单册返回按钮（2026-11-12）
+
+关于页点阵间距调至 37px，亮暗主题使用接近纸面的常态颜色，鼠标经过时用主题强调色。静态底纹也使用相同间距。归档保留原点阵参数。
+
+从站内导航进单册时，在该条历史中标记返回入口。「‹ 相册」调用浏览器后退，复用来源页的滚动和相册总览的位置恢复。直接打开单册或关闭脚本时，按钮仍链接到相册首页。
+
+### 6.167 归档 · 宽幅点阵与封面切换（2026-11-12）
+
+归档页头沿用 React Bits 原 Dot Grid，背景扩到全视口宽并覆盖筛选条，向首组文章淡出。列表按真实年份分组，每篇在同一个链接里显示日期、标签、标题和摘要。
+
+从 LeiBox Collection Layout Morph 接入两档选择、方向键和原缓动。两种视图共享服务端渲染的文章节点，尺寸由响应式 CSS 排版，GSAP Flip 用实际位置衔接封面、文字和条目。已有关键词、年月、排序和清空逻辑保留。封面使用已有文章图，缺图时用日期字面。关闭脚本显示列表，减少动态时直接切换。
+
+### 6.168 归档 · 恢复纵向列表与悬停过渡（2026-11-12）
+
+默认列表恢复按日期、标题、摘要和标签纵向排布。桌面悬停沿用条目的轻移和玻璃阴影，加入轻微上浮。移入和移出均过渡位移与阴影，命中区域由列表行负责。减少动态时使用标题颜色作为悬停反馈。
+
+### 6.169 友链优先与导航面板边缘（2026-11-12）
+
+友站卡片紧接标题和导语，互动点阵放在首组卡片后。其余入口、本站资料与交换说明接在下方。分组和链接继续读取内容层。
+
+导航面板亮色用浅灰绿，暗色用中性黑，两层前置色条在暗色模式下用中性灰。桌面面板和色条的左侧收成小圆角，开合期间以外侧柔影分隔正文。无脚本菜单共用面板样式。
+
+友链页暗色点阵使用本站亮橙，悬停波纹用浅橙提亮。静态图案和动态画布共用色值。
+### 6.170 说说 · 多光标搭建与主题开关（2026-11-12）
+
+说说页本身由七枚光标搭出来，引擎在 `src/scripts/talks-build.ts`。滚动只决定「哪一条开始搭」，不决定「停在哪」：上沿进到视口 78% 起搭、退回 96% 以外撤回，已经滚出视口上方的直接给满。每条一个进度 p∈[0,1]，同时最多三条在搭，排队超过 220ms 就直接落位。装饰层是脚本往 body 上挂的一张 fixed canvas（`.tb-layer`，z-index 8、不拦指针），只画光标、选择框、四角柄和「宽 × 高」标注；内容显隐交给 `[data-built]` 与 CSS 过渡，`html.build-ok` 由脚本添加 —— 没有 JS、减少动效、打印时内容原样可见。
+
+三条踩过的硬约束：① `.tb-layer` 必须写 `:global(...)`，JS 创建的节点没有 Astro 作用域，写 scoped 会让画布退回内联元素、随文档滚走（表现为「明明在画却一个人也看不见」）；② 700ms 内没出过一帧就把该搭的一次性给满，宁可没有动画也不能白屏；③ 单条 0.7 秒、速度取参考站上限 2。
+
+主题开关从关于页搬进顶栏（`ThemeToggle` 的 `variant="nav"`）：画布仍是 220×200，用 52px 高的窗口裁出中间那条软条，按 0.8 缩放塞进 46px 的顶栏，手机档 0.58。渲染器仍走动态 import，458 KB 单独记账（`THEME_RENDERER_BUDGET`），各页预算改用 `siteWideLazyBytes()` 把它从闭包里剔除，而不是给每条红线加 458 KB。
+
+软影：站主口径是「我只是说那个软条的影子不要」，槽必须留。⇒ `scene.ts` 里 `SHADOW_STRENGTH = 0`，只乘在 `getFakeShadow` 的 influence 上；地面 alpha（比纸暗多少）、`applyAO`、`rectangleCutoutDist` 一个字没动。第一版把地面 alpha 整层撤掉，槽随之消失、软条像浮在纸面上（站主截图：「那个槽呢？？？」），已回滚。
+### 6.171 说说 · 多光标搭建改成参考站的三种动作（2026-11-12 第三轮）
+
+站主口径两条：「多光标搭建你直接抄那个参考站，不要自己做」+「文字和图片都要有单独拉过来的感觉……每一个板块都要是拉过来的一样，不要直接浮现」。
+
+上一版只做了「一个光标拉个框 + 内容淡入」，所以图片的观感是「光标飞过去了，图在原地没动」。读了参考实现（`_probe/reference/multi-cursor-builder.html`，52 KB 脚本）之后，把它那套**分 kind 的动作**照搬过来：
+
+| kind | 落在哪些板块 | 动作（照抄参考站分支） | D |
+|---|---|---|---|
+| `text` | 页头、正文、说明 | 十字从左上扫到右下拉出文字框 → 变 I-beam → **逐字打出来**（中文逐字、英文逐词） | `.45 + .14 + 字数/46~110` |
+| `carry` | 日期、语音条、点赞评论 | 光标飞到远处，**整块跟着它被拖回来**（`translate3d` + drop-shadow），落地归位 | 1.04s |
+| `rect` | 每一张图、每一个视频 | 十字拉框 + `clip-path` 从左擦出 → 光标飞远 → **拖着一张缩略图飞回来**落进框里 | 2.08s |
+
+速度和参考站一致：倍率 `SPEED = 1`（上一版为了「快一点」用了 2，站主 2026-11-12 改口为「慢一点，跟参考站一样」）；撤回 2.2×；每块由一个**进度` s ∈ [0,D]`** 驱动，滚动只决定「该不该开始」（`top < 82%` 视口高）/「该不该撤」（`top > 92%`），不决定停在哪。
+
+多光标：七枚（Lumen / Vesper / Wisp / Moss / Aster / Ember / Rill）空闲时满视口漂移，谁离目标最近谁接活。**顺序约束只在同一条说说内**生效（先日期、再正文、再配图），跨条并行 —— 否则 16 条说说会串成几十秒的长链，后进视口的只能干等。
+
+两条踩出来的硬约束：
+
+① **绝不在带 `transform` 的元素上读 `getBoundingClientRect`**。`carry` 让整块位移，测回来的是位移后的框，拿它当基准再算位移会形成正反馈把元素越推越远。⇒ 全部走缓存矩形 `bx/by/bw/bh`，滚动时用 `scrollY` 差量修正，只有无变换的段落才重实测。
+
+② **落定必须显式写 `opacity: '1'`**。CSS 那条 `html.build-ok [data-build]{opacity:0}` 是「藏起来等搭」的开关，写空串等于交还给 CSS ⇒ 那一块**永久不可见**（实测正文整段消失、`.body` 的 computed opacity 一直是 0）。
+
+排队的兜底（`QUEUE_DEADLINE = 3200`，参考站没有这条）留着只兜「深链接跳转后整屏空白」；落定的每种来由都打 `data-tb-settled="out|queue|net"` 便于实测定位 —— 首屏实测 7 个落定全部是 `out`（滚出视口上方，没人看得见），没有一个是被排队替观众做了决定。
+
+实测（CDP，1280×900）：`clip-path` 揭示 `99.9% → 97.5% → 87.5% → 64.9% → 30.8% → 7.7% → 0.6%`（0.6 秒）；正文可见字元 `0 → 7 → 18 → 26 → 37 → 59`；画布上出现一块 96×96 的实心墨随光标平移（那就是手里拖的缩略图）；`carry` 元素 `transform` 非零持续约 0.7 秒后归零。门闩见 `tests/talks-float.test.ts` 的「多光标搭建」组（9 条，变异验证 4/4 被咬住）。
+### 6.172 友链取色跟随主题 · 点阵水波换色 · 说说页「落图才显影 / 撤回 / 常开漂移」（2026-11-13）
+
+站主四条，都是**看真机截图报的**，逐条对应到一处成因：
+
+| # | 站主原话（节选） | 成因 | 修法 |
+|---|---|---|---|
+| 1 | 「在友链按那个切换亮/暗的按钮，背景产生的星链颜色不会跟着换」 | `constellation.ts` 把 `--accent` / `--accent-ink` 在**初始化时读一次**存成 `const`；切到暗色后 token 已是橙，画布还捏着亮色那套绿（黑底橙页上拖一串绿线） | 颜色改 `let` + `readColors()`，监听 `themechange` 后**重读并原地重画一帧**（`draw(lastT)`） |
+| 2 | 「暗色模式下友链……鼠标滑动产生的水波颜色搭配亮橙不好看」 | 水波色取的是 `--links-mosaic-ink`，而暗色档点阵本体是 `var(--accent)`（橙）、ink 是 `var(--accent-ink)`（亮橙）⇒ **同色堆叠** | 新开 token `--links-mosaic-hover`：亮色档沿用浅绿，暗色档改**暖纸白** `#f4eee6`，靠明度差而非色相差把水波读出来 |
+| 3 | 「图片已经出来了，但是鼠标还没拖过来 —— 改为图片（或视频）拖过来之后再显现」 | `rect` 的 `apply()` 写的是 `t > 0 ? '1' : ''`：**拉框第一帧**就把元素整块放出来，后半程"拖过来"只剩光标和缩略图在飞 | 元素藏到 `t ≥ 1.78`（`path()` 里 grab 走完、缩略图落框那一刻）才用 `clip-path` 自下而上扫出；撤回时 t 反向穿过同一段，图跟着收回 |
+| 4 | 「停在一个界面的时候那几个光标就不动了……往回滚的时候原站是把这些东西撤走」 | ① 空闲时 `raf = 0` 把循环关掉 ⇒ 光标定在最后一帧；② 派活门槛写死 `want !== 1` ⇒ **撤回方向永远没有手**，块留在原地、七枚光标只能瞎飘 | ① 循环常开（空闲档隔帧出图降到 30fps，不拿续航换动效）；② 两个方向都派活，撤回走同一条 `path()` 的逆放（2.2×），兜底 `settle` 只留给"搭"这一侧 |
+
+三条**只有实测/通读才能确认**的细节：
+
+① **`themechange` 到了只能重画，不能重跑 `build()`。** 重建会重排星序、把已累积的边作废 ⇒ 画面突然清空重来，正好推翻头部「离开不回落」那条累积机制。门闩因此断的是「处理函数里出现 `build()`」这条负向性质。
+
+② **`rect` 的显影时刻必须和 grab 的终点对齐（1.78）。** 早一点是"图先到、手后到"（本轮报障），晚一点是缩略图已经消失、框空着等人。改用 `clamp((t - 1.78) / 0.24)` 之后，撤回方向自动复用同一段 —— 不必再写一份"逆向揭示"。
+
+③ **循环常开后，滚动差量修正不能再挂 `!raf`。** 那条件属于"空闲停机"的年代：现在 `raf` 永远非零，正在被 `carry` 拖着的块拿不到修正，基准 `by` 停在滚动前的位置，拖动路径整条偏掉。改为无条件做差量（对 `read()` 覆盖的块无害，因为紧接着就被实测值覆盖）。
+
+「图片一开始不加载」这一句按**不显影**落地，不是延迟请求：拖拽时要 `drawImage` 的缩略图就是这张 `<img>`，像素必须提前可取；而元素一旦从 `src` 上摘掉，无 JS 时那一格会变成空白（`html.build-ok` 之外的降级链要求内容原样可见）。⇒ 视觉上等价（观众看不到任何提前量），语义上不牺牲降级。
+
+门闩：`tests/talks-float.test.ts` 新增 3 条（落图才显影 / 撤回也派手且不落定 / 空闲不停机 + 降频），`tests/links-constellation.test.ts` 新增 2 条（主题重读、水波色独立 token）。变异验证见提交说明。
+### 6.173 显影板幕里主题开关点不到（2026-11-13）
+
+站主：「相册首页显影板那里暗色亮色的按钮按不到」。
+
+成因一句话：**放行名单是按元素类型写的，而新搬来的那颗开关不属于任何一类。**
+
+`gallery-stage.css` 里 `.bath` 是 `position:fixed;inset:0` 的整屏画布，显影板那一幕要让"随便涂哪儿都能擦出照片"，所以 `html.on-develop` 时把 `.gallery-stage-ui / .topbar / .pager` 整层设成 `pointer-events:none`，再把可交互件逐个放回来：
+
+```css
+html.on-develop body.gallery-story .topbar a,
+html.on-develop body.gallery-story .topbar button,      /* ← 名单只到这两类 */
+html.on-develop body.gallery-story .pager button,
+html.on-develop body.gallery-story [data-advance] { pointer-events:auto }
+```
+
+2026-11-12 把主题开关从关于页搬进顶栏时，它的宿主元素是 `<div role="switch" tabindex="0">`（`ThemeToggle.astro`，为的是让 canvas 铺满、软条能拖），**既不是 `a` 也不是 `button`** ⇒ 继承 `none` ⇒ 视觉上好好在那儿，指针穿透到下面的画布上，按什么都没发生。
+
+修法是把 `[data-theme-toggle]` 加进两处放行名单（另一处是 `>.topbar>:is(.navbtn,.navtog,.nav-trigger)` 那行，同类问题一起补）。它内部 canvas 默认 `pointer-events:auto`，软条拖拽与点按都恢复。
+
+实测（CDP，1280×900，`_probe/_gal-theme.mjs` / `_gal-theme2.mjs`）：
+
+| 幕 | `html.on-develop` | 开关 computed `pointer-events` | `elementFromPoint(中心)` | 点击后 `html.dark` |
+|---|---|---|---|---|
+| 显影板 | true | `auto` | `canvas`（在开关内部，`inside=true`） | false → **true** |
+| 弧形封面 | false | `auto` | `canvas`（同上） | false → **true** |
+
+门闩：`tests/develop-bath.test.ts` 同一 `it` 内新增 2 条（主名单、直子元素名单）。变异验证 2/2 咬住、按字节还原后 sha256 一致 —— 只删任意一处都会红。
+
+> 教训记一条：**"锁整层、逐个放行"这种写法，名单的维度必须是"可交互"而不是"标签名"。** 站上现在有三类可点件：`a` / `button` / `div[role]`；以后往顶栏加任何控件，第一件事是确认它在这张名单里。
+### 6.174 友链水波改成亮橙 · 说说页点评论时搭建收工 · 软条立体感回滚（2026-11-13）
+
+#### ① 友链暗色点阵的水波：暖纸白 → 同色相提亮的橙
+
+上一版把水波改成暖纸白 `#f4eee6`，站主否掉：「你这水波为什么换了个白色，换个比默认状态亮一点的橙色吧」。
+
+问题不在明度，在**色家族**：白和橙在点阵场里是两个色系，读起来像贴了一块纸。改法是留在橙的色家族里只抬明度 —— 点阵本体 `--accent` = `#ff7b00`（hsl 29/100/50），水波取同色相、L 65% ⇒ **`#ffa94d`**。
+
+| 档 | `--links-mosaic-hover` |
+|---|---|
+| 亮色 | `var(--links-mosaic-ink)`（`#a5cbb9`，绿底上抬一档浅绿，未动） |
+| 暗色 | **`#ffa94d`**（原来是 `#f4eee6`） |
+
+#### ② 说说页：搭建中点评论 ⇒ 这一轮收工，光标让开评论区
+
+站主：「如果在多鼠标搭建的过程中点击评论会乱（鼠标搭建动画在评论上面）」，给了两个方向，选择实现为**两者结合**：
+
+*成因*：评论展开把这一条以下的内容**整体下推**，而搭建用的是缓存的矩形（`bx/by/bw/bh`）⇒ 正在飞的框与缩略图按旧基准走，正好压在新展开的表单上。
+
+*落地*：
+1. 捕获阶段监听 `[data-toggle]` 的 click（`talks.ts` 的展开在冒泡阶段，必须排在它前面）；
+2. 所有未落定的块 `settle(g, 'pause')` —— 新增的第四档：到完成态但**不冻结**、**不打 `data-tb-settled` 痕迹**。不冻结是关键：站主上一轮要的「往回滚撤走」不能被这一次收工废掉；不留痕迹是因为探针靠那个属性数"直接浮现"的块，pause 不属于那一类；
+3. 展开高度是 320ms 的 CSS 动画 ⇒ 重测两拍（下一帧 + 380ms），否则量到中间高度；
+4. `measure()` 把展开着的 `.cbox`（判据是**没有 `inert`**）现算成禁入矩形 `avoid`，空闲光标漂移时若目标点落进去就推到最近的一边外 —— 光标会**顺着展开让开**，这正是站主要的第二个选项。
+
+实测（CDP 1280×900，`_probe/_tb-comment.mjs`）：
+
+| 读数 | 点击前 | 点击后 |
+|---|---|---|
+| 未落定块 | 56 | 0（剩下 8 个都在 `top > 900`，即视口下方，本就不可见） |
+| 展开的评论盒高度 | — | 364 px |
+| **评论盒内的画布墨像素** | — | **0** |
+| `data-tb-settled` 新增 | — | 0（pause 不留痕） |
+
+上滚 1400px 的对照：点击组与不点组「视口内正在撤的块」都是 1 ⇒ pause 没有废掉撤回。
+
+#### ③ 软条：真透明那条**撤销**，槽的立体感恢复满值
+
+站主先要「左半部分不是白色的，是透明的，所以在绿色背景下就要显绿色，橙色背景下显橙色」，我按**真 alpha**（端头 0.16、槽的墨影 ×0.12）实现；随后收到第二张截图与一句：「你看原来的软条，他的槽是有阴影的，而且整个是有立体感的」「你看你现在改的一点立体感都没有」。
+
+*为什么错*：这个开关的**全部立体感都来自槽**——内壁暗部、上下沿亮边、接触遮蔽，全部由 `dark`（这块地面比纸暗多少）算出来。压 `dark` 就是压立体感。端头给真 alpha 则是另一处损失：折射、玻璃厚度、内壁高光一起消失，变成一片能透光的塑料。
+
+*回滚*：
+- `GROUND_INK` 固定 **1**（槽的墨影满值），保留常量只为让"想调淡"这件事有个明确位置；
+- `END_GLASS_ALPHA` 固定 **1**，端头的"背景色"只能走光学（`reflection` / `refractedColor`），不走 alpha。
+
+> 这条留作教训：**"让 A 和背景同色"不等于"把 A 的 alpha 压掉"**。前者是配色问题，后者会连阴影一起抹平。下一轮若还要调端头色相，改 `glassPaper` / `glassGrey` 那一支的取色，别碰 alpha。
+
+门闩：`tests/theme-toggle.test.ts` 两条改写（`GROUND_INK` 必须为 1、不许再有 `jellyAlpha` 与按 x 的端头蒙版），`tests/talks-float.test.ts` 新增一条（点击收工 + pause 语义 + 禁入区）。变异验证见提交说明。
+### 6.175 说说页「搭建中锁评论」· 软条端头「渗色而不是透明」（2026-11-13）
+
+站主看完上一版（§6.174）给了两条收口：
+
+> 「改成搭建中不能点击评论吧，要不然一下搭完太突兀了。」「甲」
+
+#### ① 说说页：从「点一下就收工」改成「搭建期间点不动」
+
+上一版把「点评论」处理成「这一轮全部落定（`pause`）」。站主否掉的不是"防乱"这个目的，而是**代价**：一按就把整页搭完，比乱更突兀。
+
+现在：
+
+| 层 | 做法 |
+|---|---|
+| 视觉/指针 | `html.is-building` 时 `.acts [data-toggle] { pointer-events:none; cursor:default }` |
+| 键盘 | 捕获阶段拦 `click`（Enter/空格产生的 click 绕过 `pointer-events`），`preventDefault + stopPropagation`，**不做任何落定** |
+| 状态判据 | `syncBuilding()` 每帧一遍：视口内存在 `want===1 && s<D && !frozen` 的块 ⇒ 挂类 |
+| 收尾 | `astro:before-swap` 摘掉 `is-building`（SPA 共用一个 `<html>`，不摘会把下一页一起锁住） |
+
+判据为什么排掉两类块：
+
+- **撤回方向（`want === -1`）**：往上一滚整页都在撤，若也算"搭建中"，评论会一路按不动；
+- **视口外**：下方排队的块不替用户做决定。
+
+`pause` 这一档随之删除 —— 没有调用点之后留着它，只会让下一个人以为"还有一条落定路径"。
+
+实测（CDP 1280×900，`_probe/_tb-lock.mjs`）：
+
+| 阶段 | `is-building` | 开关 `pointer-events` | 点击后展开的评论盒 | 待搭块 |
+|---|---|---|---|---|
+| 搭建中（57 块待搭） | true | `none` | **0** | 55（继续搭，没被打断） |
+| 搭建中·键盘触发 `click()` | true | `none` | **0** | 55 |
+| 这一轮搭完 | false | `auto` | 0 | 51（都是视口外） |
+| 搭完点击 | false | `auto` | **1**（正常展开） | 51 |
+
+#### ② 软条端头（站主选「甲」）：保持折射，只调取色
+
+站主对上一轮（真 alpha 0.16）的两次评价合起来就是需求说明：
+
+1. 「左半部分不是白色的，是透明的，所以在绿色背景下就要显绿色，橙色背景下显橙色」——要**读得出背景色**；
+2. 「一点立体感都没有」——但不能靠降 alpha，那会把折射、玻璃厚度、内壁高光一起抹掉。
+
+⇒ 唯一不冲突的实现是「把背景的**色调**掺进反射项」：
+
+```ts
+const glassPaper = tint.rgb * (0.62 + 0.62 * saturate(y + 0.2));
+const envBleed = endTint.rgb * (END_GLASS_BLEED * capMask * capMask * endTint.w);
+const reflection = mix(glassPaper, glassGrey, tint.w) + envBleed;   // 加法，不是乘
+```
+
+四个决定：
+
+| 决定 | 理由 |
+|---|---|
+| **加**色而非乘 | 暗档 `groundTint` 是 `#0b0b0c`，乘任何色都归零 ⇒ 暗底永远读不出橙 |
+| 遮罩按到**球根中心**（`endCap.z`）的距离，再平方 | 只让球根透色；带身是高饱和果冻（橙/墨绿），掺背景色会糊成脏色 |
+| 强度 `END_GLASS_BLEED = 0.22`、跨度 `END_GLASS_SPAN = 0.62` | 要的是"玻璃后面的色调"，不是把端头染成色板；两个数都在 `scene.ts` 顶部，可目检后调 |
+| 颜色取 `--accent`（不是 `--jelly-tip`） | 亮档 `#2d7d46` 墨绿 / 暗档 `#ff7b00` 橙，正好是软条本体的**反色相** ⇒ 端头与带身不会糊在一起 |
+
+新增 uniform `endTint: vec4f`（rgb = 色，w = 启用），`theme-toggle.ts` 在 `paintTip` 里按拖拽进度混色喂进去（拖到一半时端头也跟着过渡）。默认 `w = 0` ⇒ 取不到 token 时与旧版逐像素一致。
+
+> ⚠ 无头与带窗口 Chrome 在本机都拿不到 `navigator.gpu`（`--enable-unsafe-webgpu` / Vulkan / d3d11 四种组合都试过），这一项**只能靠站主真机目检**。代码侧能守的是：alpha 恒 1、槽的 `GROUND_INK` 恒 1、渗色走加法。
+
+门闩：`tests/talks-float.test.ts` 一条改写（`is-building` 的 CSS、状态判据、键盘拦截、换页清理、不再出现 `pause`），`tests/theme-toggle.test.ts` 一条改写（`END_GLASS_BLEED` 区间、`reflection` 的加法关系、`endTint` uniform 与 setter、颜色取自 `--accent`）。变异验证见提交说明。
+### 6.176 显影板幕软条撤场（2026-11-13，站主选 D）
+
+站主看完成品后只给了一句判断，随后在四个方案里选了 D：
+
+> 「主要是显影板上软条按钮太突兀了，你想想怎么解决，只给方案，不动手」→ 方案 A/B/C/D 摆出来后 →「d」
+
+⚠ 这条与 §6.173 **同一位置、相反结论**。§6.173 是站主当天上午报「按钮按不到」，修法是把 `[data-theme-toggle]` 加进放行名单；下午这一句把方向整个翻过来 —— 不是"能不能点"，是"它在不在"。两段注释都留在代码里，就是怕后来人照着其中一段把它加回去。
+
+#### 突兀不是单一原因，是三层叠在一起
+
+| 层 | 事实 | 后果 |
+|---|---|---|
+| 对比 | 这一幕底是 `#090c0c → #34413a` 的近黑绿渐变；软条端头是 `--jelly-tip-light` `#ff7313` | 它是整屏**唯一的高饱和暖色**，视线先落在按钮上，照片成了它的背景 |
+| 体积 | nav 版窗口 176×41.6px，而这一幕其余 UI 全是 11–12px、低对比、等宽细字 | 唯一带实体感的东西（槽 + 玻璃厚度 + 内壁高光），比例失衡 |
+| 语义 | 槽模拟的是"纸面被压出一个凹槽" | 这一幕的承载体是**照片**，不是纸面 ⇒ 槽没有来处，读起来像贴上去的异物 |
+
+因此 A（缩小）、B（换色）、C（改成圆点）都只能按住其中一层；D 是唯一一次按住三层的选项，代价是这一屏不能切主题 —— 而这一屏本来就是暗房画面，主题在这里的语义最弱，代价可接受。
+
+#### 落地：三条声明 + 两段过渡
+
+```css
+html.on-develop body.gallery-story>.topbar>[data-theme-toggle]{
+  opacity:0; visibility:hidden; pointer-events:none;
+  transition: opacity .45s ease, visibility 0s linear .45s;
+}
+/* 出场（摘掉 on-develop 之后走这条） */
+body.gallery-story>.topbar>[data-theme-toggle]{
+  transition: opacity .45s ease, visibility 0s linear 0s;
+}
+```
+
+四个决定，每个都对应一个具体后果：
+
+| 决定 | 不这么做会怎样 |
+|---|---|
+| **保留占位**，不用 `display:none` | 软条让出的 176px 会让右侧导航按钮横移 ⇒ 换幕时整条顶栏抽一下 |
+| **`visibility:hidden`**，不只 `opacity:0` | `opacity:0` 的元素**仍在 Tab 序列里**，键盘会落到一个看不见的开关上（无障碍红线） |
+| 隐藏侧 `visibility` 延迟 **`.45s`** | 立刻 hidden 会把淡出掐断 —— 观感是"闪一下就没了" |
+| 出场侧过渡写在**可见态**上（`0s linear 0s`） | 若继承隐藏态那句 `.45s` 延迟，淡入期间仍是 hidden，读起来像"按钮迟到" |
+
+同一条放行名单里，`[data-theme-toggle]` 被**摘掉**（两处：`.topbar [data-theme-toggle]` 与 `>.topbar>:is(...,[data-theme-toggle])`）。理由：既已整块撤场，放行就等于留下一个"看不见但能点"的幽灵按钮。
+
+#### 实测（CDP，1280×900，`_probe/_gal-hide.mjs`）
+
+| 幕 | `on-develop` | opacity | visibility | pointer-events | rect | 可聚焦 |
+|---|---|---|---|---|---|---|
+| 第 1 幕 显影板 | true | **0** | **hidden** | **none** | 176×42（占位在） | false |
+| 第 2 幕 弧形封面 | false | **1** | visible | auto | 176×42（同左） | true |
+| 回到第 1 幕 | true | 0 | hidden | none | 176×42 | false |
+
+淡入连采：`0 → 0.346 → 0.726 → 0.911 → 0.987`（90ms 间隔）⇒ 0.45s 过渡真实在播，不是硬切。
+
+> 首屏不会"先闪一下再消失"：`on-develop` 虽然在 JS 里挂，但软条画布本身是懒加载的（渲染器走 `requestIdleCallback` + 动态 `import()`）⇒ 类名到位之前画布是空白，没有可闪的东西。
+
+#### 门闩
+
+`tests/develop-bath.test.ts` 同一 `it` 内，把 §6.173 那两条**反转**并加密：
+
+1. 放行名单里 `not.toMatch` 主题开关（两处）；
+2. 撤场规则必须同时含 `opacity:0` / `visibility:hidden` / `pointer-events:none`；
+3. 隐藏侧 `visibility 0s linear .45s`；
+4. 出场侧 `transition:opacity`；
+5. `not.toMatch` 任何 `display:none`。
+
+变异验证 **5/5 被咬住**（去掉 visibility、删整条规则、把软条加回放行名单、注入 `display:none`、删出场过渡），每条按字节还原。
+
+### 6.177 全站亮暗过渡连续化 · 拖动软条逐帧跟手（2026-11-13）
+
+站主原话：「做好每一页的亮暗色过渡……拖动的时候会慢慢变化……特别是底纹，从亮色到暗色颜色变化要丝滑均匀一点，不要突变」。关于页此前已达标（§6.95 软条拖动预览），这一轮把其余全部页面拉平到同一水平。
+
+#### 病根：`html.dark` 整条替换
+
+此前多数页面靠 `html.dark … { … }` **整条替换**实现暗色 —— 松手落定那一刻没问题，但拖动中间态拿不到任何中间值，观感就是「突变」。本轮把所有底纹/装饰层改掉：
+
+| 层 | 页面 | 改法 |
+|---|---|---|
+| 百褶 ∞（`.paper-inf` / `.page-inf`） | 首页 / 归档 | `--theme-w` 加权 opacity + `--plate-filter-pleat` 滤镜链 |
+| 墨迹 ∞（`.inf-ink-plate`） | 友链 / 说说 / 日志 | 同上，`--plate-filter-ink` |
+| 显影板渐变（`.bath`） | 相册区 | 渐变**拆色标** `--bath-1..4`，两档同名同序，逐档 `color-mix` |
+| 交接幕（`--entry-*`） | 文章页尾 | 同上拆色标 |
+| 机械环 day/night | 留言页 | 两图同场**交叉淡入**（按 `--theme-w` 各乘权重），废掉 `display:none/block` |
+| 首页前景（wash/grid/ring/band/玻璃/eyebrow/slice） | 首页 | 全部 token 化进 `body.chrome-console` 两档声明 |
+| fin 帧图 / profile-art | 组件 / 关于页 | 两图叠放，暗图 opacity 按权重淡入 |
+| 造物台颗粒 / 项目双图 | forge.css | 颗粒 opacity 权重化；双图改交叉淡入 |
+| 标签飘带底色 | 标签页 | `--tag-flow-band` 两档声明端点值（声明在根元素上能被预览读到） |
+
+#### 三条硬约束（决定预览能不能连续）
+
+预览模块 `src/scripts/theme-preview.ts` 通过 `getComputedStyle(documentElement)` 枚举变量，因此：
+
+1. **变量必须能被枚举到**：两端都要在 `:root` 可达（只在 `html.dark` 里声明的端点，亮档 `calc()` 整条失效）；
+2. **值必须是纯色字面量或纯数字**：`color-mix` / 渐变 / 阴影表达式会被整个跳过 ⇒ 拆色标、折字面量；
+3. **写回要落在实际生效的那一层**：`html.dark body.chrome-console { --paper }` 写回 root 会被压掉 ⇒ root + body 双采样，按「同档下 root≠body」判定层归属。
+
+新增全局权重 `--theme-w`（0 亮 / 1 暗）专供**非颜色通道**（opacity、filter、backdrop-filter）用 `calc()` 连续化；颜色通道继续走 `--theme-preview-weight` 的 `color-mix`。数值型 token（如 `--water-strength`）直接线性插值写数字 —— 消费方是 `parseFloat`，不能写 `calc()`。
+
+拖动中间态派发 `themepreview`（含 `detail.mixed`：纯 hex 中间色表）；画布装饰层脚本（constellation / ripple / motion-dots / pleated-infinity / page-dots-view / links-waves-view）**不 import 预览模块**（会把 ~2.9 KB 拖进首屏闭包、撞页面 JS 预算），改为在事件里取 `detail.mixed`，取不到落回读 token。`themechange` 与 `themepreview` 共用同一个 `syncTheme` 处理器。
+
+#### 页面 JS 预算抬账
+
+留言页 67 → 68 KiB（实测 171350 B，余量 342 B）、螺旋盘 53248 → 54272 B（实测 155746 B，余量 98 B）—— 均因装饰层要监听 `themepreview`，改动最小实现后仍各撞线 ≤400 B。
+
+#### 实测（dev + 真浏览器采样，`_probe/_theme-live.mjs`）
+
+- 关于页 body 背景 sRGB 亮度 0→1 连续：`0.980 → 0.840 → 0.652 → 0.512 → 0.371 → 0.184 → 0.043`；
+- 归档百褶 ∞：opacity `0.2 → 0.25` 逐档走，滤镜 `grayscale(0→1) sepia(0→1) saturate(1→2.2)`；
+- 友链/说说墨迹 ∞：`0.09→0.17` / `0.08→0.16`，截图确认亮/中/暗三档为淡绿墨→中性棕墨→铜橙墨，无异常色块；
+- 留言机械环：day `0.12→0`、night `0→0.18` 交叉；
+- 相册显影板：`--bath-1` / `--bath-halo` 每档都在 `color-mix` 上走；
+- 首页：网格色绿→橙逐档、`.band` 前景 `#ffffff → #21150d`（0.25/0.5/0.75 实测 `srgb(0.78,0.77,0.76)/(0.56,0.54,0.53)/(0.35,0.31,0.29)`），中间态无断裂。
+
+#### 门闩
+
+- 新增 `tests/theme-preview.test.ts`：body 层写回、数值插值、`--theme-w`、`detail.mixed`（纯 hex、非纯色不进表）、两轮预览不留残余；
+- 新增 `tests/theme-continuity.test.ts`：原「整条替换重镇」文件不得再出现 `html.dark` 规则、各底纹 `calc(… --theme-w)` 判据、机械环交叉淡入、渐变两档同名同序；
+- `tests/links-constellation.test.ts` ⑧-b 放宽为「内联箭头或具名共用 syncTheme 皆可」，性质三条不变（重读 / 原地重画 / 不重跑 build），并新增 themepreview 必须同挂。
+
+#### 教训（同步进 AGENTS.md 事故表）
+
+1. ★★★ 亮暗切换靠 `html.dark` 整条替换，就以为「过渡做好了」—— 拖动中间态拿不到任何中间值；
+2. ★★ 非字面量的 token 值，预览读不到也写不回 —— `color-mix`/渐变/阴影表达式会被整个跳过；
+3. ★★ 写权重驱动的滤镜链后不代端点验算 —— 必须 w=0 恒等、w=1 等于原暗档写法。
+
+### 6.178 八问轮 · 交叉淡入的叠放铁律与初始化降级（2026-11-13）
+
+站主一次报了八个问题，六个当场修掉，两个给了诊断结论。按页记：
+
+#### ① 说说页视频封面（首帧 poster）
+
+机制（spec §6.95 前后的 poster 生成器一节）已建（`scripts/gen-video-poster.mjs` 用 Chrome 抽帧 → `public/videos/<sha>.poster.jpg`；`talks.astro` 的 `posterOf()` 按约定推导，文件在才写 poster 属性）。本轮：重跑生成脚本补齐 + 实测 dev 页 `poster="/videos/….poster.jpg"` 双处生效。新增门闩 `tests/talk-video-poster.test.ts`：说说页引用的每个视频必须有 >1KB 的 poster 文件 —— 以后上传新视频忘了跑脚本，测试红，跑一遍脚本即绿。
+
+#### ② 留言页机械环「跑上面去了」—— 交叉淡入的叠放铁律
+
+实测（`_probe/_diag-ring.mjs`）：`.mechanical-ring` 容器 700×**900**（aspect-ratio 1400/900 应为 450），day 图占 y −209~241 —— **顶出视口**。病根：§6.177 的交叉淡入改造把 `display:none/block` 换成两图同场，但两张 `<img>` 都留在**文档流**里，各占一整张图高，把 fixed 容器撑高一倍。修复：容器 `display:grid; grid-template:1fr/1fr`，两图 `grid-area:1/1` 叠放。**铁律：凡「两档同场交叉」的双图，必须叠放（grid-area 或 absolute+inset），在文档流里各占一份高度就是布局事故。** 复查本轮所有双图（FinInfinity、about profile-art、forge 双图）均已叠放，仅机械环漏网。
+
+#### ③ 造物台 ∞ 反光跟手
+
+`forge-scene.js` 的 `setTheme` 是二值切换。抽成 `applyTheme(colors, w)`：数值项（envMapIntensity 1.35→1.65、key 3.2→2.0、fill 2.4→1.7、exposure 1.12→1.15）按 w 线性插值，颜色项优先取 `themepreview` 事件 `detail.mixed` 的 `--forge-*` 中间色。`--forge-break-glint` 两档都是 var() 引用（进不了 mixed 表），由 `forge.ts` 拿两端实际目标（`--forge-light-key`/`--accent`）按进度插值补进表。`setTheme` 与 `setPreview` 共用 applyTheme —— w=1 时两路同值，松手不跳。
+
+#### ⑤ 关于页/归档页点阵跟手 —— 语义别名进不了 mixed 表
+
+`--dot-grid-base: var(--about-dot-base)` 是**语义别名**：getComputedStyle 对自定义属性不做 var() 展开（拿到的是字符串 "var(…)"），预览的 mixed 表只收纯 hex ⇒ 别名进不了表，canvas 层 `tint['--dot-grid-base']` 落空回读 token（亮档）⇒ 拖动不变、松手瞬变。修复（`page-dots-view.ts`）：解出 var() 引用的真名，优先从 mixed 取真名的中间色。同病的 `--forge-break-glint` 用 ③ 的路子解决。
+
+> **⚠ 2026-11-13 更正（本段的诊断前提是错的，保留原文只为留痕，别再照抄）**：
+> 现代 Chrome 的 `getComputedStyle` 对自定义属性**会把 var() 链解析到底** —— 静止时
+> `--dot-grid-base` 直接读出 `#d9e4da`，拖动预览时读出
+> `color-mix(in srgb, #d9e4da, #2b201b 37.5%)`（`_probe/_diag-basecolor.mjs` 现场值）。
+> 真凶是后者：DotGrid 的 `toRgb` 只吃 3/6 位 hex，吃不下 color-mix ⇒ 兜底**纯白**。
+> 现行修法见 §6.179 / §6.180：优先查 `data-dot-base` 声明的真名在 mixed 表里的纯 hex，
+> 兜底自己解析 color-mix 插值；门闩 `tests/page-dots-color.test.ts` 直接喂现场字符串。
+
+#### ④ 相册页「有时候只剩底纹」—— 初始化降级
+
+复现不了（干净环境 h1/main 全在、无 JS 错），但结构性风险明确：相册是「slides 默认全 `visibility:hidden`、等脚本 `show(0,1,true)` 揭幕」⇒ **初始化链上任何一个查询落空 = 整页白屏**。`gallery-stage.js` 防御加固：`animate` 对 null 元素跳过、`overlayOpen`/`syncHint`/`[data-current]`/`status`/`dialog` 全容错、绑定走 `on()` helper、**首幕揭开包 try/catch 兜底加 `is-active`** —— 最坏情况是装置部分失效，不再可能是白屏。
+
+#### ⑦ TOC 帆船淡出
+
+`sailing-toc-motion.ts` 的 `select(null)` 原来 `ship.hidden = true` 瞬间摘。改为先 `opacity:0`（`.st-ship` 新增 `transition: opacity .26s ease`，RM 档关闭）260ms 后再 hidden；半路反向（淡出未完又选中）掐掉挂起的隐藏。实测：目录内滚触发 `select(null)`，120ms 处 opacity 0.25 → 620ms hidden ✓。
+
+#### ⑥ 归档页卡死 —— 当时未复现（2026-11-13 结案，见 §6.180）
+
+干净 dev + 探针（5s+3s 采样、滚动触发）无 longtask、无 JS 错、无资源异常（404 全是 dev 环境噪声：dev-toolbar 与评论 Functions 缺席；线上无此路径）。~~待站主下次复现时提供~~ ⇒ **结案**：病灶只在「主题开关懒加载后的首个渲染帧」，稳态采样天然抓不到；`setInitial` 的 240 步同步沉降是一条 ~640ms 长任务。修法与实测见 §6.180。
+
+#### 门闩与测试
+
+- 新增 `tests/talk-video-poster.test.ts`（1 项）；
+- `tests/toc-motion.test.ts` 5 项全绿（vendor 改动未破坏既有行为）；
+- 全量 139 文件 / 1608 通过 / 1 跳过。
+
+#### 教训
+
+1. ★★★ 「两档同场交叉」的双图若不叠放，容器被撑高 —— 布局回归是交叉淡入的头号伴生风险，改完必须量容器 rect；
+2. ★★ ~~语义别名 token（值是 `var(…)`）在 canvas 层要**解引用**再取 mixed~~ **（2026-11-13 撤销：Chrome 会展开 var()，见 ⑤ 的更正框）**。成立的部分是「两层消费方式不同，判据要分开写」：CSS 层 inline 写真名自然生效，canvas 层必须自己把现场字符串折成纯 hex。
+
+### 6.179 四问连报 · dev 依赖扫描 PARSE_ERROR 总根因（2026-11-13）
+
+站主四问：① 说说页音频有时候是原生裸控件；② 「点开菜单的动画呢？？？」；③ 点阵「修好了渐变但点成静态的了」「现在渐变又没了但恢复可被扰动」；④ dev 页面糊着 `UnhandledRejection: [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED]`，归档页/关于页概率卡死。**四问同根**。
+
+#### 根因链（两颗雷叠着炸）
+
+**雷 1（站点代码）**：`Base.astro` 的 JSX 注释里写了字面 `<script>`（「为什么并进同一块而不是各写一个 `<script>`」）。Astro dev 的脚本抽取按 HTML 语义扫标签、**认不得 JSX 注释**，把注释文本抽成「虚拟脚本」，首行是全角冒号开头的 `：文章页的脚本条数预算` ⇒ `PARSE_ERROR: Invalid Character` ⇒ **跳过整个依赖预打包**（日志：`Failed to run dependency scan. Skipping dependency pre-bundling`）⇒ react / gsap 等裸导入在 dev 里解析失败 ⇒ 所有懒挂载组件时好时坏：
+
+| 症状 | 断链点 |
+|---|---|
+| 菜单没动画 | `nav-drawer.ts` 点击时 `import('./staggered-site-menu')`（React + gsap）失败 ⇒ 回退无动画 checkbox 抽屉 |
+| 点阵静态 / 渐变不跟 | `page-dots-view`（React）加载残废；懒 chunk 的 `theme-preview` 加载失败 ⇒ `themepreview` 不派发 ⇒ 渐变断 |
+| 音频裸控件 | `Base.astro` 共享块按需 `import('../scripts/audio-player')` 失败 ⇒ 原生 `<audio controls>` 露出 |
+| 归档/关于概率卡死 | vite 反复重试优化时请求挂起 |
+
+**雷 2（本机环境）**：WorkBuddy 的 safe-delete shim 拦 vite 依赖预构建的缓存替换（`rm node_modules/.vite/deps_temp_*`）⇒ optimizer 半路死掉，页面上直接糊 UnhandledRejection 覆盖层。与 verify 同一规矩：**凡本机跑 vite 一律带 `CODEBUDDY_SAFE_DELETE_ENABLED=0`**，中招后清 `node_modules/.vite` 重启。
+
+#### 修复与实测（dev 复启后探针逐项验收）
+
+1. Base.astro 注释改写去字面标签 + 原地留警示注释；新门闩 `tests/astro-comment-script.test.ts`：全站 .astro 的 JSX 注释块内禁 `<script` 字面（真脚本块内 JS 注释不受限）。
+2. 清 `.vite` 缓存、`CODEBUDDY_SAFE_DELETE_ENABLED=0` 重启 dev ⇒ 启动日志零扫描错误。
+3. 探针实测：/talks/ 音频自定义播放器升级（波形 `[role=slider]` + 播放键 ✓）；/about/ 点击菜单真挂载 `dialog.site-menu-dialog > .staggered-menu-wrapper`（data-open、2 层动画 prelayer、10 菜单项 ✓）；点阵 canvas 1258×802 正常渲染、`themepreview` 通路无异常；/archive/ 长任务 **0** 条、三页控制台错误 **0** 条。
+
+#### 教训
+
+1. ★★★ dev 里出现"全站灵异现象"（多个不相干组件时好时坏），**先看启动日志有没有 "Skipping dependency pre-bundling"** —— 有的话是依赖扫描炸了，查 .astro 注释里的字面标签，别逐个组件排查；
+2. ★★ JSX 注释在**源码层**是文本：任何按 HTML 语义扫源码的工具（dev 脚本抽取、依赖扫描）都认不得它，注释里不许出现字面标签；
+3. ★ 本机 shim 对 vite 自身的 rm 也拦 —— dev/preview 与 build/verify 同一规矩（`CODEBUDDY_SAFE_DELETE_ENABLED=0`）。
+
+### 6.180 归档页卡死 · 首帧沉降 640ms 长任务（2026-11-13）
+
+站主追问：「打开归档页还是有概率卡死」「还是卡死，还是点阵在慢慢拖动亮暗变化时没有跟着渐变」。
+§6.178 记的「未复现」到此结案 —— 上一轮探针只采 5s+3s、没抓到首帧那一下。
+
+#### 根因（CPU profile 实测，不是猜）
+
+`setInitial()` 在**首个渲染帧里同步**跑最多 240 步沉降，每步 6 子步 × 16 轮约束
+≈ 3200 次投影：
+
+| 开销 | 实测 |
+|---|---|
+| 每次投影分配 2 个 `d.vec2f`，x/y 还是 getter | CPU profile：`get x` 196ms + `get y` 185ms；normalImpl 417ms |
+| `Math.hypot` 的防溢出缩放（本站坐标只用 1e-8..2） | 微基准 10 万次 35.7ms vs 纯 sqrt 1.4ms |
+| `Math.pow`（弯折强度每轮每点重算） | 首帧 ≈ 35 万次 |
+| typegpu `std.smoothstep/clamp/saturate` 的 CPU 侧分发 | 微基准 10 万次 35.7ms vs 等价纯 JS 1.4ms |
+
+⇒ 生产构建同样有一条 **~640ms 长任务**（`_probe/_diag-cpu.mjs`），主线程冻结 = 「有概率卡死」。
+「概率」来自它只在**主题开关懒加载后的首个渲染帧**发生，且随当前档位收敛步数变化
+（亮色档跑满 240 步，深色档提前收敛）。
+
+#### 修法：同一套数学，换个存法（不做时间切片）
+
+时间切片会把「初态平衡」变成可见的抖动（§6.178 之前特意求的是首帧即平衡态），
+所以改为把热路径压到 50ms 以内：
+
+1. `slider.ts` 物理状态改为扁平 `Float64Array`（`#px/#py/#qx/#qy`）：积分与约束
+   投影零分配、零 getter；`#pos` 降级为发布缓存，`#publish` 时同步 17 个 vec2f
+   （`points` 命中测试与 GPU buffer 仍读它，对外 API 未变）。
+2. `Math.hypot` → `Math.sqrt(dx²+dy²)`；收敛判定改成数值循环（原来是每步
+   `Math.max(...this.#pos.map(...))`）。
+3. 拱形权重 / 弯折强度按点位**每步算一次**（`#archProfile` / `#bendK`），
+   迭代内层不再有 sin/pow；端头展平刚度饱和一次、`#projectLineY` 内联。
+4. 物理热循环里的 `std.*` 换成等价纯 JS（`clamp01` / `smoothstepJS`）；
+   GPU 侧 `'use gpu'` 代码仍走 `std.*`。
+
+| 判据 | 修前 | 修后 |
+|---|---|---|
+| `setInitial(0)` 亮色档（node 直跑，mock GPU 边界） | ~640ms（线上 profile） | **22.8ms** |
+| `update×240`（亮色档） | — | **34.8ms**（0.145ms/帧） |
+| 首帧形状 ↔ 往返后静止形状 | < 0.005 | < 0.005（`jelly-initialization.test.ts` 全绿） |
+
+⚠ 中途两次「改完还是慢」：`vec2f` 换掉后 53.8ms、hypot 换掉后仍是 232ms（vm 环境），
+靠 CPU profile 才量出真正的两个大头是 `Math.pow` 与 `std.smoothstep` —— **别按调用次数直觉排序，先 profile**。
+
+#### 点阵不跟渐变：本地 dev 未复现，链路实测是通的
+
+`_probe/_diag-slowdrag.mjs` 以 16ms 一帧、每帧 +0.005 的**连续小步进**驱动预览
+（不是 5 个离散档），钩 WebGL `uniform3f` 读 `uBase`：
+
+- 201 个 `themepreview` 事件 → 194 次 uBase 写入 → **97 个不同色值**（0.851→0.176）；
+- `mixed['--about-dot-base']` 全程存在（145 键），CSS 侧 `--dot-grid-base` 同步为
+  `color-mix(in srgb, #d9e4da, #2b201b 100%)`。
+
+⇒ 上一轮「color-mix 兜底纯白」的修法在当前 dev 构建里生效；站主若在线上仍看到不跟手，
+先确认部署是否已包含该提交（线上产物核对），别再回头改这段数学。
+
+#### 门闩与测试
+
+- 新增 `tests/jelly-warmup.test.ts`（5 项）：热路径禁 vec2f 分配 / 禁 hypot / 常量每步算一次 /
+  收敛判定不 map / 禁 std.*；变异 `_probe/_mutate-jelly-warmup.py` **4 / 4 咬住**。
+- 新增 `tests/page-dots-color.test.ts`（4 项）：现场 color-mix 字符串 → 连续纯 hex；
+  变异 `_probe/_mutate-page-dots-color.py` **3 / 3 咬住**。
+  ★ 首轮变异 2 漏网：mixed 表测试值恰好等于 50% 插值结果，删掉优先级也通过 ——
+  **判据数据必须能区分「两条路」，别用退化值**。
+- 同步更新 `tests/theme-toggle.test.ts` 槽内夹紧判据的字面（扁平化后写的是 `px[i]`）。
+- 行为等价：`tests/jelly-initialization.test.ts`（2）、`theme-toggle.test.ts`（39）、
+  `theme-drag.test.ts`（7）**48 / 48 全绿**。
+- **终验**：`npm run build`（EXIT=0，产物首页已含 v2.91）+
+  `CODEBUDDY_SAFE_DELETE_ENABLED=0 npx vitest run --pool=vmForks --testTimeout=20000 --maxWorkers=2`
+  ⇒ **142 文件 / 1618 通过 / 1 跳过，EXIT=0**。
+
+#### 本机 verify 的两个新环境坑（与代码无关，但会假红）
+
+1. `scripts/gen-gallery-webp.mjs` 用 `realpath(srcPath) === resolve(srcPath)` 防「符号链接
+   指到目录外」：Windows 的 `realpath()` 把盘符规范成 `D:`，`resolve()` 用的是 cwd 里
+   的小写 `d:` ⇒ **任何正常源图都不相等**，构建在第一个相册第一张图上退出 1，
+   报「源图不存在或使用了目录外链接：一些风景/011.jpg」（文件其实在，1.08 MB）。
+   ⇒ 改成「相册目录 canonical 路径 + rel」拼期望值、按平台归一大小写后再比；
+   判据仍守「不许目录外链接」，不再把盘符大小写当越界。
+2. `home-log-output.test.ts` 读的是 `dist/index.html`：写完 log.md 的 v2.91 **必须先重建**
+   再跑全量，否则 `expected 'v2.90' to be 'v2.91'`（老熟人：stale dist 假红）。
+
+#### 教训
+
+1. ★★★ 「概率卡死」先找**只在首帧发生一次**的同步循环，别只采稳态帧；profile 里
+   `get x` / `get y` 排前面不是「读属性慢」，是**每次读都经过 getter、每次写都新建对象**；
+2. ★★ 减法要按实测排：换存法（-88%）、换 hypot（-8%）、提常量（-58%）是三段，
+   只做第一段会以为「已经够快了」而停在 50ms 门槛外；
+3. ★★ 修了行为却**没上门闩**（上一轮 color-mix 修复就是）＝下次重构必然静默回归；
+   本轮补齐两个行为/结构门闩并都做过变异验证；
+4. ★ 本机 vitest 默认 `threads` / `forks` 池在本沙箱里 worker 握手失败
+   （`Vitest failed to find the current suite` / `Cannot read properties of undefined (reading 'config')`），
+   `--pool=vmForks` 或 `--pool=vmThreads` 正常 —— 全量校验一律带这个参数，别误判成代码坏了。
+
+### 6.181 五问连报 · dev 缓存被构建/测试踩坏 + 暗档收边漏写（2026-11-13）
+
+站主一口气报五问：① 暗色首页滚到中部上下两条白光；② 预览地址是不是 `localhost:4330`；
+③ 从其他页点进归档/关于仍概率卡死（站主怀疑点阵，因为「就这两页有点阵」）；
+④ 标签页 hover 动效没了；⑤ 友链模块 hover 动效没了；附一句「你为什么修 bug 会影响到
+其他好的功能」。**五问不是同一个根因**，用 A/B 对照（4330 dev vs 4331 生产构建）拆成三类。
+
+#### ① 动效消失 —— 不是功能代码坏了，是我把长驻 dev server 的缓存踩了
+
+- 现场：`astro dev --force` 进程 14:04 启动后一直没重启；`.vite/deps/_metadata.json`
+  在 15:25 被我上一轮的 `npm install` / `astro build` / `vitest` 重写，目录里只剩
+  14 个 js，`@hugeicons/*` 与 `vgpu` **连登记都没有**。
+- 实测（CDP）：`/tags/` 请求 `@hugeicons_react.js?v=cc96580c`、
+  `/links/` 请求 `vgpu.js?v=0abac08a` 一律 **504 Outdated Optimize Dep**；
+  生产构建 4331 同样两页**一条 504 都没有**。前者是标签页 `FlowingMenu`、
+  后者是友链 `ShapeWaves` 懒加载的硬依赖 ⇒ import 失败、`.catch()` 静默吞掉 ⇒ 动效消失。
+  这解释了站主上一轮说的「有时有、有时没有、报错之后又好了」。
+- **修法（结构性）**：`astro.config.mjs` 按 `process.argv` 把 Vite `cacheDir` 分成
+  `node_modules/.vite-dev`（长驻 dev 独占）与 `.vite-cli`（build/sync/preview），
+  `vitest.config.ts` 再覆盖成 `.vite-vitest`。三者互不干扰。
+- **判据（`tests/dev-cache-isolation.test.ts`）**：dev 与 cli 分支不同、vitest 不与
+  astro 任何一份重合、谁都不许落回 Vite 默认目录。守关系不守字面路径。
+- **验收**：重启后 `.vite-dev/deps` 里两个包都回来；CDP 复测零 504，
+  两页 `__reactContainer$ = true`（标签 11 个 `.flowing-menu__item`、友链 1 个 canvas），
+  证明是**真 hydrate** 不是 SSR 静态 HTML。
+  ★ 关键回归：跑完 `npm run build` 前后，dev 的 `_metadata.json` 指纹
+  （mtime `1794558090` / 8305 B）**一字未变**，build 后 dev 页面仍零 504。
+
+#### ② 白光 —— 确实是上一轮连续化改造改出来的代码缺陷（站主说对了）
+
+- `--paper-fade` 从 `home-dark.css` 挪进 `tokens.css` 时，注释写着「亮档纸白、
+  暗档用暖铜边」，**只落了亮档 `#fafaf7eb` 一条**；原来
+  `html.dark body.chrome-console .paper-wrap` 那条整规则被删却没补。
+  暗色下 `--paper = #0b0b0c`，而 `.paper-wrap` 的 `fixed` 渐变两端仍是纸白 92%
+  ⇒ 滚到中部上下各一条白光带。A/B：dev 与生产**都复现**，与缓存无关。
+- 修法：在 `html.dark` 补 `--paper-fade: #100d0bf5`（值沿用旧 `--home-paper-edge`，
+  从 `git show HEAD:src/styles/home-dark.css` 找回，**不自己造色**）。
+  两档都是纯 8 位 hex ⇒ `theme-preview` 自动收进 colorNames，拖动时写
+  `color-mix(in srgb, …)` 连续插值（实测 0%/25%/50%/75%/100% 五档逐档变化）。
+- **判据（`tests/theme-continuity.test.ts`）**：两档各一条 8 位 hex、暗档亮度
+  < 60 且 < 亮档 40%、渐变两端读 `var()` 不写字面色值。原测试只守「:root 里声明过」，
+  守不住「暗档漏写」这一半 —— 漏洞就在这儿。
+- 实测修复后：`--paper-fade = #100d0bf5`，渐变两端 `rgba(16,13,11,0.96)`。
+
+#### ③ 「就这两页有点阵」的卡死 —— 站主直觉方向对，但结论要按证据收窄
+
+- 站主怀疑点阵。CDP A/B：归档页（有点阵）整页与客户端导航**都干净**（0 longtask）；
+  关于页（有点阵 + `fin-infinity` three.js）首帧有 378ms 长任务 + 383ms rAF 停顿，
+  CPU profile 点名 `getProgramInfoLog` 278ms / `fin-scene` / `three.module.min`
+  —— 是**首次 WebGL shader 编译**，不是点阵渲染；重复进入后降到 60~70ms。
+- ★ **自我纠正（重要）**：我一度用浸泡探针得出「WebGL context 泄漏累加，
+  到第 4/5 轮 `webglcontextlost` 批量触发」的结论，正准备改代码。
+  复查发现那支探针用 `new Set()` **强引用持有每个 context**，是探针自己阻止 GC
+  把上下文顶到上限 —— 假证据。换成不持有引用的干净探针重测：6 轮导航
+  `lost = 0`、DOM canvas 恒定 3/2、长任务 434→186→63→62ms 递减（shader 缓存预热），
+  **生产构建无泄漏、无累加**。⇒ 没拿这条假证据去改代码，也没在注释里声称因果。
+- 概率卡死最合理的来源仍是 ①：Vite 遇到 Outdated Optimize Dep 会触发
+  **强制整页重载**，反复命中就是站主看到的「卡一下 / 卡死」。缓存隔离后
+  dev 点击导航复测：`/about/` 最大 152ms 且 `gaps` 空（修前 378ms + 383ms）、
+  `/archive/` 干净、全程无 504 与 `frameNavigated` 强刷。
+- **护栏（防御性，不冒充修复）**：`DotGrid` 卸载时补
+  `gl.getExtension('WEBGL_lose_context')?.loseContext()`，与站内
+  `CircularGallery` / `fin-scene.forceContextLoss` 一致。注释明写这是防御性、
+  干净探针未复现泄漏，理由只是显式释放不等 GC 回收。
+
+#### ④ 预览地址
+
+`http://localhost:4330/` 正确。实测 dev 只监听 `[::1]:4330`，`127.0.0.1:4330` 不通
+（curl `v4=000` / `v6=200`）—— 地址栏必须写 `localhost` 或 `[::1]`。
+站主截图里「最近改了什么」首卡是 v2.91，而线上仍是 v2.65 ⇒ 看的确实是本地最新工作区，
+不是过期线上产物；上一版「线上没推所以看到旧版」的结论在本轮不成立。
+
+#### 验收与教训
+
+- `CODEBUDDY_SAFE_DELETE_ENABLED=0 npm run build` → EXIT=0（43 页 / 16.08s）；
+  全量 `vitest --pool=vmForks --testTimeout=20000 --maxWorkers=2` →
+  **143 文件 / 1627 通过 / 1 跳过**。新增两组门闩 6 项，`_probe/_mutate-five-issues.py`
+  变异 **6/6 被咬住**（含「暗档误写成亮档纸白」「dev 与 cli 合并回同一目录」）。
+- 教训 1：★★★ **A/B 对照 dev 与生产构建**是区分「环境坏了」与「代码坏了」最快的刀，
+  别在单一环境里猜；站主问「修 bug 为什么影响别的功能」时，答案往往不是回归，
+  而是长驻进程与一次性命令共用了缓存。
+- 教训 2：★★★ **探针自己不能改变被测对象的生命周期**。持有 context 的强引用、
+  持有 DOM 节点、阻止 GC，都会造出「越跑越糟」的假曲线；下结论前先自查探针。
+- 教训 3：★★ 只守「token 亮档存在」的断言，守不住「暗档漏写」；端点契约要
+  成对写，并守**关系**（亮度差）而不是字面色值。
+- 教训 4：★★ 从 `git show HEAD:<file>` 找回被删掉的设计原值，比自己重新调色可靠。
+
+#### ⑤ 终验两个红项的收口（同日追加）
+
+文档改完重建 `dist` 后跑全量，冒出 2 红：`tests/album-generator.test.ts` 的
+`safe-delete` 删除失败、`tests/lightbox-pose.test.ts` 的
+`expected +0 to be close to -18`。先做 A/B 把它们拆开：
+
+| 档 | 命令 | 结果 |
+| --- | --- | --- |
+| A | 带 `CODEBUDDY_SAFE_DELETE_ENABLED=0` 的全量 | **143 文件 / 1627 通过 / 1 跳过**，EXIT=0（连跑两次） |
+| B | 去掉该环境变量 | 只红 `album-generator`，`lightbox-pose` **绿** |
+
+⇒ ① 命令遗漏：AGENTS §4（59–60 行）早把命令写对了，是执行时漏带；shim 把
+`rm(mkdtemp)` 路由到回收站**稳定失败**，B 档可复现，仓库根下因此留下 6 个
+`.qa-album-build-*` 目录（各 9–12 个文件，gitignore 覆盖）。**不是代码缺陷**。
+② 由此**证伪**了我上一轮的推测「shim 抛错连带污染了 gsap 用例」：B 档里
+`lightbox-pose` 是绿的，两个红项互相独立，不能一起归因。
+
+`lightbox-pose` 单独查：`gsap` 是跨文件可能复用的单例，全量调度里它**不一定
+推进过一帧**。独立探针 `_probe/_gsap-lazy-probe.mjs` 在 `ticker.frame = 0`
+条件下确定性复现：
+
+```
+默认(lazy 队列) : rot=0     style=null                          frame=0
+lazy:false      : rot=-18   style=transform: rotate(-18deg);    frame=0
+```
+
+即 `fromTo` 的起始姿态停在 lazy 渲染队列里，同步 `getProperty` 只能读到 0；
+16:51 那次插桩读到 `frame=2 / rot=-18`，正是另一半。**「单跑绿、组合绿、
+全量偶发红」的签名，指向的是全局单例的帧状态，不是业务断言。**
+`rotation / x / scaleX` 三组变异 **3/3 被咬住**（默认读回 0 / 0 / 1，
+`lazy:false` 读回 -18 / -320 / 0.3）。
+
+- 修法（**只改测试，产品代码一行不动**）：`tests/lightbox-pose.test.ts` 的
+  `beforeEach` / `afterEach` 用 `vi.useRealTimers()` 清掉前置文件可能留下的假
+  计时器，engine stub 的 `fromTo` 加 `lazy:false` 让起始值同步落地。断言、
+  用例数量、`lightbox-motion.ts` 全部保持原样。真浏览器里 ticker 一直由 rAF
+  驱动，产品行为不受影响；**没有**借这条测试红项去改灯箱动画。
+- 教训 5：★★ 「同步读回动画起始值」隐含依赖「ticker 至少跑过一帧」，这是
+  藏在全局单例里的**隐藏前置条件**。测试要显式消掉它，而不是靠调度运气。
+- 教训 6：★★ 环境变量漏带会稳定制造一个**看起来像业务缺陷**的红项。诊断
+  顺序应先核对命令与 AGENTS §4 是否一致，再怀疑代码。
+
+
+### 6.182 关于页与归档 · 换页时的图形阻塞（2026-11-13）
+
+在 dev 和构建预览中从友链进入关于页，再交替访问归档和关于。Chrome 记录到 Dot Grid 同步创建 WebGL 上下文可阻塞约 2 秒；屏蔽点阵 WebGL 后，关于页离场仍可在 Astro 的 DOM 交换前阻塞，最长约 2 秒落在立体装置的主动丢失上下文调用。未观察到强制重载。
+
+两页继续共用 Dot Grid 的点阵、弹簧、扰动和主题插值，绘制改为 2D。关于页先显示静态图和正文，过渡结束后再启动立体场景。识别到软件 WebGL 时保留静态图；离场先停帧、再释放后处理和材质，不主动丢失上下文。开发缓存隔离与此前的主题开关改动继续使用。
+
+### 6.183 全站维护审查 · 换页、内容索引与音频（2026-11-13）
+
+页面作用域及时注销已经取消或完成的定时器、动画帧和空闲回调。Astro 取消导航时撤下本次过渡遮罩。持久播放器先以矩形交叠筛掉无关控件，再读取覆盖控件的计算样式。音频条在 Astro 换页后按需增强，账户读取失败后释放请求缓存。
+
+生产构建复用文章元数据和网址索引，开发预览读取最新内容集合。重复网址在构建中报错，视频 JPEG 封面交回静态路由。云端语音删除查询实际草稿和活动快照，同批写草稿时确认私有引用仍有原件。追加说说语音时保留已有公开语音。未改数据库迁移。
+
+### 6.184 全屏相册、开场交接与维护（2026-11-13）
+
+Dome 和 Infinite 单册共用原站点顶栏。照片索引显示顶栏，展览模式隐藏顶栏并铺满视口。左侧显示相册返回和册名，索引切换在右侧。关于页移除静态无限符号的亮暗占位，首帧完成才显示画布。章节位置在布局变化时重测，滚动时复用。
+
+说说多光标按 1.4 倍时钟推进，打字只更新本次显示或撤回的字。首页流场离屏时阻止鼠标唤醒帧循环，开场自然结束时保留焦点。音乐播放器只在增删涉及控件的节点时重建观察名单，页面作用域逐个处理销毁。
+
+音视频发布共用 HTML 标签扫描、Range 解析与逐个暂存。语音摘要也与文件名核对，私有原件写进完整草稿备份。评论回复插入与父评论存在条件放在同一句 SQL 中，避免父评论并发删除留下孤立回复。
+
+### 6.185 相册首幕、照片索引与目录动效（2026-11-13）
+
+相册总览在首幕准备好后启用固定舞台。单个动画失败时直接应用目标样式，舞台初始化失败时恢复可滚动的封面与链接。直达单册后的返回链接指向弧形封面，站内来路由历史记录恢复。
+
+各册复用原有照片索引标题和错缝照片墙。标签详情复用标签总览的流动菜单，标题是文章入口，色带使用对应文章的摘要。独立滚动目录时，帆船沿移出方向驶离，弯道随船接近端点收窄，船身越过窗口后停止绘制。
+
+录像显示返回总览后只剩胶片底纹，刷新才恢复。在 `localhost:4330` 按相同路径复现时，Astro 已恢复历史记录和第二幕，但 head 中舞台与弧形封面样式均已被换页移除。Vite 已执行过 CSS 模块，返回时不会重新注入。将舞台、弧形封面、穹顶和照片星球样式改为由对应 Astro 页面加载，换页直接采用目标页响应中的样式。
+
+### 6.186 公共顶栏、标题字形与归档切换（2026-11-13）
+
+造物台原来通过局部样式指定 80px 顶栏，现沿用公共顶栏。首页和内页使用 React Bits 首页导航的 50px 阈值、1276px 宽屏收起目标和 500ms 过渡。保留站点菜单与主题控件，玻璃仍挂在伪元素上。相册总览沿用固定舞台的顶栏策略，沉浸式展览继续隐藏顶栏。
+
+造物台标题采用 Tech Text 原版画布，补充首帧回调，静态标题在画布就绪前可见。归档复用 True Focus 的角框、缓动与模糊反馈，由原有标签状态驱动；两个等宽标签共用一只角框。
+
+源码取自 React Bits 提交 `9d9c687dc4f55b23539aa5417b703078047efa74`。[首页导航](https://github.com/DavidHDev/react-bits/tree/9d9c687dc4f55b23539aa5417b703078047efa74/src/components/landingnew/Navbar) · [Tech Text](https://github.com/DavidHDev/react-bits/tree/9d9c687dc4f55b23539aa5417b703078047efa74/src/ts-default/TextAnimations/TechText) · [True Focus](https://github.com/DavidHDev/react-bits/tree/9d9c687dc4f55b23539aa5417b703078047efa74/src/ts-default/TextAnimations/TrueFocus)
+
+### 6.187 菜单归位、磨砂顶栏与主标题动效（2026-11-13）
+
+收起顶栏宽度上限为 65rem，厚度跟随公共间距，磨砂层复用播放器的玻璃边缘、高光和色泽。打开菜单时，按钮按真实 Menu 位置进入模态对话框，再弹到视口右上角。关闭后，等待抽屉和按钮归位，再关闭对话框并交还焦点。首页顶栏随后可以随背景恢复自己的颜色。
+
+公开主标题在首次悬停时加载 Tech Text，使用原排版的行盒定位画布。拖字时画布随字扩展，保留拖出原行的字形，松手后按原位置回弹。True Focus 共享直角框，由归档的视图和排序、相册目录的场景与造物台的演出阶段驱动。
+
+### 6.188 圆头玻璃栏与文字细节（2026-11-13）
+
+浮动导航和展开的播放器共用玻璃规则，包括底色透明度、模糊、边缘与高光。导航两端为圆头。首页首屏仍从背景决定导航文字的颜色。造物台和相册的 Menu 使用公共导航字体和字重。归档的视图和排序使用微圆角外框，直角焦点框内缩并按等宽选项移动。Tech Text 的虚线独立于悬停选框绘制，拖动和回弹时从原位连到字形。
+
+### 6.189 归档切换与文章封面（2026-11-13）
+
+列表和封面同步切换布局，只给视口内条目做短位移和淡入，避免逐个测量标题、日期、摘要和图片的旧位置及新位置。排序、搜索和过滤继续沿用原有动画。公开文章封面统一通过既有构建端点输出，六篇沿用正文图片，四篇用生成图补齐，原有封面保留。
+
+云端写作台的文章封面支持独立上传、使用正文或已上传图片、编辑说明和清除。单独上传的封面走现有私有资产和草稿恢复流程。桌面写作台增加本篇已有图片选项。两套写作台继续使用共享的相册布局列表。
+
+### 6.190 归档变形与鳍片接力（2026-11-13）
+
+列表与封面恢复同一条目之间的变形。切换前后批量读布局，只为视口附近的条目、标题和封面创建动画。帧间变换和淡入淡出交给浏览器，筛选与排序仍用原来的动画。
+
+关于页的鳍片从飞行同侧依次起步，前后两条弧交错接力，保留原有的翻滚与散开路径。鳍片在离开时先转动，接回时逐片复原。快速跨章节时，每片直接从当下的位置、大小和朝向转向新目标，空中姿态持续到它接回。
+
+### 6.191 关于页快速往返与运行环境（2026-11-13）
+
+快滚改向后，逐片起飞的时序只安排一次。连续目标变化由临界阻尼跟随，位置、比例、转角和腾空量逐帧演进。被打断的鳍片保留速度与高度，沿弧线转向再逐片接回。高 DPI 画布的后处理按 165 万像素上限分配，保留原有 CSS 尺寸。项目及云端写作台 CI 的 Node 版本固定为 26.13.1。
+
+
+### 6.192 关于页鳍片转向与风景穹顶（2026-11-14）
+
+关于页按章节落位，在相邻章节的切换点保留迟滞。已经飞出的鳍片保持速度与腾空高度追向新落点，已经归位的鳍片按当前方向重新排队。先抬离带面再横向加速，最后逐片接回。
+
+Dome Gallery 沿用 React Bits 的错列投影与惯性拖动，本站采用演示的球面密度、透视和 30px 圆角，垂直旋转锁在 0°。每列优先使用两处近赤道卡位，足以让每张照片转过视口中段。展览补位逐轮洗牌并保留原序号。桌面与云端写作台沿用同一个布局值，单册展览由网站渲染。
+
+
+### 6.193 关于页鳍片飞行与快速折返（2026-11-14）
+
+恢复旧版显著的空中缩小、翻转和分层。飞行由逐片计时推进，前段剥离、中段飞行、到达后才逐片接回。已出发的片在落点变化时沿当下切线进入新弧，仍在原位的片从实际飞行侧错峰起飞。快速越过中间章节只更新最新落点，两处同侧落点之间沿外弧飞过。
+
+
+### 6.194 关于页鳍片悬停（2026-11-14）
+
+相邻章节的切换中点前后各留 5.5% 的悬停区间。停留片刻后，逐片飞行计时停在 0.32 秒，保留原位的带面和飞到中段的鳍片。滑出区间继续播放，反向则沿当前姿态折返。快滚短暂经过时沿用原飞行。
+
+
+### 6.195 关于页鳍片跟随滚动（2026-11-14）
+
+滚动位置直接决定飞行进度，逐片剥离、翻转、接合沿原曲线取样。短阻尼让鳍片在停手后继续移动一小段，然后留在相应的半空姿态。相邻章节反向时沿当前曲线回放，快速跨章节从当前姿态改走新弧，新的滚动位置始终可立即更新目标。

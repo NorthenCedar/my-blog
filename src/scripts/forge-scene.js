@@ -275,6 +275,24 @@ export function createForgeScene(canvas, onFrame) {
   canvas.addEventListener('webglcontextlost', event => { event.preventDefault(); contextLost = true; if (raf) cancelAnimationFrame(raf); raf = 0; last = 0; canvas.parentElement.dataset.ready = 'false'; }, {signal:events.signal});
   canvas.addEventListener('webglcontextrestored', () => { contextLost = false; canvas.parentElement.dataset.ready = 'true'; resize(); wake(); }, {signal:events.signal});
   resize(); canvas.parentElement.dataset.ready = 'true';
+  /* ★ 主题端点与权重统一在这里算（2026-11-13）：
+     setTheme（松手落定）与 setPreview（拖动中间态）共用 —— 保证 w=1 时两种路径
+     得到**同一组值**，松手那一帧不会跳。数值端点抄自旧 setTheme 的三元写法，
+     以后调光改这里一处。 */
+  const applyTheme = (colors, w) => {
+    const pick = name => (colors && colors['--forge-' + name]) || palette(name) || '';
+    const set = (material, name) => { const v = pick(name); if (v) material.color.set(v); };
+    set(metal, 'metal'); metal.envMapIntensity = 1.35 + 0.3 * w;
+    set(edgeMaterial, 'metal-edge');
+    set(chainMaterial, 'chain');
+    set(fragmentMaterial, 'chain'); fragmentMaterial.emissive.set(pick('break-glint') || '#000000');
+    set(filingMaterial, 'break-glint'); set(flashMaterial, 'break-glint');
+    flashMaterial.emissive.set(pick('break-glint') || '#000000');
+    set(rim, 'rim');
+    key.intensity = 3.2 - 1.2 * w; fill.intensity = 2.4 - 0.7 * w;
+    renderer.toneMappingExposure = 1.12 + 0.03 * w;
+    wake();
+  };
   return {
     dispose() {
       if (disposed) return; disposed = true; events.abort();
@@ -292,14 +310,14 @@ export function createForgeScene(canvas, onFrame) {
     setReduced(value) { reduced = value; pointerX = pointerY = 0; wake(); },
     setTheme(value) {
       dark = value === 'dark';
-      metal.color.set(palette('metal')); metal.envMapIntensity = dark ? 1.65 : 1.35;
-      edgeMaterial.color.set(palette('metal-edge'));
-      chainMaterial.color.set(palette('chain'));
-      fragmentMaterial.color.set(palette('chain')); fragmentMaterial.emissive.set(palette('break-glint'));
-      filingMaterial.color.set(palette('break-glint')); flashMaterial.color.set(palette('break-glint')); flashMaterial.emissive.set(palette('break-glint'));
-      rim.color.set(palette('rim'));
-      key.intensity = dark ? 2.0 : 3.2; fill.intensity = dark ? 1.7 : 2.4;
-      renderer.toneMappingExposure = dark ? 1.15 : 1.12; wake();
+      applyTheme(null, dark ? 1 : 0);
+    },
+    /* ★ 拖动软条的中间态（站主 2026-11-13：拖动时 ∞ 的反光也要跟着变）。
+       colors 是 themepreview 事件 detail.mixed 里 `--forge-*` 的中间 hex；
+       取不到的项（如 --forge-break-glint 是 var() 引用，进不了 mixed 表）
+       落回读当前档 token —— 由调用方把能算的都算好传进来。 */
+    setPreview(colors, w) {
+      applyTheme(colors, clamp(w));
     },
   };
 }

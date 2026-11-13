@@ -747,9 +747,17 @@ describe('时间切片 · 产物骨架（无 JS 可用是底线）', () => {
     const tokens = readFileSync('src/styles/tokens.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const light = tokens.match(/:root\s*\{([^}]*)\}/)?.[1] ?? '';
     const dark = tokens.match(/html\.dark\s*\{([^}]*)\}/)?.[1] ?? '';
-    expect(light).toMatch(/--gallery-entry-bg:[^;]*var\(--dusk-1\)[^;]*var\(--dusk-4\)/);
-    expect(dark).toContain('--gallery-entry-bg: var(--gallery-bath-bg)');
-    expect(dark).toMatch(/--gallery-bath-bg:\s*linear-gradient\(178deg/);
+    /* ★★ 2026-11-13：交接幕的颜色从「整条渐变」拆成「渐变 + 逐段色标」——
+       拖动主题软条时 background-image 不属于可插值 token，只有色标能连续走。
+       判据跟着意图走：结构仍是同一条 178deg 四段渐变 + 顶上那圈光环，
+       亮档取 dusk（深绿场），暗档取 home-hero（橙场），两档**同名同序**。 */
+    expect(light).toMatch(/--entry-1:\s*var\(--dusk-1\)/);
+    expect(light).toMatch(/--entry-4:\s*var\(--dusk-4\)/);
+    expect(light).toMatch(/--gallery-entry-bg:[^;]*var\(--entry-halo\)[^;]*var\(--entry-1\)/);
+    expect(dark).toMatch(/--entry-1:\s*var\(--home-hero-1\)/);
+    expect(dark).toMatch(/--entry-4:\s*var\(--home-hero-4\)/);
+    expect(dark).toMatch(/--bath-1:\s*var\(--home-hero-1\)/);
+    expect(dark).toMatch(/--bath-4:\s*var\(--home-hero-4\)/);
   });
 });
 

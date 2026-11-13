@@ -136,15 +136,16 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
     ))}
   </div>
 
-  {/* 量规：这条线上 82 个位置，三册各占一段。位置由 --p（0..1）驱动，
-      **不是**滚动条 —— 装置没有滚动条可言，这条就是它的替代物。 */}
-  <div class="sp-gauge" aria-hidden="true">
-    <div class="sp-rail" data-sp-rail>
+  {/* 量规按相册分段，同一位置可用指针拖动或用键盘选择。 */}
+  <div class="sp-gauge">
+    <span class="sp-gauge-label" aria-hidden="true">定位</span>
+    <div class="sp-rail" data-sp-rail aria-hidden="true">
       {segs.map((s) => (
         <span class="sp-seg" style={`--n:${s.n}`} title={s.title}></span>
       ))}
     </div>
-    <span class="sp-mark" data-sp-mark></span>
+    <span class="sp-mark" data-sp-mark aria-hidden="true"></span>
+    <input class="sp-scrub" type="range" min="1" max={flat.length} value="1" data-sp-scrub aria-label="螺旋盘照片位置" />
   </div>
 
   {/* 右下角读数：当前位置 + 这一张是谁。 */}
@@ -488,30 +489,60 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
     right: var(--gutter);
     top: 50%;
     transform: translateY(-50%);
-    width: 2px;
+    width: var(--sp-7);
     height: min(46%, 260px);
-    pointer-events: none;
+    z-index: 2;
+    pointer-events: auto;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--paper) 82%, transparent);
+    box-shadow: inset 0 0 0 1px var(--glass-line);
   }
-  :global(.sp-on) .sp-rail {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
+  .sp-gauge-label {
+    position: absolute;
+    inset: auto 0 calc(100% + var(--sp-2));
+    text-align: center;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+  }
+  .sp-gauge:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .sp-scrub {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
+    margin: 0;
+    writing-mode: vertical-lr;
+    direction: ltr;
+    opacity: 0;
+    cursor: pointer;
+    touch-action: none;
+  }
+  :global(.sp-on) .sp-rail {
+    position: absolute;
+    inset: var(--sp-2) 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    width: var(--sp-2);
+    margin-inline: auto;
   }
   :global(.sp-on) .sp-seg {
     /* 每册一段，长度**按帧数**分配（不写死比例）。 */
     flex: var(--n, 1) 1 0;
-    background: var(--hair);
+    border-radius: 999px;
+    background: repeating-linear-gradient(var(--muted) 0 1px, transparent 1px 5px);
+    opacity: 0.48;
   }
   :global(.sp-on) .sp-mark {
     position: absolute;
     left: 50%;
-    top: calc(var(--p, 0) * 100%);
-    width: 11px;
-    height: 2px;
+    top: clamp(var(--sp-2), calc(var(--p, 0) * 100%), 100% - var(--sp-2));
+    width: var(--sp-4);
+    height: 3px;
     transform: translate(-50%, -50%);
     background: var(--accent);
+    border-radius: 999px;
+    pointer-events: none;
   }
   :global(.sp-on) .sp-hud {
     display: block;
@@ -701,7 +732,7 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
 
 <script>
 import { startLoop, createActivityGate, prefersReducedMotion, shouldAnimate } from '../scripts/rl-core';
-import { clamp, blendV, throwTarget, stepSpring, stepPxOf, radiusOf, edgeOf, DT_MAX } from '../scripts/helix-core';
+import { clamp, blendV, throwTarget, stepSpring, stepPxOf, radiusOf, edgeOf } from '../scripts/helix-core';
 import { showBig, prefetch, intentPrefetch } from '../scripts/big-image';
 import { onPage } from '../scripts/page-lifecycle';
 onPage(({document, window, addEventListener, setTimeout, clearTimeout}) => {
@@ -813,7 +844,15 @@ onPage(({document, window, addEventListener, setTimeout, clearTimeout}) => {
     const hudCap = document.querySelector('[data-sp-hud-cap]')!;
     const posEl = document.getElementById('sp-pos');
     const mark = document.querySelector<HTMLElement>('[data-sp-mark]')!;
+    const scrub = vp.querySelector<HTMLInputElement>('[data-sp-scrub]')!;
     const PAD = String(N).padStart(3, '0');
+    let scrubTarget: number | null = null;
+
+    const syncScrub = (i: number) => {
+      const it = items[i];
+      scrub.value = String(i + 1);
+      scrub.setAttribute('aria-valuetext', `第 ${i + 1} 张，共 ${N} 张 · ${it.dataset.albumTitle ?? ''} · ${it.dataset.cap ?? ''}`);
+    };
 
     const hud = (i: number) => {
       const it = items[i];
@@ -823,6 +862,7 @@ onPage(({document, window, addEventListener, setTimeout, clearTimeout}) => {
       hudAlbum.textContent = it.dataset.albumTitle ?? '';
       hudNo.textContent = 'NO.' + (it.dataset.no ?? '');
       hudCap.textContent = it.dataset.cap ?? '';
+      if (scrubTarget === null) syncScrub(i);
       if (curOn >= 0 && curOn !== i) items[curOn].classList.remove('on');
       it.classList.add('on');
       curOn = i;
@@ -900,27 +940,20 @@ onPage(({document, window, addEventListener, setTimeout, clearTimeout}) => {
         }
       }
       const near = clamp(Math.round(f), 0, N - 1);
+      if (scrubTarget !== null && (drag || tgt !== scrubTarget || (f === tgt && v === 0))) {
+        scrubTarget = null;
+        if (near === curOn) syncScrub(near);
+      }
       if (near !== curOn) hud(near);
     };
 
-    /* 二阶弹簧在 helix-core 里（stepSpring）。★ 那里每帧吃**真实 dt**
-       （站规：禁止"每帧固定系数"，那等于把 dt 当成 1/60 秒 ⇒ 120Hz 屏上快一倍、
-       掉帧时又变慢，观感随设备变），并且**先夹速度再积分**。 */
-    let acc = 0;
     const tick = (dt: number) => {
       if (!gate.onScreen || !gate.visible) return;   // 停帧：滚出视口 / 切走标签页
-      const s = clamp(dt, 0, DT_MAX) / 1000;
-      if (!drag) {
-        const st = stepSpring(f, v, tgt, dt);
-        f = st.f;
-        v = st.v;
-      }
-      /* 读数每 4ms 才刷一次 —— 120Hz 屏上不必比 60Hz 多写一倍。 */
-      acc += s;
-      if (acc > 0.004) {
-        acc = 0;
-        paint();
-      }
+      if (drag || (f === tgt && v === 0)) return;
+      const st = stepSpring(f, v, tgt, dt);
+      f = st.f;
+      v = st.v;
+      paint();
     };
 
     const goto = (i: number, hard = false) => {
@@ -932,11 +965,21 @@ onPage(({document, window, addEventListener, setTimeout, clearTimeout}) => {
       }
     };
 
+    // 刻度选中目标，盘面和游标通过同一个弹簧追上。途中帧不回写拖动中的输入值。
+    scrub.addEventListener('input', () => {
+      if (!Number.isFinite(scrub.valueAsNumber)) return;
+      if (scrubTarget === null) v = 0;
+      goto(scrub.valueAsNumber - 1);
+      scrubTarget = f === tgt && v === 0 ? null : tgt;
+      syncScrub(tgt);
+    });
+
     /* ---------------- 输入：指针（鼠标 + 触屏同一套）---------------- */
     /* ★★ 按下时落点所在的片 —— 抬手判定"点的是哪一张"**只能**用它：
        下面的 `setPointerCapture` 会把后续事件全部改派给 vp（见 release 里的注）。 */
     let downOn: HTMLElement | null = null;
     vp.addEventListener('pointerdown', (e) => {
+      if (e.target === scrub) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       drag = true;
       moved = 0;
@@ -1058,6 +1101,7 @@ onPage(({document, window, addEventListener, setTimeout, clearTimeout}) => {
     /* ---------------- 输入：键盘 ---------------- */
     vp.tabIndex = 0;
     vp.addEventListener('keydown', (e) => {
+      if (e.target === scrub) return;
       const k = e.key;
       if (k === 'ArrowRight' || k === 'ArrowDown') {
         e.preventDefault();

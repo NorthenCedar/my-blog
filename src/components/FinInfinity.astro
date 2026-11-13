@@ -1,31 +1,8 @@
 ---
-/**
- * 立体 ∞（FinInfinity）—— 关于页背景装置。
- *
- * 移植自 `tmc5csxr9m-cpu/rhine-lock` 的 ∞ fin sculpture：400 片长方体鳍
- * 沿 Gerono 双纽线摆开，每片绕切线扭转 + 前倾，靠自发光在边缘点亮一道亮边。
- * 几何与材质在 `src/scripts/fin-shaders.ts` / `fin-scene.ts`。
- *
- * ★ 三层结构（与站内其它装置同构）：
- *   [data-fin-static] 无 JS / reduced-motion / ≤767px 时的静态层（原场景亮暗同姿态帧）
- *   [data-fin-view]   WebGL 层（脚本判定可跑才显）
- *   canvas           WebGL 画布
- * ⚠ **显隐只用 opacity，不用 hidden/display**（AGENTS 事故表 ★★★★）：
- *   canvas 尺寸是量出来的，display:none 时 getBoundingClientRect 全是 0 ⇒
- *   renderer 按 0尺寸初始化 ⇒ 永远画不出来。静态层用 hidden 是安全的（它不靠脚本测量）。
- *
- * ★ 只在这一页、且动态 import —— three.js 544 KB + n8ao WASM 803 KB 不能上每一页。
- *   见 about.astro 里的同类注释。
- */
-import staticLight from '../assets/about/plates/fin-static-light.webp';
-import staticDark from '../assets/about/plates/fin-static-dark.webp';
+// 场景第一帧就绪后才淡入，加载期间由页面本身的纸色和点阵铺底。
 ---
 
-<div class="fin-infinity" data-fin-infinity>
-  {/* 静态回退层：无 JS / reduced-motion / 窄屏时，装置的全部内容 */}
-  <div class="fin-static" data-fin-static aria-hidden="true"
-    style={`--fin-frame-light:url("${staticLight.src}");--fin-frame-dark:url("${staticDark.src}")`}></div>
-  {/* WebGL 层：脚本判定可跑才去掉 hidden */}
+<div class="fin-infinity" data-fin-infinity aria-hidden="true">
   <div class="fin-view" data-fin-view hidden>
     <canvas data-fin-cv></canvas>
   </div>
@@ -47,6 +24,7 @@ import staticDark from '../assets/about/plates/fin-static-dark.webp';
     /* 点击由窗口监听，场景按可见鳍片判命中；底纹本身不拦截正文操作。 */
     pointer-events: none;
   }
+  .fin-view[hidden] { display: none; }
   .fin-view,
   .fin-view canvas {
     display: block;
@@ -61,23 +39,4 @@ import staticDark from '../assets/about/plates/fin-static-dark.webp';
   }
   /* 只有脚本判定可跑、场景真的起来之后才淡入（.fin-on 由控制器挂上） */
   .fin-infinity.fin-on .fin-view canvas { opacity: 1; }
-  .fin-infinity.fin-on .fin-static { opacity: 0; }
-
-  .fin-static {
-    position: absolute;
-    inset: 0;
-    background: var(--fin-frame-light) center / contain no-repeat;
-    opacity: 0.7;
-    transition: opacity 260ms ease;
-  }
-  :global(html.dark) .fin-static { background-image: var(--fin-frame-dark); }
-
-  @media (max-width: 767px) {
-    .fin-infinity { width: min(96vw, 800px, 150vh); }
-  }
-  /* 窄屏 / reduced-motion：只留静态层，WebGL 层永不显示。
-     控制器也在初始化前检查断点，不会在窄屏创建后立即销毁三维场景。 */
-  @media (max-width: 767px) {
-    .fin-view { display: none; }
-  }
 </style>

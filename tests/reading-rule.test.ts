@@ -278,15 +278,11 @@ describe('文章页右栏目录 · 版式契约', () => {
     }
   });
 
-  it('目录进右栏要压掉 Toc 那套「通栏横向索引条」的规则（≥1440 四列 / 隐藏标题）', () => {
-    // 那边 ≥1440 会 .label{display:none} + ol{columns:4} —— 在 256px 的栏里会散架
+  it('帆船目录保留可读标题和单列独立滚动，宽屏不把章节拆列', () => {
     const toc = readFileSync(join(ROOT, 'src/components/Toc.astro'), 'utf8');
-    expect(toc, 'Toc 的 1440 规则改名了？契约要跟着看').toMatch(/min-width: 1440px/);
-    expect(ACSS).toMatch(/\.post-rail :global\(\.toc \.label\)\s*\{\s*display:\s*block/);
-    expect(ACSS).toMatch(/\.post-rail :global\(\.toc ol\)\s*\{\s*columns:\s*auto/);
-    // 压得住的实测证据：编译后的选择器权重必须是 (0,3,0) 级别
-    expect(DIST_CSS).toMatch(/\.post-rail\[[^\]]+\] \.toc \.label\{display:block\}/);
-    expect(DIST_CSS).toMatch(/\.post-rail\[[^\]]+\] \.toc ol\{[^}]*columns:auto(?:;|\})/);
+    expect(toc).toContain('<h2 class="label">本文目录</h2>');
+    expect(toc).not.toMatch(/\bcolumns:/);
+    expect(DIST_CSS).toMatch(/ol\[[^\]]+\]\{[^}]*max-block-size:min\(48svh,28rem\)[^}]*overflow-y:auto/);
   });
 
   it('正文保留字体、行高、段落与代码排版，只通过父级分配列宽', () => {

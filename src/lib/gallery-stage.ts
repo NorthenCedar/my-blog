@@ -7,5 +7,5 @@ export function coverPresentation(album:GalleryAlbum,index:number){
   const frame=album.frames.find(frame=>frame.src===album.cover)??album.frames[0];if(!frame)return null;
   const small=frame.files.reduce((a,b)=>b.w<a.w?b:a),large=frame.files.reduce((a,b)=>b.w>a.w?b:a);
   const configured=resolvePresentation({...album,width:small.actualW??small.w,height:small.h},index),kind=configured.arrangement;
-  return {kind,lines:albumTitleLines(album.title),src:large.url,width:small.actualW??small.w,height:small.h,alt:frame.alt,transition:configured.transition,stroke:configured.stroke,weight:configured.weight,href:`/gallery/${encodeURIComponent(album.id)}/`};
+  return {kind,lines:albumTitleLines(album.title),src:large.url,thumbnail:small.url,width:small.actualW??small.w,height:small.h,alt:frame.alt,transition:configured.transition,stroke:configured.stroke,weight:configured.weight,href:`/gallery/${encodeURIComponent(album.id)}/`};
 }

@@ -4,6 +4,8 @@ date: 2026-11-10
 summary: 主要介绍VMware预建安装法，面向小白，如想自己安装系统也可参考本文
 tags: [教程, 工具]
 draft: false
+cover: ./kali.jpg
+coverAlt: Kali Linux 预建虚拟机下载页面
 ---
 > **说明：本教程只讲虚拟机安装。Kali 是合法的安全测试系统，请仅在自己的设备或获得明确授权的环境中使用，仅供学习交流。**
 

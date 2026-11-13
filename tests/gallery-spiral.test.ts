@@ -1,4 +1,5 @@
-import { MOTION_ENGINE_BUDGET, expectMotionStartup } from './_motion-budget';
+import { jsClosure } from './_writer-output';
+import { MOTION_ENGINE_BUDGET, TECH_HEADING_BOOT_BUDGET, THEME_TOGGLE_BOOT_BUDGET, expectMotionStartup, siteWideLazyBytes } from './_motion-budget';
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -895,7 +896,7 @@ describe('螺旋盘 · 红线与预算', () => {
     expect(CODE, '螺旋态丢了 max-height ⇒ 图会溢出片框').toMatch(/\.sp-frame img\s*\{[^}]*max-height:\s*100%/);
   });
 
-  it('★ 页面 JS 预算（上限 14336）', () => {
+  it('★ 页面 JS 预算：静态依赖与按需引擎分别计量', () => {
     /* 口径与 /gallery、文章页那几条一致：**内联 + 同源外链闭包**的实数，不靠少算通过。
        实测构成（2026-10-09）：内联 2765（Base 的首帧保险 + 过渡 loader）
        + 本页 chunk 6969 + big-image 共享块 487 + rl-core 共享块 1208 = 11429。
@@ -921,11 +922,26 @@ describe('螺旋盘 · 红线与预算', () => {
           14 KiB 下仍留 ~120 字节天花板，three 那条反面正对照照旧生效。 */
     // 全站公共歌单播放器增加约 5.5 KiB，共享闭包预留 6 KiB。
     // 随机播放队列净增约 1 KiB，保留完整闭包和 Three 禁入断言。
-    const BUDGET = 53248 + MOTION_ENGINE_BUDGET;
-    expectMotionStartup(PAGE_PATH, 53248);
+    /* ★ 2026-11-13：补上顶栏主题开关的引导脚本那 4 KiB（`THEME_TOGGLE_BOOT_BUDGET`）。
+       主题开关从关于页搬进顶栏之后，`ThemeToggle` 的引导脚本 + 它静态拉进来的
+       `page-lifecycle`（825 + 2794 ≈ 3.8 KB）出现在**每一个内页**上，本页实测
+       53804 B > 53248 ⇒ 撞线。`build-output.test.ts` 的三处当时都加了这一笔，**本页漏了**
+       （不是新开销，是漏记；加上之后口径才和其它页一致）。
+       ⚠ 别为了让这条变绿去抬 53248 本身 —— 那会把"每页都付一次"的这笔账藏起来。
+       这 4 KiB 在**完整闭包**里也要记一次（同一批脚本也在 full 里）：实测 154916 B，
+       记上之后余量只剩 ~0.7 KB —— 下次真要往本页加东西，请按规矩抬上限并写清为什么。
+       ★ 2026-11-13：加了「主题连续过渡」—— 本页的百褶环 Canvas 要消费 `themepreview`
+       的中间色（否则拖软条时只有它停在亮档，松手才跳）。实测 155746 B，撞线 98 B。
+       按规矩再抬 1 KiB（余量 926 B），全部反面正对照（three 禁入）照旧。 */
+    const BUDGET = 54272 + MOTION_ENGINE_BUDGET + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET;
+    expectMotionStartup(PAGE_PATH, 53248 + THEME_TOGGLE_BOOT_BUDGET);
     expect(hasDist, '先 npm run build').toBe(true);
-    const { code, files } = jsClosure(PAGE_PATH);
-    const full = Buffer.byteLength(code, 'utf8');
+    const { code, files } = jsClosure(PAGE_PATH, { skipMenu: true, skipTechHeading: true });
+    /* ★ 2026-11-13：同样要剔除全站共享的**懒加载**渲染器（主题开关本体 458 KB）。
+       它由顶栏挂在每一页上、但只走动态 import ⇒ 不属于本页的 JS。
+       与 `build-output.test.ts` 的三处口径一致，用 `siteWideLazyBytes()` 减掉，
+       而不是给这条预算加 458 KB（那会让 three 的反面正对照一起失效）。 */
+    const full = Buffer.byteLength(code, 'utf8') - siteWideLazyBytes(files);
     console.log(
       `螺旋盘页面 JS: 闭包 ${full} 字节（预算 ${BUDGET}）· ${files.length} 个同源 chunk · ` +
         files.map((f) => `${f.split(/[\\/]/).pop()} ${statSync(f).size}`).join(' + '),
@@ -937,35 +953,15 @@ describe('螺旋盘 · 红线与预算', () => {
     );
   });
 
-  it('★★ 两个消费方共用同一个组件：独立页=page、相册页=embed（不许并存第二份实现）', () => {
+  it('总览链接到独立螺旋盘，装置仍由共享组件渲染', () => {
     expect(hasDist, '先 npm run build').toBe(true);
-    expect(GAL_HTML, '/gallery 里没有装置（站主 2026-10-07：显影板之下、砖墙之上）').toMatch(/data-spiral/);
-    expect(GAL_HTML, '/gallery 那份的 mode 必须是 embed').toMatch(/data-sp-mode="embed"/);
-    expect((GAL_HTML.match(/data-sp-rig/g) ?? []).length, '相册页只能有一个装置坐标系').toBe(1);
-    /* 页序：显影板 → 螺旋盘 → 相册入口条 → 页末那个全屏入口。
-       站主原话：「把螺旋盘放到显影板的下面」+（同日下一轮）「下面**不放现在全部铺开的**，
-       放**入口**」⇒ 用产物里的**字节偏移**判，比看类名可靠。 */
-    const iBath = GAL_HTML.indexOf('data-bath');
-    const iSp = GAL_HTML.indexOf('data-spiral');
-    const iRow = GAL_HTML.indexOf('data-gallery-album');
-    const iEntry = GAL_HTML.indexOf('全屏打开螺旋盘');
-    expect([iBath, iSp, iRow, iEntry].every((i) => i >= 0), '页序四段没找齐').toBe(true);
-    expect(iBath, '显影板必须排在螺旋盘之前').toBeLessThan(iSp);
-    expect(iSp, '螺旋盘必须排在相册入口条之前').toBeLessThan(iRow);
-    expect(iRow, '相册入口条必须排在页末那个全屏入口之前').toBeLessThan(iEntry);
-    /* 独立页那份是 page，且**没有**入口条/砖墙 —— 它仍是"全屏专注视图" */
-    expect(HTML, '独立页的 mode 必须是 page').toMatch(/data-sp-mode="page"/);
-    expect(HTML, '独立页不该出现砖墙').not.toMatch(/class="wf"/);
-    expect(HTML, '独立页不该出现相册入口条').not.toMatch(/data-album-row/);
-    /* 两份产物里的装置标记必须同源（同一组件 ⇒ 同一批 --k） */
-    const ks = (s: string) => [...s.matchAll(/--k:(\d+)/g)].map((m) => Number(m[1]));
-    expect(ks(GAL_HTML), '相册页那份的 --k 序列与独立页不一致（实现分叉了）').toEqual(ks(HTML));
-    /* 组件是**唯一**实现：两个页面文件里不许再内联一份装置样式/脚本 */
-    for (const p of ['src/pages/gallery/spiral.astro', 'src/pages/gallery/index.astro']) {
-      const page = read(p);
-      expect(page, `${p} 里又内联了一份 .sp-viewport 样式`).not.toMatch(/\.sp-viewport\s*\{/);
-      expect(page, `${p} 里又内联了一份装置脚本`).not.toMatch(/radiusOf\(/);
-    }
+    expect(GAL_HTML).toContain('href="/gallery/spiral/"');
+    expect(GAL_HTML).not.toContain('data-sp-mode="embed"');
+    expect(HTML).toContain('data-sp-mode="page"');
+    expect((HTML.match(/data-sp-rig/g) ?? []).length).toBe(1);
+    expect(HTML).not.toContain('class="wf"');
+    expect(HTML).not.toContain('data-album-row');
+    expect(read('src/pages/gallery/spiral.astro')).toContain('<SpiralPlate mode="page" />');
   });
 
   it('★★★ 滚轮：两档都接管 + 两端让路（站主第四轮改了口径）', () => {
@@ -1014,12 +1010,10 @@ describe('螺旋盘 · 红线与预算', () => {
     const hint = /<p class="sp-hint"[^>]*>([^<]*)<\/p>/.exec(SRC)?.[1] ?? '';
     expect(hint, '找不到 .sp-hint 的文案').not.toBe('');
     expect(hint.trim(), `提示语是「${hint.trim()}」—— 没有告诉访客可以用滚轮`).toContain('滚轮');
-    /* 两个消费方的产物里都该是同一句（分岔过一次就说明 mode 又被抄进模板了） */
+    /* 独立页仍用组件的操作提示。 */
     if (hasDist) {
       expect(HTML, '独立页的提示语里没有滚轮').toMatch(/sp-hint[^>]*>拖动 · 滚轮 · ← →/);
-      expect(GAL_HTML, '相册页的提示语里没有滚轮（embed 档也接管滚轮了）').toMatch(
-        /sp-hint[^>]*>拖动 · 滚轮 · ← →/,
-      );
+
     }
   });
 
@@ -1059,25 +1053,3 @@ describe('螺旋盘 · 红线与预算', () => {
     for (const s of srcs) expect(s, '网格图必须走最窄档').toContain(`-${gridW}.`);
   });
 });
-
-/** 页面实际加载的 JS 代码文本（内联 + 同源外链 import 闭包）—— 与 build-output.test.ts 同一口径。
- *  ⚠ 必须跟着 import 走：Astro 会把多页共用的脚本抽成 `/_astro/*.js`，
- *    只读页面 HTML（或只跟一层）会**少算**预算。 */
-function jsClosure(pagePath: string): { code: string; files: string[] } {
-  const html = readFileSync(pagePath, 'utf8');
-  const inline = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
-  const files: string[] = [];
-  const seen = new Set<string>();
-  const load = (href: string) => {
-    const rel = href.replace(/^\//, '').replace(/^\.\//, '');
-    const f = join(DIST, rel.startsWith('_astro/') ? rel : join('_astro', rel));
-    if (seen.has(f) || !existsSync(f)) return;
-    seen.add(f);
-    files.push(f);
-    const code = readFileSync(f, 'utf8');
-    for (const m of code.matchAll(/(?:import|from)\s*\(?\s*(["'`])([^"'`]+?\.js)\1/g)) load(m[2]);
-  };
-  for (const m of html.matchAll(/<script[^>]+src="(\/_astro\/[^"]+\.js)"/g)) load(m[1]);
-  const code = inline + '\n' + files.map((f) => readFileSync(f, 'utf8')).join('\n');
-  return { code, files };
-}

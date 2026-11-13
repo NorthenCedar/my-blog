@@ -22,6 +22,8 @@
 //      后面的 <main> 就盖住了顶栏里的抽屉（首页没事纯属侥幸：console 外壳只做淡入、不做缩放）。
 //      现在：动画跑完（950ms）由本脚本把 `pt-on pt-play` 摘掉 ⇒ 那个 transform 随之消失。
 
+import type { TransitionBeforePreparationEvent, TransitionBeforeSwapEvent } from 'astro:transitions/client';
+
 const KEY = 'pt';
 const root = document.documentElement;
 // v3（2026-09-30 站主定案）：换成**原型 v10.6 的墨色浸染**，时间线总长 900ms
@@ -43,9 +45,17 @@ function precheck(e: MouseEvent, a: HTMLAnchorElement): boolean {
 
 // ---- 收尾：目标页播完就把标记摘掉 ----
 // **必须摘**：`pt-content` 的结束帧带着 transform，留在类上就等于给 .shell 永久加了一个层叠上下文。
-if (root.classList.contains('pt-play')) {
-  setTimeout(() => root.classList.remove('pt-on', 'pt-play'), HANDOFF_MS);
+let cleanupTimer: number | undefined;
+let preparing: AbortSignal | undefined;
+function clearOverlay() {
+  window.clearTimeout(cleanupTimer);
+  root.classList.remove('pt-on', 'pt-play');
 }
+function finishAfter(ms: number) {
+  window.clearTimeout(cleanupTimer);
+  cleanupTimer = window.setTimeout(clearOverlay, ms);
+}
+if (root.classList.contains('pt-play')) finishAfter(HANDOFF_MS);
 
 // 系统开了「减少动态效果」就整套不参与（CSS 那边也有一套保险）
 if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -64,7 +74,7 @@ if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
           return; // 隐私模式下写不进去：这次就没有过渡，不影响导航
         }
         root.classList.add('pt-on');
-        setTimeout(() => root.classList.remove('pt-on'), STALE_MS);
+        finishAfter(STALE_MS);
       });
     },
     true, // 捕获阶段只做初筛；真正的判断在微任务里（见上）
@@ -72,12 +82,40 @@ if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
 }
 
 // 客户端换页沿用原来的墨色过渡，不替换持久播放器。
-document.addEventListener('astro:before-preparation', () => {
-  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) root.classList.add('pt-on');
+document.addEventListener('astro:before-preparation', event => {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const { signal } = event as TransitionBeforePreparationEvent;
+  window.clearTimeout(cleanupTimer);
+  preparing = signal;
+  root.classList.remove('pt-play');
+  root.classList.add('pt-on');
+  signal.addEventListener('abort', () => {
+    if (preparing !== signal) return;
+    preparing = undefined;
+    clearOverlay();
+  }, { once: true });
 });
 document.addEventListener('astro:after-swap', () => {
+  preparing = undefined;
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    root.classList.add('pt-on','pt-play');
-    setTimeout(() => root.classList.remove('pt-on','pt-play'), HANDOFF_MS);
+    root.classList.add('pt-on', 'pt-play');
+    finishAfter(HANDOFF_MS);
+  } else {
+    clearOverlay();
   }
+});
+
+// 单册返回按钮只回到已经确认的站内来源。
+document.addEventListener('astro:before-swap', event => {
+  const { from, to, navigationType, newDocument, signal } = event as TransitionBeforeSwapEvent;
+  if (navigationType !== 'push' || from.origin !== to.origin || from.pathname === to.pathname) return;
+  if (!newDocument.querySelector('[data-album-return]')) return;
+
+  // Astro 先写入本次导航的历史条目，再触发 after-swap。
+  document.addEventListener('astro:after-swap', () => {
+    if (location.href !== to.href) return;
+    try {
+      history.replaceState({ ...history.state, albumReturn: true }, '');
+    } catch { /* 保留链接指向的相册首页。 */ }
+  }, { once: true, signal });
 });

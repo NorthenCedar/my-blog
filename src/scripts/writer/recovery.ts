@@ -1,6 +1,6 @@
 import type { WriterDraft } from '../../lib/writer/model';
 import type { RecoveryCopy } from './save';
-export type RecoveryRecord=RecoveryCopy&{key:string;user:string;draftId:string;pendingImages?:{id:string;blob:Blob;alt:string}[]};
+export type RecoveryRecord=RecoveryCopy&{key:string;user:string;draftId:string;pendingImages?:{id:string;blob:Blob;alt:string;cover?:boolean}[]};
 export const recoveryKey=(user:string,draft:WriterDraft)=>`${user}/${draft.id}/${draft.base?.commit??'new'}`;
 export function createRecoveryStore(factory:IDBFactory|undefined){
   let opening:Promise<IDBDatabase>|undefined;

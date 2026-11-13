@@ -39,6 +39,14 @@ it.each(['lb','splb'])('%s灯箱打开时所有播放器界面退出，音频不
   lb.classList.remove('on');await new Promise(resolve=>setTimeout(resolve,0));flush();
   expect(root.hasAttribute('data-modal-hidden')).toBe(false);expect(panel.inert).toBe(false);
 });
+it('普通对话框保持打开时，播放器仍可见并可操作',async()=>{
+  const {root,bar,flush}=setup('<dialog class="site-menu-dialog"></dialog>');
+  const dock=createMusicDock(root,()=>{});cleanup=dock.dispose;
+  document.querySelector('dialog')!.show();
+  await new Promise(resolve=>setTimeout(resolve,0));flush();
+  expect(root.hasAttribute('data-modal-hidden')).toBe(false);
+  expect(bar.inert).toBe(false);
+});
 it('面板打开时缩小窗口，横条与面板仍留在可见区域',()=>{
   const {root,bar,flush}=setup();const dock=createMusicDock(root,()=>{});cleanup=dock.dispose;dock.setOpen(true);
   Object.defineProperties(window,{innerWidth:{configurable:true,value:320},innerHeight:{configurable:true,value:240}});
@@ -51,6 +59,24 @@ it('阅读尺在画外准备入场时也保留完整高度，不因其滑入而�
   document.querySelector<HTMLElement>('[data-rule]')!.getBoundingClientRect=()=>rect(0,810,1280,52);
   const dock=createMusicDock(root,()=>{});cleanup=dock.dispose;
   expect(parseFloat(root.style.getPropertyValue('--music-dock-y'))+bar.getBoundingClientRect().height).toBeLessThanOrEqual(800-52-12);
+});
+
+it('远离播放条的控件不用读取计算样式，覆盖的控件仍让出点击', () => {
+  const { root, bar, flush } = setup('<button id="far">远处</button><button id="near">近处</button>');
+  const far = document.getElementById('far')!;
+  const near = document.getElementById('near')!;
+  far.getBoundingClientRect = () => rect(16, 16, 80, 44);
+  near.getBoundingClientRect = () => {
+    const anchor = bar.getBoundingClientRect();
+    return rect(anchor.left + 12, anchor.top + 4, 80, 44);
+  };
+  const style = vi.spyOn(window, 'getComputedStyle');
+  const dock = createMusicDock(root, () => {});
+  cleanup = dock.dispose;
+  flush();
+  expect(style.mock.calls.some(([element]) => element === far)).toBe(false);
+  expect(style.mock.calls.some(([element]) => element === near)).toBe(true);
+  expect(bar.inert).toBe(true);
 });
 
 it('按钮通过动效移入横条时也让出点击，不需要滚动来触发',async()=>{

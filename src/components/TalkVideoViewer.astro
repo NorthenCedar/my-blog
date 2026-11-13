@@ -1,0 +1,50 @@
+---
+interface Props { id: string; src: string; alt: string; poster?: string }
+const { id, src, alt, poster } = Astro.props;
+---
+<!-- 视频弹窗：列表里只有封面方块，点开才载入并在弹窗里播放。
+     与 TalkImageViewer 同一套弹窗骨架（关闭按钮 + figure + 说明），视觉不另起一套。 -->
+<dialog id={id} class="talk-video-dialog" aria-label="说说视频">
+  <form method="dialog"><button data-talk-video-close aria-label="关闭视频（Esc）" autofocus>关闭 ✕</button></form>
+  <figure>
+    <video controls playsinline preload="metadata" src={src} poster={poster}></video>
+    <figcaption><a href={src} target="_blank" rel="noopener">{alt}</a></figcaption>
+  </figure>
+</dialog>
+
+<style>
+  .talk-video-dialog {
+    box-sizing: border-box;
+    width: min(96vw, 1600px);
+    max-width: 96vw;
+    max-height: 94dvh;
+    padding: var(--sp-4);
+    border: 1px solid var(--hair);
+    background: var(--paper);
+    color: var(--ink);
+    overscroll-behavior: contain;
+  }
+  .talk-video-dialog::backdrop { background: var(--visitor-backdrop); opacity: 0.88; }
+  :global(html:has(.talk-video-dialog[open])) { overflow: hidden; }
+  form { margin: 0; }
+  button {
+    display: block;
+    margin-left: auto;
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--hair);
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+  }
+  figure { margin: var(--sp-3) 0 0; text-align: center; }
+  video {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 70dvh;
+    margin: auto;
+    background: var(--panel);
+  }
+  figcaption { margin: var(--sp-3) 0 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+</style>

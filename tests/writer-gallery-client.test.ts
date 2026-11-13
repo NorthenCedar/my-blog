@@ -20,6 +20,7 @@ class Node extends EventTarget{
   set textContent(value:string){this.own=value;this.children=[];}get textContent():string{return this.own+this.children.map(c=>c.textContent).join('');}
   append(...nodes:Node[]){this.children.push(...nodes);}prepend(...nodes:Node[]){this.children.unshift(...nodes);}replaceChildren(...nodes:Node[]){this.own='';this.children=nodes;}
   setAttribute(k:string,v:string){this.attrs[k]=v;}getAttribute(k:string){return this.attrs[k]??null;}
+  removeAttribute(k:string){delete this.attrs[k];}
   scrollIntoView(){}click(){this.dispatchEvent(new Event('click'));}
   focus(){(document as any).activeElement=this;}setCustomValidity(message:string){this.attrs.validity=message;}
   all():Node[]{return [this,...this.children.flatMap(c=>c.all())];}
@@ -132,7 +133,20 @@ it('空册经手动或自动保存仍不预先固定构图，首张横图上传�
  }
 });
 it('文章与项目仍要求上传前说明，相册空图注规则不放宽其他类型',async()=>{
- for(const kind of ['post','project']){let calls=0;const {root}=await open(kind,{title:'内容',images:[]},[],[],{},async()=>{calls++;return {sha256:'a'.repeat(64)};});const choose=root.all().find(n=>n.type==='file')!;(choose as any).files=[new Blob(['a'])];choose.dispatchEvent(new Event('change'));await settle();find(root,'上传并添加').click();await settle();expect(calls).toBe(0);expect(root.textContent).toContain('请先填写图片说明');await mounted!.dispose();mounted=undefined;}
+ for(const kind of ['post','project']){let calls=0;const {root}=await open(kind,{title:'内容',images:[]},[],[],{},async()=>{calls++;return {sha256:'a'.repeat(64)};});const choose=root.all().find(n=>n.getAttribute('aria-label')==='选择配图')!;(choose as any).files=[new Blob(['a'])];choose.dispatchEvent(new Event('change'));await settle();find(root,'上传并添加').click();await settle();expect(calls).toBe(0);expect(root.textContent).toContain('请先填写图片说明');await mounted!.dispose();mounted=undefined;}
+});
+it('云端写作台独立上传文章封面，保存后可清除，正文保持原样',async()=>{
+ const {root,saved}=await open('post',{title:'文章'},[],[],{},async()=>({sha256:'a'.repeat(64)}));
+ const choose=input(root,'post-cover-upload');
+ (choose as any).files=[new Blob(['a'])];choose.dispatchEvent(new Event('change'));await settle();
+ const alt=root.all().find(n=>n.tagName==='LABEL'&&n.own==='封面说明（上传前必填）')!.children[0];
+ edit(alt,'文章封面图');
+ find(root,'上传为封面').click();await settle();
+ find(root,'保存草稿').click();await settle();
+ expect(saved.at(-1).value.fields).toMatchObject({cover:'writer-asset:'+'a'.repeat(64),coverAlt:'文章封面图'});
+ expect(saved.at(-1).value.body).toBe('原有\r\n正文\n');
+ find(root,'清除封面').click();find(root,'保存草稿').click();await settle();
+ expect(saved.at(-1).value.fields).toMatchObject({cover:'',coverAlt:''});
 });
 
 it('空册主动选择完整编排后保存并上传横图仍保留明确选择',async()=>{

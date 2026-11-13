@@ -114,7 +114,7 @@ const MARK = 'M12 6c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2-2.67 4-4 6-4a
 {/* ===== 开场行为（目标 <900 B）=====
      ① 点击 skip / Esc / 空格 → 同一条 close()
      ② 总时长走完（clock 的 animationend）→ close()
-     ③ 收尾时**先**把焦点交回主标题、再移除覆盖层（反过来焦点会掉到 <body>）
+     ③ 主动跳过时把焦点交回主标题，保持滚动位置；自然播完保留用户当前焦点。
      ★ 空格必须 preventDefault —— 默认行为是向下滚页；而"空格只在遮罩还在时劫持"
        靠的是 close() 之后本监听器随覆盖层一起失效（overlay.remove() + boot-on 摘掉）。
      ★ skip 按钮在 2900ms 起自己淡出（见 .bi-skip 的 bi-skip-out），但 Esc / 空格的
@@ -123,49 +123,34 @@ const MARK = 'M12 6c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2-2.67 4-4 6-4a
 <script>
 
 import { onPage } from '../scripts/page-lifecycle';
-onPage(({document, addEventListener, removeEventListener, setTimeout}) => {
+onPage(({ document, setTimeout, clearTimeout }) => {
+  const html = document.documentElement;
+  const overlay = document.querySelector('[data-boot-overlay]');
+  if (!overlay || !html.classList.contains('boot-on')) return;
 
-  (() => {
-    const html = document.documentElement;
-    const overlay = document.querySelector('[data-boot-overlay]');
-    // 没播（reduced-motion / 无 JS / 本会话已播）就直接不注册任何东西
-    if (!overlay || !html.classList.contains('boot-on')) return;
+  const clock = overlay.querySelector('.bi-clock');
+  const listeners = new AbortController();
+  const close = (skipped = false) => {
+    listeners.abort();
+    clearTimeout(fallback);
+    html.classList.remove('boot-on', 'boot-mini');
+    if (skipped) document.querySelector<HTMLElement>('.band-copy h1')?.focus({ preventScroll: true });
+    overlay.remove();
+  };
+  const fallback = setTimeout(close, 8000);
+  const options = { signal: listeners.signal };
 
-    const clock = overlay.querySelector('.bi-clock');
-    let closed = false;
-
-    const close = () => {
-      if (closed) return;
-      closed = true;
-      // 焦点交接：遮罩收尾别把焦点掉到 <body>。h1 上的 tabindex="-1" 与
-      // base.css 的 `[tabindex='-1']:focus-visible{outline:none}` 是这条链的另一半。
-      const title = document.querySelector('.band-copy h1, h1.display, h1');
-      if (title && typeof title.focus === 'function') title.focus();
-      html.classList.remove('boot-on', 'boot-mini'); // 解锁滚动 + 让覆盖层消失
-      overlay.remove();
-      document.removeEventListener('keydown', onKey);
-    };
-
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' || event.key === ' ' || event.key === 'Spacebar') {
-        event.preventDefault();
-        close();
-      }
-    };
-
-    overlay.querySelector('.bi-skip')?.addEventListener('click', close);
-    document.addEventListener('keydown', onKey);
-
-    if (clock) {
-      overlay.addEventListener('animationend', (event) => {
-        if (event.target !== clock) return; // ← 子元素的事件会冒泡上来
-        close();
-      });
-      setTimeout(close, 8000); // 兜底：animationend 万一不来，也别把滚动锁死
-    }
-  })();
-
-},"[data-boot-overlay]");
+  overlay.querySelector('.bi-skip')?.addEventListener('click', () => close(true), options);
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' && event.key !== ' ' && event.key !== 'Spacebar') return;
+    event.preventDefault();
+    close(true);
+  }, options);
+  overlay.addEventListener('animationend', event => {
+    if (event.target === clock) close();
+  }, options);
+  return () => listeners.abort();
+}, '[data-boot-overlay]');
 </script>
 
 <style>

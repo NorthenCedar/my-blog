@@ -4,6 +4,8 @@ date: 2026-11-09
 summary: 本文是一篇关于如何开通一张visa卡的教程
 tags: [教程, 工具]
 draft: false
+cover: ./c976ddd7-b7d5-405c-a381-4346c2de2f8b.png
+coverAlt: Roogoo 乐享卡开卡页面上的卡片示意
 ---
 
 注：本文旨在教程如何为旅行以及尝试订阅AI产品而开卡，请勿用于其他用途！不要炒币！！！炒币死路一条！！！

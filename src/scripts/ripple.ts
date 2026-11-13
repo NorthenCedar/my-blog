@@ -15,8 +15,13 @@ onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, 
   let raf = 0, lastTime = 0;
   let previous: { x: number; y: number; time: number } | undefined;
   let styles = getComputedStyle(canvas);
+  /* 拖动主题软条时的中间色（由 themepreview 事件带过来，纯 hex）。 */
+  let tint: Record<string, string> | null = null;
   const color = (name: string) => {
-    let hex = styles.getPropertyValue(name).trim().slice(1);
+    /* 拖动软条时优先取预览算好的中间色；否则读 token。
+       暗档的 --water-light 是暖铜，中间态必须是"绿白 → 铜"的逐档插值，
+       不能等松手才换（换了就是水面上方突然变色的那一下）。 */
+    let hex = (tint?.[name] || styles.getPropertyValue(name).trim()).slice(1);
     // 构建器会把六位色压成三位，必须先展开再读通道。
     if (hex.length === 3) hex = [...hex].map((digit) => digit + digit).join('');
     return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -105,10 +110,17 @@ onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, 
   });
   reduce.addEventListener('change', resize);
   desktop.addEventListener('change', resize);
-  document.addEventListener('themechange', () => {
+  /* 主题终态与拖动中间态共用一个处理器：`themechange` 的 detail 是 'dark'/'light'，
+     取不到 `mixed` ⇒ 自动落回"读 token"的路径。
+     ⚠ 参数判空：测试里的最小 document mock 派发事件时不带实参（与 theme-preview.ts
+       里 `document.body ?? root` 的退让同一家族），生产浏览器永远会传。 */
+  const syncTheme = (event?: Event) => {
+    tint = (event as CustomEvent<{ mixed?: Record<string, string> }> | undefined)?.detail?.mixed ?? null;
     readPalette();
     if (raf) paint();
-  });
+  };
+  document.addEventListener('themechange', syncTheme);
+  document.addEventListener('themepreview', syncTheme);
   resize();
 })();
 

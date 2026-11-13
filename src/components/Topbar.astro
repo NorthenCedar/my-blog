@@ -32,43 +32,34 @@
  * 只用在本页渲染时才加载的样式（`is:global` + `body.chrome-page` 前缀），
  * 所以其余页面既不会多背字节，也不会被这些规则碰到。
  */
-import { NAV_LINKS, type NavKey } from '../lib/nav';
+import type { NavKey } from '../lib/nav';
 import NavDrawer from './NavDrawer.astro';
+import ThemeToggle from './ThemeToggle.astro';
 
 interface Props {
   wordmark: string;
   current?: NavKey;
+  home?: boolean;
 }
-const { wordmark, current } = Astro.props;
+const { wordmark, current, home = false } = Astro.props;
+const scrolls = Astro.url.pathname !== '/gallery/';
 ---
 
 {/* 百褶 ∞ 底纹：与首页同一张素材、同一套挂法（fixed 挂视口 ⇒ 滚动时始终居中）。
     纯装饰 ⇒ aria-hidden；不拦指针由 CSS 保证。
     素材自带右偏的墨迹（原型 v10.6 定案：不做居中补偿，要的就是原图本来的样子）。 */}
-<div class="page-inf" aria-hidden="true"></div>
+{!home && <div class="page-inf" aria-hidden="true"></div>}
 
-<div class="topbar">
+<div class:list={['topbar', home && 'home-topbar']} data-scroll-topbar={scrolls ? '' : undefined}>
   <a class="site" href="/">{wordmark}</a>
-  <nav aria-label="主导航">
-    {NAV_LINKS.map((l) => (
-      <a href={l.href} aria-current={current === l.key ? 'page' : undefined}>{l.label}</a>
-    ))}
-    <a href="/rss.xml">RSS</a>
-    {/* 回复提醒（2026-10-18 站主：别人回复我时要看得见）。
-        未登录时由 src/scripts/notices.ts 把 hidden 拿掉 —— 匿名访客看不到这枚铃铛。
-        ★ 为什么放在 nav 里面：它就是导航那一排的一个胶囊（形态照抄隔壁链接），
-          没有登录态时整排不占位，也不会把 space-between 的顶栏挤成四段。 */}
-    <button class="notices" type="button" data-notices aria-expanded="false" aria-label="回复提醒" hidden>
-      <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">
-        <path d="M8 1.6a4.1 4.1 0 0 0-4.1 4.1v3.1L2.6 11.2h10.8L12.1 8.8V5.7A4.1 4.1 0 0 0 8 1.6Zm0 12.9a1.75 1.75 0 0 0 1.75-1.75H6.25A1.75 1.75 0 0 0 8 14.5Z" fill="currentColor" />
-      </svg>
-      <span class="notices-count" data-notices-count hidden></span>
-    </button>
-  </nav>
-  {/* 主题开关（Jelly Slider）不在顶栏 —— 2026-10-17 站主拍板「按钮只放在关于页」⇒
-      那 462 KB 的渲染器 chunk 只被 /about/ 引用。见 src/pages/about.astro 的 .theme-dock
-      （页面右上角；2026-10-17 第二轮从右栏 FIG.05 搬上去的）。 */}
-  {/* 移动端抽屉（零 JS）；桌面隐藏 —— 见组件内注释 */}
+  {!home && <button class="notices" type="button" data-notices aria-expanded="false" aria-label="回复提醒" hidden>
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">
+      <path d="M8 1.6a4.1 4.1 0 0 0-4.1 4.1v3.1L2.6 11.2h10.8L12.1 8.8V5.7A4.1 4.1 0 0 0 8 1.6Zm0 12.9a1.75 1.75 0 0 0 1.75-1.75H6.25A1.75 1.75 0 0 0 8 14.5Z" fill="currentColor" />
+    </svg>
+    <span class="notices-count" data-notices-count hidden></span>
+  </button>}
+  {/* 主题开关（2026-11-12 从关于页搬上来）：裁切小窗版，见 ThemeToggle.astro。 */}
+  {!home && <ThemeToggle variant="nav" />}
   <NavDrawer current={current} />
 </div>
 
@@ -116,9 +107,15 @@ const { wordmark, current } = Astro.props;
     pointer-events: none;
     z-index: -1;
   }
-  html.dark body.archive-plate .page-inf {
-    filter: var(--pleat-dark-filter);
-    opacity: var(--pleat-dark-opacity);
+  /* ★★ 2026-11-13：暗档从「整条规则切换」改成「按 --theme-w 连续算」。
+     原来 `html.dark body.archive-plate .page-inf { filter: …; opacity: … }` 只有在
+     松手落定、`html` 挂上 dark 类那一刻才成立 ⇒ 拖动全程停在亮档，落定才"啪"一下变铜。
+     现在滤镜链与浓度都用权重表达（w=0 恒等 / w=1 等于原来的暗档值，见 tokens.css）。 */
+  body.archive-plate .page-inf {
+    filter: var(--plate-filter-pleat);
+    opacity: calc(
+      var(--pleat-light-opacity) * (1 - var(--theme-w)) + var(--pleat-dark-opacity) * var(--theme-w)
+    );
   }
 
   /* ---------- 顶栏：极简，只有站名与主导航 ----------
@@ -141,17 +138,20 @@ const { wordmark, current } = Astro.props;
        挪到 ::before 之后：模糊的**底色仍然是页面**（不是顶栏自己的装饰），
        顶栏的字/链接在 ::before 之上 ⇒ 观感逐像素不变
        （`_probe/_nav/before|after/strip-about-1200.png` 对照 + `_probe/_nav/diff-strip.png`）；
-       而 `.topbar` 退回普通元素 ⇒ 抽屉重新拿到视口、也重新回到根层叠上下文。
+       顶栏恢复为抽屉的普通祖先，固定层继续按视口测量。
        ⚠ 别再往 `.topbar` 上加 `backdrop-filter` / `filter` / `transform` / `perspective` /
           `will-change` / `contain` —— 任何一个都会把上面两个问题一起带回来
           （首页 `index.astro` 早有一条注释专门避开 `transform`，出处相同）。
           护栏：`tests/nav-drawer-overflow.test.ts` 的「顶栏不得建立 fixed 包含块」。 */
-    position: relative;   /* 只给玻璃层当定位祖先 —— relative 不建立 fixed 的包含块 */
+    position: sticky;
+    top: 0;
+    /* 顶栏高于正文，关于页向上延伸的透明画布也不会拦住菜单。 */
+    z-index: 2;
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
-    padding: 0.7rem var(--gutter);
+    padding: var(--topbar-pad-block) var(--gutter);
     /* 只占位、不着色：底线改由玻璃层画。留在这儿会被 ::before 的模糊一起吃掉。
        写 `transparent` 而不是删声明 —— 删了顶栏会矮 1px（"此处刻意不着色"也是给后来人看的）。 */
     border-bottom: 1px solid transparent;
@@ -165,8 +165,7 @@ const { wordmark, current } = Astro.props;
        不进它的 backdrop** ⇒ 玻璃变成一层近乎纯纸白的白片（实测顶栏 rgb(246,246,243) → rgb(251,251,248)，
        即 ∞ 底纹不再透过玻璃可见）。写成 0（正常定位层）后与"玻璃挂在 .topbar 自己身上"的
        原始观感**逐值相同**（`_probe/_nav-var.mjs` 的 base/z0/ctrl 三档对照）。
-       ★ **刻意不加 `isolation`** —— 正是靠"顶栏不是层叠上下文"这一条，抽屉才能回到根层叠上下文
-       去压过 `main`（加了 isolation：抽屉几何恢复了、但层叠命中变成 `div.profile`，仍被正文盖住）。 */
+       顶栏整体位于正文之上，抽屉层仍由固定定位铺满视口。 */
   body.chrome-page .topbar::before {
     content: '';
     position: absolute;
@@ -192,84 +191,14 @@ const { wordmark, current } = Astro.props;
     color: var(--ink);
     letter-spacing: 0.14em;
     text-decoration: none;
+    min-width: 0;
+    margin-inline-end: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  /* ⚠️ 这一段是 `<style is:global>`，选择器**必须锚在顶栏自己的那个 nav 上**（`> nav`）。
-     2026-09-26 踩过：写成 `.topbar nav` 时，移动端抽屉组件里的 `<nav class="navpanel">`
-     也被一起选中 —— 它的特异性（0,2,2）高过抽屉自己的作用域规则（0,2,0），
-     结果**桌面端也漏出一份横排菜单**、抽屉在手机上被拉成横排（截图里一眼能看到）。
-     `> nav` 只命中顶栏直接子节点，抽屉在组件内部、不受影响。 */
-  body.chrome-page .topbar > nav:not(.navpanel) {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;   /* 同首页胶囊：胶囊自带 padding，间距收小（原文字链是 1.1rem） */
-    flex-wrap: wrap;
-  }
-  /* ★ 2026-10-01 站主：「把其他页的导航栏格式改成主页同款」——
-     从「下划线文字链」改成「胶囊按钮」。形态逐条照搬首页 nav a：
-     圆角 999px + 透明描边 + overflow:hidden（收掠光）+ 悬停位移 + 掠光扫过 + 当前页绿底绿边。
-     ★★ 颜色**刻意不照搬**：首页胶囊是深墨绿底上的白字/白底/亮绿（--accent-bright），
-     内页顶栏是**浅色纸白底** —— 白字在纸白上不可见、--accent-bright 对纸只有 2.66:1
-     （tests/tokens.test.ts 白名单守着「亮绿只许在深色底」）。
-     所以这里用**浅底可用的 token 换肤**，形态一模一样：
-       默认  --muted 灰字 / 透明底
-       hover   --ink 墨字 + --accent-wash 浅绿底 + --accent 绿描边 + 上浮 2px + 掠光
-       当前页  --accent-ink 深绿字 + --accent-wash 浅绿底 + --accent-ink 深绿描边
-     （深绿字/深绿描边 vs 墨字/绿描边 ⇒ 当前页一眼可辨，等价于首页亮绿那一下。） */
-  body.chrome-page .topbar > nav:not(.navpanel) a {
-    /* 必须显式写颜色：UA 样式表的 `a:link { color: -webkit-link }` 是针对元素本身的声明，
-       会压过从 .topbar 继承来的 color —— 不写就是浏览器默认蓝（放大截图逮到的）。
-       深色带的 Brandline 显式声明了色所以没事，顶栏漏了。 */
-    position: relative;
-    padding: 0.42rem 0.82rem;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    overflow: hidden;   /* 收掠光的斜扫 */
-    color: var(--muted);
-    text-decoration: none;
-    transition:
-      transform var(--dur-fast) var(--ease-interact),
-      color var(--dur-fast) var(--ease-interact),
-      background-color var(--dur-fast) var(--ease-interact),
-      border-color var(--dur-fast) var(--ease-interact);
-  }
-  /* 掠光：悬停时一道斜光从左扫到右（照搬首页 nav a::before 的动效，
-     光色换成浅底可用的 --glass-bg-hot —— 白 59%，在浅绿底上是一道微弱高光）。 */
-  body.chrome-page .topbar > nav:not(.navpanel) a::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: linear-gradient(115deg, transparent 30%, var(--glass-bg-hot) 50%, transparent 70%);
-    transform: translateX(-120%);
-    transition: transform var(--dur-hover) var(--ease-glass);
-  }
-  body.chrome-page .topbar > nav:not(.navpanel) a:hover,
-  body.chrome-page .topbar > nav:not(.navpanel) a:focus-visible {
-    color: var(--ink);
-    background: var(--accent-wash);
-    border-color: var(--accent);
-    transform: translateY(-2px);
-  }
-  body.chrome-page .topbar > nav:not(.navpanel) a:hover::before,
-  body.chrome-page .topbar > nav:not(.navpanel) a:focus-visible::before {
-    transform: translateX(120%);
-  }
-  body.chrome-page .topbar > nav:not(.navpanel) a:focus-visible {
-    outline: 2px solid var(--accent-ink);
-    outline-offset: 2px;
-  }
-  body.chrome-page .topbar > nav:not(.navpanel) a[aria-current='page'] {
-    color: var(--accent-ink);
-    background: var(--accent-wash);
-    border-color: var(--accent-ink);
-  }
-
-  /* ---------- 回复提醒铃铛 + 面板（2026-10-18） ----------
-     胶囊形态与隔壁链接逐条对齐（padding / 圆角 / 描边 / 悬停），
-     差别只有两处：它是个 `<button>`（所以字号行高要显式给），
-     以及未登录时带 `hidden`（匿名访客眼里这一格**完全不存在**）。
-     面板挂在 `.topbar` 上（不是 nav 里）—— 否则会变成 flex 的一项把导航挤走。 */
-  body.chrome-page .topbar > nav:not(.navpanel) .notices {
+  /* 回复提醒和菜单并排，面板由回复提醒控制器挂到顶栏。 */
+  body.chrome-page .topbar > .notices {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
@@ -287,9 +216,9 @@ const { wordmark, current } = Astro.props;
       border-color var(--dur-fast) var(--ease-interact),
       transform var(--dur-fast) var(--ease-interact);
   }
-  body.chrome-page .topbar > nav:not(.navpanel) .notices:hover,
-  body.chrome-page .topbar > nav:not(.navpanel) .notices:focus-visible,
-  body.chrome-page .topbar > nav:not(.navpanel) .notices[aria-expanded='true'] {
+  body.chrome-page .topbar > .notices:hover,
+  body.chrome-page .topbar > .notices:focus-visible,
+  body.chrome-page .topbar > .notices[aria-expanded='true'] {
     color: var(--ink);
     background: var(--accent-wash);
     border-color: var(--accent);
@@ -299,11 +228,11 @@ const { wordmark, current } = Astro.props;
   }
   /* ⚠ `display:inline-flex` 会压过 UA 的 `[hidden]{display:none}` —— 不补这一条，
      匿名访客也会看见一枚空铃铛（本站踩过一次同类：hidden 被组件自己的 display 顶掉）。 */
-  body.chrome-page .topbar > nav:not(.navpanel) .notices[hidden],
+  body.chrome-page .topbar > .notices[hidden],
   .notices-count[hidden] {
     display: none;
   }
-  body.chrome-page .topbar > nav:not(.navpanel) .notices:focus-visible {
+  body.chrome-page .topbar > .notices:focus-visible {
     outline: 2px solid var(--accent-ink);
     outline-offset: 2px;
   }
@@ -398,40 +327,90 @@ const { wordmark, current } = Astro.props;
     margin: 0;
     color: var(--muted);
   }
-  /* 窄屏隐藏站名，只留导航（站主 2026-09-26 定案）：
-     390 下站名会折成两行、挤压导航，而顶栏的功能是导航、站名是装饰。
-     （核对过：首页 390 下其实**是**带站名的，所以这条不是"跟首页一致"，
-       而是它本身解决了折行问题 —— 如实记在这里，避免以后被当成依据引用。） */
   @media (max-width: 767px) {
     body.chrome-page .topbar .site {
-      display: none;
-    }
-
-    /* ★ 2026-10-18（回复提醒）：小屏没有站名字标，顶栏只剩「铃铛 + 抽屉按钮」两件时
-       space-between 会把铃铛甩到最左边、跟右边的汉堡隔着整屏 —— 顶栏就那么高，
-       视线自然落在右侧，所以把铃铛也推到右边、贴着汉堡。
-       ⚠️ 抽屉的 `.navbtn` 自带 `margin-left:auto`（原本负责把汉堡推到右边）——
-       两个 auto 会平分空隙，铃铛就卡在整屏中间（实测 x=145 / 390）。所以这里把
-       汉堡的 auto 收掉，让空隙全归铃铛，两者靠 0.5rem 间距挨着。 */
-    body.chrome-page .topbar > nav:not(.navpanel) {
-      margin-left: auto;
-      margin-right: 0.5rem;
-    }
-    body.chrome-page .topbar .navbtn {
-      margin-left: 0;
+      font-size: var(--fs-xs);
+      letter-spacing: .06em;
     }
   }
 
-  /* ≤1023px：横排链接换成移动端抽屉（站主 2026-09-26 追加导航四项后，9 项横排在平板上会挤）。
-     ⚠️ 同样必须 `:not(.navpanel)`：抽屉的 `<nav>` 也是 .topbar 的直接子节点，
-     漏了这一处会把**抽屉自己**按成 display:none（实测：面板 0×0、点开也看不见）。 */
-  @media (max-width: 1023px) {
-    /* ★ 2026-10-18（回复提醒）：原来这里是整条 nav 一起 display:none ——
-       但铃铛也住在这条 nav 里，结果手机上「别人回复我了」这件事**根本看不见**。
-       改成分开处理：文字链接仍然收起（抽屉接管导航），铃铛单独留在顶栏上。 */
-    body.chrome-page .topbar > nav:not(.navpanel) > a {
-      display: none;
+  /* 取自 React Bits 首页 Navbar.css 的宽度、背景和边框过渡。
+     保留本站玻璃伪元素，抽屉继续以视口为包含块。 */
+  [data-scroll-topbar] {
+    width: 100%;
+    max-width: 100vw;
+    margin-inline: auto;
+    transition: top .5s ease, max-width .5s ease, padding .5s ease;
+  }
+  html:has(body.chrome-page:not(.gallery-story, .forge-page)) {
+    scroll-padding-top: calc(2 * var(--topbar-pad-block) + 4rem);
+  }
+  body.forge-page > [data-scroll-topbar],
+  body.chrome-console > .home-topbar {
+    position: fixed;
+    inset-inline: 0;
+    top: 0;
+  }
+  body.chrome-page:not(.gallery-story) > [data-scroll-topbar],
+  body.chrome-console > .home-topbar {
+    z-index: 30;
+  }
+  body.chrome-console > .home-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--topbar-pad-block) var(--gutter);
+    color: var(--band-ink);
+    pointer-events: none;
+  }
+  .home-topbar > :is(.navbtn, .nav-trigger) { pointer-events: auto; }
+  .home-topbar .site {
+    visibility: hidden;
+    color: inherit;
+    text-decoration: none;
+    font: var(--fs-xs) "IBM Plex Mono", monospace;
+    letter-spacing: .08em;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .home-topbar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .home-topbar > :is(.site, .navbtn, .nav-trigger) { position: relative; }
+  html.boot-on .home-topbar { visibility: hidden; }
+  [data-scroll-topbar]::before {
+    transition: background-color .5s ease, border-color .5s ease, border-radius .5s ease,
+      box-shadow .5s ease, backdrop-filter .5s ease;
+  }
+  body > [data-scroll-topbar][data-topbar-scrolled] {
+    top: 20px;
+    max-width: min(65rem, calc(100% - 2 * var(--gutter)));
+    padding-block: var(--sp-1);
+    padding-inline: var(--sp-4);
+    color: var(--ink);
+  }
+  body > [data-scroll-topbar][data-topbar-scrolled]::before {
+    border-radius: 999px;
+  }
+  .home-topbar[data-topbar-scrolled] .site { visibility: visible; pointer-events: auto; }
+  body > .home-topbar[data-topbar-scrolled][data-topbar-over-hero] { color: var(--band-ink); }
+  @media (prefers-reduced-transparency: reduce) {
+    body > .home-topbar[data-topbar-scrolled][data-topbar-over-hero] { color: var(--ink); }
+  }
+  @media (max-width: 767px) {
+    body > [data-scroll-topbar][data-topbar-scrolled] {
+      top: var(--sp-2);
+      max-width: calc(100vw - 2 * var(--sp-2));
+      padding-inline: var(--sp-3);
     }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-scroll-topbar], [data-scroll-topbar]::before { transition: none; }
   }
 
   /* ---------- 内页页头（外壳提供，各页复用） ----------

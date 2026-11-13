@@ -1,104 +1,16 @@
 import { fmtTime, groupReplies, parentIdsOf, postComment, replyLi, toggleReplyForm, type Reply } from './reply-common';
 import { authorNode, identityControls, node, type Authored } from './visitor-client';
 import { onPage } from './page-lifecycle';
-onPage(({document, addEventListener}) => {
-// 说说的点赞与评论。全站第三个客户端脚本（前两个：代码复制、文章/留言页评论）。
-//
-// 与 src/scripts/comments.ts 的区别（所以没有复用它）：
-//   · 那边是「一个页面一个评论区」（`document.querySelector('[data-comments]')`，单例）；
-//   · 这里是「一条说说一份」，页面上 N 个，且每个都带一个点赞按钮。
-//   两边**共用** src/scripts/reply-common.ts 的回复渲染与表单 ⇒ 三处回复的观感与规则完全一致。
-//
-// 安全铁律同 comments.ts：**任何地方都不用 innerHTML**，用户输入一律 textContent。
+// 说说每条有自己的评论区，回复渲染和表单与文章、留言共用。
 type Comment = Authored & { body: string; createdAt: string };
 
-const LIKE_STORE = 'nc-liked-talks';
-
-/** 本地记住"我赞过哪些"（只是按钮观感；服务端另有同 IP 幂等，见 functions/api/likes.ts）。 */
-const readLiked = (): string[] => {
-  try {
-    const raw = localStorage.getItem(LIKE_STORE);
-    const arr: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [];
-  } catch {
-    return [];
-  }
-};
-const writeLiked = (list: string[]) => {
-  try {
-    localStorage.setItem(LIKE_STORE, JSON.stringify(list.slice(-200)));
-  } catch {
-    /* 隐私模式下写不进去就算了，不影响点赞本身 */
-  }
-};
-
+onPage(({ document }) => {
   const boxes = [...document.querySelectorAll<HTMLElement>('[data-comments-for]')];
-  const likeButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-like]')];
-  if (boxes.length > 0 || likeButtons.length > 0) {
-    // 条数要在**点开之前**就显示出来 ⇒ 先把每个「怎么把数字写回去」的函数记下来，进页面后一次性去问（见本块末尾）
-    const countPaints = new Map<string, (n: number) => void>();
-    /** 已经拉过完整评论的（用户点开过）：这批的条数以列表真实行数为准，批量结果不许覆盖 */
-    const pulled = new Set<string>();
-  const liked = new Set(readLiked());
+  if (!boxes.length) return;
 
-  // ---------- 点赞 ----------
-  // 先把已赞状态标上（不依赖网络），再批量取真实计数。
-  for (const b of likeButtons) {
-    if (liked.has(b.dataset.like ?? '')) b.setAttribute('aria-pressed', 'true');
-  }
-
-  const paint = (slug: string, n: number) => {
-    const btn = likeButtons.find((b) => b.dataset.like === slug);
-    const span = btn?.querySelector<HTMLElement>('[data-like-count]');
-    if (span) span.textContent = String(n);
-  };
-
-  if (likeButtons.length > 0) {
-    const slugs = likeButtons.map((b) => b.dataset.like ?? '').filter(Boolean);
-    fetch(`/api/likes?slugs=${encodeURIComponent(slugs.join(','))}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('取赞数失败'))))
-      .then((data: { likes?: Record<string, number> }) => {
-        for (const [slug, n] of Object.entries(data.likes ?? {})) paint(slug, n);
-      })
-      .catch(() => {
-        /* 计数取不到就留个「·」，不影响点 */
-      });
-  }
-
-  for (const btn of likeButtons) {
-    btn.addEventListener('click', () => {
-      const slug = btn.dataset.like ?? '';
-      if (!slug || btn.disabled) return;
-      // 已经赞过：不再重复请求（服务端也幂等，这里只是省一次往返）
-      if (liked.has(slug)) return;
-      btn.disabled = true;
-      fetch('/api/likes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug }),
-      })
-        .then(async (r) => {
-          const body = (await r.json().catch(() => ({}))) as { count?: number; counted?: boolean };
-          if (!r.ok) return Promise.reject(new Error('点赞没成功'));
-          return body;
-        })
-        .then((body) => {
-          paint(slug, body.count ?? 0);
-          if (body.counted) {
-            liked.add(slug);
-            writeLiked([...liked]);
-          }
-          // counted=false 表示这个 IP 之前赞过（比如换了浏览器）—— 一样标成已赞，别让人反复点
-          btn.setAttribute('aria-pressed', 'true');
-        })
-        .catch(() => {
-          /* 失败就不标记，用户可以再点一次 */
-        })
-        .finally(() => {
-          btn.disabled = false;
-        });
-    });
-  }
+  // 列表打开前显示批量计数，打开后以实际加载的条数为准。
+  const countPaints = new Map<string, (n: number) => void>();
+  const pulled = new Set<string>();
 
   // ---------- 评论 ----------
   // 顺序（2026-09-27 站主："把新评论放上面，其他的评论留言也一样"）：
@@ -137,6 +49,7 @@ const writeLiked = (list: string[]) => {
   for (const box of boxes) {
     const slug = keyOf(box);
     const toggle = document.querySelector<HTMLButtonElement>(`[data-toggle="${CSS.escape(slug)}"]`);
+    const results = box.querySelector<HTMLElement>('[data-comment-results]')!;
     const list = box.querySelector<HTMLOListElement>('[data-list]')!;
     const empty = box.querySelector<HTMLElement>('[data-empty]')!;
     const errorBox = box.querySelector<HTMLElement>('[data-error]')!;
@@ -203,6 +116,7 @@ const writeLiked = (list: string[]) => {
             }
           }
           empty.hidden = list.childElementCount > 0;
+          results.dataset.open = '';
           setCount();
         })
         .catch(() => {
@@ -214,8 +128,10 @@ const writeLiked = (list: string[]) => {
     retry.addEventListener('click', load);
 
     toggle?.addEventListener('click', () => {
-      const open = box.hidden;
-      box.hidden = !open;
+      const open = toggle.getAttribute('aria-expanded') !== 'true';
+      box.toggleAttribute('data-open', open);
+      box.inert = !open;
+      box.setAttribute('aria-hidden', String(!open));
       toggle.setAttribute('aria-expanded', String(open));
       if (open) load();
     });
@@ -238,6 +154,7 @@ const writeLiked = (list: string[]) => {
         .then((c) => {
           render(list, c, true, openReply); // fresh ⇒ prepend（新的在最上面）
           empty.hidden = true;
+          results.dataset.open = '';
           setCount();
           (form.elements.namedItem('body') as HTMLTextAreaElement).value = '';
         })
@@ -270,6 +187,4 @@ const writeLiked = (list: string[]) => {
         /* 数字取不到就算了 */
       });
   }
-}
-
-});
+}, '[data-comments-for]');

@@ -2,158 +2,51 @@
 import Base from '../../layouts/Base.astro';
 import PageTitle from '../../components/PageTitle.astro';
 import TagsPlate from '../../components/TagsPlate.astro';
-import DraftBadge from '../../components/DraftBadge.astro';
+import TagFlowMenu from '../../components/TagFlowMenu.astro';
 import { getAllTags, getPostsByTag } from '../../lib/posts';
 
-// 只产出「已登记且有文章」的标签页 —— 0 篇文章的标签不会生成空页面。
-// 注意：这条 filter 让下面那条「空态」分支在产品数据下**不可达**（collectTags 也已 filter count>0）。
-// 它仍然必须迁到新外壳：将来若放开"空标签也出页"，它会带着旧外壳上线。
+// 只为已登记且有可见文章的标签生成详情。
 export async function getStaticPaths() {
   const tags = await getAllTags();
-  return tags.map((t) => ({ params: { tag: t.tag } }));
+  return tags.map(({ tag }) => ({ params: { tag } }));
 }
 
 const { tag } = Astro.params;
 const posts = await getPostsByTag(tag!);
+const items = posts.map(post => ({
+  text: post.title,
+  link: post.url,
+  meta: post.draft ? post.date + ' · 草稿' : post.date,
+  bandText: [post.summary],
+}));
 ---
-{
-  /* 标签详情（2026-09-26 迁移 chrome='band'→'page'；2026-10-06 由 PostIndex 竖排列表改**矩阵**）。
-     ★ 两条渲染路径**都要挂装饰层** —— 路径 A（正常）与路径 B（空态）各有自己的 <Base>。
-       'page' 外壳不渲染 band 槽 ⇒ 漏挂任何一条，那条路径的标题/底纹会静默消失且构建照常成功
-       （站上已经吃过一次这个亏，所以这里两条都写了，且测试会分别核对）。
 
-     ★★ 2026-10-06 起**不再复用 `PostIndex`** —— 那是个**竖排列表**，而且被 `/archive/`
-        复用着（归档页的筛选脚本按 `[data-groups] .index li` 取行）。
-        改它的默认形态 = 改归档页；给它加 variant 又会把"归档用的 data-* 契约"和
-        "标签页的矩阵形态"搅在一个文件里。**两条路都不如另写一份**：
-        归档要的是"可筛可排的一列"，标签页要的是"一张矩阵"，本来就是两种东西。
-        ⚠ 代价如实记下：`PostIndex` 里那几个 `data-date/data-year/data-month/data-q`
-          **本页不再产出**（tag 页没有筛选脚本，站上没有任何代码读它们 —— 已核过）。
-          信息（日期/标题/摘要/标签）一条没少，少的只是给归档筛选器用的钩子。
-
-     ★ 装置与底纹：`TagsPlate`（与标签总览**同一个组件**）——
-       站主要求"单标签 CROSSHAIR 准星与标签总览共用一套实现"，共用点就在那里。 */
-}
-{posts.length > 0 ? (
-  <Base title={tag} current="tags" chrome="page" bodyClass="tags-plate">
-    <Fragment slot="plate"><TagsPlate /></Fragment>
-    <header class="pagehead">
-      <PageTitle>{tag}</PageTitle>
-    </header>
-    <ul class="post-matrix">
-      {posts.map((p) => (
-        <li class="post-cell">
-          <a href={p.url}>
-            <span class="p-meta">
-              <time datetime={p.date}>{p.date}</time>
-              {p.draft && <> <DraftBadge /></>}
-            </span>
-            <span class="p-title">{p.title}</span>
-            <span class="p-sum">{p.summary}</span>
-            <span class="p-tags">{p.tags.join(' / ')}</span>
-          </a>
-        </li>
-      ))}
-    </ul>
-  </Base>
-) : (
-  <Base title="没有这个标签" current="tags" chrome="page" bodyClass="tags-plate">
-    <Fragment slot="plate"><TagsPlate /></Fragment>
-    <header class="pagehead">
-      <PageTitle>没有这个标签</PageTitle>
-    </header>
-    <p class="prose">
-      这个标签没有文章，或者它还没登记。<a href="/tags/">看看全部标签</a>
+<Base title={posts.length ? tag : '没有这个标签'} current="tags" chrome="page" bodyClass="tags-plate">
+  <Fragment slot="plate"><TagsPlate /></Fragment>
+  <header class="pagehead">
+    <PageTitle>{posts.length ? tag : '没有这个标签'}</PageTitle>
+    <p class="tag-summary">
+      <a href="/tags/">全部标签</a>
+      {posts.length > 0 && <span>{posts.length} 篇文章</span>}
     </p>
-  </Base>
-)}
+  </header>
+  {posts.length > 0
+    ? <TagFlowMenu items={items} articles />
+    : <p class="prose">这个标签没有文章，或者它还没登记。</p>}
+</Base>
 
 <style>
-  /* ===================================================================
-   * 格线矩阵（POST MATRIX）—— 与标签总览同一个母题（见 tags/index.astro 的镜像注释）
-   *
-   * 格线画法：**每一格是一个完整的方框**，再用 `margin: 0 -1px -1px 0` 把相邻两格的
-   * 边框叠在一起 ⇒ 内部线 1px、不出现 2px 双线。
-   * ★ 为什么不用"容器给上/左边、格子给右/下边"那种更省字节的写法：
-   *   本页的条目数**随标签变**（今天 1~2 篇），最后一行几乎总是没填满。
-   *   那种写法在没填满时，容器的上边线仍然横贯全宽，而最后一行的下边线只画了一半
-   *   ⇒ 看上去像"线画漏了"。完整方框写法下，每个用到的格子都是闭合的，
-   *   没用到的格子**根本不存在线** —— 未填满的矩阵长得就像"格纸只用了前几格"，
-   *   那是矩阵正常的样子，不是渲染错误。
-   *
-   * 列数走 `--mx-cols`（默认 3）：3 / 2 / 1。
-   * ★ 与标签总览的 4/3/2 **刻意不同**：那边一格里只有一个词，这边一格里是
-   *   "标题 + 摘要"，格子需要更宽。列数按**格里的内容**定，不按"同区两页必须一样"定。
-   * =================================================================== */
-  .post-matrix {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    grid-template-columns: repeat(var(--mx-cols, 3), minmax(0, 1fr));
-  }
-  .post-cell {
-    display: grid; /* 让 <a> 自动拉满整格 ⇒ 悬停热区 = 整格 */
-    border: 1px solid var(--hair);
-    /* 右/下各 −1px：把自己那条边框压到邻格边框下面，内部线因此是 1px 而不是 2px。
-       ⚠ 副作用是最后一行/列会**越出容器 1px** —— 落在 `.shell` 的 gutter 里，
-         不会造成横向滚动（`body` 另有 `overflow-x: clip`）。 */
-    margin: 0 -1px -1px 0;
-    background: transparent; /* 保持透空，让底纹 ∞ 从格子后面透出来 */
-  }
-  .post-cell a {
+  .tag-summary {
     display: flex;
-    flex-direction: column;
-    gap: var(--sp-2);
-    padding: var(--sp-5) var(--sp-4);
-    color: inherit;
-    text-decoration: none;
-    /* 颜色/位移的过渡参数在 `src/styles/hover.css`（全站基线），本页只写形态。 */
-  }
-  .post-cell a:hover,
-  .post-cell a:focus-visible {
-    background: var(--accent-wash);
-  }
-  .post-cell a:hover .p-title,
-  .post-cell a:focus-visible .p-title {
-    /* 用 `--accent-ink`（6.18:1）而不是 `PostIndex` 那边的 `--accent`：
-       本区两页的悬停绿要一致 —— 标签总览用的就是 --accent-ink。
-       （两者的对比度都够：22px 粗体属 WCAG 的"大字号"，3:1 即可。） */
-    color: var(--accent-ink);
-  }
-  .p-meta {
-    font-size: var(--fs-xs);
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .p-title {
-    font-size: var(--fs-lg);
-    font-weight: 800;
-    /* 行高用 --lh-heading(1.18) 而不是 --lh-item(1.03)：
-       格子里标题会折成两三行，1.03 是给单行大标题的，多行会挤在一起。 */
-    line-height: var(--lh-heading);
-    letter-spacing: var(--ls-item);
-  }
-  .p-sum {
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--sp-3);
+    margin: var(--sp-2) 0 0;
     font-size: var(--fs-sm);
     color: var(--muted);
   }
-  .p-tags {
-    margin-top: auto; /* 把标签行推到格子底部 ⇒ 同一行的格子底部对齐 */
-    padding-top: var(--sp-3);
-    font-size: var(--fs-xs);
-    color: var(--muted);
-  }
-
-  /* 列数档（3 / 2 / 1）。断点按**格宽**取：900px 以下三列的格子放标题+摘要会太窄。 */
-  @media (max-width: 900px) {
-    .post-matrix {
-      --mx-cols: 2;
-    }
-  }
-  @media (max-width: 600px) {
-    .post-matrix {
-      --mx-cols: 1;
-    }
+  .tag-summary a {
+    color: var(--accent-ink);
+    text-underline-offset: 0.18em;
   }
 </style>

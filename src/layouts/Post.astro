@@ -408,26 +408,10 @@ const shareCover = !entry.data.draft && entry.data.cover ? `/post-covers/${meta.
       scrollbar-width: thin;
       scrollbar-color: var(--hair) transparent;
     }
-    /* 目录进右栏：单列、显式露出「本文目录」标题，
-       并压掉 Toc.astro 里那套为「通栏横向索引条」写死的规则
-       （那边 ≥1440 会隐藏标题 + 排四列 —— 在 256px 的栏里会散架）。
-       ⚠ 必须 `:global(...)`：`.toc` 是 Toc.astro 的元素，带的是它的作用域属性；
-         写在 .post-rail 之下才能把权重压过 `@media (min-width:1440px)` 那条。 */
     .post-rail :global(.toc) {
       margin: 0;
       padding: var(--sp-3) 0;
-      max-width: 16rem;
-    }
-    .post-rail :global(.toc .label) {
-      display: block;
-    }
-    .post-rail :global(.toc ol) {
-      /* columns:1 遇到限高仍会向右生成溢出列；auto 才恢复单列块流。 */
-      columns: auto;
-      max-height: min(44vh, 28rem);
-      overflow-y: auto;
-      overscroll-behavior: contain;
-      scrollbar-width: thin;
+      max-width: var(--post-rail-width);
     }
     .post-tools { display: flex; flex-wrap: wrap; gap: var(--sp-2); padding-top: var(--sp-4); }
     .post-tools a,
@@ -504,18 +488,42 @@ import '../scripts/comments';
 import '../scripts/reading-rule';
 import '../scripts/scroll-rail';
 import { initPostRail } from '../scripts/post-rail';
-import { createTocMotion } from '../scripts/toc-motion';
+import type { createTocMotion } from '../scripts/toc-motion';
 import { onPage } from '../scripts/page-lifecycle';
-onPage(({document, addEventListener}) => {
-
-  // 文章页的客户端脚本：代码块工具栏 + 评论区 + 阅读尺。见 src/scripts/  const toc = document.querySelector<HTMLElement>('.post-rail .toc');
-  const motion = toc ? createTocMotion(toc) : null;
-  const disposeRail = initPostRail(document, (link, changed) => motion?.moveTo(link, changed));
-  addEventListener('pagehide', event => {
-    motion?.finish();
-    if (!event.persisted) { disposeRail(); motion?.dispose(); }
+onPage(({ document, keep, addEventListener, IntersectionObserver }) => {
+  const toc = document.querySelector<HTMLElement>('.post-rail .toc');
+  let motion: ReturnType<typeof createTocMotion> | undefined;
+  let active: HTMLAnchorElement | undefined;
+  let live = true;
+  const disposeRail = initPostRail(document, (link, changed) => {
+    active = link;
+    motion?.moveTo(link, changed);
   });
-  addEventListener('pageshow', event => { if (event.persisted) motion?.finish(); });
 
-},".post-rail");
+  const dispose = () => {
+    if (!live) return;
+    live = false;
+    disposeRail();
+    motion?.dispose();
+  };
+  keep(dispose);
+  if (!toc) return;
+
+  const observer = new IntersectionObserver(([entry]) => {
+    if (!entry.isIntersecting) return;
+    observer.disconnect();
+    void import('../scripts/toc-motion').then(({ createTocMotion }) => {
+      if (!live) return;
+      motion = createTocMotion(toc);
+      if (active) motion.moveTo(active, true);
+    }).catch(() => { /* 目录锚点与当前位置仍可用。 */ });
+  }, { rootMargin: '120px' });
+  observer.observe(toc);
+  addEventListener('pagehide', event => {
+    if (!event.persisted) dispose();
+  });
+  addEventListener('pageshow', event => {
+    if (event.persisted) motion?.finish();
+  });
+}, '.post-rail');
 </script>

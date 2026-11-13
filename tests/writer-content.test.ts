@@ -8,6 +8,18 @@ const post='---\r\n# 原有说明\r\ntitle: 原题 # 保留注释\r\ndate: 2026-
 const talks='---\r\n# 原有说明\r\ntitle: 说说\r\nitems:\r\n  - id: talk-old\r\n    date: 2026-10-23\r\n    text: 原文\r\n    videos:\r\n      - src: old.mp4\r\n        alt: 旧视频\r\n  - id: talk-neighbor\r\n    date: 2026-10-22\r\n    text: 邻居 # 邻居注释\r\n---\r\n';
 const base=(text:string,itemHash?:string)=>({commit:'1'.repeat(40),blobSha:'2'.repeat(40),text,...(itemHash?{itemHash}:{})});
 const decode=(changes:ReturnType<typeof planChanges>,path:string)=>new TextDecoder().decode(changes.find(c=>c.path===path)!.bytes);
+it('封面可单独上传并发布，要求说明且不写入正文',()=>{
+  const value=readPost(post),bytes=new Uint8Array([1,2,3]),sha=createHash('sha256').update(bytes).digest('hex');
+  const publish=()=>planChanges({kind:'post',key:'example',base:base(post),value},post,new Map([[sha,bytes]]));
+  value.fields.cover='writer-asset:'+sha;
+  expect(publish).toThrow('封面说明');
+  value.fields.coverAlt='封面图';
+  expect(publish).toThrow('未上传');
+  value.assets=[{sha256:sha,alt:'封面图'}];
+  const result=readPost(decode(publish(),'content/posts/example/index.md'));
+  expect(result.fields.cover).toBe('./writer-'+sha+'.webp');
+  expect(result.body).toBe(value.body);
+});
 it('文章只定点更改字段和正文，保留 CRLF、未知字段与注释，最终公开',()=>{
   const value=readPost(post);value.fields.title='新题："引用"';value.body='新正文\n';
   const result=decode(planChanges({kind:'post',key:'example',base:base(post),value},post,new Map()),'content/posts/example/index.md');

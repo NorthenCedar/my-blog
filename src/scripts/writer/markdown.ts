@@ -54,6 +54,16 @@ const serializer=new MarkdownSerializer({...defaultMarkdownSerializer.nodes,para
   ...defaultMarkdownSerializer.marks,strike:{open:'<del>',close:'</del>',expelEnclosingWhitespace:true},
 },{escapeExtraCharacters:/</g});
 const detector=withWriterStrike(new MarkdownIt({html:true}));
+export function writerBodyImages(raw:string) {
+  const images = new Map<string,string>();
+  for (const block of detector.parse(raw, {})) {
+    for (const token of block.children ?? []) {
+      const src = token.type === 'image' && token.attrGet('src');
+      if (src && !images.has(src)) images.set(src, token.content);
+    }
+  }
+  return images;
+}
 export const parseWriterMarkdown=(raw:string):Node=>parser.parse(raw);
 export function serializeWriterMarkdown(doc:Node,original?:{raw:string;doc:Node}):string{
   if(original&&doc.eq(original.doc))return original.raw;

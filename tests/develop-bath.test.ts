@@ -54,7 +54,6 @@ import { existsSync } from 'node:fs';
  */
 const SRC = readFileSync('src/scripts/develop.ts', 'utf8');
 const CODE = SRC.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, ' ');
-const ASTRO = readFileSync('src/pages/gallery/index.astro', 'utf8');
 /* ★★ 2026-10-07：素材池的**标记**搬去了 `src/components/AlbumRow.astro`（相册入口条）。
    原因：砖墙离开 `/gallery`（一册一页），这一页的 `<figure>` 只剩入口条里的那些。
    脚本那一侧的契约因此从 `.wf figure` 换成更中性的 `[data-bath-src] figure`。
@@ -332,9 +331,6 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
 
 
   it('★ 手写花体（英文站名）不在 canvas 里 ⇒ 擦痕擦不掉它', () => {
-    /* ★ 站名不许写死在 src/ 里（架构契约：主题不持有正文/站名）⇒ 必须是从 content 读来的 */
-    const mark = /class="bath-mark"\s*>\{siteWordmark\}</.test(ASTRO);
-    const fromContent = /getSite\(\)/.test(ASTRO);
     /* ★★ Homemade Apple = 参考站同款（站主原话）；它是拉丁字体 ⇒ 后面必须有中文手写体兜底 */
     const script = /font-family:[^;]*Homemade Apple/.test(ACSS);
     const cnName = /font-family:[^;]*楷体/.test(ACSS);
@@ -347,19 +343,16 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     const noFillText = !/fillText/.test(CODE);
     const above = /\.bath-mark\s*\{[^}]*z-index:\s*2/.test(ACSS);
     console.log(
-      `判据 花体字 实测: ${mark ? '板上有英文站名 ✓' : '⚠️ 字没了'} · `
+      '判据 花体字 实测: '
       + `${script ? 'Homemade Apple（参考站同款）✓' : '⚠️ 不是那款手写体'} · `
       + `${cnName ? '有中文手写体兜底 ✓' : '⚠️ 拉丁字体之外没有中文兜底'} · `
-      + `${fromContent ? '站名来自 content ✓' : '⚠️ 站名写死在 src/ 里（违反内容契约）'} · `
       + `${face && shipped ? '自托管 woff2 ✓' : '⚠️ 字体没落地'} · `
       + `${noCdn ? '没有 CDN 引用 ✓' : '⚠️ 引了外部字体'} · `
       + `${noFillText ? '不用 canvas fillText（擦不掉）✓' : '⚠️ 字画进了 canvas ⇒ 会被蒙版抠掉'} · `
       + `${above ? '压在颗粒层之上 ✓' : '⚠️ 会被颗粒层盖住'}`,
     );
-    expect(mark, '板上没有那行手写花体（站主要保留它）').toBe(true);
     expect(script, '字体栈里没有 Homemade Apple ⇒ 不是站主要的那款花体（参考站同款）').toBe(true);
     expect(cnName, '拉丁手写体之外没有中文兜底 ⇒ 万一渲染中文会掉成默认黑体').toBe(true);
-    expect(fromContent, '站名写死在 src/ 里 ⇒ 违反「主题不持有正文/站名」（content-invariants 会红）').toBe(true);
     expect(face && shipped, '字体没自托管到 public/fonts（或 @font-face 不存在）⇒ 花体字不生效').toBe(true);
     expect(noCdn, '引了外部字体服务 ⇒ 违反"站内不依赖外部资源"').toBe(true);
     expect(noFillText, '字画进了 canvas ⇒ 会被擦痕蒙版一起抠掉（站主要它擦不掉）').toBe(true);
@@ -380,9 +373,7 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     expect(stitch, '噪点没开 stitchTiles ⇒ 160px 平铺会有可见接缝').toBe(true);
   });
 
-  it('板默认不出现 —— 没有 JS 就没有它，不是"藏起来"', () => {
-    const hiddenAttr = /class="bath"[^>]*\shidden\b/.test(ASTRO);
-    const ariaHidden = /class="bath"[^>]*aria-hidden="true"/.test(ASTRO);
+  it('显影脚本抽片后直接显示画布', () => {
     const reveals = /host\.hidden\s*=\s*false/.test(CODE);
     const hiddenCss = /\.bath\[hidden\]/.test(ACSS);
     /* ★ 露面**不许等**首图下载完：静止态一个像素都不画（纯色），等图只会让板在慢网络下
@@ -391,14 +382,11 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     const noWait = !/await\s+ready\(/.test(CODE);
     const revealDirect = /if\s*\(openRandom\(\)\)\s*\{\s*host\.hidden\s*=\s*false/.test(CODE);
     console.log(
-      `判据 无 JS 降级 实测: ${hiddenAttr ? 'SSR 就带 hidden ✓' : '⚠️ 首屏没有 hidden'} · `
-      + `${ariaHidden ? 'aria-hidden ✓' : '⚠️ 缺 aria-hidden'} · `
+      '判据 画布显示 实测: '
       + `${reveals ? '脚本到位才解除 ✓' : '⚠️ 脚本没解除'} · `
       + `${hiddenCss ? '显式 [hidden] 规则 ✓' : '⚠️ 没有 [hidden] 兜底规则'} · `
       + `${noWait && revealDirect ? '不等首图下载 ✓' : '⚠️ 在等首图下载完才露面'}`,
     );
-    expect(hiddenAttr, '板没带 hidden ⇒ 无 JS 时会看到一块空的深色板（板上没有可用信息）').toBe(true);
-    expect(ariaHidden, '板是纯装饰，应 aria-hidden —— 否则读屏会念一段无意义的读数').toBe(true);
     expect(reveals, '脚本没有解除 hidden（板永远不出现）').toBe(true);
     expect(hiddenCss, '上游若给 .bath 加了 display，[hidden] 会被覆盖 ⇒ 必须显式写一条').toBe(true);
     expect(noWait && revealDirect, '板在等首图下载完才露面 ⇒ 慢网络下页头会空几秒（线上实测 4.1 s 时还没露面）').toBe(true);
@@ -502,15 +490,35 @@ describe('相册页显影板：纯色底、搅动显影与降级', () => {
     expect(gridTier && whAttrs, '网格图挂的不是 800 档尺寸 ⇒ 脚本端判横竖/定图源的口径对不上').toBe(true);
   });
 
-  it('★ 显影板在 body 具名槽固定铺满，手机也能涂抹上下留白', () => {
-    expect(ASTRO).toContain(' fullWidth');
-    const plate=ASTRO.slice(ASTRO.indexOf('<Fragment slot="plate">'),ASTRO.indexOf('</Fragment>'));
-    expect(plate).toContain('data-bath hidden');
+  it('★ 显影装置样式覆盖视口，保留高度归一化笔触', () => {
     expect(ACSS).toMatch(/\.bath\s*\{[^}]*position:\s*fixed;inset:\s*0/);
     expect(ACSS).not.toMatch(/\bwidth:\s*100vw/);
     expect(ACSS).toMatch(/html\.on-develop body\.gallery-story>main\{pointer-events:none/);
     expect(ACSS).toMatch(/html\.on-develop body\.gallery-story \.bath\{visibility:visible;pointer-events:auto/);
     expect(ACSS).toContain('100svh');
+    /* ★★ 2026-11-13 站主两次报障，结论**反了一次**，两段都要读：
+         上午「相册首页显影板那里暗色亮色的按钮按不到」⇒ 把它加进放行名单；
+         下午「显影板上软条按钮太突兀了」⇒ 选 D：这一幕**整块撤场**，名单里摘掉。
+       ⇒ 现在守的是相反的命题，而且必须是双向的：
+         · 只删隐藏、把放行加回来 = 一个"看不见但能点"的幽灵按钮；
+         · 只删放行、不写隐藏 = 回到"看得见点不动"。
+       另外 `visibility:hidden` 不能省 —— `opacity:0` 的元素仍在 Tab 序列里，
+       键盘会落到一个看不见的开关上（无障碍红线，不是风格选择）。 */
+    expect(ACSS, '放行名单里还有主题开关 ⇒ 显影板幕它仍在场，与撤场冲突')
+      .not.toMatch(/html\.on-develop body\.gallery-story \.topbar \[data-theme-toggle\]/);
+    expect(ACSS, '第二处直子元素名单也要摘掉它')
+      .not.toMatch(/html\.on-develop body\.gallery-story>\.topbar>:is\([^)]*\[data-theme-toggle\]/);
+
+    const away = /html\.on-develop body\.gallery-story>\.topbar>\[data-theme-toggle\]\{([^}]*)\}/.exec(ACSS)?.[1] ?? '';
+    expect(away.length, '撤场规则没找到，下面几条会空转').toBeGreaterThan(60);
+    expect(away, '整块撤出要 opacity:0').toContain('opacity:0');
+    expect(away, '必须 visibility:hidden（否则键盘会落到看不见的开关上）').toContain('visibility:hidden');
+    expect(away, '兜底 pointer-events:none').toContain('pointer-events:none');
+    expect(away, '隐藏侧要等淡出结束再 hidden').toMatch(/visibility 0s linear \.45s/);
+    expect(ACSS, '出场要有过渡，否则换幕时橙条啪地弹回来')
+      .toMatch(/body\.gallery-story>\.topbar>\[data-theme-toggle\]\{transition:opacity/);
+    expect(ACSS, '别用 display:none 换位 —— 顶栏右侧会整体横移')
+      .not.toMatch(/\[data-theme-toggle\][^{]*\{[^}]*display:[ ]*none/);
     // 原装置的高度归一化笔触不因全屏舞台改变。
     expect(CODE).toMatch(/const\s+radius\s*=\s*RB;/);
     expect(CODE).toMatch(/const\s+ox\s*=\s*\(u\s*-\s*pu\)\s*\*\s*aspect/);

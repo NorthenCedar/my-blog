@@ -5,15 +5,13 @@ import DraftBadge from './DraftBadge.astro';
 interface Props {
   posts: PostMeta[];
   heading?: string;
+  covers?: ReadonlyMap<string, string>;
 }
-const { posts, heading } = Astro.props;
+const { posts, heading, covers } = Astro.props;
 ---
 {heading && <h2 class="section">{heading}</h2>}
 <ul class="index">
   {posts.map((p) => (
-    /* data-* 是给 /archive 的搜索/年月筛选/排序用的（2026-09-26 站主要求）。
-       放在这里而不是归档页：归档页是复用这个组件渲染的，属性必须跟着行一起产出。
-       标签页（6 个）也用它，多这几个属性无副作用 —— 筛选脚本只挂在归档页。 */
     <li
       data-date={p.date}
       data-year={p.date.slice(0, 4)}
@@ -21,6 +19,13 @@ const { posts, heading } = Astro.props;
       data-q={`${p.title} ${p.summary} ${p.tags.join(' ')}`.toLowerCase()}
     >
       <a href={p.url}>
+        <span class="archive-art" aria-hidden={covers?.has(p.slug) ? undefined : 'true'}>
+          {covers?.has(p.slug) ? (
+            <img src={`/post-covers/${p.slug}.jpg`} alt={covers.get(p.slug)!} loading="lazy" decoding="async" />
+          ) : (
+            <span class="archive-art-date">{p.date.slice(5).replace('-', '/')}</span>
+          )}
+        </span>
         <span class="date">
           <time datetime={p.date}>{p.date}</time>
           {p.draft && <> <DraftBadge /></>}
@@ -35,9 +40,9 @@ const { posts, heading } = Astro.props;
 
 <style>
   .section {
+    margin: 0 0 var(--sp-4);
     font-size: var(--fs-lg);
     font-weight: 700;
-    margin: 0 0 var(--sp-4);
   }
   .index {
     list-style: none;
@@ -45,14 +50,36 @@ const { posts, heading } = Astro.props;
     padding: 0;
     border-top: 1px solid var(--ink);
   }
-  .index li {
-    border-bottom: 1px solid var(--hair);
-  }
+  .index li { min-inline-size: 0; border-bottom: 1px solid var(--hair); }
   .index a {
     display: block;
     padding: var(--sp-6) 0;
-    text-decoration: none;
     color: inherit;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+  .index a:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px;
+  }
+  :global([data-groups][data-view='list']) .index a:is(:hover, :focus-visible) {
+    transform: none;
+    box-shadow: none;
+  }
+  .archive-art { display: none; }
+  .archive-art img {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+  .archive-art-date {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   .date {
     font-size: var(--fs-xs);
@@ -62,26 +89,101 @@ const { posts, heading } = Astro.props;
   .title {
     display: block;
     margin: var(--sp-2) 0 var(--sp-3);
-    max-width: 22em;
+    max-inline-size: 22em;
     font-size: var(--fs-item);
     line-height: var(--lh-item);
     letter-spacing: var(--ls-item);
     font-weight: 800;
   }
-  /* 条目字号远大于 24px，所以 3.68:1 的 --accent 合法 */
-  .index a:hover .title {
-    color: var(--accent);
-  }
+  .index a:hover .title, .index a:focus-visible .title { color: var(--accent-ink); }
   .summary {
     display: block;
+    max-inline-size: 40em;
     font-size: var(--fs-sm);
     color: var(--muted);
-    max-width: 40em;
   }
   .tags {
     display: block;
-    margin-top: var(--sp-3);
+    margin-block-start: var(--sp-3);
     font-size: var(--fs-xs);
     color: var(--muted);
+  }
+
+  :global([data-groups][data-view='card']) .index {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+    align-items: stretch;
+    gap: var(--sp-4);
+    border-top: 0;
+  }
+  :global([data-groups][data-view='card']) .index li { border: 0; }
+  :global([data-groups][data-view='card']) .index a {
+    display: grid;
+    block-size: 100%;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: 'art art' 'date tags' 'title title' 'summary summary';
+    align-content: start;
+    align-items: baseline;
+    gap: var(--sp-2);
+    padding: 0 0 var(--sp-4);
+    border: 1px solid var(--hair);
+    border-radius: var(--sp-3);
+    background: var(--paper);
+  }
+  :global([data-groups][data-view='card']) .archive-art {
+    grid-area: art;
+    display: grid;
+    place-items: center;
+    position: relative;
+    inline-size: 100%;
+    aspect-ratio: 16 / 8;
+    overflow: hidden;
+    background:
+      repeating-linear-gradient(135deg, transparent 0 9px, var(--page-grid-line) 9px 10px),
+      var(--accent-wash);
+    color: var(--accent-ink);
+    border: 0;
+    border-block-end: 1px solid var(--hair);
+    border-radius: var(--sp-3) var(--sp-3) 0 0;
+  }
+  :global([data-groups][data-view='card']) .archive-art-date {
+    font-size: clamp(1.5rem, 5vw, 3.4rem);
+    font-weight: 500;
+    letter-spacing: -.04em;
+  }
+  :global([data-groups][data-view='card']) .date {
+    grid-area: date;
+    margin: var(--sp-1) 0 0 var(--sp-4);
+  }
+  :global([data-groups][data-view='card']) .tags {
+    grid-area: tags;
+    margin: var(--sp-1) var(--sp-4) 0 0;
+    color: var(--accent-ink);
+  }
+  :global([data-groups][data-view='card']) .title {
+    grid-area: title;
+    margin: 0 var(--sp-4);
+    font-size: clamp(1.04rem, 1.45vw, 1.32rem);
+    line-height: 1.35;
+    font-weight: 750;
+  }
+  :global([data-groups][data-view='card']) .summary {
+    grid-area: summary;
+    margin-inline: var(--sp-4);
+    line-height: 1.55;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .title { transition: color var(--dur-hover) var(--ease-interact); }
+  }
+  @media (any-hover: hover) and (prefers-reduced-motion: no-preference) {
+    :global([data-groups][data-view='list']) .index a {
+      transition:
+        transform var(--dur-hover) var(--ease-interact),
+        box-shadow var(--dur-hover) var(--ease-interact);
+    }
+    :global([data-groups][data-view='list']) .index li:hover > a {
+      transform: translate(var(--hover-nudge), var(--hover-lift));
+      box-shadow: var(--glass-shadow);
+    }
   }
 </style>

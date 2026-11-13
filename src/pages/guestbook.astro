@@ -5,6 +5,7 @@ import PageTitle from '../components/PageTitle.astro';
 import CommentSection from '../components/CommentSection.astro';
 import Voiceprint from '../components/Voiceprint.astro';
 import MechanicalRing from '../components/MechanicalRing.astro';
+import GuestbookWords from '../components/GuestbookWords.astro';
 
 /** 留言页（2026-09-26 站主按参考站要求新增）。
  *  参考站那一页是「全站评论汇总 + 本页留言」两块；**汇总那块需要后端聚合**，本站的评论接口
@@ -22,13 +23,13 @@ const d = (entry?.data ?? {}) as unknown as GuestbookData;
 <Base title="留言" current="guestbook" chrome="page" bodyClass="guestbook-plate">
   {/* 装饰挂在 .shell 外，避免页面过渡改变 fixed 的包含块。 */}
   <Fragment slot="plate">
+    <GuestbookWords />
     <MechanicalRing />
   </Fragment>
   <header class="pagehead">
     <PageTitle>留言</PageTitle>
     {d.intro && <p class="lede">{d.intro}</p>}
     {d.note && <p class="note">{d.note}</p>}
-    <p class="ring-caption">轻拨金属环，松开后慢慢归位。</p>
   </header>
 
   {/* ★ 声纹带 VOICEPRINT（2026-10-14）—— 站内第一台读页面真实内容的装置。
@@ -53,13 +54,6 @@ const d = (entry?.data ?? {}) as unknown as GuestbookData;
     max-width: var(--measure);
     color: var(--muted);
   }
-  .ring-caption {
-    margin: var(--sp-5) 0 0;
-    color: var(--muted);
-    font-size: var(--fs-xs);
-    display: none;
-  }
-  :global(body.ring-can-drag) .ring-caption { display: block; }
   .note {
     margin: var(--sp-2) 0 0;
     max-width: var(--measure);

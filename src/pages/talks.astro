@@ -1,16 +1,20 @@
 ---
 import '../styles/visitor.css';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { getEntry } from 'astro:content';
 import { Image, getImage } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import PageTitle from '../components/PageTitle.astro';
 import TalkImageViewer from '../components/TalkImageViewer.astro';
+import TalkVideoViewer from '../components/TalkVideoViewer.astro';
 import { renderTalkText } from '../lib/talk-text';
 import { validateTalkVideos } from '../lib/video-assets.mjs';
 import { validateTalkAudio } from '../lib/audio-assets.mjs';
 // 回复区样式（2026-09-28）：全局引入。本页 <style> 是 scoped，
 // 而回复元素是 JS 运行时创建的（没有 data-astro-cid）⇒ 写在本页 style 里不会生效。
 import '../styles/replies.css';
+import '../vendor/react-bits/ThoughtLineDisclosure.css';
 
 /** 说说页（2026-09-26 站主按参考站要求新增）：短的、没成为文章的东西。
  *  体例取自参考站「说说」：时间线，每条 = 时间 + 正文（那边还带序号，本站不加序号 ——
@@ -79,13 +83,41 @@ const slugOf = (t: Talk): string => {
   const nth = sameDay.indexOf(t);
   return `talk-${day}${nth === 0 ? '' : String.fromCharCode(97 + nth)}`;
 };
-const rows = items.map((t) => {
-  const slug = slugOf(t);
-  return { t, slug, videos: validateTalkVideos(t.videos, `content/pages/talks.md 的 ${slug}`), audio: validateTalkAudio(t.audio, `content/pages/talks.md 的 ${slug}`) };
-});
 // 说说配图：构建期收进来，才能走 Astro 的优化管线（WebP + srcset）
+// ⚠️ 位置有讲究：`rows` 里要用 `assetOf`（把配图拼进统一媒体网格），
+//    而 `const` 是 TDZ ⇒ 这两行必须留在 `rows` **之前**（2026-11-12 构建实测：
+//    放后面报 `Cannot access 'assetOf' before initialization`）。
 const talkAssets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/talks/*.{jpg,jpeg,png,webp,avif}', { eager: true });
 const assetOf = (name: string) => talkAssets[`/src/assets/talks/${name}`]?.default;
+const rows = items.map((t) => {
+  const slug = slugOf(t);
+  const videos = validateTalkVideos(t.videos, `content/pages/talks.md 的 ${slug}`);
+  const images = (t.images ?? []).map((img, index) => ({ ...img, index, asset: assetOf(img.src) }));
+  /* ★ 2026-11-12（第二轮）站主：「图片和视频的排版太乱了，做整齐一点」。
+     原来图片走 `.shots`（3 栏方图）、视频单独一条 `.clips`（288 宽、比图片宽一大截），
+     同一条说说里两套尺寸、两个左缘 —— 看起来像两拨东西掉在同一页上。
+     ⇒ 图片与视频**并进同一张网格**：一种方块、一种间距、一个左缘。
+     栏数只看总数（1 / 2 / 4 → 1 / 2 / 2 栏，其余 3 栏），4 个媒体正好排成 2×2。 */
+  const media = [
+    ...images.map((img) => ({ kind: 'image' as const, ...img })),
+    ...videos.map((video, index) => ({ kind: 'video' as const, ...video, index })),
+  ];
+  const columns = media.length <= 2 ? Math.max(media.length, 1) : media.length === 4 ? 2 : 3;
+  return { t, slug, videos, audio: validateTalkAudio(t.audio, `content/pages/talks.md 的 ${slug}`), media, columns };
+});
+
+/**
+ * 视频封面（站主 2026-11-12：「不点开是黑色的，给他一张封面」）。
+ *   · 约定：`public/videos/<sha>.poster.jpg` —— 与原件同名的首帧截图，
+ *     由 `scripts/gen-video-poster.mjs` 抽出（本机没有 ffmpeg，用浏览器解码）。
+ *   · 文件不在就返回 undefined：`poster` 属性干脆不写，
+ *     让浏览器退回首帧，不会留下一个指向 404 的空封面。 */
+const posterOf = (src: string): string | undefined => {
+  const poster = src.replace(/\.(?:mp4|webm)$/, '.poster.jpg');
+  return existsSync(join(process.cwd(), 'public', poster)) ? poster : undefined;
+};
+// 说说配图：构建期收进来，才能走 Astro 的优化管线（WebP + srcset）
+// （`talkAssets` / `assetOf` 已提到 `rows` 之前，原因见那里。）
 // 大档按实际配图生成；链接提供无脚本后备，缩略图在列表中居中裁成正方形。
 const fullImages = new Map(await Promise.all(rows.flatMap(({ t }) => t.images ?? []).map(async (img) => {
   const asset = assetOf(img.src);
@@ -141,24 +173,31 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     )}
     <canvas class="float-bg" data-float-bg aria-hidden="true"></canvas>
   </Fragment>
-  <header class="pagehead">
+  <header class="pagehead" data-build="text">
     <PageTitle>说说</PageTitle>
     {d.intro && <p class="lede">{d.intro}</p>}
   </header>
 
-  <ol class="talks">
-    {rows.map(({ t, slug, videos, audio }) => (
+  {/* 多光标搭建（2026-11-12 站主口径）：不是在页面里放演示，而是**这一页本身**
+      由几枚光标搭出来 —— 往下滚是搭，往回滚是撤。装饰画在 body 上那张 fixed canvas
+      （`src/scripts/talks-build.ts`），这里只留一句说明。 */}
+  <p class="build-note" data-build="text">
+    这一页是七枚光标搭出来的：往下滚，它们会把下一条拉框、落字；往回滚就原路撤回。
+  </p>
+
+  <ol class="talks" data-talks-build>
+    {rows.map(({ t, slug, audio, media, columns }) => (
       <li class="talk">
-        <time datetime={iso(t.date)}>{fmt(t.date)}</time>
+        <time datetime={iso(t.date)} data-build="carry">{fmt(t.date)}</time>
         <div class="talk-content">
-          <p class="body">
+          <p class="body" data-build="text">
             <Fragment set:html={renderTalkText(t.text)} />
             {t.href && <> <a href={t.href}>链接</a></>}
           </p>
           {/* 语音（2026-11-10）：贴在正文后面、配图前面 —— 它是"说出来的那句正文"，
               不是配图也不是配视频，顺序上该紧跟着文字。 */}
           {audio.length > 0 && (
-            <div class="talk-audio">
+            <div class="talk-audio" data-build="carry">
               {audio.map((a) => (
                 <div class="ap" data-audio data-src={a.src} data-label={a.label}>
                   <audio controls preload="metadata" src={a.src} aria-label={a.label || '语音'}></audio>
@@ -167,67 +206,99 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
             </div>
           )}
 
-          {t.images && t.images.length > 0 && (
-            <div class="shots" data-columns={t.images.length <= 2 ? t.images.length : t.images.length === 4 ? 2 : 3}>
-              {t.images.map((img, i) =>
-                assetOf(img.src) ? (
-                  <a href={fullImages.get(img.src)} data-talk-image={`talk-image-${slug}-${i}`} data-no-transition aria-label={`放大查看：${img.alt}`}>
-                    <Image
-                      src={assetOf(img.src)!}
-                      alt={img.alt}
-                      widths={[480, 760]}
-                      sizes={t.images.length === 1 ? '(max-width: 767px) 65vw, 288px' : t.images.length === 2 || t.images.length === 4 ? '(max-width: 767px) 44vw, 280px' : '(max-width: 767px) 28vw, 184px'}
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </a>
+          {media.length > 0 && (
+            <div class="shots" data-columns={columns}>
+              {media.map((m) =>
+                m.kind === 'image' ? (
+                  m.asset ? (
+                    <a
+                      class="shot"
+                      data-build="rect"
+                      href={fullImages.get(m.src)}
+                      data-talk-image={`talk-image-${slug}-${m.index}`}
+                      data-no-transition
+                      aria-label={`放大查看：${m.alt}`}
+                    >
+                      <Image
+                        src={m.asset}
+                        alt={m.alt}
+                        widths={[480, 760]}
+                        sizes={
+                          columns === 1
+                            ? '(max-width: 767px) 65vw, 288px'
+                            : columns === 2
+                              ? '(max-width: 767px) 44vw, 280px'
+                              : '(max-width: 767px) 28vw, 184px'
+                        }
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </a>
+                  ) : (
+                    <p class="missing">找不到图片 {m.src}（应放在 src/assets/talks/ 下）</p>
+                  )
                 ) : (
-                  <p class="missing">找不到图片 {img.src}（应放在 src/assets/talks/ 下）</p>
+                  /* 视频与图片同一个方块：列表里只放封面，不预载、不带控件，
+                     点开才在弹窗里播放（站主 2026-11-12：「点开才能看大图」）。
+                     说明文字压在封面左下角的小胶囊里 —— 放在方块**外面**
+                     会把这一格的高度撑出网格的节奏（就是原来那种参差感）。 */
+                  <a
+                    class="shot shot-video"
+                    data-build="rect"
+                    href={m.src}
+                    data-talk-video={`talk-video-${slug}-${m.index}`}
+                    data-no-transition
+                    aria-label={`播放视频：${m.alt}`}
+                  >
+                    <video preload="none" muted playsinline tabindex="-1" aria-hidden="true" src={m.src} poster={posterOf(m.src)}></video>
+                    <span class="clip-play" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="18" height="18" focusable="false"><path d="M8 5.3v13.4L19 12Z" /></svg>
+                    </span>
+                    <span class="shot-cap">{m.alt}</span>
+                  </a>
                 ),
               )}
             </div>
           )}
 
-          {videos.length > 0 && (
-            <div class="clips">
-              {videos.map((video) => (
-                <figure class="clip">
-                  <video controls preload="none" playsinline src={video.src} aria-label={video.alt}>
-                    <a href={video.src}>下载视频：{video.alt}</a>
-                  </video>
-                  <figcaption>{video.alt}</figcaption>
-                </figure>
-              ))}
-            </div>
-          )}
-
-          {/* 点赞（不记名，只记个数）+ 评论（要写名字）。数据挂在 data-slug 上，见 src/scripts/talks.ts */}
-          <div class="acts">
-            <button type="button" class="act like" data-like={slug} aria-pressed="false">
+          {/* 点赞和评论以说说的稳定 slug 对应服务端记录。 */}
+          <div class="acts" data-build="carry">
+            <button type="button" class="act like" data-like={slug} aria-label="点赞" aria-pressed="false">
               <svg class="heart" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
                 <path d="M12 20.3 4.6 13a4.8 4.8 0 0 1 6.8-6.8l.6.6.6-.6A4.8 4.8 0 0 1 19.4 13Z" />
               </svg>
               <span data-like-count>·</span>
             </button>
             <button type="button" class="act" data-toggle={slug} aria-expanded="false" aria-controls={`c-${slug}`}>
-              评论<span data-count-for={slug}></span>
+              <span>评论<span data-count-for={slug}></span></span>
+              <svg class="comment-chevron" viewBox="0 0 16 16" width="12" height="12" fill="none" aria-hidden="true">
+                <path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
             </button>
           </div>
-          <section class="cbox" id={`c-${slug}`} data-comments-for={slug} hidden>
-            <ol class="clist" data-list></ol>
-            <p class="cempty" data-empty hidden>还没有评论，你可以是第一个。</p>
-            <form class="cform" data-form novalidate>
-              <label for={`n-${slug}`}>名字</label>
-              <input id={`n-${slug}`} name="name" type="text" maxlength="40" autocomplete="nickname" required />
-              <label for={`b-${slug}`}>评论</label>
-              <textarea id={`b-${slug}`} name="body" rows="3" maxlength="1000" required></textarea>
-              <div class="hp" aria-hidden="true">
-                <label for={`w-${slug}`}>网站（请留空）</label>
-                <input id={`w-${slug}`} name="website" type="text" tabindex="-1" autocomplete="off" />
+          <section class="cbox thought-line__trace" id={`c-${slug}`} data-comments-for={slug} aria-hidden="true" inert>
+            <div class="thought-line__fold">
+              <div class="cbox-content">
+                <div class="thought-line__trace" data-comment-results>
+                  <div class="thought-line__fold">
+                    <ol class="clist" data-list></ol>
+                    <p class="cempty" data-empty hidden>还没有评论，你可以是第一个。</p>
+                  </div>
+                </div>
+                <form class="cform" data-form novalidate>
+                  <label for={`n-${slug}`}>名字</label>
+                  <input id={`n-${slug}`} name="name" type="text" maxlength="40" autocomplete="nickname" required />
+                  <label for={`b-${slug}`}>评论</label>
+                  <textarea id={`b-${slug}`} name="body" rows="3" maxlength="1000" required></textarea>
+                  <div class="hp" aria-hidden="true">
+                    <label for={`w-${slug}`}>网站（请留空）</label>
+                    <input id={`w-${slug}`} name="website" type="text" tabindex="-1" autocomplete="off" />
+                  </div>
+                  <button type="submit" data-submit>发表</button>
+                </form>
+                <p class="cerror" role="alert" data-error hidden></p>
               </div>
-              <button type="submit" data-submit>发表</button>
-            </form>
-            <p class="cerror" role="alert" data-error hidden></p>
+            </div>
           </section>
         </div>
       </li>
@@ -238,6 +309,9 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     const asset = assetOf(img.src);
     return asset && <TalkImageViewer id={`talk-image-${slug}-${i}`} src={fullImages.get(img.src)!} alt={img.alt} width={asset.width} height={asset.height} />;
   }))}
+  {rows.flatMap(({ videos, slug }) => videos.map((video, i) => (
+    <TalkVideoViewer id={`talk-video-${slug}-${i}`} src={video.src} alt={video.alt} poster={posterOf(video.src)} />
+  )))}
 </Base>
 
 <style>
@@ -245,6 +319,62 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     margin: var(--sp-4) 0 0;
     max-width: var(--measure);
     color: var(--muted);
+  }
+  /* 多光标搭建（2026-11-12 第二轮，站主纠正口径）：
+     「我是让你用多光标页面搭建这个效果把说说页搭建起来，不是让你直接把这个放到说说页」
+     ⇒ 页面里不再嵌任何演示框 —— **这一页本身**是搭出来的：
+       几枚光标飞过来、在每条说说外面拉一个框、内容随后落位；上滚原路撤回。
+     装饰层是 JS 往 body 上挂的一张 fixed canvas（`.tb-layer`，不拦指针），
+     真正的显隐由 `data-built` 驱动。 */
+  /* ⚠ 这张画布是 **JS 创建的**（`document.createElement`），身上没有 Astro 的
+     `data-astro-cid-*` ⇒ 本页 scoped 选择器**碰不到它**。第一版就栽在这：
+     `.tb-layer` 规则没生效，画布退回内联元素、被追加到 body 末尾随文档滚动，
+     于是"明明在画（getImageData 数得到墨）却一个人也看不见"。
+     ⇒ 必须写 `:global(...)`。同理，任何由脚本生成的节点都要走 :global。 */
+  :global(.tb-layer) {
+    position: fixed;
+    inset: 0;
+    z-index: 8;
+    pointer-events: none;
+  }
+  /* ⚠ 藏内容这件事**必须**由 `html.build-ok` 把关（脚本加了类才会藏）：
+     没有 JS、脚本失败、减少动效 —— 内容一律原样可见，绝不能出现"整页空白"。
+     ★ 这里**不写 transition**：2026-11-12 第三轮起，每一块都由脚本按自己的时间轴
+       逐帧写 opacity / transform / clip-path（文字逐字、图片 drag-and-drop、其余整块拖）。
+       留一条 CSS 过渡只会和脚本抢同一批属性，表现得像"慢半拍"。
+     ★ 也不写 `translateY`：carry 的位移是脚本算出来的，初始偏移会让基准矩形算错。 */
+  html.build-ok [data-build] {
+    opacity: 0;
+  }
+  /* 文字块的框要**贴住文字**，不是贴住盒。`.pagehead` / `.body` 是块级元素，
+     宽度撑满容器 ⇒ 光标拉出来的框会比文字宽一大截（实测 1184 × 273 包着一个
+     三百来字宽的标题）。`fit-content` 让宽度收到「最宽那一行」，
+     而 `max-width: 100%` 保证长段落仍在原来的换行点折行。
+     ⚠ 逐字 span 即使 `opacity: 0` 也占位，所以搭建过程中宽度不塌、不会抖。 */
+  html.build-ok [data-build='text'] {
+    width: fit-content;
+    max-width: 100%;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html.build-ok [data-build] { opacity: 1; transform: none; clip-path: none; }
+  }
+  /* ★★ 2026-11-13 站主：「改成搭建中不能点击评论吧，要不然一下搭完太突兀了」。
+     搭建期间这颗开关**点不动**（类由 `talks-build.ts` 的 `syncBuilding()` 挂/摘）。
+     为什么只锁它：点赞不改布局；而展开评论会把这一条以下整体下推，正在飞的框与
+     缩略图按缓存的旧基准走 ⇒ 正好压到刚展开的表单上（站主截图里那一片）。
+     `cursor: default` 是给的一点暗示 —— 不降透明度：搭建只有一两秒，
+     按钮忽然变灰比"暂时按不动"更像出了故障。
+     ⚠ 必须 `:global` —— `html` 是页面根，Astro 的作用域属性挂不到它上面。 */
+  :global(html.is-building) .acts [data-toggle] {
+    pointer-events: none;
+    cursor: default;
+  }
+  .build-note {
+    margin: var(--sp-4) 0 0;
+    max-width: var(--measure);
+    color: var(--muted);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.01em;
   }
   /* 透明时间线：日期与正文分栏，留白让雨滴与墨点自然穿过。
      正文保持稳定，背景 FLOAT 继续独立绘制；只裁缩略图，不改原件与灯箱。 */
@@ -300,9 +430,11 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     color: var(--ink);
     overflow-wrap: anywhere;
   }
+  /* 媒体网格（2026-11-12 第二轮）：图片与视频共用一套方块。
+     只有一条规矩 —— 所有格子都是 1:1、同一个间距、同一个左缘；
+     栏数由媒体总数决定（见前面 rows 里的 columns）。 */
   .shots {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--sp-3);
     margin-top: var(--sp-5);
   }
@@ -311,46 +443,69 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     width: min(100%, calc(var(--sp-8) * 4));
   }
   .shots[data-columns='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .shots a {
+  .shots[data-columns='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* 缩略方块（站主 2026-11-12：「把图片和视频的正方形都改成圆角的」）：
+     圆角、细边、裁切都挂在承载链接上，img/video 自己不带边框 —— 否则直角的边框
+     会从圆角外面露出来，圆角就白做了。 */
+  .shots .shot {
+    position: relative;
     display: block;
     min-width: 0;
     aspect-ratio: 1;
     overflow: hidden;
+    border: 1px solid var(--hair);
+    border-radius: var(--sp-2);
+    background: var(--panel);
   }
-  .shots a:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: var(--sp-1); }
-  .shots :global(img) {
+  .shots .shot:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: var(--sp-1); }
+  .shots :global(img),
+  .shots :global(video) {
     width: 100%;
     height: 100%;
     object-fit: cover;
     object-position: center;
     display: block;
-    border: 1px solid var(--hair);
     background: var(--panel);
   }
-  .clips {
+  /* 视频说明：压在封面左下的小胶囊（吃纸色底，亮暗两套都自带对比）。
+     放方块外面会把那一格撑高，网格立刻参差 —— 这正是原来"乱"的来源之一。 */
+  .shot-cap {
+    position: absolute;
+    left: var(--sp-2);
+    bottom: var(--sp-2);
+    max-width: calc(100% - var(--sp-4));
+    padding: 0.15em 0.55em;
+    border: 1px solid var(--hair);
+    border-radius: 999px;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: var(--fs-xs);
+    line-height: 1.6;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  /* 播放键压在封面上：吃 --paper 底、--ink 三角，亮暗两套都自带对比。 */
+  .clip-play {
+    position: absolute;
+    inset: 0;
     display: grid;
-    gap: var(--sp-3);
-    margin-top: var(--sp-3);
-    min-width: 0;
+    place-items: center;
+    pointer-events: none;
   }
-  .clip {
-    margin: 0;
-    min-width: 0;
+  .clip-play svg {
+    box-sizing: content-box;
+    width: 1.15rem;
+    height: 1.15rem;
+    padding: 0.55rem;
+    border-radius: 999px;
+    background: var(--paper);
+    color: var(--ink);
+    fill: currentColor;
+    opacity: 0.92;
   }
-  .clip video {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-    border: 1px solid var(--hair);
-    background: var(--panel);
-  }
-  .clip figcaption {
-    margin-top: var(--sp-2);
-    color: var(--muted);
-    font-size: var(--fs-sm);
-    overflow-wrap: anywhere;
-  }
+  .shot-video:hover .clip-play svg { opacity: 1; }
   .missing {
     margin: 0;
     font-size: var(--fs-sm);
@@ -366,22 +521,26 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
   .acts {
     display: flex;
     align-items: center;
-    gap: var(--sp-3);
+    gap: var(--sp-2);
     margin-top: var(--sp-3);
   }
   .act {
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
-    padding: 0.25em 0.7em;
+    min-block-size: 2.5rem;
+    padding: var(--sp-1) var(--sp-3);
     font: inherit;
     font-size: var(--fs-xs);
     color: var(--muted);
     background: transparent;
     border: 1px solid var(--hair);
+    border-radius: 999px;
+    cursor: pointer;
     font-variant-numeric: tabular-nums;
   }
-  .act:hover {
+  .act[hidden] { display: none; }
+  .act:is(:hover, :focus-visible, [aria-expanded='true']) {
     border-color: var(--accent);
     color: var(--accent-ink);
   }
@@ -400,11 +559,33 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     stroke-width: 1.6;
     stroke-linejoin: round;
   }
+  .acts :global(.pulse-heart__count) { font-size: var(--fs-xs); }
+  .comment-chevron { flex: none; }
+  .act[aria-expanded='true'] .comment-chevron { transform: rotate(180deg); }
   .cbox {
-    margin-top: var(--sp-3);
-    padding: var(--sp-3) 0 0;
-    border-top: 1px dashed var(--hair);
+    --tl-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --tl-settle: 350ms;
   }
+  .cbox-content {
+    margin-top: var(--sp-3);
+    padding: var(--sp-4);
+    border: 1px solid var(--glass-line);
+    border-radius: var(--sp-3);
+    background: var(--glass-bg);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .act, .comment-chevron, .cbox-content :global(.reply-btn) {
+      transition: transform var(--dur-fast) var(--ease-interact), color var(--dur-hover) var(--ease-interact);
+    }
+    .act:active, .cbox-content :global(.reply-btn:active) { transform: translateY(1px) scale(0.98); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cbox { --tl-settle: 0ms; }
+  }
+  @media (pointer: coarse) {
+    .act { min-block-size: 44px; }
+  }
+  .clist:empty { margin: 0; }
   .clist {
     list-style: none;
     margin: 0 0 var(--sp-3);
@@ -442,7 +623,7 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
   }
   .cform {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: 0.4em var(--sp-3);
   }
@@ -459,6 +640,7 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     border: 1px solid var(--hair);
     padding: 0.35em 0.5em;
   }
+  .cform textarea { inline-size: 100%; resize: vertical; }
   .cform textarea,
   .cform .hp,
   .cform button {
@@ -537,8 +719,14 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
        覆盖 12.2%）后同样 .2 的分量重了约 4 倍，会把"纸白阅读底一字不改"压过去。
        ⇒ 取 **.08**：站上**自己**的装饰底纹定稿档就是 8%
          （`--deco-plate-coarse` = `#2d7d4614` = 20/255 ≈ 7.8%，文章页方格那轮站主亲选）。
-         同一把尺子量两张图，比"照抄一个只对旧素材成立的数字"更忠实于原意。 */
-    opacity: var(--plate-op, 0.08);
+         同一把尺子量两张图，比"照抄一个只对旧素材成立的数字"更忠实于原意。
+       ★★ 2026-11-13：暗档滤镜与浓度改成连续（--theme-w）——
+          原来 `html.dark` 那条只在松手后成立，拖动全程停在 8% 的原图。 */
+    filter: var(--plate-filter-ink);
+    opacity: calc(
+      var(--plate-op, 0.08) * (1 - var(--theme-w)) +
+        var(--plate-op, var(--talks-plate-dark-opacity)) * var(--theme-w)
+    );
     pointer-events: none;
     z-index: -1;
   }
@@ -552,11 +740,8 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     max-width: none;
     object-fit: contain;
   }
-  /* 暗底上的月相使用哑光铜橙，仍能分辨圆缺与半透明边缘。 */
-  :global(html.dark) .float-plate {
-    filter: var(--ink-plate-dark-filter);
-    opacity: var(--plate-op, var(--talks-plate-dark-opacity));
-  }
+  /* 暗底上的月相使用哑光铜橙，仍能分辨圆缺与半透明边缘。
+     ★ 2026-11-13：这条规则已并入上面的 `.float-plate`（滤镜与浓度都按权重连续走）。 */
 
   /* 装置画布：与底纹同层（同 z-index:-1），DOM 在后 ⇒ 雨画在墨点**之上**、正文之下。
      `inset:0` 满屏 ⇒ 一次对尺寸，滚动时不需要任何重算（fixed 不随文档走）。 */
@@ -581,11 +766,22 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
 </style>
 
 <script>
-  // 说说的点赞与评论（2026-09-26 站主要求）。逻辑在 src/scripts/talks.ts，
+  // 点赞和评论分别挂载，Pulse Heart 按可见范围加载。
   // 与文章/留言页的评论脚本分开：那边是"一个页面一个评论区"，这里是"一条说说一个"。
   import '../scripts/talks';
+  import '../scripts/talks-likes';
   import '../scripts/talk-image-viewer';
+  import { onPage } from '../scripts/page-lifecycle';
   // 本页的装置「浮游 FLOAT」（2026-10-04）：斜飘雨线 + 下半屏椭圆涟漪。
   // 在同一个 <script> 里 import ⇒ Astro 会把两个模块并进同一个产物脚本，不新增标签。
   import '../scripts/float';
+  /* 多光标搭建（2026-11-12 站主：「用多光标页面搭建这个效果把说说页搭建起来」）。
+     光标与选择框都画在 body 上那张 fixed canvas 里（`src/scripts/talks-build.ts`），
+     这里只负责在页面切换后重新点火。 */
+  onPage(({ document }) => {
+    const root = document.querySelector('[data-talks-build]');
+    if (!root || root.hasAttribute('data-build-ready')) return;
+    root.setAttribute('data-build-ready', '');
+    void import('../scripts/talks-build').then((m) => m.initTalksBuild());
+  }, '[data-talks-build]');
 </script>

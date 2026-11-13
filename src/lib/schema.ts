@@ -102,7 +102,7 @@ export type GalleryFrontmatter = z.infer<typeof gallerySchema>;
 export const gallerySchema = z.object({
   title: z.string().default(''),
   titleEn: z.string().trim().optional(),
-  layout: z.enum(['scatter', 'slices','wall']).default('scatter'),
+  layout: z.enum(['scatter', 'slices', 'dome', 'infinite', 'wall']).default('scatter'),
   date: z.preprocess(v=>v instanceof Date?v.toISOString().slice(0,10):v,z.string().default('')),
   draft:z.boolean().optional(),
   cover:z.string().optional(),

@@ -1,0 +1,55 @@
+/* React Bits Footer.css 中的点阵容器及静态图交接规则。 */
+.ln-footer-art {
+  --footer-art-mask: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgb(0 0 0 / 0.009) calc(var(--art-fade, 96px) * 0.1),
+    rgb(0 0 0 / 0.058) calc(var(--art-fade, 96px) * 0.2),
+    rgb(0 0 0 / 0.163) calc(var(--art-fade, 96px) * 0.3),
+    rgb(0 0 0 / 0.317) calc(var(--art-fade, 96px) * 0.4),
+    rgb(0 0 0 / 0.5) calc(var(--art-fade, 96px) * 0.5),
+    rgb(0 0 0 / 0.683) calc(var(--art-fade, 96px) * 0.6),
+    rgb(0 0 0 / 0.837) calc(var(--art-fade, 96px) * 0.7),
+    rgb(0 0 0 / 0.942) calc(var(--art-fade, 96px) * 0.8),
+    rgb(0 0 0 / 0.991) calc(var(--art-fade, 96px) * 0.9),
+    #000 var(--art-fade, 96px)
+  );
+  position: relative;
+  width: 100%;
+  height: clamp(120px, 17vw, 260px);
+  margin-top: clamp(40px, 4.5vw, 72px);
+  overflow: hidden;
+  pointer-events: none;
+  contain: layout paint;
+  color: #655a72;
+  -webkit-mask-image: var(--footer-art-mask);
+  mask-image: var(--footer-art-mask);
+}
+.ln-footer-art-fallback,
+.ln-footer-art-live {
+  position: absolute;
+  inset: 0;
+}
+.ln-footer-art-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transition: opacity 400ms ease;
+}
+.ln-footer-art-live .shape-waves {
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+.ln-footer-art-live .shape-waves[data-ready='true'] {
+  opacity: 1;
+}
+.ln-footer-art:has(.shape-waves[data-ready='true']) .ln-footer-art-fallback {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ln-footer-art-fallback,
+  .ln-footer-art-live .shape-waves {
+    transition: none;
+  }
+}

@@ -146,9 +146,16 @@ export function slugIssues(entries: { id: string; slug?: string }[]): {
 } {
   const errors: string[] = [];
   const warnings: string[] = [];
+  const owners = new Map<string, string>();
 
   for (const e of entries) {
     const effective = e.slug ?? e.id;
+    const owner = owners.get(effective);
+    if (owner !== undefined) {
+      errors.push(e.id + ' 与 ' + owner + ' 使用了同一个文章 URL 片段「' + effective + '」');
+    } else {
+      owners.set(effective, e.id);
+    }
 
     if (effective.length > SLUG_MAX) {
       errors.push(`${e.id}：URL 片段「${effective}」超过 ${SLUG_MAX} 字符`);

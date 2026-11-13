@@ -5,7 +5,7 @@ import { WriterError,writerFail,writerId,utf8Length,validateTarget,validateWrite
 
 type DraftRow={id:string;owner:string;kind:WriterKind;target_key:string;revision:number;base_json:string;value_json:string;published_revision:number};
 const fields='id,owner,kind,target_key,revision,base_json,value_json,published_revision';
-const activeJobs="'queued','dispatch_unknown','validating','ready','pushed'";
+export const activeJobs="'queued','dispatch_unknown','validating','ready','pushed'";
 const decode=(r:DraftRow):WriterDraft=>({id:r.id,kind:r.kind,key:r.target_key,revision:r.revision,base:JSON.parse(r.base_json),value:JSON.parse(r.value_json),publishedRevision:r.published_revision});
 export const proofValues=(p:WriterProof)=>[p.owner,p.authVersion,p.tokenHash,Date.now()];
 export async function assertWriterProof(db:D1Database,proof:WriterProof) {
@@ -32,6 +32,22 @@ export async function listDrafts(db:D1Database,owner:string) {
 export function assetRefs(db:D1Database,proof:WriterProof,id:string,assets:WriterValue['assets'],marker:string) {
   return assets.map((asset,position)=>db.prepare('INSERT INTO writer_draft_assets(draft_id,owner,sha256,position) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM writer_requests WHERE id=? AND owner=?)').bind(id,proof.owner,asset.sha256,position,marker,proof.owner));
 }
+// 与删除素材使用同一个引用字段，写入时在 D1 的同一批次确认语音仍在。
+const missingDraftAudio = `EXISTS (
+  SELECT 1 FROM json_each(?, '$.audios') clip
+  WHERE NOT EXISTS (
+    SELECT 1 FROM writer_audio a WHERE a.owner=?
+      AND a.sha256=json_extract(clip.value, '$.sha256')
+      AND a.ext=json_extract(clip.value, '$.ext')
+  )
+)`;
+
+async function assertDraftAudio(db: D1Database, owner: string, value: WriterValue, content: string) {
+  if (value.audios?.length && await db.prepare(`SELECT 1 WHERE ${missingDraftAudio}`).bind(content, owner).first()) {
+    writerFail(400, 'audio_missing', '部分语音已不存在或格式不符，请重新上传');
+  }
+}
+
 export async function createDraft(db:D1Database,proof:WriterProof,input:{kind:WriterKind;key:string;base:WriterBase;value:WriterValue}):Promise<WriterDraft> {
   const {kind,key}=validateTarget(input.kind,input.key),value=validateWriterValue(kind,input.value,input.base);
   const base=JSON.stringify(input.base);
@@ -40,13 +56,18 @@ export async function createDraft(db:D1Database,proof:WriterProof,input:{kind:Wr
   await assertWriterProof(db,proof);
   try {
     const results=await db.batch([
-      db.prepare(`INSERT INTO writer_requests(id,owner) SELECT ?,? WHERE ${LIVE_ACCOUNT_SQL}`).bind(marker,proof.owner,...proofValues(proof)),
+      db.prepare(`INSERT INTO writer_requests(id,owner) SELECT ?,? WHERE ${LIVE_ACCOUNT_SQL}${value.audios.length ? ` AND NOT ${missingDraftAudio}` : ''}`)
+        .bind(marker,proof.owner,...proofValues(proof),...(value.audios.length ? [content, proof.owner] : [])),
       db.prepare('INSERT OR IGNORE INTO writer_usage(owner) SELECT ? WHERE EXISTS(SELECT 1 FROM writer_requests WHERE id=?)').bind(proof.owner,marker),
       db.prepare('INSERT INTO writer_drafts(id,owner,kind,target_key,base_json,value_json,payload_bytes,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM writer_requests WHERE id=?)').bind(id,proof.owner,kind,key,base,content,utf8Length(base)+utf8Length(content),now,now,marker),
       ...assetRefs(db,proof,id,value.assets,marker),
       db.prepare('DELETE FROM writer_requests WHERE id=?').bind(marker),
     ]);
-    if(!results[0].meta.changes) {await assertWriterProof(db,proof);writerFail(409,'version_conflict','请重新保存草稿');}
+    if(!results[0].meta.changes) {
+      await assertWriterProof(db,proof);
+      await assertDraftAudio(db,proof.owner,value,content);
+      writerFail(409,'version_conflict','请重新保存草稿');
+    }
     return await readDraft(db,proof.owner,id);
   } catch(error) {return writerStoreError(error);}
 }
@@ -67,7 +88,8 @@ export async function saveDraft(db:D1Database,proof:WriterProof,input:WriterSave
   const marker=randomToken(16),now=Date.now();
   try {
     const results=await db.batch([
-      db.prepare(`INSERT INTO writer_requests(id,owner) SELECT ?,? WHERE EXISTS(SELECT 1 FROM writer_drafts WHERE owner=? AND id=? AND revision=?) AND ${LIVE_ACCOUNT_SQL}`).bind(marker,proof.owner,proof.owner,input.id,input.expectedRevision,...proofValues(proof)),
+      db.prepare(`INSERT INTO writer_requests(id,owner) SELECT ?,? WHERE EXISTS(SELECT 1 FROM writer_drafts WHERE owner=? AND id=? AND revision=?) AND ${LIVE_ACCOUNT_SQL}${value.audios.length ? ` AND NOT ${missingDraftAudio}` : ''}`)
+        .bind(marker,proof.owner,proof.owner,input.id,input.expectedRevision,...proofValues(proof),...(value.audios.length ? [content, proof.owner] : [])),
       db.prepare('UPDATE writer_drafts SET value_json=?,payload_bytes=length(CAST(base_json AS BLOB))+?,revision=revision+1,updated_at=? WHERE id=? AND owner=? AND EXISTS(SELECT 1 FROM writer_requests WHERE id=?)').bind(content,utf8Length(content),now,input.id,proof.owner,marker),
       db.prepare('DELETE FROM writer_draft_assets WHERE draft_id=? AND EXISTS(SELECT 1 FROM writer_requests WHERE id=?)').bind(input.id,marker),
       ...assetRefs(db,proof,input.id,value.assets,marker),
@@ -79,6 +101,7 @@ export async function saveDraft(db:D1Database,proof:WriterProof,input:WriterSave
       await assertWriterProof(db,proof);
       const saved=await replay();
       if(saved) return saved;
+      await assertDraftAudio(db,proof.owner,value,content);
       writerFail(409,'version_conflict','云端已有更新，请保留当前输入并对照处理');
     }
     return {...before,value,revision:input.expectedRevision+1};
@@ -92,18 +115,36 @@ export async function deleteDraft(db:D1Database,proof:WriterProof,id:string,revi
 }
 export async function exportDraft(db:D1Database,owner:string,id:string) {
   writerId(id);
-  // 同一批次读取正文及引用，避免导出期间自动保存混入另一版本的配图。
-  const [rows,images]=await db.batch([
+  // 同一批次读取正文与素材，自动保存不会混入另一份修订的引用。
+  const [rows, images, audio] = await db.batch([
     db.prepare(`SELECT ${fields} FROM writer_drafts WHERE owner=? AND id=?`).bind(owner,id),
     db.prepare('SELECT a.sha256,a.bytes,a.width,a.height FROM writer_assets a JOIN writer_draft_assets r ON r.owner=a.owner AND r.sha256=a.sha256 WHERE r.draft_id=? AND a.owner=? ORDER BY r.position').bind(id,owner),
+    db.prepare(`SELECT a.sha256,a.bytes,a.ext,a.size
+      FROM writer_drafts d, json_each(d.value_json, '$.audios') clip
+      JOIN writer_audio a ON a.owner=d.owner AND a.sha256=json_extract(clip.value, '$.sha256')
+        AND a.ext=json_extract(clip.value, '$.ext')
+      WHERE d.id=? AND d.owner=? ORDER BY clip.key`).bind(id,owner),
   ]);
-  if(!rows.results.length)writerFail(404,'draft_missing','这份草稿不存在，请返回草稿列表');
-  const draft=decode(rows.results[0] as unknown as DraftRow),encoded=[];
-  for(const row of images.results){
-    const image=row as unknown as {sha256:string;bytes:ArrayBuffer;width:number;height:number},bytes=new Uint8Array(image.bytes);
-    const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
-    if(hash!==image.sha256)writerFail(500,'asset_corrupt','配图摘要不一致，本次未生成备份，请保留草稿并检查存储');
-    encoded.push({...image,bytes:btoa(Array.from(bytes,b=>String.fromCharCode(b)).join(''))});
+  if (!rows.results.length) writerFail(404,'draft_missing','这份草稿不存在，请返回草稿列表');
+  const draft = decode(rows.results[0] as unknown as DraftRow);
+  if (audio.results.length !== (draft.value.audios?.length ?? 0)) {
+    writerFail(409, 'audio_missing', '部分草稿语音缺失，无法生成完整备份');
   }
-  return {format:'northcedar-writer-1',draft,images:encoded};
+  const encodedImages = [];
+  for (const row of images.results) encodedImages.push(await encodeBackupAsset(row, '配图'));
+  const encodedAudio = [];
+  for (const row of audio.results) encodedAudio.push(await encodeBackupAsset(row, '语音'));
+  return { format: 'northcedar-writer-1', draft, images: encodedImages, audios: encodedAudio };
+}
+
+async function encodeBackupAsset(row: unknown, kind: string) {
+  const asset = row as { bytes: ArrayBuffer; sha256: string };
+  const bytes = new Uint8Array(asset.bytes);
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('');
+  if (hash !== asset.sha256) writerFail(500, 'asset_corrupt', kind + '摘要不一致，本次未生成备份，请保留草稿并检查存储');
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 16384) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 16384));
+  }
+  return { ...asset, bytes: btoa(binary) };
 }

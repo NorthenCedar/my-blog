@@ -220,6 +220,7 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
   }[][] = [];
   let paths: SVGPathElement[] = [];
   let raf = 0, T = 0, lastNow = 0;
+  let onScreen = true;
 
   const setSize = () => {
     const r = host.getBoundingClientRect();
@@ -372,6 +373,7 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
   };
 
   const onMove = (e: MouseEvent | TouchEvent) => {
+    if (!onScreen) return;
     const r = host.getBoundingClientRect();
     const t = 'touches' in e ? e.touches[0] : e;
     mouse.x = t.clientX - r.left;
@@ -400,14 +402,13 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
 
   if ('IntersectionObserver' in window) {
     new IntersectionObserver((es) => {
-      es.forEach((e) => {
-        if (e.isIntersecting) {
-          if (!raf) raf = requestAnimationFrame(tick);
-        } else if (raf) {
-          cancelAnimationFrame(raf);
-          raf = 0;
-        }
-      });
+      onScreen = es[es.length - 1].isIntersecting;
+      if (onScreen) {
+        if (!raf) raf = requestAnimationFrame(tick);
+      } else if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
     }, { threshold: 0.02 }).observe(host);
   }
   raf = requestAnimationFrame(tick);

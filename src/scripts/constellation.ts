@@ -77,10 +77,27 @@ onPage(({document, window, addEventListener, matchMedia}) => {
   const reduce = prefersReducedMotion();
   const animate = shouldAnimate(reduce);
 
-  /* ---------- 颜色（只从 token 读） ---------- */
-  const CS = getComputedStyle(document.documentElement);
-  const ACCENT = CS.getPropertyValue('--accent').trim() || '#2d7d46';
-  const ACCENT_INK = CS.getPropertyValue('--accent-ink').trim() || '#266b3b';
+  /* ---------- 颜色（只从 token 读；★ 主题一变必须重读） ----------
+   * ★★ 站主 2026-11-13 实测报障：「在友链按那个切换亮/暗的按钮，背景产生的星链
+   *   颜色不会跟着换」。原因就在这里 —— 原实现把两个 token 在**初始化时读一次**
+   *   存成 `const`，切到暗色后 token 已经是橙（`--accent #ff7b00` /
+   *   `--accent-ink #ffb570`），画布还捏着亮色那套绿 ⇒ 黑底橙页上拖一串绿线。
+   *   ⇒ 改成 `let` + `readColors()`，主题事件到了就重读并**用当前 t 重画一帧**。
+   *   ⚠ **不能**重跑 build()：那会重排星序、把已累积的边作废 ⇒ 画面突然清空重来
+   *     （这正是头部「离开不回落」那条累积机制的反面）。*/
+  let ACCENT = '#2d7d46';
+  let ACCENT_INK = '#266b3b';
+  /* ★★ 2026-11-13：拖动主题软条时也要跟着变色。
+     中间色**不从模块取**（那会把预览模块整个拉进首屏包，页面 JS 预算当场爆），
+     而是从 `themepreview` 事件的 `detail.mixed` 里读 —— 它由懒加载的主题开关 chunk
+     算好（纯 hex，canvas 的 fillStyle 只吃这个）。没有拖动时 tint 为 null，走读 token 的常规路径。 */
+  let tint: Record<string, string> | null = null;
+  const readColors = () => {
+    const cs = getComputedStyle(document.documentElement);
+    ACCENT = tint?.['--accent'] || cs.getPropertyValue('--accent').trim() || '#2d7d46';
+    ACCENT_INK = tint?.['--accent-ink'] || cs.getPropertyValue('--accent-ink').trim() || '#266b3b';
+  };
+  readColors();
   /** 给 6 位 hex 挂 alpha ⇒ 8 位 hex（tokens 的同一约定）。 */
   const A = (hex: string, a: number) => {
     const h = hex.replace('#', '').slice(0, 6);
@@ -194,6 +211,8 @@ onPage(({document, window, addEventListener, matchMedia}) => {
   let ptr = { x: -9999, y: -9999, on: false };
   let cw = 0;
   let ch = 0;
+  /** 最近一帧的时间（秒）：主题切换时用它原地重画，不必等下一帧（RM 档没有下一帧）。 */
+  let lastT = 0;
   let ctx = ctx0;
 
   /**
@@ -408,6 +427,7 @@ onPage(({document, window, addEventListener, matchMedia}) => {
   /** 画一帧 t（秒）。除 lit / e.p 之外全是 f(t) 的确定函数。 */
   function draw(t: number) {
     if (!cw || !ch || !stars.length) return;
+    lastT = t;
     ctx.clearRect(0, 0, cw, ch);
 
     /* ---------- 一、连线（先画，压在星点之下） ---------- */
@@ -553,6 +573,20 @@ onPage(({document, window, addEventListener, matchMedia}) => {
     // 显隐门控：与首页 DNA 同一套（opacity:0 → is-ready → 1），不是 hidden 属性
     cv.classList.add('is-ready');
   }
+
+  /* ★★ 主题切换 ⇒ 重读 token + **原地重画一帧**（站主 2026-11-13 报障的修法）。
+     两档都要挂：RM 档不跑 rAF，没有"下一帧"能自然把新颜色补上。
+     监听用 onPage 给的作用域 `document`（不是裸 document）⇒ 页面切换时自动摘掉，
+     不会留住上一页的画布与累积状态。
+     ★ 2026-11-13：`themechange` 与 `themepreview` 走同一个处理器 —— 前者 detail 是
+       'dark'/'light' 字符串、取不到 `mixed`，正好落回 null 走读 token 的路径。 */
+  const syncTheme = (event: Event) => {
+    tint = (event as CustomEvent<{ mixed?: Record<string, string> } | null>).detail?.mixed ?? null;
+    readColors();
+    draw(lastT);
+  };
+  document.addEventListener('themechange', syncTheme);
+  document.addEventListener('themepreview', syncTheme);
 })();
 
 },"[data-const-bg]");

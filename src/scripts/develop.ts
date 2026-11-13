@@ -880,8 +880,10 @@ onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, 
      ★★ 图源用**网格档（800）**那张（`img` 的 src），**不是**灯箱档（1280）：
         1280 档单张能到 **486 KB**，线上实测某张图 842 ms 才到、更重的要好几秒
         ⇒ 那几秒里指针**擦不出任何东西**（`drawCover` 看 `complete`，没图就不画）。 */
+  // 总览从发布清单提供横幅照片的元数据，浏览器只加载实际选中的那张。
+  const publishedFrames: Frame[] | null = host.dataset.bathFrames ? JSON.parse(host.dataset.bathFrames) : null;
   const collect = (): Frame[] =>
-    Array.from(document.querySelectorAll<HTMLElement>('[data-bath-src] figure:not([hidden])'))
+    (publishedFrames ?? Array.from(document.querySelectorAll<HTMLElement>('[data-bath-src] figure:not([hidden])'))
       .map((fig) => {
         const im = fig.querySelector<HTMLImageElement>('img');
         return {
@@ -889,7 +891,7 @@ onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, 
           w: Number(im?.getAttribute('width') ?? 0),
           h: Number(im?.getAttribute('height') ?? 0),
         };
-      })
+      }))
       .filter((f) => f.url && f.w > 0 && f.h > 0 && f.w > f.h);
 
   /* ★ 本文件**唯一**允许的随机源：每次打开随机抽一张照片（站主要求）。

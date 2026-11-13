@@ -6,7 +6,7 @@ import { onPage } from './page-lifecycle';
  *   · 读tokens.css 取色 → 整包传给场景（**本文件不出现色值字面量**）
  *   · **动态 import 场景**（three.js 544 KB + n8ao WASM 803 KB，不能上每一页）
  *   · 视口外 / 切标签 ⇒ 停帧；prefers-reduced-motion ⇒ 根本不启动
- *   · 启动失败（WebGL 拿不到 / WASM 404）⇒ 退回静态层，**绝不留空画布**
+ *   · 启动失败（WebGL 不可用 / WASM 404）时保留页面背景
  *   · 点按主题仍直接切换，拖动预览时按连续进度更新 uDenied 与色板
  *   · 点击 ⇒ 触发脉冲（原版无此交互，是新加的）
  */
@@ -16,8 +16,10 @@ import type { FinPalette, FinScene } from './fin-scene';
 import { mixThemeColor, type ThemePreviewFrame } from './theme-preview';
 import { chapterProgress } from './about-relay.mjs';
 
-/** 脚本可跑的最严条件：过不了就只留静态层。 */
+/** 装置只在支持 WebGL 的桌面环境启用。 */
+let unsupported = false;
 const ok = () =>
+  !unsupported &&
   !matchMedia('(max-width: 767px)').matches &&
   !matchMedia('(prefers-reduced-motion: reduce)').matches &&
   typeof WebGLRenderingContext !== 'undefined';
@@ -26,7 +28,6 @@ export function initFinInfinity(root: HTMLElement): void {
   const host = root.querySelector<HTMLElement>('[data-fin-infinity]');
   const view = root.querySelector<HTMLElement>('[data-fin-view]');
   const initialCanvas = root.querySelector<HTMLCanvasElement>('[data-fin-cv]');
-  const staticLayer = root.querySelector<HTMLElement>('[data-fin-static]');
   if (!host || !view || !initialCanvas) return;
   let canvas = initialCanvas;
   let canvasUsed = false;
@@ -76,51 +77,64 @@ export function initFinInfinity(root: HTMLElement): void {
   let gate: ReturnType<typeof createActivityGate> | null = null;
   let disposed = false;
   let generation = 0;
+  let startupFrame = 0;
+  const stops = Array.from(document.querySelectorAll?.<HTMLElement>('[data-motion-stop]') ?? []);
+  let offsets: number[] = [];
+  const measureStops = () => {
+    offsets = stops.map(el => el.getBoundingClientRect().top + scrollY);
+    syncRelay();
+  };
 
   const resize = () => {
-    const r = host.getBoundingClientRect();
-    scene?.resize(r.width, r.height, devicePixelRatio || 1);
-    syncRelay();
+    if (!scene) return;
+    const { width, height } = host.getBoundingClientRect();
+    scene.resize(width, height, devicePixelRatio || 1);
   };
   const syncRelay = () => {
     // 三段内容各自提供过渡路程，不再把整页的短距离压成两次重排。
-    const anchors=Array.from(document.querySelectorAll?.<HTMLElement>('[data-motion-stop]') ?? []).map(el=>el.getBoundingClientRect().top+scrollY);
-    if(anchors.length<2)return;
-    const progress=chapterProgress(anchors,scrollY,innerHeight);
-    scene?.setRelay(progress);
+    if (!scene || offsets.length < 2) return;
+    const progress = chapterProgress(offsets, scrollY, innerHeight);
+    scene.setRelay(progress);
     host.dataset.relay = progress.toFixed(4);
   };
   addEventListener('scroll',syncRelay,{passive:true});
-  addEventListener('resize',syncRelay);
+  addEventListener('resize', measureStops);
 
   const boot = async (ticket: number) => {
     const mod = await import('./fin-scene');
-    if (disposed || ticket !== generation || !stopLoop || !ok()) return;
+    if (disposed || ticket !== generation || !ok()) return;
     const frameCanvas = canvas;
     canvasUsed = true;
     const s = await mod.createFinScene(frameCanvas, themePreview ? previewPalette(themePreview) : buildPalette());
-    if (disposed || ticket !== generation || frameCanvas !== canvas || !stopLoop || !ok()) {
+    if (!s) {
+      unsupported = true;
+      if (ticket === generation && !disposed) disable();
+      return;
+    }
+    if (disposed || ticket !== generation || frameCanvas !== canvas || !ok()) {
       s.dispose();
       return;
     }
     scene = s;
-    syncRelay();
+    measureStops();
     s.setPalette(themePreview ? previewPalette(themePreview) : buildPalette());
     s.setDenied(themePreview?.progress ?? (isDark() ? 1 : 0));
     resize();
-    s.resize(host.getBoundingClientRect().width, host.getBoundingClientRect().height, devicePixelRatio || 1);
     s.playAssemble();
     s.render(0);
-    // 场景真正有一帧后再交接；加载期间仍可看到静态背景。
+    // 场景画出第一帧后再淡入。
     host.classList.add('fin-on');
-    staticLayer?.setAttribute('hidden', '');
+    gate = createActivityGate(view, {});
+    stopLoop = startLoop(dt => {
+      if (gate?.onScreen && gate.visible) scene?.render(dt);
+    });
   };
 
   const enable = () => {
-    if (disposed || stopLoop) return;
-    if (!ok()) return; // reduced-motion / 无 WebGL ⇒ 只留静态层
+    if (disposed || !view.hidden || document.documentElement.classList.contains('pt-on')) return;
+    if (!ok()) return;
     if (canvasUsed) {
-      // dispose 已主动丢失旧上下文；保留属性与作用域标记，用新画布恢复桌面场景。
+      // 保留作用域标记，用新画布重建因断点或上下文丢失而停止的场景。
       const next = canvas.cloneNode(false) as HTMLCanvasElement;
       canvas.replaceWith(next);
       canvas = next;
@@ -129,28 +143,28 @@ export function initFinInfinity(root: HTMLElement): void {
     }
     const ticket = ++generation;
     view.hidden = false;
-    gate = createActivityGate(view, {});
-    stopLoop = startLoop((dt) => {
-      if (gate && !(gate.onScreen && gate.visible)) return; // 视口外 / 切标签 ⇒ 停帧
-      scene?.render(dt);
-    });
-    boot(ticket).catch((err) => {
-      if (ticket !== generation || disposed) return;
-      console.warn('[fin] 场景启动失败，退回静态层', err);
-      disable();
-      staticLayer?.removeAttribute('hidden');
+    startupFrame = requestAnimationFrame(() => {
+      startupFrame = requestAnimationFrame(() => {
+        startupFrame = 0;
+        boot(ticket).catch((err) => {
+          if (ticket !== generation || disposed) return;
+          console.warn('[fin] 场景启动失败', err);
+          disable();
+        });
+      });
     });
   };
 
   const disable = () => {
     generation++;
+    cancelAnimationFrame(startupFrame);
+    startupFrame = 0;
     stopLoop?.();
     stopLoop = null;
     gate?.dispose();
     gate = null;
     view.hidden = true;
     host.classList.remove('fin-on');
-    staticLayer?.removeAttribute('hidden');
     const previous = scene;
     scene = null;
     previous?.dispose();
@@ -158,13 +172,15 @@ export function initFinInfinity(root: HTMLElement): void {
 
   /* ── 尺寸：容器变了要跟着变（窄屏 / 旋转 / 侧栏开合）── */
   const ro = new ResizeObserver(() => resize());
-  const pageObserver = new ResizeObserver(() => syncRelay());
-  pageObserver.observe(document.body);
+  const pageObserver = new ResizeObserver(measureStops);
+  for (const stop of stops) pageObserver.observe(stop);
   ro.observe(host);
 
   /* ── 点按主题直接切换；拖动则使用 themepreview 的连续进度 ── */
   const mo = new MutationObserver(() => {
-    if (!scene || themePreview) return;
+    // 墨色过渡退场后再启动 GPU。
+    if (!scene) { enable(); return; }
+    if (themePreview) return;
     // ★ 换主题要**连色板一起换** —— 亮暗两套 token 不同，只改 uDenied 会让
     //   鳍片本体色还停在上一档的色值上（这是"暗色模式鳍片还是浅色"那类 bug 的来处）。
     scene.setPalette(buildPalette());
@@ -232,14 +248,13 @@ export function initFinInfinity(root: HTMLElement): void {
   onMq();
 
 /* ── WebGL 上下文丢失（切GPU / 驱动重置 / 长时间隐藏）──
-     与 pleated-infinity.ts 同一套处理：丢 ⇒ 停帧 + 退回静态层（不留黑画布）；
+     与 pleated-infinity.ts 同一套处理：丢 ⇒ 停帧并隐藏画布；
      恢复 ⇒ 重建场景。⚠ 必须 preventDefault，否则浏览器**不会**再派发 restored。── */
   function bindContext(target: HTMLCanvasElement) {
     target.addEventListener('webglcontextlost', (e) => {
       if (disposed || target !== canvas) return;
       e.preventDefault();
       disable();
-      staticLayer?.removeAttribute('hidden');
     }, { passive: false });
     target.addEventListener('webglcontextrestored', () => {
       if (disposed || target !== canvas) return;
@@ -248,8 +263,12 @@ export function initFinInfinity(root: HTMLElement): void {
   }
 
   /* ── 页面级清理：bfcache 回来时别留孤儿 rAF ── */
-addEventListener('pagehide', () => {
+  function teardown(event: PageTransitionEvent) {
+    // 浏览器往返缓存保留当前 DOM；正常离页和 Astro 换页销毁场景。
+    if (event.persisted) return;
+    removeEventListener('pagehide', teardown);
     disposed = true;
+    cancelAnimationFrame(startupFrame);
     ro.disconnect();
     mo.disconnect();
     document.removeEventListener('themepreview', onThemePreview);
@@ -257,12 +276,19 @@ addEventListener('pagehide', () => {
     motion.removeEventListener('change', onMq);
     removeEventListener('pointerdown', onDown);
     removeEventListener('scroll',syncRelay);
-    removeEventListener('resize',syncRelay);
+    removeEventListener('resize', measureStops);
     pageObserver.disconnect();
     removeEventListener('pointermove', onMove);
+    const previous = scene;
+    scene = null;
     stopLoop?.();
-    scene?.dispose();
-  }, {once:true});
+    gate?.dispose();
+    if (previous) {
+      // 先停帧并完成 Astro 的 DOM 交换，旧画布脱离后再清理 GPU 资源。
+      setTimeout(() => previous.dispose(), 0);
+    }
+  }
+  addEventListener('pagehide', teardown);
 }
 
 /* ── 自启动（与 pleated-infinity.ts 同模式：脚本被import 就跑）── */

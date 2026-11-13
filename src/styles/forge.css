@@ -28,8 +28,16 @@ body.forge-page .etched-surface{position:absolute;inset:0;z-index:-2;background:
 body.forge-page .etch{position:absolute;width:min(85vw,1244px);height:125%;color:var(--etch);opacity:.65;stroke-width:.8;will-change:transform}
 body.forge-page .etch-left{left:-33%;top:-9%;transform:translate3d(0,calc(var(--progress,0) * -28px),0) rotate(-18deg)}
 body.forge-page .etch-right{right:-37%;top:6%;transform:translate3d(0,calc(var(--progress,0) * 35px),0) rotate(22deg)}
-body.forge-page .surface-grain{position:absolute;inset:0;opacity:.16;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.92' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.22' filter='url(%23n)'/%3E%3C/svg%3E");pointer-events:none;mix-blend-mode:multiply}
-html.dark body.forge-page .surface-grain{opacity:.12;mix-blend-mode:screen}
+/* ★★ 2026-11-13：颗粒底纹原来是 `opacity .16 / multiply`，暗档整条换成 `opacity .12 / screen`。
+   混合模式是离散量，插不了值，拖动软条时只能在那一下硬跳。改成两层同场：
+   multiply 层按 (1 - --theme-w) 淡出、screen 层按 --theme-w 淡入，
+   浓度端点逐字对齐原来两档（.16 / .12）。 */
+body.forge-page{--grain-noise:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.92' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.22' filter='url(%23n)'/%3E%3C/svg%3E")}
+body.forge-page .surface-grain{position:absolute;inset:0;pointer-events:none}
+body.forge-page .surface-grain::before,
+body.forge-page .surface-grain::after{content:"";position:absolute;inset:0;background-image:var(--grain-noise)}
+body.forge-page .surface-grain::before{opacity:calc(.16 * (1 - var(--theme-w)));mix-blend-mode:multiply}
+body.forge-page .surface-grain::after{opacity:calc(.12 * var(--theme-w));mix-blend-mode:screen}
 body.forge-page .hero-topline{position:absolute;top:108px;left:7%;right:7%;display:flex;justify-content:space-between;color:var(--muted);font-size:11px;letter-spacing:.05em}
 body.forge-page .hero-topline .mono{font-size:10px;letter-spacing:.16em}
 body.forge-page .hero-heading{position:absolute;left:10%;top:20%;z-index:2;pointer-events:none;transform:translate3d(0,calc(var(--leave,0) * -48px),0);opacity:calc(1 - var(--leave,0));will-change:opacity,transform}
@@ -37,13 +45,14 @@ body.forge-page .hero-heading .eyebrow{margin:0 0 12px;display:flex;align-items:
 body.forge-page .tiny-line{width:22px;height:1px;background:var(--accent)}
 body.forge-page h1{font-size:clamp(68px,7.4vw,112px);font-weight:600;letter-spacing:-.075em;line-height:1.12;margin:0}
 body.forge-page h1 .heading-dot{margin-left:4px}
+body.forge-page #hero-title{position:relative;display:inline-block;pointer-events:auto}
+body.forge-page #hero-title .tech-text{touch-action:none}
 body.forge-page .hero-subtitle{margin:18px 0 0;color:var(--muted);font-size:16px;letter-spacing:.12em}
 body.forge-page .object-caption{position:absolute;right:10%;top:25%;z-index:2;display:flex;flex-direction:column;gap:16px;pointer-events:none;opacity:calc(1 - var(--leave,0));transform:translateY(calc(var(--leave,0) * -24px))}
 body.forge-page .object-caption .mono{font-size:10px;letter-spacing:.1em;color:var(--accent)}
 body.forge-page .object-caption>span:last-child{font-size:13px;color:var(--muted);line-height:1.9}
 body.forge-page .scene-wrap{position:absolute;inset:0;pointer-events:none}
 body.forge-page .scene-wrap::after{content:"";width:45%;height:6%;position:absolute;left:28%;top:76%;background:radial-gradient(ellipse,var(--forge-object-shadow),transparent 68%);filter:blur(18px);opacity:calc(.7 - var(--leave,0) * .3);z-index:-1}
-html.dark body.forge-page .scene-wrap::after{background:radial-gradient(ellipse,var(--forge-object-shadow),transparent 68%)}
 body.forge-page #forge-scene{width:100%;height:100%;display:block;opacity:0;transition:opacity 1s}
 body.forge-page .scene-wrap[data-ready=true] #forge-scene{opacity:1}
 body.forge-page .scene-fallback{position:absolute;left:23%;width:54%;top:32%;opacity:.85}
@@ -60,8 +69,8 @@ body.forge-page .small-mark{font-size:36px;color:var(--accent)}
 body.forge-page .hero-bottom{position:absolute;bottom:36px;left:7%;right:7%;display:flex;align-items:end;justify-content:space-between;z-index:4}
 body.forge-page .scroll-cue{margin:0;display:flex;align-items:center;gap:13px;font-size:12px;color:var(--muted)}
 body.forge-page .scroll-icon{height:35px;width:35px;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center;color:var(--accent)}
-body.forge-page .stage-nav{position:relative;display:flex;gap:28px;padding-bottom:16px}
-body.forge-page .stage-nav button{padding:10px 0;font-size:12px;color:var(--muted);transition:color .3s}
+body.forge-page .stage-nav{--stage-nav-offset:16px;position:relative;display:grid;grid-template-columns:repeat(3,1fr);padding-bottom:var(--stage-nav-offset)}
+body.forge-page .stage-nav button{padding:10px 12px;font-size:12px;color:var(--muted);white-space:nowrap}
 body.forge-page .stage-nav button span{font-family:"IBM Plex Mono",monospace;font-size:10px;margin-right:7px}
 body.forge-page .stage-nav button[aria-current=step]{color:var(--accent)}
 body.forge-page .stage-progress{position:absolute;bottom:0;height:1px;background:var(--line);width:100%}
@@ -153,12 +162,13 @@ body.forge-page .dialog-copy{font-size:14px;line-height:2;color:var(--muted)}
 body.forge-page .dialog-copy h3{font-size:16px;font-weight:600;color:var(--ink);margin-top:30px}
 body.forge-page .dialog-link{display:inline-flex;gap:32px;margin-top:24px;padding-bottom:8px;border-bottom:1px solid var(--line);color:var(--accent);font-size:13px}
 body.forge-page .dialog-gallery{margin-top:30px}
-body.forge-page .dialog-gallery figure{margin:0 0 30px}
-body.forge-page .dialog-gallery img{width:100%;max-height:520px;object-fit:contain;border-radius:3px;display:block}
-body.forge-page .dialog-gallery figcaption{font-size:11px;color:var(--muted);margin-top:9px}
-body.forge-page .dialog-gallery .gallery-image-dark{display:none}
-html.dark body.forge-page .dialog-gallery .has-dark{display:none}
-html.dark body.forge-page .dialog-gallery .gallery-image-dark{display:block}
+body.forge-page .dialog-gallery figure{margin:0 0 30px;display:grid;grid-template-columns:1fr}
+body.forge-page .dialog-gallery img{grid-area:1/1;width:100%;max-height:520px;object-fit:contain;border-radius:3px;display:block}
+body.forge-page .dialog-gallery figcaption{grid-column:1;grid-row:2;font-size:11px;color:var(--muted);margin-top:9px}
+/* ★★ 2026-11-13：明暗双图原来靠 `display:none/block` 在 `html.dark` 下互换 —— 拖动软条时
+   `html.dark` 不成立，图只在松手那一瞬跳。改成同格叠放、按 `--theme-w` 交叉淡入。 */
+body.forge-page .dialog-gallery .has-dark{opacity:calc(1 - var(--theme-w))}
+body.forge-page .dialog-gallery .gallery-image-dark{opacity:var(--theme-w)}
 body.forge-page .connection-copy{position:absolute;left:20px;right:20px;top:23%;text-align:center;z-index:2;pointer-events:none;opacity:var(--connection,0);transform:translateY(calc((1 - var(--connection,0)) * 16px))}
 body.forge-page .connection-copy p{font-size:30px;letter-spacing:.03em;line-height:1.4;margin:0 0 13px;font-weight:600}
 body.forge-page .connection-copy span{font-size:12px;color:var(--muted);letter-spacing:.06em}
@@ -229,8 +239,8 @@ body.forge-page .scene-fallback{top:42%;left:3%;width:94%}
 body.forge-page .hero-bottom{left:27px;right:27px;bottom:25px;display:flex;flex-direction:column;gap:23px;align-items:stretch}
 body.forge-page .scroll-cue{font-size:10px;gap:10px;justify-content:center}
 body.forge-page .scroll-icon{width:26px;height:26px}
-body.forge-page .stage-nav{justify-content:space-between;padding-bottom:10px;gap:0}
-body.forge-page .stage-nav button{font-size:11px;padding:5px 0}
+body.forge-page .stage-nav{--stage-nav-offset:10px}
+body.forge-page .stage-nav button{font-size:11px;padding:5px 6px}
 body.forge-page .stage-nav button span{font-size:9px}
 body.forge-page .arrival-note-left{left:28px;top:25%}
 body.forge-page .arrival-note-left p{font-size:26px;margin:12px 0 13px}
@@ -320,11 +330,6 @@ body.forge-page[data-motion=reduce] .reveal{opacity:1;transform:none}
 body.forge-page[data-motion=reduce] *{transition-duration:.01ms!important}
 /* 使用共享导航、主题和页脚，舞台自身不建立内部滚动容器。 */
 body.forge-page .page-inf{display:none}
-body.forge-page .topbar{position:fixed;inset:0 0 auto;z-index:30;min-height:80px;padding:10px 4%;background:transparent}
-body.forge-page .topbar::before{box-shadow:none;background:var(--glass);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
-body.forge-page .topbar>.site{font-size:12px;letter-spacing:.08em;white-space:nowrap}
-body.forge-page .topbar>nav:not(.navpanel){font-size:12px;gap:.12rem}
-body.forge-page .topbar>nav:not(.navpanel)>a{padding:.4rem .62rem}
 body.forge-page .hero{margin:0}
 body.forge-page .section-aside{max-width:22em}
 body.forge-page .object-caption{max-width:155px}
@@ -346,10 +351,10 @@ body.forge-page .project-images{position:relative;width:86%;height:80%;margin:au
 body.forge-page .image-visual{display:grid;place-items:center;background:var(--forge-preview-mat)}
 body.forge-page .project-shot{position:absolute;inset:0;overflow:hidden;border:6px solid var(--forge-preview-paper);box-shadow:0 16px 35px var(--forge-model-shadow);transition:transform .85s var(--ease)}
 body.forge-page .project-shot:not([data-layer="0"]){display:none}
-body.forge-page .project-photo{width:100%;height:100%;object-fit:cover;transition:filter .8s,transform 1.1s var(--ease)}
-body.forge-page .project-photo-dark{display:none}
-html.dark body.forge-page .project-photo.has-dark{display:none}
-html.dark body.forge-page .project-photo-dark{display:block}
+body.forge-page .project-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:filter .8s,transform 1.1s var(--ease)}
+/* ★★ 2026-11-13：同 `.dialog-gallery` —— 双图不再 `display` 互换，改叠放交叉淡入。 */
+body.forge-page .project-photo.has-dark{opacity:calc(1 - var(--theme-w))}
+body.forge-page .project-photo-dark{opacity:var(--theme-w)}
 body.forge-page [data-effect="stack"] .project-images{width:67%;height:72%;transform:none}
 body.forge-page [data-effect="stack"] .project-shot{display:block}
 body.forge-page [data-effect="stack"] .project-shot[data-layer="0"]{z-index:3;transform:rotate(-5deg)}
@@ -371,7 +376,7 @@ body.forge-page [data-effect]:focus-visible{outline:3px solid var(--accent);outl
 body.forge-page[data-motion="reduce"] .visual-object,body.forge-page[data-motion="reduce"] .project-photo,body.forge-page[data-motion="reduce"] .project-shot{transition:none!important;filter:none!important}
 body.forge-page[data-motion="reduce"] .effect-light{display:none}
 @media(prefers-reduced-motion:reduce),(hover:none){body.forge-page .effect-light{display:none}body.forge-page .theme-toggle:hover,body.forge-page .work-visual:hover .visual-open,body.forge-page .text-link:hover span{transform:none}}
-@media(max-width:760px){body.forge-page .topbar{min-height:64px;padding:8px 22px}body.forge-page .topbar>.site{display:block;font-size:10px;letter-spacing:.04em}body.forge-page .hero-topline{top:98px;max-width:calc(100% - 200px);font-size:9px}body.forge-page .object-caption{max-width:none}body.forge-page .project-reading{padding-top:110px}body.forge-page .dialog-copy :is(h2,h3){font-size:17px}}
+@media(max-width:760px){body.forge-page .hero-topline{top:98px;max-width:calc(100% - 200px);font-size:9px}body.forge-page .object-caption{max-width:none}body.forge-page .project-reading{padding-top:110px}body.forge-page .dialog-copy :is(h2,h3){font-size:17px}}
 
 /* 固定阶段按钮让出右下角播放器，入口保持可见。 */
 @media(min-width:761px){body.forge-page .hero-bottom{right:max(7%,248px);}}

@@ -281,7 +281,7 @@ describe('相册 · 与页面其他部分的互锁', () => {
        ★ 2026-10-07 第二轮：入口条改**等距抽样、上限 15** ⇒ 这里不再是全站帧数之和，
          而是 `Σ min(15, total)`。素材池小了一半（40 / 82）——
          这是"少图"的直接后果，但显影板要的是"随便挑一张横幅"，40 张足够。 */
-    expect((GAL.match(/data-sp-item="/g) ?? []).length, '原盘保留全部照片作为显影素材池').toBe(TOTAL);
+    expect((read('dist/gallery/spiral/index.html').match(/data-sp-item="/g) ?? []).length, '独立原盘保留全部照片').toBe(TOTAL);
   });
 
   it('★ 缩略图链接仍是 data-no-transition（灯箱接管这次点击，页面蒙版必须放行）', () => {

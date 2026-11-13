@@ -39,13 +39,39 @@ body.gallery-story .catalog-scenes{display:flex;gap:24px;padding:0 0 20px;color:
 @media(max-width:767px){body.gallery-story .film-object{width:185vw;max-width:none}body.gallery-story .film-backdrop{place-items:center;opacity:calc(var(--gallery-film-opacity) * .75)}body.gallery-story .bath{background-position-y:-64px}body.gallery-story .bath-mark{font-size:clamp(21px,6vw,39px);padding:0 24px;line-height:1.8}body.gallery-story .develop-topnote{left:27px;top:28px;gap:13px;font-size:10px}body.gallery-story .develop-bottom{left:27px;right:27px;bottom:29px;flex-direction:column;align-items:flex-start;gap:24px}body.gallery-story .develop-bottom p{font-size:11px}body.gallery-story .develop-bottom p>span{display:block;margin-top:6px;opacity:.75}body.gallery-story .develop-bottom button{font-size:11px;gap:30px}body.gallery-story .catalog-scenes{font-size:11px;gap:22px}body.gallery-story .catalog-scenes span{font-size:9px}}
 @media(max-width:360px){body.gallery-story .develop-topnote,body.gallery-story .develop-bottom{left:22px;right:22px}body.gallery-story .kind-spiral{padding-left:18px;padding-right:18px}}
 @media(max-width:767px) and (max-height:550px) and (orientation:landscape){body.gallery-story .bath{background-position-y:-52px}body.gallery-story .bath-mark{font-size:35px}body.gallery-story .develop-topnote{left:6vw;top:12px}body.gallery-story .develop-bottom{left:6vw;right:6vw;bottom:12px;flex-direction:row;align-items:flex-end}body.gallery-story .develop-bottom p>span{display:none}body.gallery-story .film-object{width:124vw}}
-@media(prefers-reduced-motion:reduce){body.gallery-story .film-backdrop{transition:none}body.gallery-story .film-object{will-change:auto}}
-/* 显影画布直接固定在视口上，不再受中间舞台的高度与换幕变形约束。 */
+@media(prefers-reduced-motion:reduce){body.gallery-story .film-backdrop{transition:none}body.gallery-story .film-object{will-change:auto}body.gallery-story>.topbar>[data-theme-toggle]{transition:none}}
+/* 显影画布直接固定在视口上，不再受中间舞台的高度与换幕变形约束。
+   ★ 2026-11-13：本幕把整条顶栏设成 `pointer-events:none`（好让整屏涂抹不被拦），
+   再逐个把可交互件放回来。**放行名单必须覆盖每一类可点元素** —— 主题开关是
+   `<div role="switch">` 而不是 `a`/`button`，漏掉就是「看着在、点不动」（站主当天报障）。
+   ⚠ 同一天晚些时候这条**又改了方向**：站主看过之后说「显影板上软条按钮太突兀了」，
+     选了"这一幕不出场"（D 方案）⇒ 软条**故意不进放行名单**，改成整块撤出。
+     当前口径见下面那段 `== 显影板幕 · 软条撤场 ==`，别再照着这句把它加回去。 */
 body.gallery-story .bath{position:fixed;inset:0;z-index:1;background-size:100% 100%;background-position:0 0;visibility:hidden;pointer-events:none}
 html.on-develop body.gallery-story .bath{visibility:visible;pointer-events:auto}
 html.on-develop body.gallery-story .gallery-stage-ui,html.on-develop body.gallery-story .topbar,html.on-develop body.gallery-story .pager{pointer-events:none}
 html.gallery-stage-ready.on-develop body.gallery-story .kind-develop{pointer-events:none}
 html.on-develop body.gallery-story .topbar a,html.on-develop body.gallery-story .topbar button,html.on-develop body.gallery-story .pager button,html.on-develop body.gallery-story [data-advance]{pointer-events:auto}
+/* == 显影板幕 · 软条撤场（站主 2026-11-13 选 D：「显影板上软条按钮太突兀了」）==
+   三层原因叠在一起，任何一层单独投降都不够：
+     ① 对比：这一幕底是 #090c0c→#34413a 的近黑绿，软条端头是 --jelly-tip-light #ff7313，
+        它是整屏唯一的高饱和暖色，视线先落在按钮上，照片反倒成了它的背景；
+     ② 体积：nav 版窗口 176×41.6px，而这一幕其余 UI 全是 11–12px 低对比等宽细字，
+        软条是唯一带实体感的东西（槽 + 玻璃厚度 + 内壁高光）；
+     ③ 语义：槽模拟的是"纸面被压出一个凹槽"，这一幕的承载体是**照片**，槽没有来处。
+   ⇒ 显影板幕整块撤出，进入第二幕（弧形封面）淡入。
+   ⚠ 三条声明必须一起写，缺哪条都有具体后果：
+     · `opacity:0` —— 视觉；
+     · `visibility:hidden` —— 无障碍。opacity:0 的元素**仍在 Tab 序列里**，键盘会落到
+       一个看不见的开关上；visible 还能让它整体退出 a11y 树；
+     · `pointer-events:none` —— 兜底。本幕顶栏整体已是 none，但别依赖上层不变量。
+   ⚠ 别为了"省占位"改成 `display:none`：软条让出的 176px 会让右侧导航按钮横移，
+     换幕时顶栏整个抽一下 —— 保留占位才是对的。
+   ⚠ `visibility` 的过渡要显式给：隐藏侧延迟到淡出结束（`0s linear .45s`），
+     出场侧立刻生效（`0s linear 0s`），否则淡入只剩后半程，读起来像"按钮迟到"。 */
+html.on-develop body.gallery-story>.topbar>[data-theme-toggle]{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .45s ease,visibility 0s linear .45s}
+/* 出场（摘掉 on-develop 之后走这条）。过渡写在**可见态**上，两种幕的时序才不会互相污染。 */
+body.gallery-story>.topbar>[data-theme-toggle]{transition:opacity .45s ease,visibility 0s linear 0s}
 /* 只约束装置在此幕中的外框；片宽、悬停、放大和缩回样式由本站组件提供。 */
 body.gallery-story .kind-spiral{display:block;padding:0 6vw}
 body.gallery-story .original-plate{height:100%;min-height:0;overflow:auto;outline:none}
@@ -74,12 +100,13 @@ body.gallery-story>.topbar>.gallery-theme{flex:none;margin-left:12px}
 body.gallery-story .gallery-stage-ui{font:16px/1.6 "IBM Plex Sans","Microsoft YaHei",sans-serif;width:100%}
 body.gallery-story .kind-develop{display:none}
 html.gallery-stage-ready body.gallery-story .kind-develop.is-active{display:block}
+html.gallery-stage-ready:not(.on-develop) body.gallery-story .kind-develop.is-active{background:var(--gallery-bath-bg)}
 html.gallery-stage-ready body.gallery-story>.foot{display:none}
 html.gallery-stage-ready body.gallery-story .gallery-stage-ui{height:calc(100svh - var(--gallery-topbar-height,82px))}
 html.on-develop body.gallery-story>main{pointer-events:none}
 
 
-html.on-develop body.gallery-story>.topbar>:is(.navbtn,.navtog),html.on-develop body.gallery-story .navmask,html.on-develop body.gallery-story .navpanel{pointer-events:auto}
+html.on-develop body.gallery-story>.topbar>:is(.navbtn,.navtog,.nav-trigger),html.on-develop body.gallery-story .navmask,html.on-develop body.gallery-story .navpanel{pointer-events:auto}
 body.gallery-story .original-plate{font-size:var(--fs-body);line-height:var(--lh-body)}
 html.gallery-stage-ready.on-spiral:not(.sp-on) body.gallery-story .stage{touch-action:pan-y pinch-zoom}
 body.gallery-story .gallery-catalog .foot{display:block;background:transparent;color:var(--gallery-muted);--on-band:var(--gallery-ink);--on-band-sub:var(--gallery-accent);--on-band-meta:var(--gallery-muted);--accent-ink:var(--gallery-accent);padding:20px 0 0;margin-top:22px;border-top:1px solid var(--gallery-hair)}
@@ -94,15 +121,11 @@ body.gallery-story .theme-button[hidden]{display:none!important}
 body.gallery-story .bath{top:0;}
 body.gallery-story>.topbar::before{background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;}
 html.on-develop body.gallery-story>.topbar{color:var(--gallery-bath-ink);}
-html.on-develop body.gallery-story>.topbar .site,html.on-develop body.gallery-story>.topbar nav>a{color:var(--gallery-bath-ink);background:transparent;}
-html.on-develop body.gallery-story>.topbar nav>a[aria-current=page]{border-color:color-mix(in srgb,var(--gallery-bath-ink) 36%,transparent);}
+html.on-develop body.gallery-story>.topbar :is(.site,.notices){color:var(--gallery-bath-ink);}
+
 body.gallery-story .gallery-catalog{pointer-events:auto;}
 @media(min-width:1000px){body.gallery-story .pager{padding-right:240px;margin-right:12px;}body.gallery-story .view-hint{white-space:normal;}}
 @media(max-width:1199px){body.gallery-story .view-hint{display:none;}}
 @media(max-width:999px){body.gallery-story{--music-page-bottom:105px;}}
 
 /* 透明导航只覆盖一层淡绿洗底，显影背景仍可透出。 */
-body.gallery-story>.topbar>nav:not(.navpanel)>a:is(:hover,:focus-visible,[aria-current=page]){background:var(--gallery-nav-wash);color:var(--accent-ink);border-color:var(--gallery-nav-line);}
-html.dark body.gallery-story>.topbar>nav:not(.navpanel)>a:is(:hover,:focus-visible,[aria-current=page]){background:var(--paper);color:var(--ink);border-color:var(--hair);}
-
-html:not(.dark).on-develop body.gallery-story>.topbar>nav:not(.navpanel)>a:is(:hover,:focus-visible,[aria-current=page]){color:var(--gallery-bath-ink);border-color:var(--gallery-nav-line);}

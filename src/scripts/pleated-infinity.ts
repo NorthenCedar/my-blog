@@ -8,8 +8,12 @@ onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, 
   const canvas = host?.querySelector<HTMLCanvasElement>('canvas');
   if (!host || !canvas) return;
   let styles = getComputedStyle(host);
+  /* 拖动主题软条时的中间色（由 themepreview 事件带过来，纯 hex）。 */
+  let tint: Record<string, string> | null = null;
   const color = (name: string) => {
-    let hex = styles.getPropertyValue(name).trim().slice(1);
+    /* 拖动软条时取预览的中间色；数值型 token 由预览逐帧写成数字，
+       所以下面的 parseFloat 在中间态同样读得到。 */
+    let hex = (tint?.[name] || styles.getPropertyValue(name)).trim().slice(1);
     if (hex.length === 3) hex = [...hex].map(c => c + c).join('');
     return [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
   };
@@ -85,11 +89,18 @@ onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, 
   window.addEventListener('pageshow', () => { suspended = false; start(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else start(); });
   reduced.addEventListener('change', () => { stop(); start(); });
-  document.addEventListener('themechange', () => {
+  /* 主题终态与拖动中间态共用一个处理器（`themechange` 的 detail 取不到 mixed ⇒ 读 token）。
+     ⚠ 参数判空：测试的最小 document mock 派发事件不带实参（同 theme-preview.ts 的退让家族）。 */
+  const syncTheme = (event?: Event) => {
+    tint = (event as CustomEvent<{ mixed?: Record<string, string> }> | undefined)?.detail?.mixed ?? null;
+    /* ⚠ palette 更新必须在 renderer 判空之前：WebGL 上下文丢失期间切主题
+       （renderer=null）也要更新 palette，否则恢复时用旧色重建。 */
     Object.assign(palette, readPalette());
     renderer?.setPalette(palette);
     if (renderer && !document.hidden) paint();
-  });
+  };
+  document.addEventListener('themechange', syncTheme);
+  document.addEventListener('themepreview', syncTheme);
   canvas.addEventListener('webglcontextlost', e => {
     e.preventDefault(); stop(); renderer = null; canvas.hidden = true; host.removeAttribute('data-ready');
   });

@@ -766,16 +766,14 @@ describe('立体 ∞ · 配色走 token（站规 §3 第 2 条：组件里不许
   });
 });
 
-describe('立体 ∞ · 只住在关于页、且降级完整', () => {
-  it('只挂在关于页，且旧百褶已从关于页消失', () => {
-    expect(aboutSrc).toContain('<Fragment slot="plate"><FinInfinity /></Fragment>');
-    expect(aboutSrc, 'about.astro 还 import 着百褶（它已搬到标签页）')
-      .not.toMatch(/import PleatedInfinity/);
-    expect(aboutSrc, '硬编码的旧槽位写法还在').not.toMatch(/<PleatedInfinity/);
+describe('立体 ∞ · 独立组件与启动门控', () => {
+  it('关于页继续挂载无限符号并与点阵分层', () => {
+    expect(aboutSrc).toMatch(/<Fragment slot="plate">[\s\S]*?data-dot-grid[\s\S]*?<FinInfinity \/>/);
+    expect(aboutSrc).not.toMatch(/<PleatedInfinity/);
   });
 
-  it('静态回退层 + hidden 门控都在（无 JS / reduced-motion 时装置有内容可看）', () => {
-    expect(comp).toMatch(/data-fin-static/);
+  it('无脚本与等待首帧时只显示页面背景', () => {
+    expect(comp).not.toMatch(/data-fin-static|fin-static-/);
     expect(comp).toMatch(/data-fin-cv/);
     expect(comp, 'WebGL 层初始必须 hidden（脚本判定可跑才放开）').toMatch(/data-fin-view[^>]*hidden/);
   });
@@ -805,12 +803,12 @@ describe('立体 ∞ · 只住在关于页、且降级完整', () => {
       .toMatch(/preventDefault/);
   });
 
-  it('启动失败要退回静态层，不留空画布', () => {
+  it('启动失败要收起画布，留下页面背景', () => {
     /* 同样先剥注释 —— 这条判的是「失败路径存在」，
        把它整段注释掉是最自然的破坏方式，判据必须咬得住。 */
     const code = ctrl.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/.*$/gm, ' ');
     expect(code, '没有 catch 启动失败').toMatch(/\.catch\(/);
-    expect(code, '失败时没有把静态层放回来').toMatch(/staticLayer\?\.removeAttribute\('hidden'\)/);
+    expect(code, '失败时没有收起画布').toMatch(/view\.hidden\s*=\s*true/);
   });
 
   it('颜色由控制器从 token 取，场景文件里不出现色值字面量', () => {

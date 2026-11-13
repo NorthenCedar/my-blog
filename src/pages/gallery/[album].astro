@@ -22,12 +22,15 @@
 
 import Base from '../../layouts/Base.astro';
 import AlbumScene from '../../components/AlbumScene.astro';
+import InteractiveAlbum from '../../components/InteractiveAlbum.astro';
 import GalleryInf from '../../components/GalleryInf.astro';
 import manifest from '../../../public/gallery/manifest.json';
+import '../../vendor/react-bits/DomeGallery.css';
+import '../../vendor/react-bits/InfiniteMenu.css';
 
 type File = { w: number; h: number; url: string };
 type Frame = { alt: string; src: string; files: File[] };
-type Album = { id: string; title: string; titleEn?: string; cover?:string; layout?: 'scatter' | 'slices' | 'wall'; date: string; total: number; frames: Frame[] };
+type Album = { id: string; title: string; titleEn?: string; cover?:string; layout?: 'scatter' | 'slices' | 'dome' | 'infinite' | 'wall'; date: string; total: number; frames: Frame[] };
 
 /* ★ 一册一页 —— 相册清单从 manifest 读（"有几个文件夹就放几个"）：
    站主往 content/gallery/ 丢一个新文件夹，构建时生成脚本写进 manifest，
@@ -51,13 +54,13 @@ export async function getStaticPaths() {
           `它会静默覆盖）⇒ 请把 content/gallery/${album.id}/ 改名，或换一个保留字表。`,
       );
     }
-    return { params: { album: album.id }, props: { albumId: album.id, no: i + 1 } };
+    return { params: { album: album.id }, props: { album, no: i + 1 } };
   });
 }
 
-const albums = manifest.albums as Album[];
-const { albumId, no } = Astro.props as { albumId: string; no: number };
-const album = albums.find((a) => a.id === albumId)!;
+const { album, no } = Astro.props as { album: Album; no: number };
+const layout = album.layout;
+const interactive = layout === 'dome' || layout === 'infinite';
 const shareFrame = album.frames.find(frame=>frame.src===album.cover)??album.frames[0];
 const shareImage = shareFrame?.files.reduce<File | undefined>((largest, file) => !largest || file.w > largest.w ? file : largest, undefined)?.url;
 ---
@@ -66,5 +69,11 @@ const shareImage = shareFrame?.files.reduce<File | undefined>((largest, file) =>
   {/* 视口底纹 ∞ —— 与 `/gallery/`、`/gallery/spiral/` 同一份（站主 2026-10-08「三条路都换」）。 */}
   <Fragment slot="plate"><GalleryInf /></Fragment>
 
-  <AlbumScene album={album} no={no} />
+  {interactive
+    ? <InteractiveAlbum album={{ ...album, layout }} no={no} />
+    : <AlbumScene album={{ ...album, layout }} no={no} />}
 </Base>
+
+<script>
+  import '../../scripts/album-return';
+</script>

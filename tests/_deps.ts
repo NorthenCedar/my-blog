@@ -39,6 +39,15 @@ export const RUNTIME_DEPS_ALLOWED = [
   '@astrojs/rss',
   '@astrojs/sitemap',
   'astro',
+  // React Bits Flowing Menu 官方组件的图标依赖。
+  '@hugeicons/core-free-icons',
+  '@hugeicons/react',
+  // 仅新相册陈列动态加载 React 与官方 Dome Gallery 的手势库。
+  'react',
+  'react-dom',
+  '@use-gesture/react',
+  // React Bits 原版 Shape Waves，仅友链页点阵按需加载。
+  'vgpu',
   // Jelly Slider 主题开关的渲染器（2026-10-17）
   '@typegpu/noise',
   '@typegpu/sdf',

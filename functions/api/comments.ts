@@ -8,7 +8,7 @@ import {
   type CommentRecord,
   type ReplyRecord,
 } from './_lib/comments-core';
-import { commentIdentity, attachCommentAuthors, saveAuthoredComment } from './_lib/visitor-comments';
+import { commentIdentity, attachCommentAuthors, saveAuthoredComment, missingReplyParent, replyParentExists } from './_lib/visitor-comments';
 import { parseNoticeTarget, recordCommentNotice, recordReplyNotice, validNoticeTarget, type NoticeTarget } from './_lib/notices';
 import { AccountError } from './_lib/visitor-core';
 import { currentAccount, publicUser } from './_lib/visitor-store';
@@ -153,7 +153,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       .first<{ id: number }>();
 
     if (!parent) {
-      return json({ error: '要回复的留言不存在（可能已被删除）' }, 400);
+      return json({ error: missingReplyParent }, 400);
     }
   }
 
@@ -206,16 +206,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ comment: { id, slug, name, body, createdAt, parentId, replyTo, author: publicUser(author, env) } }, 201);
   }
   const inserted = await env.COMMENTS_DB.prepare(
-    'INSERT INTO replies (slug, parent_id, reply_to, name, body, created_at, ip_hash) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id'
+    `INSERT INTO replies (slug, parent_id, reply_to, name, body, created_at, ip_hash)
+      SELECT ?,?,?,?,?,?,? WHERE ${replyParentExists} RETURNING id`
   )
-    .bind(slug, parentId, replyTo, name, body, createdAt, ipHash)
+    .bind(slug, parentId, replyTo, name, body, createdAt, ipHash, slug, parentId)
     .first<{ id: number }>();
 
-  await recordReplyNotice(env, { ...notice, parentId, replyId: inserted?.id ?? 0, target: noticeTarget! });
-
+  if (!inserted) return json({ error: missingReplyParent }, 400);
+  await recordReplyNotice(env, { ...notice, parentId, replyId: inserted.id, target: noticeTarget! });
   return json(
-
-    { comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId, replyTo, author: null } },
+    { comment: { id: inserted.id, slug, name, body, createdAt, parentId, replyTo, author: null } },
     201
   );
   } catch (error) {

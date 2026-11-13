@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +10,7 @@ const dirs: string[] = [];
 afterEach(() => { while (dirs.length) rmSync(dirs.pop()!, { recursive: true, force: true }); });
 
 function hash(name: string): string {
-  // 只需要一个 64 位小写十六进制串；内容与文件名是否一致由 export 自己核对。
+  // 构造仅用于链接及格式校验的合法名称。
   return name.padEnd(64, '0').slice(0, 64).toLowerCase();
 }
 
@@ -20,9 +21,7 @@ function wav(): Buffer {
   return bytes;
 }
 
-function page(name: string, wavName: string): Buffer {
-  return Buffer.from(String(wavName).slice(0, 64) + ':' + name);
-}
+const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
 function workspace() {
   const root = join(tmpdir(), `audio-${Math.random().toString(16).slice(2)}`);
@@ -35,12 +34,18 @@ function workspace() {
 describe('作者音频：构建期只导出被引用的原件', () => {
   it('引用到的拷进 dist/audio，没引用的不导，清单记下来', async () => {
     const root = workspace();
-    const used = hash('a1') + '.wav';
-    const unused = hash('b2') + '.wav';
     const bytes = wav();
+    const other = Buffer.from(bytes);
+    other[63] = 1;
+    const used = digest(bytes) + '.wav';
+    const unused = digest(other) + '.wav';
     writeFileSync(join(root, 'content/audio', used), bytes);
-    writeFileSync(join(root, 'content/audio', unused), bytes);
-    writeFileSync(join(root, 'dist/posts/demo/index.html'), `<div class="ap" data-audio data-src="/audio/${used}"></div>`);
+    writeFileSync(join(root, 'content/audio', unused), other);
+    writeFileSync(join(root, 'dist/posts/demo/index.html'), [
+      '<audio><source src="/audio/' + used + '"></audio>',
+      '<pre>/audio/' + unused + '</pre>',
+      '<!-- <audio src="/audio/' + unused + '"></audio> -->',
+    ].join(''));
 
     const result = await exportAudioAssets({ rootDir: root, distDir: join(root, 'dist') });
 
@@ -53,9 +58,10 @@ describe('作者音频：构建期只导出被引用的原件', () => {
 
   it('页面删掉引用后再跑一次，旧产物会被清掉', async () => {
     const root = workspace();
-    const gone = hash('c3') + '.mp3';
-    writeFileSync(join(root, 'content/audio', gone), Buffer.from([0xff, 0xfb, 0x90, 0x00]));
-    writeFileSync(join(root, 'dist/posts/demo/index.html'), `<div data-src="/audio/${gone}"></div>`);
+    const bytes = Buffer.from([0xff, 0xfb, 0x90, 0x00]);
+    const gone = digest(bytes) + '.mp3';
+    writeFileSync(join(root, 'content/audio', gone), bytes);
+    writeFileSync(join(root, 'dist/posts/demo/index.html'), '<audio src="/audio/' + gone + '"></audio>');
     await exportAudioAssets({ rootDir: root, distDir: join(root, 'dist') });
     expect(readFileSync(join(root, 'dist/audio', gone)).byteLength).toBeGreaterThan(0);
 
@@ -64,9 +70,24 @@ describe('作者音频：构建期只导出被引用的原件', () => {
     expect(() => readFileSync(join(root, 'dist/audio', gone))).toThrow();
   });
 
+  it('音频摘要错时失败，已公开的导出清单仍保留', async () => {
+    const root = workspace();
+    const bytes = wav();
+    const valid = digest(bytes) + '.wav';
+    const bad = hash('ffff') + '.wav';
+    const html = join(root, 'dist/posts/demo/index.html');
+    writeFileSync(join(root, 'content/audio', valid), bytes);
+    writeFileSync(join(root, 'content/audio', bad), bytes);
+    writeFileSync(html, '<audio src="/audio/' + valid + '"></audio>');
+    await exportAudioAssets({ rootDir: root });
+    writeFileSync(html, '<audio src="/audio/' + bad + '"></audio>');
+    await expect(exportAudioAssets({ rootDir: root })).rejects.toThrow(/SHA-256/);
+    expect(JSON.parse(readFileSync(join(root, 'dist/audio/.exported-audio.json'), 'utf8')).files).toEqual([valid]);
+  });
+
   it('引用了一个仓库里不存在的音频：构建当场失败，不留哑链接', async () => {
     const root = workspace();
-    writeFileSync(join(root, 'dist/posts/demo/index.html'), `<div data-src="/audio/${hash('d4')}.mp3"></div>`);
+    writeFileSync(join(root, 'dist/posts/demo/index.html'), `<audio src="/audio/${hash('d4')}.mp3"></audio>`);
     await expect(exportAudioAssets({ rootDir: root, distDir: join(root, 'dist') })).rejects.toThrow(/audio/i);
   });
 });

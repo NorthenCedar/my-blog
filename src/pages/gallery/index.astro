@@ -1,21 +1,30 @@
 ---
 import Base from '../../layouts/Base.astro';
-import SpiralPlate from '../../components/SpiralPlate.astro';
 import GalleryCover from '../../components/GalleryCover.astro';
+import TrueFocusFrame from '../../components/TrueFocusFrame.astro';
 import manifest from '../../../public/gallery/manifest.json';
 import {getSite} from '../../lib/site';
 import {coverPresentation,type GalleryAlbum} from '../../lib/gallery-stage';
 import {filmPattern} from '../../lib/gallery-film.mjs';
+// 换页会替换 head，舞台和弧形封面的样式必须随页面响应一起进入。
+import '../../styles/gallery-stage.css';
+import '../../vendor/react-bits/CircularGallery.css';
 const albums=(manifest.albums as GalleryAlbum[]).filter(album=>album.frames.length);
 const total=albums.reduce((sum,album)=>sum+album.total,0),count=albums.length+2;
 const siteWordmark=(await getSite()).wordmark;
 const first=albums[0]?.frames.find(frame=>frame.src===albums[0]?.cover)??albums[0]?.frames[0],shareImage=first?.files.reduce((a,b)=>b.w>a.w?b:a).url;
+const firstCover=albums.length ? coverPresentation(albums[0],0) : null;
+const bathFrames = albums.flatMap(album => album.frames.flatMap(frame => {
+  const file = frame.files.reduce((a, b) => b.w < a.w ? b : a);
+  const w = file.actualW ?? file.w;
+  return w > file.h ? [{ url: file.url, w, h: file.h }] : [];
+}));
 ---
 <Base title="相册" description={`${albums.map(album=>album.title).join('、')} · ${total} 张照片`} shareImage={shareImage} shareImageAlt={first?.alt} current="gallery" chrome="page" bodyClass="gallery-inf-plate gallery-story" fullWidth>
   <Fragment slot="plate">
     <div class="tsl-veil" aria-hidden="true"></div>
     <div class="film-backdrop" aria-hidden="true"><div class="film-object" data-film><Fragment set:html={filmPattern()}/></div></div>
-    <div class="bath" data-bath hidden aria-hidden="true"><canvas class="bath-cv" data-bath-cv></canvas><span class="bath-mark">{siteWordmark}</span></div>
+    <div class="bath" data-bath data-bath-frames={JSON.stringify(bathFrames)} hidden aria-hidden="true"><canvas class="bath-cv" data-bath-cv></canvas><span class="bath-mark">{siteWordmark}</span></div>
   </Fragment>
   <div class="gallery-stage-ui" data-gallery-redesign="1">
     <h1 class="sr-only">相册</h1>
@@ -23,11 +32,47 @@ const first=albums[0]?.frames.find(frame=>frame.src===albums[0]?.cover)??albums[
       <section class="slide kind-develop" data-slide="0" data-kind="develop" data-title="显影板" aria-labelledby="develop-title">
         <h2 class="sr-only" id="develop-title">显影板</h2>
         <div class="develop-topnote" data-reveal data-order="-1"><span>{albums.length} 本相册</span><i></i><span>{total} 张照片</span></div>
-        <div class="develop-bottom" data-reveal data-order="3"><p>移动鼠标，让照片显影。<span>触屏可涂抹，点击箭头继续。</span></p><button type="button" data-advance>翻到螺旋盘 <span aria-hidden="true">↓</span></button></div>
+        <div class="develop-bottom" data-reveal data-order="3"><p>移动鼠标，让照片显影。<span>触屏可涂抹，点击箭头继续。</span></p><button type="button" data-advance>翻到相册封面 <span aria-hidden="true">↓</span></button></div>
       </section>
-      <section class="slide kind-spiral" data-slide="1" data-kind="spiral" data-title="螺旋盘" aria-labelledby="spiral-title">
-        <h2 class="sr-only" id="spiral-title">螺旋盘</h2>
-        <div class="original-plate" data-bath-src tabindex="0" aria-label="螺旋盘照片"><SpiralPlate mode="embed" /></div>
+      <section id="gallery-overview" class="slide kind-arc" data-slide="1" data-kind="arc" data-title="弧形封面" data-gallery-overview aria-labelledby="cover-arc-title">
+        <h2 class="sr-only" id="cover-arc-title">弧形封面</h2>
+        {firstCover && albums.length > 1 && (
+          <section class="cover-arc" data-cover-arc aria-label="相册封面陈列" hidden>
+            <div class="cover-arc-canvas" data-cover-canvas></div>
+            <div class="cover-selection">
+              <button type="button" data-cover-prev aria-label="上一本相册">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
+              </button>
+              <a data-cover-current href={firstCover.href}>
+                <strong data-cover-title>{albums[0].title}</strong>
+                <span data-cover-count>{albums[0].total} 张照片</span>
+              </a>
+              <button type="button" data-cover-next aria-label="下一本相册">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg>
+              </button>
+            </div>
+            <p class="cover-hint">左右拖动，点击封面进入相册</p>
+          </section>
+        )}
+        {albums.length > 0 ? (
+          <ul class="catalog-albums" data-arc-fallback>
+            {albums.map((album, index) => {
+              const cover = coverPresentation(album, index)!;
+              return (
+                <li data-gallery-album={album.id}>
+                  <a class="catalog-album" href={cover.href} data-album-link>
+                    <img src={cover.thumbnail} alt={cover.alt} width={cover.width} height={cover.height} loading="lazy" decoding="async" />
+                    <span class="catalog-album-copy">
+                      <strong data-album-title>{album.title}</strong>
+                      <span data-album-count>{album.total} 张照片</span>
+                    </span>
+                    <span class="catalog-arrow" aria-hidden="true">↗</span>
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        ) : <p class="catalog-empty">相册发布后会显示在这里。</p>}
       </section>
       {albums.map((album,index)=><GalleryCover album={album} index={index}/>)}
     </div>
@@ -43,11 +88,114 @@ const first=albums[0]?.frames.find(frame=>frame.src===albums[0]?.cover)??albums[
   <p class="sr-only" data-status role="status" aria-live="polite"></p>
   <dialog class="gallery-catalog" aria-labelledby="catalog-title">
     <header><div><p>{total} 张照片</p><h2 id="catalog-title">挑一本，慢慢看。</h2></div><button type="button" data-close-catalog aria-label="关闭相册目录">×</button></header>
-    <div class="catalog-scenes"><button type="button" data-pick="0"><span>01</span>显影板</button><button type="button" data-pick="1"><span>02</span>螺旋盘</button></div>
+    <div class="catalog-scenes true-focus"><TrueFocusFrame /><button type="button" data-pick="0"><span>01</span>显影板</button><button type="button" data-pick="1"><span>02</span>弧形封面</button></div>
     <div class="catalog-list">{albums.map((album,index)=>{const cover=coverPresentation(album,index)!;return <button type="button" data-pick={index+2}><img src={cover.src} alt={cover.alt} width="80" height="90" loading="lazy"/><span><b>{album.title}</b><small>{album.total} 张照片</small></span><span class="catalog-no">{String(index+1).padStart(2,'0')}</span></button>})}</div>
     <p class="catalog-note">选中封面后，点击照片或文字进入相册。</p>
     <p class="catalog-note"><a href="/gallery/spiral/">全屏打开螺旋盘 ↗</a></p>
     <div data-gallery-site-meta></div>
   </dialog>
 </Base>
-<script>import '../../scripts/gallery-stage.js';</script>
+<style>
+  .catalog-scenes.true-focus {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: fit-content;
+    padding: 2px;
+    gap: 0;
+    margin-bottom: var(--sp-4);
+  }
+  .catalog-scenes.true-focus > button { padding: var(--sp-2) var(--sp-3); }
+  :global(body.gallery-story) .kind-arc {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    justify-items: center;
+    padding: var(--sp-3) 5vw;
+  }
+  .cover-arc {
+    position: relative;
+    width: min(100%, 100rem);
+    margin-inline: auto;
+    text-align: center;
+  }
+  .cover-arc[data-loading] { position: absolute; inset-inline: 0; visibility: hidden; }
+  .catalog-albums[hidden], .cover-arc[hidden] { display: none; }
+  .cover-arc-canvas { height: clamp(8rem, 48svh, 33rem); }
+  .cover-selection {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-4);
+    margin-top: calc(-1 * var(--sp-2));
+  }
+  :global(body.gallery-story) .cover-selection button {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--hair);
+    border-radius: 50%;
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    transition: background var(--dur-hover) var(--ease-interact), color var(--dur-hover) var(--ease-interact);
+  }
+  :global(body.gallery-story) .cover-selection button:hover { background: var(--ink); color: var(--paper); }
+  .cover-selection svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .cover-selection a {
+    display: grid;
+    gap: var(--sp-1);
+    width: min(56vw, 21rem);
+    min-width: 0;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .cover-selection strong { font-size: clamp(1.25rem, 2.7vw, 2rem); overflow-wrap: anywhere; }
+  .cover-selection span, .catalog-album-copy span { color: var(--muted); font-size: var(--fs-sm); }
+  .cover-selection a:hover strong, .catalog-album:hover strong { color: var(--accent-ink); }
+  :global(body.gallery-story) .cover-hint { margin: var(--sp-3) 0 0; color: var(--muted); font-size: var(--fs-sm); }
+  .catalog-albums {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    gap: var(--sp-4) var(--sp-5);
+    list-style: none;
+    padding: 0;
+    margin: 0 auto;
+    width: min(100%, var(--wrap));
+    max-height: min(65svh, 100%);
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .catalog-album {
+    display: grid;
+    grid-template-columns: 4.25rem minmax(0, 1fr) auto;
+    gap: var(--sp-3);
+    align-items: center;
+    padding-block: var(--sp-3);
+    border-top: 1px solid var(--hair);
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .catalog-album img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; }
+  .catalog-album-copy { display: grid; gap: var(--sp-1); overflow-wrap: anywhere; }
+  .catalog-arrow { color: var(--muted); }
+  @media (max-width: 640px) {
+    :global(body.gallery-story) .kind-arc { padding-inline: var(--sp-3); }
+    .cover-arc-canvas { height: clamp(10rem, 39svh, 24rem); }
+    .catalog-albums { grid-template-columns: 1fr; gap: 0; }
+  }
+</style>
+<script>
+  import '../../scripts/gallery-stage.js';
+  import '../../scripts/gallery-overview';
+</script>

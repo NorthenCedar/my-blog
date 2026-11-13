@@ -215,6 +215,75 @@ describe('友链页 · 星座 CONSTELLATION（2026-10-05）', () => {
       expect(CODE).toMatch(/padStart\(2,\s*'0'\)/); // 8 位 hex 的补零
     });
 
+    it('⑧-b ★★ 主题切换必须**重读** token（站主 2026-11-13 报障）', () => {
+      /* 「在友链按那个切换亮/暗的按钮，背景产生的星链颜色不会跟着换」——
+         成因是把 `--accent` / `--accent-ink` 读一次就存成 const：切到暗色后 token 已是橙，
+         画布还捏着亮色那套绿。这里锁两条性质：
+           ① 颜色是可重读的（有 readColors()，且被 `let` 持有，不能是 const 快照）；
+           ② themechange 到了要**原地重画**（RM 档不跑 rAF，没有下一帧能自然补上）。 */
+      expect(CODE, '缺 readColors()：颜色又变回一次性快照了').toContain('const readColors = () => {');
+      expect(CODE, '颜色必须由 let 持有').toMatch(/let ACCENT\w* = '#/);
+      expect(CODE, '没有重读，主题切换后画布还是旧色').toMatch(/readColors\(\)/);
+      expect(CODE, '监听 themechange 才会跟着换').toMatch(/addEventListener\('themechange'/);
+      /* ⚠ 只能重画，**不能**重跑 build()：那会把已累积的边作废，画面突然清空重来。
+         ★ 2026-11-13 拖动软条改造：themechange 与 themepreview 共用 syncTheme 处理器
+           （拖动的每一帧也要重读重画）。判据放宽为两种形态皆可——内联箭头或具名共用
+           处理器，但三条性质不变：重读 readColors()、原地重画 draw(lastT)、不 build()。 */
+      const handler =
+        /addEventListener\('themechange',\s*\(\)\s*=>\s*\{([\s\S]*?)\}\);/.exec(CODE)?.[1] ??
+        /const syncTheme = \([^)]*\)(?::[^=]*)?\s*=>\s*\{([\s\S]*?)\n  \};/.exec(CODE)?.[1] ??
+        '';
+      expect(handler.length, 'themechange 处理函数没找到，判据会空转').toBeGreaterThan(20);
+      expect(handler).toContain('readColors()');
+      expect(handler).toContain('draw(lastT)');
+      expect(handler, '重跑 build() 会清掉已连成的边').not.toContain('build()');
+      /* 共用处理器必须两个事件都挂：拖动中间态走 themepreview，少了它拖动时星链不跟手。 */
+      expect(CODE).toMatch(/addEventListener\('themepreview',\s*syncTheme\)/);
+    });
+
+    it('⑧-c 点阵水波色**留在橙的色家族里、只抬明度**（站主 2026-11-13 两次定口径）', () => {
+      /* 第一版：hoverColor 直接取 `--links-mosaic-ink`（暗档那正好也是亮橙）⇒ 同色堆叠，糊进底纹。
+         第二版：改成暖纸白 `#f4eee6` ⇒ 站主「你这水波为什么换了个白色」——
+                 白和橙是两个**色家族**，在橙场里像贴了一块纸。
+         最终：同色相、只抬明度（`#ff7b00` → `#ffa94d`）。
+         ⚠ 判据不能只断"独立 token"，得断**色关系**：色相差小 + 饱和度够 + 比本体亮。
+           只断字符串相等就成了零容差快照，站主以后微调色值会被误伤。 */
+      const TOK = readFileSync(join(ROOT, 'src/styles/tokens.css'), 'utf8');
+      const VIEW = readFileSync(join(ROOT, 'src/scripts/links-waves-view.ts'), 'utf8');
+      expect(VIEW, '水波色必须从 --links-mosaic-hover 读').toContain("'--links-mosaic-hover'");
+      expect((TOK.match(/--links-mosaic-hover:/g) ?? []).length, '明暗两档都要定义').toBeGreaterThanOrEqual(2);
+
+      const darkBlock = TOK.slice(TOK.indexOf('html.dark {'));
+      const hover = /--links-mosaic-hover:\s*(#[0-9a-fA-F]{6})/.exec(darkBlock)?.[1] ?? '';
+      const accent = /--accent:\s*(#[0-9a-fA-F]{6})/.exec(darkBlock)?.[1] ?? '';
+      expect(hover && accent, '暗色档的 hover / accent 没取到，判据会空转').toBeTruthy();
+
+      /** hex → [色相°, 饱和度, 明度]；sRGB 足够（只用来比色关系，不做精确配色校验） */
+      const hsl = (hex: string) => {
+        const n = Number.parseInt(hex.slice(1), 16);
+        const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255);
+        const mx = Math.max(r, g, b);
+        const mn = Math.min(r, g, b);
+        const l = (mx + mn) / 2;
+        const d = mx - mn;
+        const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+        let h = 0;
+        if (d !== 0) {
+          if (mx === r) h = 60 * (((g - b) / d) % 6);
+          else if (mx === g) h = 60 * ((b - r) / d + 2);
+          else h = 60 * ((r - g) / d + 4);
+        }
+        return [(h + 360) % 360, s, l] as [number, number, number];
+      };
+      const [hh, hs, hl] = hsl(hover);
+      const [ah, as_, al] = hsl(accent);
+      const hueGap = Math.min(Math.abs(hh - ah), 360 - Math.abs(hh - ah));
+      expect(hueGap, `水波与点阵本体差 ${Math.round(hueGap)}° 色相 ⇒ 跳到另一个色家族（白在橙场里像贴纸）`).toBeLessThanOrEqual(25);
+      expect(hs, '水波饱和度掉太多 ⇒ 会读成"灰/白"而不是"更亮的橙"').toBeGreaterThanOrEqual(0.75);
+      expect(as_, '本体本身不该是低饱和色，判据前提不成立').toBeGreaterThanOrEqual(0.75);
+      expect(hl, `水波明度 ${hl.toFixed(2)} 不比本体 ${al.toFixed(2)} 亮 ⇒ 被点亮的格子读不出来`).toBeGreaterThan(al);
+    });
+
     it('⑨ 素材自带 alpha ⇒ CSS 不得再叠底色（否则双重压暗）', () => {
       // .inf-ink-plate 不许有 background / background-color
       const rule = ACSS.match(/\.inf-ink-plate\s*\{[^}]*\}/)?.[0] ?? '';
@@ -311,7 +380,10 @@ describe('友链页 · 星座 CONSTELLATION（2026-10-05）', () => {
     it('㉑ 产物里 page-inf 的关闭规则真在（权重必须对齐才压得住 .page-inf）', () => {
       if (!hasDist) return;
       const html = readFileSync(join(DIST, 'links', 'index.html'), 'utf8');
-      expect(html).toMatch(/body\.links-plate \.page-inf\{display:none\}/);
+      const inline = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((match) => match[1]);
+      const linked = [...html.matchAll(/href="(\/_astro\/[^"]+\.css)"/g)]
+        .map((match) => readFileSync(join(DIST, match[1].slice(1)), 'utf8'));
+      expect([...inline, ...linked].join('\n')).toMatch(/body\.links-plate \.page-inf\{display:none\}/);
     });
 
     it('㉒ 产物里 canvas 未被钉hidden、且引用了多档 webp', () => {

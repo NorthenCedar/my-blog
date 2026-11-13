@@ -4,7 +4,7 @@ onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, 
 
 /** 单册渐进增强：同一批 figure 在陈列与索引间移动，灯箱留在变换层外。 */
 for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]')) {
-  if(root.dataset.layout==='wall')continue;
+  if (root.dataset.layout !== 'scatter' && root.dataset.layout !== 'slices') continue;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
   const get = <T extends HTMLElement = HTMLElement>(name: string) => root.querySelector<T>(`[data-scene-${name}]`)!;
   const viewport = get('viewport');
@@ -22,6 +22,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
   const next = get<HTMLButtonElement>('next');
   const controls = get('controls');
   const status = get('status');
+  const scrub = root.querySelector<HTMLInputElement>('[data-scene-scrub]');
   const hint = get('help');
   const bounds = {
     x: Math.max(...positions.map((p) => Math.abs(p.x))) + 400,
@@ -97,6 +98,10 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
     }
     if (current !== lastReadout) {
       status.textContent = `${current + 1} / ${figures.length}`;
+      if (scrub) {
+        scrub.value = String(current + 1);
+        scrub.setAttribute('aria-valuetext', `第 ${current + 1} 张，共 ${figures.length} 张 · ${thumbnails[current].alt}`);
+      }
       lastReadout = current;
     }
     prev.disabled = target <= 0;
@@ -220,7 +225,15 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
   document.addEventListener('focusin', (event) => {
     if (!viewport.contains(event.target as Node)) navigation = focusIntent('focus', navigation.pending);
   });
-  toggle.addEventListener('click', () => setActive(!active));
+  toggle.addEventListener('click', () => {
+    root.classList.add('scene-view-changed');
+    setActive(!active);
+  });
+  scrub?.addEventListener('input', () => {
+    stop();
+    target = focus = clampFocus(scrub.valueAsNumber - 1, figures.length);
+    paint();
+  });
   get('home').addEventListener('click', () => home());
   prev.addEventListener('click', () => { if (slices) goto(target - 1); else { const base = cameraTarget ?? camera; moveCamera({ ...base, x: base.x + 200 }); } });
   next.addEventListener('click', () => { if (slices) goto(target + 1); else { const base = cameraTarget ?? camera; moveCamera({ ...base, x: base.x - 200 }); } });
@@ -321,6 +334,16 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-album-scene]'))
     wheelVelocity = Math.max(-12, Math.min(12, wheelVelocity + impulse));
     start();
   }, { passive: false });
+  viewport.addEventListener('photo-wall:select', (event) => {
+    if (!active) return;
+    const index = figures.indexOf(event.target as HTMLElement);
+    if (index < 0) return;
+    if (slices) goto(index);
+    else {
+      const { x, y, depth } = positions[index];
+      moveCamera({ x: -x * camera.scale / (1 + depth), y: -y * camera.scale / (1 + depth), scale: camera.scale });
+    }
+  });
   viewport.addEventListener('focusin', (event) => {
     navigation = focusIntent('focus', navigation.pending);
     if (!active || !navigation.center) return;

@@ -160,6 +160,13 @@ describe.skipIf(!hasDist)('开场动画：产物契约', () => {
       .join('\n');
   const homeHtml = () => readFileSync(join(DIST, 'index.html'), 'utf8');
 
+  it('暗色首页的渐变光晕在实际定义暖橙色的作用域内解析', () => {
+    const tokens = readFileSync('src/styles/tokens.css', 'utf8');
+    const palette = ruleBody(tokens, 'html.dark body.chrome-console {');
+    expect(palette).toMatch(/--home-halo:\s*#[\da-f]{8}/i);
+    expect(palette).toMatch(/--home-sky-halo:\s*var\(--home-halo\)/);
+  });
+
   it('流场揭幕的最终浓度与静止状态一致，移除开场标记时不会突然变粗', () => {
     const page = readFileSync('src/pages/index.astro', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const darkCss = readFileSync('src/styles/home-dark.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');

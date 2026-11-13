@@ -1,7 +1,7 @@
 import type { WriterProof } from './writer-auth';
 import { LIVE_ACCOUNT_SQL } from './visitor-store';
 import { randomToken } from './visitor-core';
-import { assertWriterProof, proofValues, writerStoreError } from './writer-drafts';
+import { activeJobs, assertWriterProof, proofValues, writerStoreError } from './writer-drafts';
 import { writerFail } from '../../../src/lib/writer/model';
 
 /** 单条语音上限 1.5 MB：云端素材存在 D1，而行上限约 2 MB（与访客语音同一口径）。 */
@@ -71,12 +71,22 @@ export async function deleteAudio(db: D1Database, proof: WriterProof, sha256: st
   await assertWriterProof(db, proof);
   const deleted = await db
     .prepare(
-      `DELETE FROM writer_audio WHERE owner=? AND sha256=? AND ${LIVE_ACCOUNT_SQL} AND NOT EXISTS(SELECT 1 FROM writer_job_audio WHERE owner=? AND sha256=?) RETURNING sha256`
+      `DELETE FROM writer_audio WHERE owner=? AND sha256=? AND ${LIVE_ACCOUNT_SQL}
+        AND NOT EXISTS (
+          SELECT 1 FROM writer_drafts d, json_each(d.value_json, '$.audios') clip
+          WHERE d.owner=writer_audio.owner AND json_extract(clip.value, '$.sha256')=writer_audio.sha256
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM writer_jobs j, json_each(j.snapshot_json, '$.value.audios') clip
+          WHERE j.owner=writer_audio.owner AND j.state IN (${activeJobs})
+            AND json_extract(clip.value, '$.sha256')=writer_audio.sha256
+        )
+        RETURNING sha256`
     )
-    .bind(proof.owner, sha(sha256), ...proofValues(proof), proof.owner, sha256)
+    .bind(proof.owner, sha(sha256), ...proofValues(proof))
     .first();
   if (!deleted) {
     await assertWriterProof(db, proof);
-    writerFail(409, 'audio_referenced', '语音正在发布或不存在，请刷新后检查');
+    writerFail(409, 'audio_referenced', '语音已被草稿或发布任务引用，或已不存在，请刷新后检查');
   }
 }

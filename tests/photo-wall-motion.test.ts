@@ -82,6 +82,28 @@ describe('单册灯箱的加载、动效与会话',()=>{
     click('.frame');ready[1]();oldClose();expect(document.querySelector('#lb')!.classList.contains('on')).toBe(true);
     expect(document.body.style.overflow).toBe('hidden');expect(document.querySelector('#lbCap')!.textContent).toBe('照片0');
   });
+  it('触屏打开后忽略同一次触碰补发的点击，下一次点击仍能关灯箱',()=>{
+    dispose();
+    vi.mocked(window.matchMedia).mockReturnValue({matches:true,addEventListener(){},removeEventListener(){}} as any);
+    dispose=initPhotoWall(document,imaging,()=>null);
+    const link=document.querySelector<HTMLElement>('.frame')!;
+    const stage=document.querySelector<HTMLElement>('.lb-stage')!;
+    const setSourceHidden=vi.fn();
+    const tap=()=>stage.dispatchEvent(new MouseEvent('click',{bubbles:true,detail:1,cancelable:true}));
+    link.dispatchEvent(new CustomEvent('photo-wall:open',{
+      cancelable:true,
+      detail:{trigger:link,readOrigin:()=>({rect:new DOMRect(20,50,100,80),radius:8}),setSourceHidden},
+    }));
+    expect(setSourceHidden).not.toHaveBeenCalled();
+    tap();
+    expect(document.querySelector('#lb')!.classList.contains('on')).toBe(true);
+    ready[0]();
+    expect(setSourceHidden).toHaveBeenLastCalledWith(true);
+    stage.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'touch'}));
+    tap();
+    expect(document.querySelector('#lb')!.classList.contains('on')).toBe(false);
+    expect(setSourceHidden).toHaveBeenLastCalledWith(false);
+  });
   it('进入页面缓存时关闭并失效旧解码，返回后仍可再开',()=>{
     click('.frame');window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}));ready[0]();
     expect(document.querySelector('#lb')!.classList.contains('on')).toBe(false);expect(document.body.style.overflow).toBe('auto');

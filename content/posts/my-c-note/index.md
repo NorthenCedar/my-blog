@@ -5,6 +5,8 @@ updated: 2026-11-11
 summary: 如标题所示，本文主要是用来记笔记的，有兴趣或者也想学习C语言的小伙伴可以看看
 tags: [个人, 备忘]
 draft: false
+cover: ./cover.webp
+coverAlt: 木桌上的程序流程图笔记、铅笔与机械键盘
 ---
 最基础的输入输出、if语句就不写了，开头主要先记与python不一样的地方
 

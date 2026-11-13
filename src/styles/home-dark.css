@@ -1,5 +1,30 @@
 /* 首页暗色配色：首屏用信号橙衬出黑色流场；正文收回近黑。
-   沿用原有开场、物理扰动和滚动时间轴，DNA 内收以避免裁切与读数模糊。 */
+   沿用原有开场、物理扰动和滚动时间轴，DNA 内收以避免裁切与读数模糊。
+
+   ★★★ 2026-11-13 大幅收窄（站主：「把其他页的亮暗过渡做一下，特别是底纹，
+       颜色变化要丝滑均匀，不要突变」）。
+
+   这个文件里的规则原来有 28 条 `html.dark body.chrome-console …`，每一条都是
+   「松手那一刻整条替换」—— 拖动软条时 `html.dark` 根本不成立，于是首屏的雾、网格、
+   同心环、玻璃舱窗、纸面、百褶 ∞ 全部停在亮档，松手才一起跳。
+
+   现在的分工（改这里之前先读一遍）：
+     · **能表达成 token 的，一律搬进 tokens.css 的 `body.chrome-console` /
+       `html.dark body.chrome-console` 两段**：亮暗两档同结构、都能被读到，
+       预览自然逐帧插值，规则里只剩一份写法。
+     · **颜色以外的通道（浓度/模糊/滤镜）用 `--theme-w` 在规则里算**，见 tokens.css
+       的 `--plate-filter-*` 与 index.astro 的 `.band-glass` / `.band-glass.g2|g3`。
+     · 只有**拖动时根本不在场**的东西才允许留在这里（开场幕 `.bi-*` 只活 5.75 秒，
+       用户碰不到它的时候没有"过渡"可言）。
+
+   ⚠ 别把 token 化的那批又搬回来：`--home-wash-ink` / `--home-grid-ink` /
+     `--home-band-grid-ink(-v)` / `--home-ring-ink` / `--home-glass-a|-b|-glint|-line` /
+     `--home-flow-ink` / `--home-eyebrow-dot` / `--home-slice-line(-2)` /
+     `--paper-fade` / `--pleat-*`。它们现在只有一个来源（tokens.css），
+     两边各写一份就会重新长出"哪个生效"的问题。 */
+
+/* 开场幕布：只在场 5.75 秒（--dur-boot），主题拖动发生在它退场之后。
+   真要连续化，得把它的三层渐变也拆成色标 —— 那是另一件事，别顺手做。 */
 html.dark body.chrome-console .bi-curtain {
   background:
     radial-gradient(110% 70% at 12% 0%, var(--home-halo) 0%, transparent 58%),
@@ -15,88 +40,16 @@ html.dark body.chrome-console .bi-wash {
 html.dark body.chrome-console .bi-mark {
   filter: none;
 }
-html.dark body.chrome-console .band {
-  --on-band: var(--home-hero-ink);
-  --on-band-sub: var(--home-hero-sub);
-  --on-band-meta: var(--home-hero-meta);
-  --logo-ink: var(--home-hero-ink);
-  background:
-    radial-gradient(110% 70% at 12% 0%, var(--home-halo) 0%, transparent 58%),
-    radial-gradient(90% 60% at 88% 88%, var(--home-halo-soft) 0%, transparent 62%),
-    linear-gradient(178deg, var(--home-hero-1) 0%, var(--home-hero-2) 34%, var(--home-hero-3) 62%, var(--home-hero-4) 100%);
-}
-/* 线宽与静止/揭幕浓度由共用规则读取 token，暗色只覆盖线色。 */
-html.dark body.chrome-console .rh-grid path {
-  stroke: var(--home-flow-line);
-}
-html.dark body.chrome-console .band-core {
-  /* 这里是会随窗口高度伸缩的顶部留白，着色会在底边切出一道横向分界。 */
-  background: none;
-}
-html.dark body.chrome-console .bg-wash {
-  /* 时间切片位于纸面层外，收掉固定橙雾才能与上方共用同一黑底。 */
-  background: none;
-}
-html.dark body.chrome-console .bg-grid,
-html.dark body.chrome-console .band-grid,
-html.dark body.chrome-console .dusk::before {
-  background-image:
-    linear-gradient(90deg, var(--home-grid) 1px, transparent 1px),
-    linear-gradient(0deg, var(--home-grid) 1px, transparent 1px);
-}
-html.dark body.chrome-console .band-grid {
-  background-image: linear-gradient(90deg, var(--home-grid) 1px, transparent 1px);
-}
-html.dark body.chrome-console .bg-ring {
-  background: repeating-radial-gradient(circle at 50% 50%, transparent 0 118px, var(--home-grid) 118px 119px);
-}
-html.dark body.chrome-console .band-glass {
-  border-color: var(--home-hero-line);
-  background: linear-gradient(160deg, var(--home-hero-glass), var(--home-hero-glass-soft));
-}
-html.dark body.chrome-console .band-glass::after {
-  background: radial-gradient(60% 55% at calc(50% + var(--mx) * 40%) calc(50% + var(--my) * 40%), var(--home-glass-light), transparent 70%);
-}
-html.dark body.chrome-console .slice-frame { border-color: var(--home-hero-line); }
-html.dark body.chrome-console .slice-frame:nth-of-type(2) { border-color: var(--home-hero-grid); }
+
+
+/* ★ 首屏 `.band` 的前景三色也搬到了 tokens.css 的 `--band-*`
+   （亮档在 `body.chrome-console`、暗档在 `html.dark body.chrome-console`，都在 body 层）。
+   原来这里那段 `.band { --on-band: … }` 只在松手后成立，中间态一直是白字，落定才跳成深字。 */
+
+/* DNA 双链的横向内收：布局差异，不是颜色，拖动时跳一下也看不出来。 */
 html.dark body.chrome-console .dna-stack { right: var(--home-dna-inset); opacity: 0.9; }
-html.dark body.chrome-console .band-glass.g2,
-html.dark body.chrome-console .band-glass.g3 {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-html.dark body.chrome-console .band-glass.g2 { opacity: 0.28; }
-html.dark body.chrome-console .band-glass.g3 { opacity: 0.18; }
-html.dark body.chrome-console .eyebrow i {
-  background: var(--home-hero-ink);
-  box-shadow: 0 0 0 3px var(--home-hero-grid);
-}
-html.dark body.chrome-console .topbar > nav a:focus-visible,
+
 html.dark body.chrome-console .navtog:focus-visible + .navbtn { outline-color: var(--home-hero-ink); }
-html.dark body.chrome-console .topbar > nav a::before {
-  background: linear-gradient(115deg, transparent 30%, var(--home-glass-light) 50%, transparent 70%);
-}
-html.dark body.chrome-console .topbar > nav a:hover,
-html.dark body.chrome-console .topbar > nav a:focus-visible {
-  background: var(--home-hero-glass);
-  border-color: var(--home-hero-line);
-}
-html.dark body.chrome-console .topbar > nav a[aria-current] {
-  color: var(--home-hero-ink);
-  background: var(--home-nav-active-bg);
-  border-color: var(--home-hero-line);
-}
-/* 晨昏带与正文边缘均使用暗色，消除写死的纸白色阶。 */
-html.dark body.chrome-console .dusk {
-  background: linear-gradient(180deg, var(--home-dusk-top) 0%, var(--home-dusk-mid) 38%, var(--paper) 80%, var(--home-paper-edge) 100%);
-}
-html.dark body.chrome-console .paper-wrap {
-  background: linear-gradient(180deg, var(--home-paper-edge) 0%, var(--paper) 18%, var(--paper) 82%, var(--home-paper-edge) 100%) fixed;
-}
-html.dark body.chrome-console .paper-inf {
-  filter: var(--pleat-dark-filter);
-  opacity: var(--pleat-dark-opacity);
-}
 html.dark body.chrome-console .card:hover { border-color: var(--home-active-line); }
 html.dark body.chrome-console .card::after {
   background: radial-gradient(46% 46% at 50% 0%, var(--home-glass-light), transparent 72%);
