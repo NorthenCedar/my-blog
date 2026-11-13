@@ -1,7 +1,7 @@
 ---
 title: 我的C语言学习笔记
 date: 2026-10-29
-updated: 2026-11-11
+updated: 2026-11-14
 summary: 如标题所示，本文主要是用来记笔记的，有兴趣或者也想学习C语言的小伙伴可以看看
 tags: [个人, 备忘]
 draft: false
@@ -611,3 +611,46 @@ int main() {
 }
 ```
 因为数组arr在传入search函数时传入的实际上是*arr （传入arr[10]是一样的，只传入首地址）,是首地址，所以需要再传一个长度
+
+### 利用数组重写素数的程序
+利用数组，判断是否是素数的效率会高很多，下面既看数组的用法也看思路
+```c
+#include <stdio.h>
+
+int main()
+{
+    const int maxNumber = 25;
+    int isPrime[maxNumber];
+    int i, x;
+
+    // 1. 初始化：假设 0 到 24 所有的数都是素数（标记为 1）
+    for (i = 0; i < maxNumber; i++)
+    {
+        isPrime[i] = 1;
+    }
+
+    // 2. 核心筛法：从 2 开始，把它的倍数全部标记为非素数（标记为 0）
+    for (x = 2; x < maxNumber; x++)
+    {
+        if (isPrime[x])  // 如果 x 没有被前面的数筛掉（依然是 1）
+        {
+            for (i = 2; i * x < maxNumber; i++)
+            {
+                isPrime[i * x] = 0; // 把 x 的倍数（i*x）全部标记为 0
+            }
+        }
+    }
+
+    // 3. 输出：遍历数组，只要值还是 1 的，就是素数
+    for (i = 2; i < maxNumber; i++)
+    {
+        if(isPrime[i])
+        {
+            printf("%d\t", i);
+        }
+    }
+    printf("\n");
+
+    return 0;
+}
+```
