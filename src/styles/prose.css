@@ -3,20 +3,6 @@
   max-width: var(--measure);
 }
 
-.post-body .prose {
-  --post-selection-bg: var(--accent-ink);
-}
-
-html.dark .post-body .prose {
-  --post-selection-bg: var(--accent);
-}
-
-.post-body .prose::selection,
-.post-body .prose ::selection {
-  background-color: var(--post-selection-bg);
-  color: var(--paper);
-}
-
 .prose p {
   margin: 0 0 1.15em;
 }

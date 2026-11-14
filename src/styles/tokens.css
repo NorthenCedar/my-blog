@@ -18,6 +18,11 @@ html.theme-previewing *::after {
   transition: none !important;
 }
 
+::selection {
+  background-color: var(--selection-bg);
+  color: var(--selection-fg);
+}
+
 :root {
   /* ★★ 2026-11-13：**亮暗之间的连续权重**（0 = 亮，1 = 暗）。
      拖动软条时由 src/scripts/theme-preview.ts 逐帧写成 inline 数字，松手即移除、
@@ -254,6 +259,8 @@ html.theme-previewing *::after {
   --archive-dot-base: #d8e3da;
   --accent: #2d7d46;       /* 对纸 4.86:1 —— 换绿后纸上小字也达标（旧橙 3.68 只能大字/图形） */
   --accent-ink: #266b3b;   /* 对纸 6.18:1 —— 纸上小字专用 */
+  --selection-bg: var(--accent-ink);
+  --selection-fg: var(--paper);
   --accent-bright: #4caf50;/* 深色底上的绿：对 --ink 6.26:1（旧橙同位置 5.24）；对纸只 2.66 —— 只许用在深色底 */
   --accent-wash: #edf3ec;  /* 绿洗底：悬停/激活的浅绿底（原型同名 token，B1 起在站点侧启用） */
   --panel: #efede7;        /* 抬升面：舱体/面板底色（原型同名 token，B1 起在站点侧启用） */
@@ -742,6 +749,7 @@ html.dark {
      实测对 #0b0b0c 是 7.57:1，比原来的绿（7.08:1）还高一点，不用另调色。 */
   --archive-dot-base: #362b24;
   --accent: #ff7b00;      /* 深底专用橙（**7.57:1**）★ 原绿 #4caf50 */
+  --selection-bg: var(--accent);
   --footer-bg: #cf681c;   /* 暗色页脚：更深的橙，保留深色文字的对比度 */
   --footer-meta: var(--paper);
   --footer-link: var(--paper);

@@ -14,7 +14,6 @@ body.forge-page button:focus-visible,
 body.forge-page a:focus-visible,
 body.forge-page summary:focus-visible{outline:2px solid var(--accent);outline-offset:6px}
 body.forge-page button:disabled{cursor:default}
-body.forge-page ::selection{background:var(--accent);color:var(--paper)}
 body.forge-page .mono,
 body.forge-page .eyebrow,
 body.forge-page .work-index{font-family:"IBM Plex Mono","Microsoft YaHei",monospace}
