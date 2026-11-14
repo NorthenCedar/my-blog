@@ -31,7 +31,9 @@ const { album, no } = Astro.props;
     </button>
   </header>
   <div class="album-stage" data-album-stage hidden aria-label={`${album.title}的互动陈列`}>
-    <div class="album-view" data-album-view data-album-title={album.titleEn || album.title}></div>
+    <div class="album-view" data-album-view>
+      {album.layout === 'willow' && album.titleEn && <p class="willow-title" lang="en" aria-hidden="true">{album.titleEn}</p>}
+    </div>
     {album.layout !== 'willow' && <p class="album-hint">拖动浏览 · 点图放大</p>}
   </div>
   <AlbumIndexHeading album={album} no={no} />
@@ -130,6 +132,32 @@ const { album, no } = Astro.props;
   /* 初始化期间测量画布的真实宽高，索引仍可使用。 */
   .album-stage[data-loading] { position: absolute; inset-inline: 0; visibility: hidden; }
   .album-view { position: absolute; inset: 0; isolation: isolate; }
+  :global(body:has([data-interactive-album][data-layout='willow'])) {
+    --willow-font: 'IBM Plex Sans', 'Microsoft YaHei', sans-serif;
+  }
+  .interactive-album[data-layout='willow'] {
+    font-family: var(--willow-font);
+  }
+  .interactive-album[data-layout='willow'] :global(:is(.scene-title h1, .scene-plate, .scene-kicker, .wf figcaption, .wf .no, .wf .zoom)) {
+    font-family: var(--willow-font);
+  }
+  :global(body:has([data-interactive-album][data-layout='willow']) :is(#lb, #lb .lb-pos, #lb .lb-meta)) {
+    font-family: var(--willow-font);
+  }
+  .willow-title {
+    position: absolute;
+    inset: clamp(4.75rem, 16vh, 10rem) var(--gutter) auto;
+    margin: 0;
+    color: color-mix(in srgb, var(--ink) 62%, var(--paper));
+    font-size: clamp(2.125rem, 8vw, 8.5rem);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -.035em;
+    text-align: center;
+    text-wrap: balance;
+    overflow-wrap: anywhere;
+    pointer-events: none;
+  }
   .album-hint {
     position: absolute;
     z-index: 1;

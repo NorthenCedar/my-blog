@@ -170,7 +170,7 @@ describe('时间切片 · 源码红线', () => {
   });
 
   it('跳转地址不写死在 JS：从静态回退层链接的 href 读（内容改路径不用改脚本）', () => {
-    expect(SRC).toContain("goLink.getAttribute('href')");
+    expect(SRC).toContain('const dest = goLink.href');
     expect(SRC).not.toContain("'/gallery/'");
   });
 
@@ -529,7 +529,7 @@ describe('时间切片 · 源码红线', () => {
     expect(SRC).toContain('Math.max(tl.settle, sstep(0, 0.34, tf))');
     expect(SRC).toContain('Math.max(tl.exit, sstep(0.3, 1, tf))');
     expect(SRC).toContain('const greenOp = gx * gx * (3 - 2 * gx);');
-    expect(SRC).toContain('if (navOk && greenOp >= 1) beginNav();');
+    expect(SRC).toContain('if (atEnd && navOk && greenOp >= 1) beginNav();');
     expect(SRC).not.toContain('tf >= 1');
     // 绿幕满屏后再停一下（确保它真的上了屏）就切页
     expect(SRC).toMatch(/const NAV_HOLD_MS = \d+;/);
@@ -679,7 +679,7 @@ describe('时间切片 · 源码红线', () => {
        复位解决的是"停在链尾那屏绿"，不是"别再弹"。两件事不许互相顶替。 */
     const showBlock = SRC.slice(SRC.indexOf("window.addEventListener('pageshow'"));
     expect(showBlock, 'bfcache 恢复仍必须先关自动跳转的闸').toMatch(
-      /if \(persisted\) navOk = false;/,
+      /if \(persisted\)\s*\{\s*navOk = false;/,
     );
     /* 标记读掉即删：只影响"接下来的那一次主页加载"，不会反复弹 */
     expect(SRC, 'EXIT_KEY 必须读掉即删').toMatch(

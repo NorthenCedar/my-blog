@@ -454,6 +454,10 @@ const titleLines: { ch: string; i: number }[][] = (() => {
                 真链接一直就在（`.tsl-static a`），不依赖这一块。 */}
         {/* 穿窗后全屏转绿 —— 取相册页开场的深绿（同款 token），跳转过去无缝 */}
         <div class="tsl-green" data-tsl-green aria-hidden="true"></div>
+        <div class="tsl-wait" data-tsl-wait hidden>
+          <p role="status" data-tsl-wait-text></p>
+          <a href="/gallery/" data-tsl-retry data-astro-reload data-no-transition hidden>重新打开相册</a>
+        </div>
       </div>
       <div class="tsl-static" data-tsl-static>
         <svg viewBox="50 45 145 150" aria-hidden="true">
@@ -1833,6 +1837,28 @@ onPage(({document, addEventListener}) => {
     pointer-events: none;
     opacity: 0;
     background: var(--gallery-entry-bg);
+  }
+  .tsl-wait {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: var(--sp-3);
+    pointer-events: none;
+    color: var(--gallery-entry-ink);
+    font-size: var(--fs-sm);
+    text-align: center;
+  }
+  .tsl-wait[hidden], .tsl-wait a[hidden] { display: none; }
+  .tsl-wait p { margin: 0; }
+  .tsl-wait a {
+    pointer-events: auto;
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: .24em;
+    padding: var(--sp-2) var(--sp-3);
   }
 
   /* 降级兜底：脚本失灵也不许把读者困在空剧场里（双保险，脚本侧同样会拒绝启用） */

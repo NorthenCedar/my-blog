@@ -170,6 +170,7 @@ html.theme-previewing *::after {
   --entry-2: var(--dusk-2);
   --entry-3: var(--dusk-3);
   --entry-4: var(--dusk-4);
+  --gallery-entry-ink: var(--on-band);
   --gallery-entry-bg: radial-gradient(110% 70% at 12% 0%, var(--entry-halo) 0%, transparent 58%), linear-gradient(178deg, var(--entry-1) 0%, var(--entry-2) 34%, var(--entry-3) 62%, var(--entry-4) 100%);
   /* ★★★ 明暗对比（不是浓淡！）：把薄片的着色**朝着色区间的中点**压缩。
      站主 2026-10-16：「图二那个没有那么大的明暗对比」—— 要的是**变平**，不是变淡。
@@ -692,6 +693,7 @@ html.dark {
   --entry-2: var(--home-hero-2);
   --entry-3: var(--home-hero-3);
   --entry-4: var(--home-hero-4);
+  --gallery-entry-ink: var(--home-hero-ink);
   --cursor-disc-line: #ffb570a6;
   --cursor-disc-fill: #ed8c3b14;
   --cursor-disc-hot-fill: #ed8c3b2e;

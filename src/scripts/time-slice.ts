@@ -1,9 +1,9 @@
 import { createActivityGate, createSpring, prefersReducedMotion, shouldAnimate, startLoop } from './rl-core';
 import { TSL, tslTimeline, tslWindow } from './time-slice-core';
-import { navigate } from 'astro:transitions/client';
+import { navigate, type TransitionBeforePreparationEvent } from 'astro:transitions/client';
 import { onPage } from './page-lifecycle';
 export { TSL, TSL_FRAMES, TSL_SECONDS, tslHash, tslPath, tslTimeline } from './time-slice-core';
-onPage(({document, window, addEventListener, matchMedia, setTimeout, clearTimeout}) => {
+onPage(({document, window, addEventListener, matchMedia, setTimeout, clearTimeout, keep}) => {
 /* =============================================================================
  * TIME SLICE 时间切片 —— 主页收尾装置（S6，footer 之前）· 控制器
  *
@@ -108,6 +108,9 @@ function init() {
   const cvs = host.querySelector<HTMLCanvasElement>('[data-tsl-cv]');
   const hud = host.querySelector<HTMLElement>('[data-tsl-hud]');
   const green = host.querySelector<HTMLElement>('[data-tsl-green]');
+  const wait = host.querySelector<HTMLElement>('[data-tsl-wait]');
+  const waitText = wait?.querySelector<HTMLElement>('[data-tsl-wait-text]');
+  const retry = wait?.querySelector<HTMLAnchorElement>('[data-tsl-retry]');
   const ring = host.querySelector<SVGSVGElement>('[data-tsl-ring]');
   const ringPath = host.querySelector<SVGPathElement>('[data-tsl-front]');
   const backPath = host.querySelector<SVGPathElement>('[data-tsl-back]');
@@ -117,7 +120,11 @@ function init() {
      这里换成 `.tsl-static a`：它是无 JS / 手机 / reduced-motion 那一档的入口，
      永远在场，语义比 CTA 更硬。 */
   const goLink = host.querySelector<HTMLAnchorElement>('.tsl-static a');
-  if (!stage || !view || !cvs || !hud || !green || !ring || !ringPath || !backPath || !edgePath || !goLink) return;
+  if (!stage || !view || !cvs || !hud || !green || !ring || !ringPath || !backPath || !edgePath || !goLink || !wait || !waitText || !retry) return;
+  const dest = goLink.href;
+  retry.href = dest;
+  let prefetched = false;
+  wait.addEventListener('pointerdown', (event) => event.stopPropagation());
 
   /* ---- 启用判定：桌面 + 动效允许，二者缺一 ⇒ 整个装置保持静态回退 ---- */
   const reduce = prefersReducedMotion();
@@ -344,7 +351,8 @@ function init() {
     }
   };
   const rewindToTop = () => {
-    if (!consumeExitMark()) return;
+    if (!consumeExitMark() && !history.state?.timeSliceExit) return;
+    clearExitHistory();
     if (window.scrollY <= 0) return; // 已经是顶部（读者自己又滚回来了 / 窄屏没滚过）⇒ 不动
     window.scrollTo(0, 0);
     /* 复位后自动跳转**重新武装**：读者是主动回主页的，不是被弹回来的 ⇒
@@ -352,14 +360,59 @@ function init() {
     navOk = true;
   };
   let navTimer = 0;
+  let waitTimer = 0;
+  let retryTimer = 0;
+  let navigation: 'idle' | 'pending' | 'failed' = 'idle';
+  const navigationInfo = {};
+  const showWait = (stalled: boolean, message: string) => {
+    wait.hidden = false;
+    waitText.textContent = message;
+    retry.hidden = !stalled;
+  };
+  const clearWait = () => {
+    clearTimeout(waitTimer);
+    clearTimeout(retryTimer);
+    wait.hidden = true;
+    waitText.textContent = '';
+    retry.hidden = true;
+  };
+  function clearExitHistory() {
+    try {
+      if (!history.state?.timeSliceExit) return;
+      const state = { ...history.state };
+      delete state.timeSliceExit;
+      history.replaceState(state, '');
+    } catch { /* 禁用历史状态时沿用浏览器的回退。 */ }
+  }
+  const failed = () => {
+    if (navigation !== 'pending') return;
+    clearWait();
+    navigation = 'failed';
+    clearExitHistory();
+    try {
+      sessionStorage.removeItem(NAV_HANDOFF_KEY);
+      sessionStorage.removeItem(EXIT_KEY);
+    } catch { /* 存储不可用不影响重试入口。 */ }
+    showWait(true, '相册暂未打开');
+  };
+  document.addEventListener('astro:before-preparation', (event: TransitionBeforePreparationEvent) => {
+    if (event.info !== navigationInfo) return;
+    event.signal.addEventListener('abort', failed, { once: true });
+    keep(() => event.signal.removeEventListener('abort', failed));
+  });
   /* 首帧就复位（back_forward 的整页重载）：能抢在浏览器恢复滚动之前就抢，
      读者看不到"一屏绿再被弹上去"那一下闪。抢不到也没关系 —— pageshow 会再兜一次。 */
   if (navType === 'back_forward') rewindToTop();
+  else if (history.state?.timeSliceExit) rewindToTop(); // Astro 回退仍在原文档，navigation type 不会改变。
   window.addEventListener('pageshow', (e) => {
     const persisted = (e as PageTransitionEvent).persisted;
     /* ★ bfcache 恢复的页面**不会重新执行脚本**（初始化时那次 navType 已经过去了）
        ⇒ 必须在这里把闸门关掉，否则恢复的一瞬间就会被弹回相册。 */
-    if (persisted) navOk = false;
+    if (persisted) {
+      navOk = false;
+      navigation = 'idle';
+      clearWait();
+    }
     /* ★★ 复位在 pageshow 再做一次，两个原因，缺一不可：
        ① bfcache 恢复时脚本不重跑 ⇒ 初始化那次 `consumeExitMark` 从没跑过，
           标记还在，只能在这里认（`backFromGate` 那时还是 false）；
@@ -368,6 +421,7 @@ function init() {
        ★ 这里**不**重新读 sessionStorage：`backFromGate` 已经记住了事实，
          重复读会把"读掉即删"的语义搞乱（第二次读必然是 null）。 */
     if (backFromGate || consumeExitMark()) {
+      clearExitHistory();
       if (window.scrollY > 0) {
         window.scrollTo(0, 0);
         navOk = true; // 与 rewindToTop 同一口径：读者主动回来的 ⇒ 重新武装
@@ -375,10 +429,11 @@ function init() {
     }
   });
   const beginNav = () => {
-    if (navTimer) return;
+    if (navTimer || navigation !== 'idle') return;
     navTimer = window.setTimeout(() => {
       navTimer = 0;
       if (!navOk) return; // 期间滚回链尾以上 / 被判定成「回来的」⇒ 不跳
+      navigation = 'pending';
       try {
         sessionStorage.setItem(NAV_HANDOFF_KEY, '1'); // 相册页据此播「内容浮上来」
         /* ★★ 同一刻写下**反向**标记：告诉"回来的那次主页"——上一次是从绿幕
@@ -387,10 +442,13 @@ function init() {
       } catch {
         /* 隐私模式存不进就算了 —— 跳转本身不受影响，只是目标页不播那道入场动画 */
       }
+      try { history.replaceState({ ...history.state, timeSliceExit: true }, ''); }
+      catch { /* 整页回退仍可使用会话标记。 */ }
       /* 这一帧绿幕已满屏（exit ≥ 0.95 ⇒ 绿幕 opacity = 1），相册页开场是
          同一套深绿（逐档实测误差 ≤2/255）⇒ 直接切过去就是无缝的。 */
-      const dest = goLink.getAttribute('href'); // 地址从静态层的链接读，不在 JS 里写死
-      if (dest) void navigate(dest);
+      waitTimer = setTimeout(() => showWait(false, '正在打开相册…'), 450);
+      retryTimer = setTimeout(() => showWait(true, '相册还在加载'), 4500);
+      void navigate(dest, { info: navigationInfo }).catch(failed);
     }, NAV_HOLD_MS);
   };
   const cancelNav = () => {
@@ -398,11 +456,6 @@ function init() {
     clearTimeout(navTimer);
     navTimer = 0;
   };
-  window.addEventListener('pageshow', (e) => {
-    /* ★ bfcache 恢复的页面**不会重新执行脚本**（初始化时那次 navType 已经过去了）
-       ⇒ 必须在这里把闸门关掉，否则恢复的一瞬间就会被弹回相册。 */
-    if ((e as PageTransitionEvent).persisted) navOk = false;
-  });
   let tailT0 = 0; // 收尾起点时刻（0 = 未在收尾）
   let lastP = 0; // 上一帧的滚动进度 —— 用来判「读者是不是在往回滚」（见 render）
 
@@ -429,6 +482,16 @@ function init() {
     // （NaN 会让整个装置「不可见 / 跳到极端态」——比停在段首难查得多）
     const p = Number.isFinite(pS) ? Math.min(1, Math.max(0, pS)) : 0;
     const tl = tslTimeline(p);
+    if (!prefetched && pRaw >= TSL.zoomEnd) {
+      prefetched = true;
+      if (navigator.onLine && !(navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData) {
+        const link = document.createElement('link');
+        link.rel = 'prefetch';
+        link.href = dest;
+        document.head.append(link);
+        keep(() => link.remove());
+      }
+    }
 
     /* 收尾：到链尾（t=1 那一线）就交给时间轴 —— 这条线同时就是「划不动」的线。
        ★ navOk 为假（刚按返回键回来的那一档）时**不启动**收尾：不锁滚、不放绿幕，
@@ -447,7 +510,7 @@ function init() {
     const atEnd = pRaw >= TSL.tEnd && (navOk || tailT0 > 0);
     if (atEnd && !tailT0) tailT0 = now;
     if (!atEnd && tailT0) tailT0 = 0; // 滚回链尾以上 ⇒ 收尾重置（可逆）
-    atTail = atEnd;
+    atTail = atEnd && navigation !== 'failed' && retry.hidden;
     const tf = tailT0 ? Math.min(1, (now - tailT0) / TAIL_MS) : 0;
     const settle = Math.max(tl.settle, sstep(0, 0.34, tf));
     const exit = Math.max(tl.exit, sstep(0.3, 1, tf));
@@ -486,8 +549,14 @@ function init() {
        判据是**绿幕自己**（greenOp = 1，即 exit ≥ 0.95），不再等收尾时间轴走完 ——
        旧写法满屏绿之后还要干等 ≈0.7 s 才切页，读起来就是「卡了一下」。
        navOk 为假（按返回键回来的那一档）⇒ 停在绿幕上不跳，读者往回滚即解封。 */
-    if (navOk && greenOp >= 1) beginNav();
-    else cancelNav();
+    if (atEnd && navOk && greenOp >= 1) beginNav();
+    else {
+      cancelNav();
+      if (!atEnd && navigation === 'failed') {
+        navigation = 'idle';
+        clearWait();
+      }
+    }
   };
 
   /* ---- three 场景（懒加载：判定可跑后才 import，three chunk 与 DNA 共享）；
@@ -532,6 +601,7 @@ function init() {
     gate?.dispose();
     gate = null;
     cancelNav();
+    clearWait();
     atTail = false;
     tailT0 = 0;
     lastP = 0;
@@ -562,6 +632,7 @@ function init() {
     }
   });
   sync();
+  keep(disable);
 }
 
 /* 浏览器里跑；vitest 只 import 上面的纯函数层（core 文件无 DOM），不碰 init()。 */

@@ -25,12 +25,6 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
   const listen = (target, type, callback, options) =>
     target.addEventListener(type, callback, { ...options, signal });
 
-  // 用户反馈等太久。开屏原来 = 16*110 + 3000 + 16*70 = 5880ms，
-  // 其中停留 3000ms 是纯等待，砍到 1200；删除 70 -> 50（=800ms）。
-  // 现在开屏 = 1760 + 1200 + 800 = 3760ms。
-  // 再压开屏：打字 80（=1280ms）、停留 700、删除 40（=640ms）。
-  // 开屏合计 = 1280 + 700 + 640 = 2620ms。
-  var TYPE_MS = 80, HOLD_MS = 700, DEL_MS = 40;
   var Z_COUNT = 4;             // 深度层数
   // 用户说的景深不是虚化，而是后排移动更慢：投影为 focal/(camZ - z)，
   // z 越大（越近）横向位移越快。所以要拉大 z 的跨度。
@@ -98,10 +92,6 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
   var TILT = 0.0;              // 每张照片的随机倾角（0 = 全部端正）。原来 0.045。
   var DOF = 0.0;               // 景深虚化强度（0 = 完全不模糊）。原来是 1.15。
   // 说明：DOF=0 时只是不做虚化，**3D 感仍在** —— 近大远小与前后遮挡照旧。
-  // 开屏那条不再和飞入耦合：飞入的起飞点只有一个 = finishOpening（文字消失）。
-  // 所以这里用原来调好的速度，不必为了赶开屏而压缩。
-  // 单张 550ms，错峰 85ms（一张接一张很清楚）。
-  // 整批 = 21*85*1.4 + 550*1.4 = 3270ms。
   var FLY_MS = 900;
   var FLY_STAGGER = 140;        // 错峰基准（ms/张）—— 用户要求错峰更明显
   var BOUNCE = 0.34;           // 到端回弹强度
@@ -218,7 +208,7 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
     // ---------- 状态 ----------
     var photos = [];        // {id, ratio, x, y, z, rot, startAt, dur, overshoot, tex, blurTex, ready}
     var scroll = 0, scrollTarget = 0, scrollMin = 0, scrollMax = 0;
-    var capInAt = 0;   // when typing ends -> the capsule fly-in starts
+    var capInAt = 0;
     var CAP_DIST = 90, CAP_MS = 620, CAP_BACK = 1.3;   // fly-in distance(px) / duration(ms) / overshoot
   var scrollV = 0;                 // 惯性速度（只衰减、不回拉 —— 与弹簧的区别）
   var gridTopY = 0, gridBottomY = 0;
@@ -239,8 +229,7 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
   var INERTIA_TAU = 480;           // 惯性衰减时间常数(ms)
   var WHEEL_IMPULSE = 0.13;        // 每格滚轮给多少速度（0.55 时 6 格就冲到底，太大）
     var camZ = CAM_DIST, focusZ = 0;
-    var openState = 'idle', openAt = 0, openText = '', overlay = null, h1 = null;
-    var startedAt = 0, ready = false, raf = 0, flightEnd = 0;
+    var startedAt = 0, raf = 0, flightEnd = 0;
     var nameWrap = null, nameEl = null, nameIdx = -1, nameSince = 0, nameShown = '', nameHPx = 24, nameOutUntil = 0;
     // cached theme surface colour for the glass base (see composePass)
     var baseThemeSeen = '__none__', baseRgb = [9 / 255, 11 / 255, 15 / 255];
@@ -838,11 +827,11 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
       if (toggleEl) {
         var txtOp = 0;
         if (splitTo < 1) {
-          var since = performance.now() - splitAt - SPLIT_IN_MS;   // 合并 tween 结束后才 > 0
+          var since = splitAt ? performance.now() - splitAt - SPLIT_IN_MS : 280;   // 合并 tween 结束后才 > 0
           txtOp = since <= 0 ? 0 : clamp01(since / 280);
           if (sp > 0.98) txtOp = 0;                                 // 还没开始合并
         }
-        // capsule: hidden until typing ends, then it flies up from below and settles.
+        // 胶囊与照片同时开始入场。
         // The transform is written every frame, so the CSS transition must be off for it,
         // otherwise the two animations stack and it reads as two separate rises.
         var _tin = capInAt ? clamp01((performance.now() - capInAt) / CAP_MS) : 0;
@@ -912,10 +901,7 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
           var hh = (hhS + (tg.hh - hhS) * s1) * ps;
           var rad = (hhS + (Math.min(tg.hw, tg.hh) - hhS) * s1) * ps;
           var hw2 = Math.max(hw, 0.6), hh2 = Math.min(Math.max(hh, 0.6), hw2);
-          // The user wants the arrows to show no disc at all while focused - the glass colour
-          // kept drifting away from the background. Fade the disc out with focusT and leave
-          // only the chevron, which follows the theme foreground via CSS.
-          if (_rest <= 0.9995 && hw2 > 0.6 && focusT < 0.999) shapes.push([ax, ay, hw2, hh2, Math.min(rad, hw2), (1 - focusT)]);
+          if (_rest <= 0.9995 && hw2 > 0.6) shapes.push([ax, ay, hw2, hh2, Math.min(rad, hw2)]);
           // ★ 箭头跟着玻璃圆的中心走（并且分裂开始就渐显）
           // 箭头：不跟随、不动位置；等玻璃圆【到位之后】才渐显
           if (el5.style.transform) el5.style.transform = '';
@@ -1030,10 +1016,6 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
         var p = order[i];
         if (!p.ready) continue;
         // 飞入进度
-        // 不能用 ready 当闸门！ready 只在开屏结束才为 true，
-        // 于是开屏期间 t 恒为 0、结束时全部瞬间跳到 1，
-        // 用户看到的就是文字消失之后照片全部一起蹦出来。
-        // 飞入只由 startedAt 决定，而它在开屏一开始就已经设好。
         var t = startedAt ? clamp01((now - startedAt - p.startAt) / p.dur) : 0;
         if (t <= 0) continue;
         // 用户要求：删掉回弹动画，一步到位。
@@ -1184,11 +1166,7 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
         }
         if (performance.now() - startedAt < flyEnd) return;
       }
-      // 在调参面板里滚轮时，是滚面板自己的列表，不要拿去滚相册，
-      // 更不要当成跳过开屏（用户说老是点到下面的东西）。
       if (!active || e.ctrlKey) return;
-      if (!ready && (openState === 'typing' || openState === 'hold')) { beginDelete(); return; }
-      if (!ready) return;
       e.preventDefault();
       var d = (e.deltaY || e.deltaX || 0) / 100;
       // 滚轮只给速度；之后由惯性推进（松手后还会滑一段）。
@@ -1236,78 +1214,8 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
       }
     }
 
-    // ---------- 开屏打字 ----------
-    function buildOpening() {
-      overlay = document.createElement('div');
-      overlay.setAttribute('data-album-open', '');
-      overlay.style.cssText =
-        'position:absolute;inset:0;z-index:2;display:grid;place-items:center;' +
-        'pointer-events:none;opacity:1;transition:opacity .42s ease;';
-      var veil = document.createElement('div');
-      veil.style.cssText = 'position:absolute;inset:0;background:var(--paper);opacity:.42;';
-      h1 = document.createElement('div');
-      h1.style.cssText =
-        'position:relative;margin:0;font:400 clamp(52px,11vw,176px)/1.05 "Ubuntu Mono",' +
-        'ui-monospace,Menlo,Consolas,monospace;letter-spacing:.02em;' +
-        'text-shadow:0 2px 24px rgba(0,0,0,.45);max-width:92vw;text-align:center;overflow-wrap:anywhere;';
-      overlay.appendChild(veil); overlay.appendChild(h1);
-      host.appendChild(overlay);
-      openText = (root.dataset.albumTitle || '相册').replace(/_+$/, '').trim() || '相册';
-      overlay.setAttribute('aria-hidden', 'true');
-      setTitle('');
-      openState = 'typing';
-      openAt = performance.now();
-    }
-    function setTitle(txt) {
-      h1.textContent = txt;
-      var c = document.createElement('span');
-      c.textContent = '_';
-      c.style.cssText = 'opacity:.85;animation:willowAlbumCaret 1s steps(1) infinite;';
-      h1.appendChild(c);
-    }
-    function beginDelete() {
-      // 不在这里起飞。起飞点是 finishOpening（文字消失）——
-      // 用户：把文字消失结束作为一个标志，然后再开始做飞入动画。
-      if (openState === 'deleting' || openState === 'done') return;
-      openState = 'deleting';
-      openAt = performance.now();
-    }
-    function tickOpening(now) {
-      if (openState === 'typing') {
-        var n = Math.min(openText.length, Math.floor((now - openAt) / TYPE_MS));
-        setTitle(openText.slice(0, n));
-        if (n >= openText.length) { openState = 'hold'; openAt = now; }   // 不在这里起飞：停留阶段不能有照片在飞
-      } else if (openState === 'hold') {
-        if (now - openAt >= HOLD_MS) beginDelete();
-      } else if (openState === 'deleting') {
-        var k = openText.length - Math.min(openText.length, Math.floor((now - openAt) / DEL_MS));
-        setTitle(openText.slice(0, k));
-        if (k <= 0) finishOpening();
-      }
-    }
-    // 飞入的起算点。放在打字结束（进入 hold）时 —— 用户要求飞入时间提前，
-    // 这样文字还在停留/淡出，照片已经在进场了。只用一次。
-    function startFly() {
-      if (startedAt) return;
-      startedAt = performance.now();
-    }
-
-    function finishOpening() {
-      openState = 'done';
-      capInAt = performance.now();   // capsule starts flying in now
-      setFocus(-1);   // the opening must end UNFOCUSED, otherwise the first Esc runs a full un-focus animation and slams a photo into your face
-      if (overlay) {
-        overlay.style.opacity = '0';
-        const opening = overlay;
-        opening.addEventListener('transitionend', () => opening.remove(), { once:true, signal });
-        lastOpening = opening;
-      }
-      ready = true;
-      startFly();                        // 若前面没启动过，这里兜底
-    }
-
     // ---------- 主循环 ----------
-    var last = 0, lastOpening = null;
+    var last = 0;
 
       // 名称：网格停稳后悬停触发（延迟 NAME_DELAY），聚焦时直接显示。
       function nameTarget() {
@@ -1403,9 +1311,7 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
       raf = requestAnimationFrame(frame);
       var dt = last ? Math.min(64, now - last) : 16;
       last = now;
-      tickOpening(now);
-      if (lastOpening && now - capInAt >= 500) { lastOpening.remove(); lastOpening = null; }
-      if (ready) tickScroll(dt);
+      tickScroll(dt);
       // 两个视图之间的补间
       // ---- 聚焦补间 ----
       if (focusT !== focusTo) {
@@ -1453,7 +1359,7 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
         scrollTarget = scroll; panTarget = panY;
       }
       if (dimEl) dimEl.style.opacity = (DIM_MAX * focusT).toFixed(3);
-      if (toggleEl) toggleEl.disabled = focusTo === 1 || !ready;
+      if (toggleEl) toggleEl.disabled = focusTo === 1;
       if (navPrev && navNext) navPrev.tabIndex = navNext.tabIndex = focusTo === 1 ? 0 : -1;
       // 灯箱左右圆形按钮：聚焦时淡入，退出时淡出
       if (navPrev && navNext) {
@@ -1494,7 +1400,7 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
       updateFocusReveal(now);
       updateName(now);
       // 原版逐帧绘制；镜头、玻璃和图注都停稳后才复用最后一帧。
-      const animating = !ready || now - startedAt < flightEnd || switching ||
+      const animating = now - startedAt < flightEnd || switching ||
         now - focusAt < FOCUS_MS + 1200 || now - splitAt < Math.max(SPLIT_OUT_MS, SPLIT_IN_MS) + 280 ||
         scrollV !== 0 || panV !== 0 || now - capInAt < CAP_MS ||
         Math.abs(panY) > 0.0001 && mode === 0 && focusTo === 0;
@@ -1583,8 +1489,7 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
         const { moved } = gesture;
         gesture = undefined;
         if (!active || moved) return;
-        if (openState === 'typing' || openState === 'hold') { beginDelete(); return; }
-        if (!ready || modeFrom !== mode) return;
+        if (modeFrom !== mode) return;
         const rect = root.getBoundingClientRect();
         const nx = 2 * (e.clientX - rect.left) / rect.width - 1;
         const ny = 1 - 2 * (e.clientY - rect.top) / rect.height;
@@ -1598,7 +1503,7 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
           toggleEl.disabled = false;
           toggleEl.focus({ preventScroll:true });
         }
-        if (!root.contains(e.target) || !ready || !['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+        if (!root.contains(e.target) || !['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
         e.preventDefault();
         const direction = e.key === 'ArrowLeft' ? -1 : 1;
         if (focusTo === 1) (direction < 0 ? navPrev : navNext).click();
@@ -1606,7 +1511,6 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
       });
 
       host.setAttribute('data-album-build', BUILD);
-      buildOpening();
       buildToggle();
       hookPress(toggleEl); hookPress(navPrev); hookPress(navNext);
       if (makePost()) { makeFbo(); if (makeBlur()) makeBlurRt(); makeCompose(); } else glassOn = false;
@@ -1630,8 +1534,8 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
         nameWrap.setAttribute('data-album-name', '');
         nameWrap.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none;z-index:1;';
         nameEl = document.createElement('div');
-        nameEl.style.cssText = 'font:400 13px/1.35 "Ubuntu Mono", ui-monospace, Menlo, Consolas, monospace;' +
-          'letter-spacing:.14em;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
+        nameEl.style.cssText = 'font:600 13px/1.35 var(--willow-font);' +
+          'letter-spacing:.02em;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
           'color:#fff;background:none;background-image:none;-webkit-background-clip:border-box;' +
           'background-clip:border-box;-webkit-text-fill-color:#fff;transform:translateY(24px);opacity:0;' +
           'transition:transform ' + NAME_IN_MS + 'ms cubic-bezier(.2,.8,.3,1), opacity ' + NAME_IN_MS + 'ms ease;' +
@@ -1925,7 +1829,9 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
       active = visible;
       if (active) {
         resize();
-        if (!ready && openState === 'typing') openAt = performance.now();
+        if (!startedAt) {
+          startedAt = capInAt = performance.now();
+        }
         last = 0;
         dirty = true;
         raf = requestAnimationFrame(frame);
