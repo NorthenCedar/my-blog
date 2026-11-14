@@ -60,6 +60,18 @@ onPage(({ document, window, keep, matchMedia, MutationObserver }) => {
       const mounted = mountWillowAlbum(view, photos, fallback);
       dispose = mounted.dispose;
       setVisible = mounted.setVisible;
+      const root = document.documentElement;
+      if (root.classList.contains('pt-play')) {
+        // 后台准备照片并显示展览外壳，等换页遮幕撤掉后才启动飞入。
+        setVisible = visible => { if (!visible) mounted.setVisible(false); };
+        const observer = new MutationObserver(() => {
+          if (root.classList.contains('pt-on')) return;
+          observer.disconnect();
+          setVisible = mounted.setVisible;
+          if (album.dataset.scene === 'interactive') setVisible(true);
+        });
+        observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+      }
       return mounted.ready.then(ready);
     }).catch(error => {
       dispose?.();
