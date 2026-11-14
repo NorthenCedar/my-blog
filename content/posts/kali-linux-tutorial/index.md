@@ -17,7 +17,7 @@ Kali Linux 是基于 Debian 的 Linux 发行版，由 Offensive Security 公司�
 
 ## 二、准备工作
 
-- 一台 Windows 或 Mac 电脑，建议内存 8GB 以上，硬盘留出至少 100GB 空闲
+- 一台 Windows 或 Mac 电脑，建议内存 8GB 以上，硬盘留出至少 30GB 空闲
 - 虚拟机软件（二选一，本文用 VMware 演示）
 - Kali 虚拟机版镜像（约 3GB）
 
