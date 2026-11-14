@@ -250,7 +250,7 @@ coverAlt: 新首页在桌面端的截图
 | date | 是 | 日期，决定相册编目顺序 |
 | images | 是 | 非空 `{src, alt}` 数组，源图不能重复，顺序由作者维护 |
 | titleEn | 否 | 英文展示名；省略时回退 title |
-| layout | 否 | scatter、slices 或 wall；省略时默认 scatter，不按数量自动切换 |
+| layout | 否 | scatter、slices、dome、infinite、wall 或 willow；省略时默认 scatter，不按数量自动切换 |
 | draft | 否 | true 为未完成相册草稿，可暂缺标题、日期和照片；缺省为已公开，发布时完整校验 |
 | cover | 否 | images 中某一项的 src，独立于照片顺序；省略时仍取第一张 |
 | presentation | 否 | 封面 arrangement（left/right/wide）、transition（slide/reveal/perspective）、stroke（arc/loop/corner）、weight（regular/bold） |

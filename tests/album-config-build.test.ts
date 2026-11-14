@@ -17,6 +17,12 @@ describe('写作台输出进入构建的真实契约',()=>{
     expect(()=>readAlbumDocument('---\ntitle: a\ntitle: b\n---')).toThrow();
     expect(()=>readAlbumDocument('---\nimages: &x [*x]\n---')).toThrow();
   });
+  it('Willow 布局从写作台输出的 YAML 保留到相册生成器和内容集合',()=>{
+    const header='title: 午后\ndate: 2026-11-14\nlayout: willow\nimages: [{src: ./window.jpg, alt: 窗边}]\n';
+    const value=readAlbumDocument(`---\n${header}---\n`);
+    expect(gallerySchema.parse(value).layout).toBe('willow');
+    expect(readAlbumOptions(header).layout).toBe('willow');
+  });
   it('三种动作可以反向且都回到无遮罩的终态，常规旧值保持一致',()=>{
     for(const type of ['slide','reveal','perspective']){
       const forward=coverMotion(type,1),reverse=coverMotion(type,-1);

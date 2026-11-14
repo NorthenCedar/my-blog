@@ -9,7 +9,7 @@ interface Props {
     titleEn?: string;
     date: string;
     total: number;
-    layout: 'dome' | 'infinite';
+    layout: 'dome' | 'infinite' | 'willow';
     frames: { alt: string; src: string; files: { w: number; h: number; url: string }[] }[];
   };
   no: number;
@@ -31,8 +31,8 @@ const { album, no } = Astro.props;
     </button>
   </header>
   <div class="album-stage" data-album-stage hidden aria-label={`${album.title}的互动陈列`}>
-    <div class="album-view" data-album-view></div>
-    <p class="album-hint">拖动浏览 · 点图放大</p>
+    <div class="album-view" data-album-view data-album-title={album.titleEn || album.title}></div>
+    {album.layout !== 'willow' && <p class="album-hint">拖动浏览 · 点图放大</p>}
   </div>
   <AlbumIndexHeading album={album} no={no} />
   <PhotoWall albums={[album]} />

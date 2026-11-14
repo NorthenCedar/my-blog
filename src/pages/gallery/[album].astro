@@ -30,7 +30,7 @@ import '../../vendor/react-bits/InfiniteMenu.css';
 
 type File = { w: number; h: number; url: string };
 type Frame = { alt: string; src: string; files: File[] };
-type Album = { id: string; title: string; titleEn?: string; cover?:string; layout?: 'scatter' | 'slices' | 'dome' | 'infinite' | 'wall'; date: string; total: number; frames: Frame[] };
+type Album = { id: string; title: string; titleEn?: string; cover?:string; layout?: 'scatter' | 'slices' | 'dome' | 'infinite' | 'wall' | 'willow'; date: string; total: number; frames: Frame[] };
 
 /* ★ 一册一页 —— 相册清单从 manifest 读（"有几个文件夹就放几个"）：
    站主往 content/gallery/ 丢一个新文件夹，构建时生成脚本写进 manifest，
@@ -60,7 +60,7 @@ export async function getStaticPaths() {
 
 const { album, no } = Astro.props as { album: Album; no: number };
 const layout = album.layout;
-const interactive = layout === 'dome' || layout === 'infinite';
+const interactive = layout === 'dome' || layout === 'infinite' || layout === 'willow';
 const shareFrame = album.frames.find(frame=>frame.src===album.cover)??album.frames[0];
 const shareImage = shareFrame?.files.reduce<File | undefined>((largest, file) => !largest || file.w > largest.w ? file : largest, undefined)?.url;
 ---

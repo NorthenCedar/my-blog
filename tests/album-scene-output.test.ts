@@ -30,7 +30,7 @@ describe('单册空间陈列产物', () => {
       }
       // 页面不在 HTML 里预挂启动态；脚本没跑时没有隐藏照片。
       expect(html).not.toMatch(/<section[^>]*class="[^"]*scene-on/);
-      if (album.layout === 'dome' || album.layout === 'infinite') {
+      if (['dome', 'infinite', 'willow'].includes(album.layout)) {
         expect(html).toContain('data-interactive-album');
         expect(html).toContain('data-album-toggle');
         expect(html).toContain('data-album-return');
@@ -45,7 +45,7 @@ describe('单册空间陈列产物', () => {
   });
   it('生成清单保留展示选项与真实像素宽，新字段不污染首页照片池', () => {
     for (const album of manifest.albums) {
-      expect(['scatter', 'slices', 'dome', 'infinite', 'wall']).toContain(album.layout);
+      expect(['scatter', 'slices', 'dome', 'infinite', 'wall', 'willow']).toContain(album.layout);
       expect(typeof album.titleEn).toBe('string'); // 新相册可以省略英文名，清单写空串。
       for (const frame of album.frames) {
         for (const file of frame.files) expect(file.actualW).toBeGreaterThan(0);

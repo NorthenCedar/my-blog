@@ -13,22 +13,26 @@ onPage(({ document, window, keep, matchMedia, MutationObserver }) => {
   if (!links.length) return;
   const photos = links.map(link => {
     const image = link.querySelector('img')!;
-    return { src: image.src, full: link.href, alt: image.alt };
+    const ratio = Number(image.getAttribute('width')) / Number(image.getAttribute('height'));
+    return { src: image.src, full: link.href, alt: image.alt, ratio };
   });
 
   let live = true;
   let dispose: (() => void) | undefined;
+  let setVisible: ((visible: boolean) => void) | undefined;
   function showIndex(show: boolean) {
     album.dataset.scene = show ? 'index' : 'interactive';
     stage.hidden = show;
     wall.hidden = !show;
     toggleLabel.textContent = show ? '返回展览' : '查看全部';
     toggle.setAttribute('aria-pressed', String(show));
+    setVisible?.(!show);
   }
 
   function fallback() {
     if (!live) return;
     delete album.dataset.scene;
+    delete stage.dataset.loading;
     stage.hidden = true;
     toggle.hidden = true;
     wall.hidden = false;
@@ -42,6 +46,29 @@ onPage(({ document, window, keep, matchMedia, MutationObserver }) => {
 
   stage.dataset.loading = '';
   stage.hidden = false;
+  function ready() {
+    if (!live) return;
+    delete stage.dataset.loading;
+    toggle.hidden = false;
+    toggle.onclick = () => showIndex(!stage.hidden);
+    showIndex(false);
+  }
+
+  if (album.dataset.layout === 'willow') {
+    import('./willow-album-view').then(({ mountWillowAlbum }) => {
+      if (!live) return;
+      const mounted = mountWillowAlbum(view, photos, fallback);
+      dispose = mounted.dispose;
+      setVisible = mounted.setVisible;
+      return mounted.ready.then(ready);
+    }).catch(error => {
+      dispose?.();
+      window.console.warn('Willow 相册初始化失败', error);
+      fallback();
+    });
+    return;
+  }
+
   import('./interactive-album-view').then(({ mountAlbum }) => {
     if (!live) return;
     const mounted = mountAlbum(view, {
@@ -55,13 +82,7 @@ onPage(({ document, window, keep, matchMedia, MutationObserver }) => {
         });
         if (link.dispatchEvent(event)) link.click();
       },
-      onReady: () => {
-        if (!live) return;
-        delete stage.dataset.loading;
-        toggle.hidden = false;
-        toggle.onclick = () => showIndex(!stage.hidden);
-        showIndex(false);
-      },
+      onReady: ready,
       onUnavailable: fallback,
     });
     dispose = mounted.dispose;

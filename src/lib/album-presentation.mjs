@@ -4,7 +4,7 @@ export const ALBUM_OPTIONS = Object.freeze({
   transition:[['slide','侧向翻入'],['reveal','遮罩显影'],['perspective','轻微透视翻入']],
   stroke:[['arc','长弧引线'],['loop','回环圈注'],['corner','框角折线']],
   weight:[['regular','常规'],['bold','明显']],
-  layout:[['scatter','散片陈列'],['slices','悬浮切片'],['dome','Dome Gallery · 照片穹顶'],['infinite','Infinite Menu · 照片星球'],['wall','直接看照片墙']],
+  layout:[['scatter','散片陈列'],['slices','悬浮切片'],['dome','Dome Gallery · 照片穹顶'],['infinite','Infinite Menu · 照片星球'],['wall','直接看照片墙'],['willow','Willow 3D · 横向展览']],
 });
 export const ALBUM_PRESETS = Object.freeze([
   {title:'长弧 · 侧翻',arrangement:'left',transition:'slide',stroke:'arc',weight:'bold'},
