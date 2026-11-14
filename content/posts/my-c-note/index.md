@@ -48,7 +48,7 @@ int main()
 9.1 byte = 8 bit
    一个int四个字节；float四字节；double八字节；char一字节
 
-10.%hd短整型，%hu无符号短整型
+10.%hd短整型，%hu无符号短整型，%p是地址
 
 11.char str[] = "ab\0cd";
     printf("%d\n", sizeof(str));   //输出结果是6，sizeof会把这个变量在**内存中占的总字节数**计算出来，这串str有四个字母和中间一个\0转义字符和字符串末尾自带的\0，所以是6
@@ -654,3 +654,190 @@ int main()
     return 0;
 }
 ```
+
+## 二维数组
+### 初识二维数组
+二维数组的遍历因为是二维所以需要两层循环，我们更喜欢把第一层看为行（横着的），第二层看为列（竖着的）
+```c
+    for ( i = 0; i <= 3; i++)
+    {
+        for ( j = 0; j <= 5; j++)
+            {
+                a[i][j] = i * j;
+            }
+    }
+```
+
+### 二维数组的初始化
+二维数组的初始化时，行数可由编译器来数，但列数必须给出，省略表示补0
+每行一个{},用逗号分隔（和前面一样，最后的逗号可以存在）。
+```c
+    int a[][5] = {
+        {0,1,2,3,4},
+        {2,3,4,5,6},
+    };
+```
+
+### 二维数组实例
+用二维数组判断井字棋胜负
+```c
+#include <stdio.h>
+
+int main()
+{
+    const int size = 3;
+    int board[size][size];
+    int i, j;
+    int num0fX, num0fO;
+    int result = -1;    // -1 means no winner, 0 means X wins, 1 means O wins
+
+    // 读入棋盘数据
+    for ( i = 0; i < size; i++)
+    {
+        for ( j = 0; j < size; j++)
+        {
+            scanf("%d", &board[i][j]);   // 记得要加 & 符号
+        }
+    }
+
+    // 检查行和列
+    for ( i = 0; i < size; i++)
+    {
+        int row_num0fO = 0, row_num0fX = 0;
+        int col_num0fO = 0, col_num0fX = 0;
+        for ( j = 0; j < size; j++)
+        {
+            // 检查第 i 行
+            if (board[i][j] == 1)
+            {
+                row_num0fX++;
+            }
+            else
+            {
+                row_num0fO++;
+            }
+
+            // 检查第 i 列
+            if (board[j][i] == 1)
+            {
+                col_num0fX++;
+            }
+            else
+            {
+                col_num0fO++;
+            }
+        }
+
+        // 内层循环结束后，判断第 i 行和第 i 列是否有赢家
+        if (row_num0fX == size || col_num0fX == size)
+        {
+            result = 1; // X wins
+            break;
+        }
+        if (row_num0fO == size || col_num0fO == size)
+        {
+            result = 0; // O wins
+            break;
+        }
+    }
+
+    // 检查主对角线
+    if (result == -1)
+    {
+        num0fX = 0;
+        num0fO = 0;
+        for ( i = 0; i < size; i++)
+        {
+            if (board[i][i] == 1)
+            {
+                num0fX++;
+            }
+            else
+            {
+                num0fO++;
+            }
+        }
+        if (num0fX == size || num0fO == size)
+        {
+            result = (num0fX == size) ? 1 : 0;
+        }
+    }
+
+    // 检查副对角线
+    if (result == -1)
+    {
+        num0fX = 0;
+        num0fO = 0;
+        for ( i = 0; i < size; i++)
+        {
+            if (board[i][size - 1 - i] == 1)
+            {
+                num0fX++;
+            }
+            else
+            {
+                num0fO++;
+            }
+        }
+        if (num0fX == size || num0fO == size)
+        {
+            result = (num0fX == size) ? 1 : 0;
+        }
+    }
+
+    // 输出结果
+    if (result == 1)
+    {
+        printf("X wins\n");
+    }
+    else if (result == 0)
+    {
+        printf("O wins\n");
+    }
+    else
+    {
+        printf("No winner\n");
+    }
+
+    return 0;
+}
+```
+## 指针
+### 指针定义
+指针就是保存地址的变量，如int *p = &i;就是把i的地址赋给了p，可以说p指向i
+另外一种定义方法是int* p;这里还是p是指针而不是有int*这么一个类型；所以int* p,q;中的q还是一个普通的整形
+
+### 函数中的指针
+我想要在调用函数时得到外面的值就可以使用指针
+```c
+    void f(int *p);
+    // 在被调用时得到了某个变量的地址
+    int i = 0; f(&i);   // 会把i的地址传给p这个指针
+    // 在这个函数里面可以通过这个指针访问外面的这个i
+    // p存的是地址，占8个字节，所以不能用%d输出，会直接截断，要用%p
+```
+来一个小例子
+```c
+#include <stdio.h>
+
+void f(int *p);
+
+int main()
+{
+    int i = 6;
+    printf("&i = %p\n", &i);
+    f(&i);
+    printf("函数改完i的值为：%d\n", i);  //因为f函数里面让*p = 10;所以i就直接被顺着地址顺藤摸瓜的改变了值
+
+    return 0;
+}
+
+void f(int *p)
+{
+    printf(" p = %p\n", p);  // 变量p存的是i的地址，而%p则是专门打印指针的格式符，输出十六进制内存地址，如果想看没有0x的输出长什么样，可以用printf("%lx\n",(unsigned long)p);把p强制转换成lx格式输出，但不建议这么做
+    printf("*p = %d\n", *p);  // 加上星号*p的本质就是解引用，拿着p存的地址去找这个地址的值，而这个值是int,所以用%d
+
+    *p = 10;  // 直接找到i的地址，让那里存着的值改为10
+}
+```
+所以scanf函数里面有&的原因，就是要把值传到所在的地址，如果没有&，他就回去找6这个地址并存进去（假设i = 6;），所以编译不一定会报错，但是运行一定会出错

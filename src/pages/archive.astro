@@ -1,5 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
+import ArchiveDateFilter from '../components/ArchiveDateFilter.astro';
 import Base from '../layouts/Base.astro';
 import TrueFocusFrame from '../components/TrueFocusFrame.astro';
 import PageTitle from '../components/PageTitle.astro';
@@ -70,20 +71,8 @@ for (let i = 0; i < tapeTicks.length - 1; i++) {
         <span class="f-label">搜索</span>
         <input type="search" name="q" data-q placeholder="标题 / 描述关键词" autocomplete="off" />
       </label>
-      <label class="f">
-        <span class="f-label">年份</span>
-        <select name="year" data-year>
-          <option value="all">全部</option>
-          {years.map((y) => <option value={y}>{y}</option>)}
-        </select>
-      </label>
-      <label class="f">
-        <span class="f-label">月份</span>
-        <select name="month" data-month>
-          <option value="all">全部</option>
-          {months.map((m) => <option value={m}>{String(Number(m))} 月</option>)}
-        </select>
-      </label>
+      <ArchiveDateFilter name="year" label="年份" values={years} />
+      <ArchiveDateFilter name="month" label="月份" values={months} />
       <div class="f f-sort" role="group" aria-label="排序">
         <span class="f-label">排序</span>
         <span class="sort-options true-focus">
@@ -227,7 +216,7 @@ for (let i = 0; i < tapeTicks.length - 1; i++) {
     color: var(--muted);
     white-space: nowrap;
   }
-  .filters :is(input[type='search'], select) {
+  .filters input[type='search'] {
     min-block-size: 2.5rem;
     min-inline-size: 0;
     padding: var(--sp-1) var(--sp-2);
@@ -238,7 +227,7 @@ for (let i = 0; i < tapeTicks.length - 1; i++) {
     border: 1px solid var(--hair);
     border-radius: var(--sp-2);
   }
-  .filters :is(input[type='search'], select):focus-visible {
+  .filters input[type='search']:focus-visible {
     outline: 2px solid var(--accent-ink);
     outline-offset: 1px;
   }
@@ -323,7 +312,6 @@ for (let i = 0; i < tapeTicks.length - 1; i++) {
     .archive-hero { min-block-size: 0; padding-block-start: var(--sp-5); }
     .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-inline: var(--sp-3); }
     .f-q { grid-column: 1 / -1; }
-    .f > select { flex: 1; }
     .f-sort { grid-column: 1; }
     .f-sort .f-label { display: none; }
     .f-sort button, .archive-views button { padding-inline: var(--sp-2); }

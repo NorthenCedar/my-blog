@@ -1,0 +1,197 @@
+---
+interface Props {
+  name: 'year' | 'month';
+  label: string;
+  values: string[];
+}
+
+const { name, label, values } = Astro.props;
+const id = `archive-${name}`;
+const options = [
+  { value: 'all', text: '全部' },
+  ...values.map(value => ({ value, text: name === 'month' ? `${Number(value)} 月` : value })),
+];
+const step = Math.min(82, 420 / Math.max(1, options.length - 1));
+---
+
+<div class="date-filter" data-date-filter>
+  <label id={`${id}-label`} for={id}>{label}</label>
+  <div class="date-control">
+    <select id={id} name={name} {...{ [`data-${name}`]: '' }}>
+      {options.map(({ value, text }) => <option value={value}>{text}</option>)}
+    </select>
+    <button
+      type="button"
+      id={`${id}-trigger`}
+      class="date-trigger"
+      role="combobox"
+      aria-labelledby={`${id}-label ${id}-value`}
+      aria-expanded="false"
+      aria-controls={`${id}-options`}
+      hidden
+    >
+      <span id={`${id}-value`} data-date-value>全部</span>
+    </button>
+    <div class="date-drawer" style={`--date-last-delay:${step * (options.length - 1)}ms`}>
+      <div id={`${id}-options`} class="date-options" role="listbox" aria-labelledby={`${id}-label`} inert>
+        {options.map(({ value, text }, index) => (
+          <div
+            id={`${id}-option-${value}`}
+            class="date-option"
+            role="option"
+            aria-selected={String(value === 'all')}
+            data-value={value}
+            style={`--date-delay:${step * (options.length - 1 - index)}ms`}
+          >{text}</div>
+        ))}
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .date-filter {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    min-inline-size: 0;
+  }
+  label {
+    color: var(--muted);
+    font-size: var(--fs-xs);
+    white-space: nowrap;
+  }
+  .date-control { position: relative; flex: 1; min-inline-size: 0; }
+  :is(select, .date-trigger) {
+    inline-size: 100%;
+    min-block-size: 2.5rem;
+    padding: var(--sp-1) var(--sp-2);
+    border: 1px solid var(--hair);
+    border-radius: var(--sp-2);
+    color: var(--ink);
+    background: var(--paper);
+    font: inherit;
+    font-size: var(--fs-sm);
+  }
+  .date-trigger:not([hidden]) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .date-trigger::after {
+    content: '';
+    box-sizing: border-box;
+    flex: 0 0 var(--sp-2);
+    block-size: var(--sp-2);
+    border: solid currentColor;
+    border-width: 0 1.5px 1.5px 0;
+    rotate: 45deg;
+    translate: 0 -25%;
+  }
+  .date-trigger[aria-expanded='true'] { border-color: var(--accent-ink); }
+  .date-trigger[aria-expanded='true']::after { rotate: 225deg; translate: 0 25%; }
+  :is(select, .date-trigger):focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 1px;
+  }
+  .date-drawer {
+    position: absolute;
+    z-index: 1;
+    inset-block-start: calc(100% + var(--sp-1));
+    inset-inline-start: 0;
+    min-inline-size: max(100%, 5.75rem);
+    border-radius: var(--sp-3);
+    visibility: hidden;
+    pointer-events: none;
+    clip-path: inset(0 calc(-1 * var(--sp-4)) 100%);
+  }
+  .date-drawer::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 1px solid var(--hair);
+    border-radius: inherit;
+    background: var(--paper);
+    box-shadow: var(--glass-shadow);
+  }
+  .date-options {
+    position: relative;
+    box-sizing: border-box;
+    display: grid;
+    gap: var(--sp-1);
+    max-block-size: min(15rem, var(--date-room, 15rem));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: calc(var(--sp-1) + 1px);
+    border-radius: inherit;
+  }
+  .date-control[data-side='above'] > .date-drawer {
+    inset-block-start: auto;
+    inset-block-end: calc(100% + var(--sp-1));
+    clip-path: inset(100% calc(-1 * var(--sp-4)) 0);
+  }
+  .date-control:has([aria-expanded='true']) > .date-drawer {
+    visibility: visible;
+    pointer-events: auto;
+    clip-path: inset(calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4)) calc(-1 * var(--sp-5)));
+  }
+  .date-option {
+    position: relative;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--sp-2);
+    color: var(--ink);
+    background: var(--paper);
+    font-size: var(--fs-sm);
+    line-height: 1.3;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .date-option:is(:hover, [data-active]):not([aria-selected='true']) {
+    color: var(--accent-ink);
+    background: var(--accent-wash);
+  }
+  .date-option[aria-selected='true'] { color: var(--paper); background: var(--accent); }
+  @media (prefers-reduced-motion: no-preference) {
+    .date-trigger::after { transition: rotate var(--dur-hover) var(--ease-interact), translate var(--dur-hover) var(--ease-interact); }
+    .date-drawer {
+      --date-flight: var(--dur-hover);
+      --date-assemble: calc(var(--date-last-delay) + var(--date-flight));
+      --date-crossfade: opacity var(--dur-hover) ease-in-out;
+      transition: clip-path var(--dur-hover) var(--ease-interact), visibility 0s var(--dur-hover);
+    }
+    .date-control:has([aria-expanded='true']) > .date-drawer { transition: none; }
+    .date-drawer::before { opacity: 0; transition: opacity var(--dur-hover) ease; }
+    .date-control:has([aria-expanded='true']) > .date-drawer::before {
+      opacity: 1;
+      transition: var(--date-crossfade) var(--date-assemble);
+    }
+    .date-option {
+      opacity: 0;
+      transform: translateY(calc(-1 * var(--sp-5))) scale(.96);
+      transition: opacity var(--dur-fast) ease, transform var(--date-flight) var(--ease-interact);
+    }
+    .date-control[data-side='above'] .date-option { transform: translateY(var(--sp-5)) scale(.96); }
+    .date-control:has([aria-expanded='true']) .date-option {
+      opacity: 1;
+      transform: none;
+      transition-delay: var(--date-delay);
+    }
+    .date-option::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border: 1px solid var(--hair);
+      border-radius: inherit;
+      opacity: 1;
+      transition: opacity var(--dur-fast) ease;
+    }
+    .date-control:has([aria-expanded='true']) .date-option::before {
+      opacity: 0;
+      transition: var(--date-crossfade) var(--date-assemble);
+    }
+  }
+</style>

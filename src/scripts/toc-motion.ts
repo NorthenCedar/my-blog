@@ -1,6 +1,6 @@
 import { createSailingTocVisual } from '../vendor/leibox/sailing-toc-motion';
 
-/** 航线跟随活动条目，正文跳转继续由原生锚点负责。 */
+/** 航线跟随阅读侧栏标记的活动条目。 */
 export function createTocMotion(nav: HTMLElement) {
   const host = nav.querySelector<HTMLElement>('.toc-index')!;
   const list = host.querySelector<HTMLOListElement>('ol')!;

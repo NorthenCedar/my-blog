@@ -1,4 +1,4 @@
-/** 阅读侧栏的增强：目录原生锚点照常可用，脚本只负责当前位置与复制反馈。 */
+/** 阅读侧栏的增强：章节跳转留在文章的同一条历史里。 */
 export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement, changed: boolean) => void): () => void {
   const win = doc.defaultView;
   if (!win) return () => {};
@@ -38,6 +38,20 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
     onActive?.(pairs[next].link,changed);
   };
   const schedule = () => { if (live && !frame && pairs.length) frame = win.requestAnimationFrame(update); };
+  const jumpToHeading = (event: MouseEvent) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const pair = pairs.find(({ link }) => link === event.currentTarget);
+    if (!pair) return;
+    const { link, heading } = pair;
+    event.preventDefault();
+    // 保留路由的历史状态；返回键直接回到进入本文前的页面。
+    if (win.location.hash !== link.hash) win.history.replaceState(win.history.state, '', link.href);
+    if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+    heading.focus({ preventScroll: true });
+    heading.scrollIntoView({ block: 'start' });
+    schedule();
+  };
+  pairs.forEach(({ link }) => link.addEventListener('click', jumpToHeading));
   win.addEventListener('scroll', schedule, { passive: true });
   win.addEventListener('resize', schedule, { passive: true });
   win.addEventListener('hashchange', schedule);
@@ -78,6 +92,7 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
     win.cancelAnimationFrame(frame);
     win.clearTimeout(timer);
     observer?.disconnect();
+    pairs.forEach(({ link }) => link.removeEventListener('click', jumpToHeading));
     win.removeEventListener('scroll', schedule);
     win.removeEventListener('resize', schedule);
     win.removeEventListener('hashchange', schedule);

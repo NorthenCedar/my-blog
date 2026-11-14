@@ -1,4 +1,5 @@
 import { onPage } from './page-lifecycle';
+import { mountArchiveDateFilters } from './archive-date-filter';
 import { createArchiveMotion, createArchiveViewMotion } from './archive-motion';
 import { primeMotion } from './motion-loader';
 import { createCollectionLayoutMorph } from '../vendor/leibox/collection-layout-morph';
@@ -63,11 +64,13 @@ export function initArchiveFilters(doc: Document): () => void {
   on(desc,'click',()=>{dir=-1;apply();}); on(asc,'click',()=>{dir=1;apply();});
   on(bar,'submit',event=>event.preventDefault());
   on(bar.querySelector('[data-clear]')!,'click',()=>{q.value='';year.value='all';month.value='all';dir=-1;apply();q.focus();});
+  const unmountDates = mountArchiveDateFilters(bar);
   apply(false);
   const dispose = () => {
     if (!live) return;
     live = false;
     listeners.forEach(off => off());
+    unmountDates();
     unmountViews?.();
     viewMotion.dispose();
     unprime();
