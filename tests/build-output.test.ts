@@ -962,7 +962,8 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     // LeiBox 帆船航线驱动实测约 3.5 KiB，仅增加按需体积，首屏上限不变。
     const SAILING_TOC_BUDGET = 4 * 1024;
     /* 2026-11-12：主题开关进顶栏，每页多背一段 ~1 KB 的引导脚本 ⇒ 首屏额度加这一笔。 */
-    const BUDGET = 67584 + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET + SAILING_TOC_BUDGET;
+    // 消息整行跳转及评论定位，完整闭包多留 1 KiB，首屏与脚本数量上限照旧。
+    const BUDGET = 68608 + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET + SAILING_TOC_BUDGET;
     expectMotionStartup(page, 67584 + THEME_TOGGLE_BOOT_BUDGET);
     const isSailingToc = (path: string) => /[/\\]toc-motion\.[^/\\]+\.js$/.test(path);
     const sailing = jsClosure(page).files.filter(isSailingToc);
@@ -1375,7 +1376,8 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
        把 three 拖进来必炸"的量级；三条反面正对照（three / 相册视图 / 播放器）全部照旧。
        ⚠ 中间色**不从模块 import**：那样会把整块预览逻辑拉进首屏包（试过，多出 ~2.9 KB），
          现在只读事件 detail 里的 `mixed`，增量才是现在这个数。 */
-    const BUDGET = 68 * 1024 + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET;
+    // 留言板使用同一套消息跳转及评论定位，完整闭包加 1 KiB。
+    const BUDGET = 69 * 1024 + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET;
     expectMotionStartup(page, 67 * 1024 + THEME_TOGGLE_BOOT_BUDGET);
     const { code, files } = jsClosure(page, { skipMenu: true, skipTechHeading: true });
     const full = Buffer.byteLength(code, 'utf8') - siteWideLazyBytes(files);

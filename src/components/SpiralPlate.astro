@@ -66,7 +66,7 @@ interface Props {
 const { mode = 'page' } = Astro.props;
 const embed = mode === 'embed';
 
-type File = { w: number; h: number; url: string };
+type File = { w: number; h: number; actualW?: number; url: string };
 type Frame = { alt: string; src: string; files: File[] };
 type Album = { id: string; title: string; date: string; total: number; frames: Frame[] };
 
@@ -122,6 +122,8 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
             width={x.grid.w}
             height={x.grid.h}
             alt={x.fr.alt}
+            data-full-width={x.big.actualW ?? x.big.w}
+            data-full-height={x.big.h}
             loading="lazy"
             decoding="async"
           />
@@ -178,7 +180,7 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
   </div>
   <div class="splb-stage">
     <button type="button" id="splbPrev" aria-label="上一张（←）">←</button>
-    <figure><img id="splbImg" src={first.big.url} alt={first.fr.alt} loading="lazy" decoding="async" /></figure>
+    <figure><img id="splbImg" alt={first.fr.alt} loading="lazy" decoding="async" /></figure>
     <button type="button" id="splbNext" aria-label="下一张（→）">→</button>
   </div>
 </div>
@@ -678,16 +680,24 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
     min-height: 0;
   }
   .splb-stage figure {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-width: 0;
     margin: 0;
     max-width: min(92vw, 1600px);
     max-height: 100%;
     line-height: 0;
   }
   .splb-stage img {
+    --lb-height: calc(100vh - 8rem);
     max-width: 100%;
-    max-height: calc(100vh - 8rem);
-    width: auto;
+    max-height: var(--lb-height);
+    width: min(var(--lb-image-width, 100%), calc(var(--lb-height) * var(--lb-image-ratio, 1)));
+    aspect-ratio: var(--lb-image-ratio, auto);
     height: auto;
+    object-fit: contain;
   }
   .splb-stage > button {
     /* 上一张 / 下一张：圆形白玻璃（2026-10-15）。
@@ -733,7 +743,7 @@ const segs = albums.map((a) => ({ title: a.title, n: a.frames.length }));
 <script>
 import { startLoop, createActivityGate, prefersReducedMotion, shouldAnimate } from '../scripts/rl-core';
 import { clamp, blendV, throwTarget, stepSpring, stepPxOf, radiusOf, edgeOf } from '../scripts/helix-core';
-import { showBig, prefetch, intentPrefetch } from '../scripts/big-image';
+import { cancelBig, showBig, prefetch, intentPrefetch } from '../scripts/big-image';
 import { onPage } from '../scripts/page-lifecycle';
 onPage(({document, window, addEventListener, setTimeout, clearTimeout}) => {
 
@@ -1174,12 +1184,6 @@ onPage(({document, window, addEventListener, setTimeout, clearTimeout}) => {
     function paintLB(i: number) {
       lbAt = clamp(i, 0, N - 1);
       const it = items[lbAt];
-      /* ★ 2026-10-08：换图走 big-image.ts（与砖墙那一侧同一套）；
-         ★ 2026-10-15 按站主两句话改：①「换成和大图尺寸一样」⇒ **直接上大档**，
-           不再用 800 档顶一下；②「点图片卡一下、翻页照片卡一下但左上角文字已经变了」
-           ⇒ 文字挪到**图可绘制之后**再写（第三个参数）+ 预取紧邻的下一张。
-           这一页原先最吃"先小后大"那一手（读者从螺旋上点开，那张 800 档必然刚解码过），
-           但**放大发虚的那一段正是要去掉的** ⇒ 两侧一起改，别只改砖墙。 */
       const j = lbAt;
       showBig(
         lbImg,
@@ -1192,6 +1196,7 @@ onPage(({document, window, addEventListener, setTimeout, clearTimeout}) => {
           lbCap.textContent = it.dataset.cap ?? '';
           lbNo.textContent = it.dataset.no ?? '';
         },
+        it.querySelector('img'),
       );
       prefetch(
         items[lbAt + 1]?.querySelector('a.sp-frame')?.getAttribute('href'),
@@ -1212,6 +1217,8 @@ onPage(({document, window, addEventListener, setTimeout, clearTimeout}) => {
       lbClose.focus();
     }
     function closeLB() {
+      cancelBig(lbImg);
+      lbAt = -1;
       lb.classList.remove('on');
       document.body.style.overflow = '';
       lbImg.removeAttribute('src');

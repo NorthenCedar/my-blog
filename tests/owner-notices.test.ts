@@ -54,8 +54,8 @@ describe('站主的全站消息提醒', () => {
     expect(owner.items.map((n: any) => [n.slug, n.parentId, n.kind, n.replyId])).toEqual([
       [slug, account.id, 'comment', null], [slug, anonymous.id, 'comment', null],
     ]);
-    expect(owner.items[0].href).toBe(slug === 'guestbook' ? `/guestbook/#comment-${account.id}`
-      : slug === 'talk-20260926' ? '/talks/#c-talk-20260926' : `/posts/my-python-memorandum/#comment-${account.id}`);
+    expect(owner.items[0].href).toBe(slug === 'guestbook' ? `/guestbook/?comment=${account.id}#comment-${account.id}`
+      : slug === 'talk-20260926' ? `/talks/?comment=${account.id}#c-talk-20260926` : `/posts/my-python-memorandum/?comment=${account.id}#comment-${account.id}`);
     expect(owner.items[0].label).toBe(slug === 'guestbook' ? '留言板 · 新留言'
       : slug === 'talk-20260926' ? '说说评论 · 新评论' : '文章评论 · 新评论');
     expect(await s.notices('reader')).toMatchObject({ isOwner: false, unread: 0, items: [] });
@@ -69,6 +69,7 @@ describe('站主的全站消息提醒', () => {
     const second = await s.publish({ parentId: parent.id, replyTarget: { kind: 'reply', id: first.id } });
     expect((await s.notices('owner')).items).toHaveLength(3);
     expect((await s.notices('reader')).items.map((n: any) => n.replyId)).toEqual([first.id]);
+    expect((await s.notices('reader')).items[0].href).toBe(`/guestbook/?comment=${parent.id}#reply-${first.id}`);
     expect((await s.notices('other')).items.map((n: any) => n.replyId)).toEqual([second.id]);
     expect(s.sqlite.prepare('SELECT target_kind,target_id FROM reply_targets WHERE reply_id=?').get(second.id))
       .toEqual({ target_kind: 'reply', target_id: first.id });
@@ -206,6 +207,38 @@ describe('站主的全站消息提醒', () => {
     expect(second.items.map((n: any) => n.excerpt)).toEqual(['留言 2', '留言 1', '留言 0']);
     expect(second.nextBefore).toBeNull();
     expect((await s.notices('reader', `?before=${first.nextBefore}`)).items).toEqual([]);
+  });
+
+  it('每个账户最多保留最新 100 条，清理旧提醒时保留原评论、回复和其他人的提醒', async () => {
+    const s = setup();
+    const parent = await s.publish({}, 'reader');
+    await s.publish({ parentId: parent.id });
+    // 模拟更新前已经积累的消息，并让时间相同以验证稳定次序。
+    s.sqlite.exec(`WITH RECURSIVE seed(n) AS (VALUES(100) UNION ALL SELECT n+1 FROM seed WHERE n<203)
+      INSERT INTO comments(id,slug,name,body,created_at,ip_hash)
+      SELECT n,'guestbook','读者','留言','2026-11-01','test' FROM seed;
+      INSERT INTO reply_notices(user_id,slug,parent_id,actor_name,excerpt,created_at)
+      SELECT 'owner',slug,id,name,body,created_at FROM comments WHERE id>=100 ORDER BY id;`);
+
+    const ids: number[] = [];
+    let cursor: number | null = null;
+    do {
+      const page = await s.notices('owner', cursor ? `?before=${cursor}` : '');
+      ids.push(...page.items.map((item: any) => item.parentId));
+      cursor = page.nextBefore;
+    } while (cursor);
+    expect(ids).toEqual([parent.id, parent.id, ...Array.from({ length: 98 }, (_, i) => 203 - i)]);
+    expect((await s.notices('owner')).unread).toBe(100);
+    expect((await s.notices('reader')).unread).toBe(1);
+
+    await s.publish({ parentId: parent.id });
+    const newComment = await s.publish({ body: '最新留言' });
+    expect(s.sqlite.prepare("SELECT COUNT(*) AS n FROM reply_notices WHERE user_id='owner'").get()?.n).toBe(100);
+    expect((await s.notices('owner')).items[0].parentId).toBe(newComment.id);
+    expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM comments').get()?.n).toBe(106);
+    expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM replies').get()?.n).toBe(2);
+    expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM reply_targets').get()?.n).toBe(2);
+    expect((await s.notices('reader')).unread).toBe(2);
   });
 
   it('删除回复清理对应通知；删除楼层同时清理顶层和回复通知，不影响其他楼层', async () => {

@@ -28,6 +28,7 @@ export type ReplyNotice = {
 };
 
 const EXCERPT_MAX = 80;
+const NOTICE_LIMIT = 100;
 
 /** 前端给的形状不可信：不是 {kind,id} 就当没给（老前端、手写请求、爬虫都走这条路） */
 export function parseNoticeTarget(input: unknown): NoticeTarget | null {
@@ -86,11 +87,21 @@ function noticeInsert(env: VisitorEnv, userId: string, notice: NoticeContent) {
     notice.body.slice(0, EXCERPT_MAX), notice.createdAt ?? new Date().toISOString(), userId, ...values);
 }
 
+function pruneNotices(env: VisitorEnv, userId: string) {
+  return env.COMMENTS_DB.prepare(
+    'DELETE FROM reply_notices WHERE id IN (SELECT id FROM reply_notices WHERE user_id = ? ' +
+      'ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?)'
+  ).bind(userId, NOTICE_LIMIT);
+}
+
 /** 顶层留言只有站主接收；匿名也投递，客户端提供的身份字段不参与判定。 */
 export async function recordCommentNotice(env: VisitorEnv, notice: Omit<NoticeContent, 'replyId'>): Promise<void> {
   if (!env.OWNER_USER_ID || notice.parentId <= 0 || notice.skipOwner || notice.actorId === env.OWNER_USER_ID) return;
   try {
-    await noticeInsert(env, env.OWNER_USER_ID, { ...notice, replyId: null }).run();
+    await env.COMMENTS_DB.batch([
+      noticeInsert(env, env.OWNER_USER_ID, { ...notice, replyId: null }),
+      pruneNotices(env, env.OWNER_USER_ID),
+    ]);
   } catch (error) {
     if (!forgiveMissingTable(error)) console.error('comment notice failed', error);
   }
@@ -126,7 +137,7 @@ export async function recordReplyNotice(
     const recipients = new Set([owner?.user_id, env.OWNER_USER_ID]);
     for (const recipient of recipients) {
       if (!recipient || recipient === options.actorId || (options.skipOwner && recipient === env.OWNER_USER_ID)) continue;
-      statements.push(noticeInsert(env, recipient, options));
+      statements.push(noticeInsert(env, recipient, options), pruneNotices(env, recipient));
     }
 
     await env.COMMENTS_DB.batch(statements);
@@ -146,12 +157,11 @@ export async function listReplyNotices(
 ): Promise<{ unread: number; items: ReplyNotice[]; nextBefore: number | null }> {
   try {
     // 游标必须属于当前账户；时间相同时以编号排序，旧通知也能稳定翻页。
-    const cursor = beforeId ? await env.COMMENTS_DB.prepare(
-      'SELECT id,created_at FROM reply_notices WHERE user_id = ? AND id = ?'
-    ).bind(userId, beforeId).first<{ id: number; created_at: string }>() : null;
-    const filter = beforeId ? cursor ? ' AND (created_at < ? OR (created_at = ? AND id < ?))' : ' AND 0' : '';
-    const values = cursor ? [cursor.created_at, cursor.created_at, cursor.id] : [];
-    const [counted, listed] = await env.COMMENTS_DB.batch([
+    const filter = beforeId ? ' AND (created_at, id) < (SELECT created_at, id FROM reply_notices WHERE user_id = ? AND id = ?)' : '';
+    const values = beforeId ? [userId, beforeId] : [];
+    const [, counted, listed] = await env.COMMENTS_DB.batch([
+      // 旧信箱在首次读取时清理，计数和分页都基于同一批保留记录。
+      pruneNotices(env, userId),
       env.COMMENTS_DB.prepare('SELECT COUNT(*) AS n FROM reply_notices WHERE user_id = ? AND read_at IS NULL').bind(userId),
       env.COMMENTS_DB.prepare(
         'SELECT id, slug, parent_id, reply_id, actor_name, excerpt, created_at, read_at ' +
@@ -172,9 +182,7 @@ export async function listReplyNotices(
         parentId: r.parent_id,
         replyId: r.reply_id,
         kind: r.reply_id === null ? 'comment' : 'reply',
-        // 保留既有落点规则；说说评论折叠，先定位到所属说说。
-        href: r.slug === 'guestbook' ? `/guestbook/#comment-${r.parent_id}`
-          : r.slug.startsWith('talk-') ? `/talks/#c-${r.slug}` : `/posts/${r.slug}/#comment-${r.parent_id}`,
+        href: noticeHref(r.slug, r.parent_id, r.reply_id),
         label: (r.slug === 'guestbook' ? '留言板' : r.slug.startsWith('talk-') ? '说说评论' : '文章评论')
           + ' · ' + (r.reply_id !== null ? '新回复' : r.slug === 'guestbook' ? '新留言' : '新评论'),
         actorName: r.actor_name,
@@ -187,6 +195,15 @@ export async function listReplyNotices(
     if (forgiveMissingTable(error)) return { unread: 0, items: [], nextBefore: null };
     throw error;
   }
+}
+
+function noticeHref(slug: string, parentId: number, replyId: number | null): string {
+  if (slug.startsWith('talk-')) {
+    const reply = replyId === null ? '' : `&reply=${replyId}`;
+    return `/talks/?comment=${parentId}${reply}#c-${encodeURIComponent(slug)}`;
+  }
+  const page = slug === 'guestbook' ? '/guestbook/' : `/posts/${encodeURIComponent(slug)}/`;
+  return `${page}?comment=${parentId}${replyId === null ? `#comment-${parentId}` : `#reply-${replyId}`}`;
 }
 
 /**

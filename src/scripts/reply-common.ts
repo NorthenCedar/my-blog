@@ -80,11 +80,11 @@ export type ReplyTarget = { kind: 'comment' | 'reply'; id: number };
  * 有 replyTo 才显示"回复 某人"（直接回复顶层时不显示）。
  * 层级永远**两层**（站主拍板）：回复一条回复时 parentId 仍指向顶层，只靠 replyTo 记名字
  * ⇒ 无论被回复多少次都不会缩进成第三层。
- * `id="comment-N"` 是提醒面板跳过来的锚点（2026-10-18）。
+ * 回复采用独立锚点，评论与回复的编号分别自增。
  */
 export function replyLi(r: Reply, onReply: () => void, fresh = false): HTMLLIElement {
   const li = el('li', 'reply-item');
-  li.id = `comment-${r.id}`;
+  li.id = `reply-${r.id}`;
   li.dataset.replyId = String(r.id);
   // A / B 都是用户输入 ⇒ 用 textContent 写，绝不拼 HTML
   const meta = el('p', 'reply-meta');

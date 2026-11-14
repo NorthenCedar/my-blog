@@ -5,14 +5,14 @@ import { intentPrefetch } from '../src/scripts/big-image';
 import { gsap as realGsap } from 'gsap';
 
 let dispose=()=>{};
-let ready:(()=>void)[];
+let ready:(()=>void)[], failures:(()=>void)[];
 let imaging:any;
 const click=(selector:string)=>document.querySelector<HTMLElement>(selector)!.click();
 beforeEach(()=>{
   document.body.innerHTML='<main><div class="wf">'+[0,1,2].map(i=>'<figure data-album-title="相册" data-cap="照片'+i+'"><a class="frame" href="/big-'+i+'.webp"><img alt="照片'+i+'" src="/small-'+i+'.webp"></a></figure>').join('')+'</div></main><div id="lb" class="lb" role="dialog" aria-modal="true"><div class="lb-backdrop"></div><div class="lb-bar"><span id="lbAlbum"></span><span id="lbCap"></span><span id="lbPos"></span><button id="lbClose">关闭</button></div><div class="lb-stage"><button id="lbPrev">上一张</button><figure><img id="lbImg" src="/big-0.webp" alt="照片0"></figure><button id="lbNext">下一张</button><p id="lbStatus" hidden></p></div></div>';
   document.body.style.overflow='auto';
-  ready=[];
-  imaging={showBig:vi.fn((img:HTMLImageElement,big:string,callback:()=>void)=>{img.src=big;img.dataset.big=big;ready.push(callback);}),prefetch:vi.fn(),intentPrefetch:vi.fn()};
+  ready=[];failures=[];
+  imaging={showBig:vi.fn((img:HTMLImageElement,big:string,callback:()=>void,_thumb:HTMLImageElement,onError:()=>void)=>{img.src=big;img.dataset.big=big;ready.push(callback);failures.push(onError);}),prefetch:vi.fn(),intentPrefetch:vi.fn()};
   vi.spyOn(window,'matchMedia').mockReturnValue({matches:false,addEventListener(){},removeEventListener(){}} as any);
   const image=document.querySelector<HTMLImageElement>('#lbImg')!;
   Object.defineProperty(image,'naturalWidth',{configurable:true,value:1200});
@@ -70,8 +70,8 @@ describe('单册灯箱的加载、动效与会话',()=>{
     expect(document.activeElement?.id).toBe('lbNext');
   });
   it('失败照片给出可操作反馈，仍可关闭',()=>{
-    click('.frame');Object.defineProperty(document.querySelector('#lbImg')!,'naturalWidth',{value:0});ready[0]();
-    expect(document.querySelector('#lbStatus')!.textContent).toContain('重试');click('#lbClose');
+    click('.frame');failures[0]();
+    expect(document.querySelector('#lbStatus')!.textContent).toContain('未能载入');click('#lbClose');
     expect(document.querySelector('#lb')!.classList.contains('on')).toBe(false);
   });
   it('关闭动画尚未完成便重开，旧完成回调不能关闭新灯箱',()=>{

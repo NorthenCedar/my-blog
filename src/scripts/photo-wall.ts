@@ -1,4 +1,4 @@
-import { showBig, prefetch, intentPrefetch } from './big-image';
+import { cancelBig, showBig, prefetch, intentPrefetch } from './big-image';
 import { getMotion, primeMotion, type MotionEngine } from './motion-loader';
 import { createLightboxMotion, type TileOrigin } from './lightbox-motion';
 
@@ -36,6 +36,7 @@ export function initPhotoWall(doc: Document, imaging: Imaging = {showBig,prefetc
   const busy=(value:boolean)=>{lb.setAttribute('aria-busy',String(value));status.hidden=!value;if(value)status.textContent='正在载入照片…';};
   const deactivate=(focus=true)=>{
     ++request;opened=false;closing=false;shown=-1;
+    cancelBig(lbImg);
     lb.classList.remove('on');delete lb.dataset.tileOpen;delete lb.dataset.exhibit;
     shownTile?.setSourceHidden?.(false);
     shownThumb?.removeAttribute('data-photo-wall-hidden');shownThumb=null;
@@ -47,15 +48,13 @@ export function initPhotoWall(doc: Document, imaging: Imaging = {showBig,prefetc
   };
   const paint=(first=false,direction=1)=>{
     const i=cur,fig=figs[i],token=++request;
+    const thumb=fig.querySelector('img');
     busy(true);
     // 图像与文字一起提交；同图重开也用请求版本隔离旧会话。
     imaging.showBig(lbImg,bigOf(fig)!,()=>{
       if(i!==cur)return;
       if(!live||!opened||closing||token!==request)return;
       busy(false);
-      if(lbImg.complete&&!lbImg.naturalWidth){
-        motion.finish();lbImg.style.visibility='hidden';status.hidden=false;status.textContent='照片未能载入，请关闭后重试。';return;
-      }
       lbImg.alt=fig.dataset.cap||'';lbAlbum.textContent=fig.dataset.albumTitle||'';lbCap.textContent=fig.dataset.cap||'';lbPos.textContent=String(i+1);
       lbImg.style.removeProperty('visibility');
       const nextTile=first ? tileView : tileView?.selectTile?.(i,direction);
@@ -66,7 +65,6 @@ export function initPhotoWall(doc: Document, imaging: Imaging = {showBig,prefetc
       shownTile?.setSourceHidden?.(true);
       const inExhibit=lb.hasAttribute('data-exhibit');
       if(shownTile?.trigger)lastFocus=shownTile.trigger;
-      const thumb=fig.querySelector('img');
       if(inExhibit&&!tileView){
         shownThumb?.removeAttribute('data-photo-wall-hidden');
         shownThumb=thumb;shownThumb?.setAttribute('data-photo-wall-hidden','');
@@ -75,6 +73,10 @@ export function initPhotoWall(doc: Document, imaging: Imaging = {showBig,prefetc
       if(first)motion.open(origin ?? thumb);
       else motion.change(direction, inExhibit);
       shown=i;
+    },thumb,()=>{
+      if(token!==request)return;
+      busy(false);
+      status.hidden=false;status.textContent='照片未能载入。';
     });
     imaging.prefetch(bigOf(figs[i+1]));
   };
@@ -99,7 +101,7 @@ export function initPhotoWall(doc: Document, imaging: Imaging = {showBig,prefetc
   };
   const close=()=>{
     if(!opened||closing)return;
-    closing=true;++request;busy(false);
+    closing=true;++request;cancelBig(lbImg);busy(false);
     const index=shown>=0?shown:cur;
     const origin=figs[index]?.querySelector('img');
     const target=tileView

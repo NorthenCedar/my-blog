@@ -253,23 +253,22 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     right: var(--gutter);
     z-index: 30;
     width: min(22rem, calc(100vw - 2 * var(--gutter)));
-    max-height: 60vh;
-    overflow-y: auto;
-    padding: 0.6rem 0.75rem;
-    border: 1px solid var(--glass-line);
-    /* ★ 直角，不是圆角：站内"内容面"一律 border-radius:0（评论卡片、表单输入框、
-       提交按钮都是），999px 只留给可点的胶囊。面板是内容面，跟着直角走。
-       阴影留着 —— 它是浮在正文之上的层，站内玻璃层用的也是 --glass-shadow。 */
-    border-radius: 0;
-    background: var(--paper);
-    box-shadow: var(--glass-shadow);
+    border-radius: 28px;
+    overflow: clip;
     font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
     font-size: var(--fs-xs);
     color: var(--ink);
   }
+  .notices-scroll {
+    max-height: 60dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: inherit;
+    padding: var(--sp-2) var(--sp-3);
+    scrollbar-width: thin;
+  }
   .notices-list {
     display: grid;
-    gap: 0.5rem;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -285,20 +284,25 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     cursor: pointer;
   }
   .notice {
-    padding-top: 0.5rem;
-    border-top: 1px solid var(--glass-line);
+    border-bottom: 1px solid var(--glass-line);
   }
-  .notice:first-child {
-    padding-top: 0;
-    border-top: 0;
+  .notice:last-child { border-bottom: 0; }
+  .notice-link {
+    display: block;
+    padding: var(--sp-2);
+    border-radius: var(--sp-2);
+    color: inherit;
+    text-decoration: none;
   }
+  .notice-link:hover, .notice-link:focus-visible { background: var(--music-glass-hover); }
+  .notice-link:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
   .notice-actor {
     margin-right: 0.35rem;
     color: var(--ink);
     text-decoration: none;
   }
-  .notice-actor:hover,
-  .notice-actor:focus-visible {
+  .notice-link:hover .notice-actor,
+  .notice-link:focus-visible .notice-actor {
     text-decoration: underline;
   }
   /* ☆ 未读标记画成一个 5px 实心点，不再塞「· 新」两个字：
@@ -316,11 +320,12 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     vertical-align: 0.15em;
   }
   .notice-time {
-    color: var(--muted);
+    color: var(--music-glass-muted);
   }
   .notice-body {
+    display: block;
     margin: 0.18rem 0 0;
-    color: var(--muted);
+    color: var(--music-glass-muted);
     overflow-wrap: anywhere;
   }
   .notices-empty {

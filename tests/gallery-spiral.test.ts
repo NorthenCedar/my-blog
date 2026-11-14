@@ -39,7 +39,7 @@ import {
  *   一、几何：变换顺序、R 由弦长反解、以及**"看得出是螺旋"的机器判据**（卷回率）；
  *   二、惯性：★ 速度必须先夹住再进积分器（这里出过一个真 bug，见 helix-core 文件头）；
  *   三、降级链：无 JS 与 reduce 走**同一个**平铺网格，`.sp-on` 只由脚本加；
- *   四、红线：零依赖 / 零外部资源 / 颜色只用 token / 无 object-fit / JS 预算。
+ *   四、红线：零依赖 / 零外部资源 / 颜色只用 token / 不裁图 / JS 预算。
  *
  * ★ 凡是能从源码读出来的旋钮（片宽上界、每片转角、淡出窗口、纵向系数、透视比）
  *   一律**解析**出来用，不写死 —— 写死的话，下次调参数会同时让门闩失去意义或假红。
@@ -887,8 +887,9 @@ describe('螺旋盘 · 红线与预算', () => {
     expect(pageBlock, '产物里装置态视口又刷上纸白了 ⇒ ∞ 底纹会被它截断').not.toContain('--paper');
   });
 
-  it('★ 一律不裁图：整块**没有** `object-fit`（与 /gallery 同一条红线）', () => {
-    expect(CODE, '出现了 object-fit ⇒ 图会被裁（本站是档案不是社交相册）').not.toMatch(/object-fit/);
+  it('★ 螺旋与灯箱显示完整照片', () => {
+    const fits = [...CODE.matchAll(/object-fit:\s*([\w-]+)/g)].map((match) => match[1]);
+    expect(fits).toEqual(['contain']);
     expect(CODE, '图没写 width/height:auto ⇒ 会被方槽拉变形').toMatch(
       /\.sp-frame img\s*\{[^}]*height:\s*auto/,
     );
@@ -933,7 +934,8 @@ describe('螺旋盘 · 红线与预算', () => {
        ★ 2026-11-13：加了「主题连续过渡」—— 本页的百褶环 Canvas 要消费 `themepreview`
        的中间色（否则拖软条时只有它停在亮档，松手才跳）。实测 155746 B，撞线 98 B。
        按规矩再抬 1 KiB（余量 926 B），全部反面正对照（three 禁入）照旧。 */
-    const BUDGET = 54272 + MOTION_ENGINE_BUDGET + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET;
+    // 灯箱加入预览、高清解码与请求取消。完整闭包实测 157983 B，预算增 1 KiB。
+    const BUDGET = 55296 + MOTION_ENGINE_BUDGET + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET;
     expectMotionStartup(PAGE_PATH, 53248 + THEME_TOGGLE_BOOT_BUDGET);
     expect(hasDist, '先 npm run build').toBe(true);
     const { code, files } = jsClosure(PAGE_PATH, { skipMenu: true, skipTechHeading: true });

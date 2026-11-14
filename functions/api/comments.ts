@@ -77,6 +77,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     return json({ counts: await countAll(url.searchParams.get('slugs'), env) });
   }
   const slug = url.searchParams.get('slug') ?? '';
+  const requested = Number(url.searchParams.get('comment'));
   // 2026-09-27 站主："把新评论放上面，其他的评论留言也一样" ⇒ 新的在前。
   // 这里是**唯一**决定顺序的地方（留言板 / 文章评论 / 说说评论三条路径共用这个接口）。
   // `id DESC` 是稳定的决胜键：同一秒内的两条也有确定顺序。
@@ -88,6 +89,13 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     .all<{ id: number; name: string; body: string; created_at: string }>();
 
   const comments = (results ?? []).map(toRecord) satisfies CommentRecord[];
+  // 旧楼层可能收到新回复，提醒链接需要它的上下文，即使它已掉出最近 200 条。
+  if (Number.isSafeInteger(requested) && requested > 0 && !comments.some(c => c.id === requested)) {
+    const row = await env.COMMENTS_DB.prepare(
+      'SELECT id, name, body, created_at FROM comments WHERE slug = ? AND id = ?'
+    ).bind(slug, requested).first<{ id: number; name: string; body: string; created_at: string }>();
+    if (row) comments.push(toRecord(row));
+  }
   const ids = comments.map((c) => c.id);
 
   // 回复（2026-09-28 站主要求）：**旧的在上** —— 一段对话要顺着读（站主拍板，与顶层相反）。

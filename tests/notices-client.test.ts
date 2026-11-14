@@ -29,7 +29,7 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => { vi.runOnlyPendingTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.resetModules(); vi.restoreAllMocks(); });
 const message = (id: number, slug = 'guestbook', kind = 'comment') => ({
   id, slug, kind, parentId: id + 100, replyId: kind === 'reply' ? id + 200 : null,
-  href: slug === 'guestbook' ? `/guestbook/#comment-${id + 100}` : slug.startsWith('talk-') ? `/talks/#c-${slug}` : `/posts/${slug}/#comment-${id + 100}`,
+  href: slug === 'guestbook' ? `/guestbook/?comment=${id + 100}#comment-${id + 100}` : slug.startsWith('talk-') ? `/talks/?comment=${id + 100}&reply=${id + 200}#c-${slug}` : `/posts/${slug}/?comment=${id + 100}#comment-${id + 100}`,
   label: (slug === 'guestbook' ? '留言板' : slug.startsWith('talk-') ? '说说评论' : '文章评论') + ' · ' + (kind === 'reply' ? '新回复' : slug === 'guestbook' ? '新留言' : '新评论'),
   actorName: '访客', excerpt: `消息 ${id}`, createdAt: '2026-11-01T10:00:00.000Z', readAt: null,
 });
@@ -66,13 +66,14 @@ it('站主面板区分三处来源与评论/回复，链接仍落在原页面，
   const s = await open({ items: [message(3), message(2, 'talk-20260926', 'reply'), { ...message(1, 'my-python-memorandum'), excerpt: '<img src=x onerror=alert(1)>' }] });
   expect(s.bell.getAttribute('aria-label')).toContain('全站消息');
   expect(s.rows().map(row => row.children.find(child => child.tagName === 'a')!.href)).toEqual([
-    '/guestbook/#comment-103', '/talks/#c-talk-20260926', '/posts/my-python-memorandum/#comment-101',
+    '/guestbook/?comment=103#comment-103', '/talks/?comment=102&reply=202#c-talk-20260926', '/posts/my-python-memorandum/?comment=101#comment-101',
   ]);
   expect(s.rows()[0].textContent).toContain('留言板');
   expect(s.rows()[1].textContent).toContain('说说');
   expect(s.rows()[1].textContent).toContain('回复');
   expect(s.rows()[2].textContent).toContain('文章');
   expect(s.rows()[2].textContent).toContain('<img src=x onerror=alert(1)>');
+  expect(s.rows().every(row => row.children.length === 1 && row.children[0].textContent === row.textContent)).toBe(true);
   expect(s.root.all().filter(child => child.tagName === 'img')).toEqual([]);
 });
 

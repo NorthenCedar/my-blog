@@ -80,8 +80,17 @@ if (root) {
     list.hidden = false;
   };
 
-  // 取列表
-  fetch(`/api/comments?slug=${encodeURIComponent(slug)}`)
+  const parent = new URLSearchParams(location.search).get('comment') ?? /^#comment-(\d+)$/.exec(location.hash)?.[1];
+  const focusComment = () => {
+    if (!/^#(?:comment|reply)-\d+$/.test(location.hash)) return;
+    const target = document.getElementById(location.hash.slice(1)) ?? document.getElementById(`comment-${parent}`);
+    if (target && list.contains(target)) target.scrollIntoView({ block: 'center' });
+  };
+  window.addEventListener('hashchange', focusComment);
+  document.addEventListener('notice:follow', focusComment);
+
+  // 取列表及提醒指向的楼层。
+  fetch(`/api/comments?slug=${encodeURIComponent(slug)}${parent ? `&comment=${encodeURIComponent(parent)}` : ''}`)
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
     .then((data: { comments: Comment[]; replies?: Reply[] }) => {
       const items = data.comments ?? [];
@@ -99,9 +108,7 @@ if (root) {
       }
       setCount();
 
-      // 从提醒面板跳进来（地址里带 #comment-N）：评论是异步取回来的，浏览器自己滚不到 —— 这里补一下。
-      const anchor = location.hash.startsWith('#comment-') ? document.getElementById(location.hash.slice(1)) : null;
-      anchor?.scrollIntoView({ block: 'center' });
+      focusComment();
 
       /* ★ 通知留言页的声纹装置（全量，2026-10-14）。这是全站第一个装置↔业务的事件钩子。
          ★★★ 它派发的是**接口原样两张表**，不在这里做映射 —— 这不是洁癖，是**预算**：

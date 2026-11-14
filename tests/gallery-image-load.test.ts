@@ -1,21 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { cancelBig, showBig } from '../src/scripts/big-image';
 
-/* 图片加载 —— 站主两句话：
- *   「@image#1 … 还是会有这个边缘残留，是网络问题吗？」→ 实测**不是加载问题**（拦图档里那片
- *     是空的），真因是螺旋盘的几何；做过的修法已按站主要求**整体撤回**，见 spec §6.61.1；
- *   「给一个点大图快速加载的方案，现在太慢了」⇒ 站主拍了 1 + 2 + 3；
- *   「把他换成和大图尺寸一样」（2026-10-15）⇒ **把 2 撤回**：灯箱不再拿 800 档占位，
- *     打开就是那张大档本身。下面 `灯箱换图` 那组守的就是改完之后的新契约，
- *     1（长缓存）与 3（打开那一刻才请求）两条原样保留。
- * 这个文件守的三块：
- *   ① `public/_headers`：静态资源长缓存（站上以前没有这个文件 ⇒ 用 CF 默认的
- *      `max-age=14400, must-revalidate` ⇒ **每次访问都回源验证**；实测最大那张
- *      1280 档 475 KB：TTFB 1.1–1.3 s、下载 4.1–6.1 s）；
- *   ② 灯箱换图：打开即大档，没有"先小后大"（`src/scripts/big-image.ts`）；
- *   ③ 时机：大档请求只许发生在**打开灯箱那一刻**，不许在页面加载时抢带宽。
- */
+/* 相册图片的缓存、预览和高清换图。 */
 
 const ROOT = process.cwd();
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
@@ -89,37 +77,61 @@ describe('灯箱换图（big-image）', () => {
     }
   });
 
-  it('★★ 灯箱直接上大档：不再拿缩略图占位（2026-10-15 站主「换成和大图尺寸一样」）', () => {
-    /* 站主要的是"点开看到的就是那张图本身"。
-       旧行为是先用已在缓存里的 800 档显形、再在后台换 1280 ——
-       代价是有一段"看着是糊的"时间，正是这次要去掉的。
-       实测（本站 82 帧）：1280 档 中位 92.1 KB / 均值 115.7 KB / 最大 475.1 KB，
-       800 档 中位 53.2 KB —— 绝大多数帧差不到一倍，直接上大档通常更快见效。 */
-    for (const [name, src] of [
-      ['PhotoWall', PW],
-      ['SpiralPlate', SP],
-      ['big-image.ts', BI],
-    ] as const) {
-      expect(code(src), `${name} 里还留着"取缓存里的缩略图"那套占位`).not.toMatch(/thumbOf/);
+  function simulateImages() {
+    const pending = new Map<string, { resolve: () => void; reject: () => void }>();
+    class DecodedImage {
+      src = '';
+      decode() {
+        return new Promise<void>((resolve, reject) => pending.set(this.src, { resolve, reject }));
+      }
+      removeAttribute() { this.src = ''; }
     }
-    /* 两段式换图（先 src=小、后台 decode 完再 src=大）整套拆掉 —— 只禁函数名不够，
-       万一有人把占位换个名字接着用，那还是"先小后大"。 */
-    expect(code(BI), '还留着"先设小档、后台再换大档"的两段式').not.toMatch(/pre\.src|pre\.decode/);
-    /* ⚠ 第三个参数现在**合法存在**了，只是语义从"占位地址"变成"就绪回调" ——
-       所以不能像本条早先那样笼统地禁"第三个参数"，要钉住它的**用途**：
-       `img.src` 在 showBig 里**只准**被赋成大档本身。
-       （早先两条按名字/前瞻写的都是弱判据：
-         · `/small\??\s*:\s*string/` —— 参数改名成 onReady 就不响了；
-         · `/img\.src\s*=\s*(?!big\b)/` —— **`\s*` 会回溯到零宽**，负向前瞻看到的
-           是 `=` 后面的那个**空格**而不是 `big` ⇒ 恒红。
-       ⇒ 改成"把每一处赋值的目标抠出来比对集合"，不依赖任何前瞻/回溯。
-       同 AGENTS §5「判据要落在"这条数据是从哪来的"，不是"这个名字出现过"」。 */
-    const assigned = [...code(BI).matchAll(/img\.src\s*=\s*([^;\n]+)/g)].map((m) => m[1].trim());
-    expect(assigned.length, 'showBig 里没找到 img.src 赋值（换图逻辑被改掉了？）').toBeGreaterThan(0);
-    expect(
-      [...new Set(assigned)],
-      'showBig 里 img.src 被赋成了大档以外的东西（那是撤掉的占位那套）',
-    ).toEqual(['big']);
+    vi.stubGlobal('Image', DecodedImage);
+    const img = { src: '', dataset: {}, getAttribute: () => img.src || null };
+    return { img: img as unknown as HTMLImageElement, pending };
+  }
+
+  it('先显示已可绘制的预览，高清解码后原位替换，图注只更新一次', async () => {
+    const { img, pending } = simulateImages();
+    try {
+      const ready = vi.fn();
+      const thumb = { currentSrc: '/small.webp', complete: true, naturalWidth: 800, dataset: {} } as HTMLImageElement;
+      showBig(img, '/big.webp', ready, thumb);
+      expect(img.src).toBe('/small.webp');
+      expect(ready).toHaveBeenCalledTimes(1);
+
+      pending.get('/big.webp')!.resolve();
+      await vi.waitFor(() => expect(img.src).toBe('/big.webp'));
+      expect(ready).toHaveBeenCalledTimes(1);
+
+      showBig(img, '/big.webp', ready, thumb);
+      expect(ready).toHaveBeenCalledTimes(2);
+      expect(img.src).toBe('/big.webp');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('高清失败保留预览，关闭后丢弃迟到的高清图', async () => {
+    const { img, pending } = simulateImages();
+    try {
+      const error = vi.fn();
+      const thumb = { currentSrc: '/small.webp', complete: true, naturalWidth: 800, dataset: {} } as HTMLImageElement;
+      showBig(img, '/big.webp', null, thumb, error);
+      pending.get('/big.webp')!.reject();
+      await Promise.resolve();
+      expect(img.src).toBe('/small.webp');
+      expect(error).not.toHaveBeenCalled();
+
+      showBig(img, '/next.webp', null, thumb);
+      cancelBig(img);
+      pending.get('/next.webp')!.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(img.src).toBe('/small.webp');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('★★ 说明文字必须等"图可绘制了"再换（站主「翻页照片卡一下但左上角文字已经变了」）', () => {
@@ -205,15 +217,7 @@ describe('灯箱换图（big-image）', () => {
     expect(BI, 'showBig 里没把 lazy 放行（打开时仍旧 lazy ⇒ 白等一次可见性判定）').toMatch(
       /\.loading\s*=\s*'eager'/,
     );
-    expect(BI, '大档没提优先级（它就是当前页面的主角）').toMatch(/fetchPriority\s*=\s*'high'/);
+    expect(BI, '大档没提优先级（它就是当前页面的主角）').toMatch(/loadDrawable\(big,\s*signal,\s*'high'\)/);
   });
 
-  it('★ 翻页绕回同一张不许闪一下', () => {
-    /* 判据要连 `src` 一起看 —— 关灯箱时会把它摘掉（"不留空 src"那条规定），
-       只比 dataset 的话，再打开同一张就什么都不显示了。 */
-    expect(BI, '同一张重设 src 会再闪一次（翻页绕回来时）⇒ 要连 src 一起判空').toMatch(
-      /img\.dataset\.big === big && img\.getAttribute\('src'\)/,
-    );
-    expect(BI, '换图压根没记下当前是哪张 ⇒ 绕回来时无从判断').toMatch(/img\.dataset\.big = big/);
-  });
 });

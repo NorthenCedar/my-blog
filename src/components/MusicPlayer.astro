@@ -55,8 +55,6 @@ if (musicOrder.playlist !== MUSIC_PLAYLIST) throw new Error('音乐顺序配置�
   .music button{pointer-events:auto;color:inherit;border:0;background:transparent;min-width:44px;min-height:44px;padding:var(--sp-2);border-radius:50%;transition:background .18s,transform .18s}
   .music button:focus-visible,.music input:focus-visible,.music a:focus-visible{outline:2px solid var(--music-glass-accent);outline-offset:3px}
   .music svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
-  .music-glass{isolation:isolate}
-  .music-glass::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none}
 
   .music-bar{position:relative;display:flex;align-items:center;gap:var(--sp-2);width:100%;height:52px;max-width:100%;padding:6px;border-radius:999px;pointer-events:none;transition:opacity .14s,visibility 0s}
   .music .music-play{display:grid;place-items:center;min-width:40px;min-height:40px;width:40px;height:40px;padding:0;flex-shrink:0;color:var(--music-glass-accent)}

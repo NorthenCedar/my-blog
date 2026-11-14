@@ -258,29 +258,32 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
       return t;
     }
 
-    // 预模糊版：CPU 一次真高斯（这台机器上唯一稳的连续模糊），片元里按景深插值
-    // 聚焦时把这张换成高清贴图。
-    // 实测三档分辨率：thumb 640 / light 1600 / screen 900。
-    // album3d 平时加载的是 screen(900)，所以高清其实是 light(1600)。
-    // 只在聚焦那一张上加载，浏览时不加载 22 张 1600px（那会很重）。
+    function uploadPhotoTexture(source) {
+      var texture = makeTexture();
+      // 图片第一行在顶部，卡片的 v=0 在底部。
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      try {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      } finally {
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      }
+      return texture;
+    }
+
+    // 保留已显示的预览，聚焦后才请求并替换高清贴图。
     function loadHiRes(p) {
       if (!p || p.hiTried || !p.lightSrc) return;
       p.hiTried = true;
       var im = new Image();
       im.crossOrigin = 'anonymous';
+      im.fetchPriority = 'high';
       im.onload = function () {
         if (signal.aborted) return;
-        var t = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, t);
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, im);
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        var texture = uploadPhotoTexture(im);
         if (p.tex) gl.deleteTexture(p.tex);
-        p.tex = t;                     // 就地换掉，正在聚焦时画面会变清晰
+        p.tex = texture;
+        p.hiReady = true;
+        p.ready = true;
         dirty = true;
       };
       im.onerror = function () { p.hiTried = false; };
@@ -290,16 +293,11 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
     function loadPhoto(p) {
       var im = new Image();
       im.crossOrigin = 'anonymous';
+      p.previewImage = im;
       im.onload = function () {
+        p.previewImage = null;
         if (signal.aborted) return;
-        var t = makeTexture();
-        gl.bindTexture(gl.TEXTURE_2D, t);
-        // 🔴 必须翻转 Y：UV 的 v=0 在卡片底部，而 2D 图像第 0 行在顶部 ——
-        // 不翻转就是上下颠倒（用户："照片还是倒着的"）。
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, im);
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-        p.tex = t;
+        if (!p.hiReady) p.tex = uploadPhotoTexture(im);
         // 预模糊
         try {
           var bw = Math.max(48, Math.min(420, Math.round(im.naturalWidth / 3)));
@@ -310,18 +308,16 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
           octx.filter = 'blur(' + Math.max(3, Math.round(bw * 0.06)) + 'px)';
           octx.drawImage(im, -bw * 0.06, -bh * 0.06, bw * 1.12, bh * 1.12);
           octx.filter = 'none';
-          var bt = makeTexture();
-          gl.bindTexture(gl.TEXTURE_2D, bt);
-          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, off);
-          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-          p.blurTex = bt;
+          p.blurTex = uploadPhotoTexture(off);
         } catch (e) { p.blurTex = null; }
         p.ready = true;
         dirty = true;
         onPhotoReady();
       };
-      im.onerror = () => { if (!signal.aborted) onPhotoError(); };
+      im.onerror = () => {
+        p.previewImage = null;
+        if (!signal.aborted) onPhotoError();
+      };
       im.src = p.src;
     }
 
@@ -990,6 +986,12 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.useProgram(prog);
+      // 顶点属性属于 WebGL 上下文。玻璃后处理可能用同一编号绑定了另一种属性。
+      gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 16, 0);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
 
       var now = performance.now();
       var focal = FOCAL * H * 0.5;
@@ -1451,11 +1453,6 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
         -1,-1, 0,0,   1,-1, 1,0,  -1,1, 0,1,
         -1, 1, 0,1,   1,-1, 1,0,   1,1, 1,1
       ]), gl.STATIC_DRAW);
-      gl.enableVertexAttribArray(0);
-      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 16, 0);
-      gl.enableVertexAttribArray(1);
-      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
-
       resize();
       photos = collect();
       for (var q0 = 0; q0 < photos.length; q0++) photos[q0].num = q0 + 1;
@@ -1588,6 +1585,7 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
         var best = -1, bz = -1e9;
         for (var i = 0; i < photos.length; i++) {
           var ph = photos[i], mt = (ph.mt === undefined) ? modeT : ph.mt;
+          if (!ph.ready) continue;
           var x = ph.x * (1 - mt) + ph.gx * mt;
           var y = ph.y * (1 - mt) + ph.gy * mt;
           var z = ph.z * (1 - mt) + (ph.gz || 0) * mt;
@@ -1625,7 +1623,10 @@ export function createWillowAlbum(root, photosInput, { onPhotoReady, onPhotoErro
       // 镜头就停在当前这张照片上（横向保持不动），只把 zoom 拉到最远（=1），
       // 纵向恢复到自然位置（0）。
       // 用户要求：聚焦灯箱时加载高清图
-      if (i >= 0 && photos[i]) loadHiRes(photos[i]);
+      if (i >= 0 && photos[i]) {
+        if (photos[i].previewImage) photos[i].previewImage.fetchPriority = 'high';
+        loadHiRes(photos[i]);
+      }
       if (i < 0) {
         if (mode === 1) {
           // 列表视图（总览）：取消聚焦后**不要停留在那张图上**，

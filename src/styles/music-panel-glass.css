@@ -1,4 +1,14 @@
-/* 展开的播放器与浮动导航共用一份玻璃材质，定位和圆角各自由组件控制。 */
+/* 展开的播放器、消息面板与浮动导航共用玻璃材质。 */
+.music-glass { isolation: isolate; }
+.music-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
 .music-glass,
 body > .topbar[data-scroll-topbar][data-topbar-scrolled]::before {
   border: 1px solid var(--music-glass-edge);
@@ -21,6 +31,7 @@ body > .topbar[data-scroll-topbar][data-topbar-scrolled]::before {
 
   .music-glass::before,
   body > .topbar[data-scroll-topbar][data-topbar-scrolled]::before {
+    -webkit-backdrop-filter: blur(5px) saturate(1.12);
     backdrop-filter: blur(5px) saturate(1.12);
   }
 }

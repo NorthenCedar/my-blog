@@ -354,6 +354,7 @@ git commit -m "feat(comments): pure validation core for comments API"
 **Interfaces:**
 - Consumes: Task 2 的全部导出；Task 1 的 binding `COMMENTS_DB`
 - Produces: `GET /api/comments?slug=` 与 `POST /api/comments`
+- 消息跳转可在 `GET /api/comments?slug=...&comment=<楼层编号>` 带上所属楼层。楼层超出最近 200 条时，接口也会返回同页的目标楼层及其回复。
 - 追加（2026-09-28）：`GET /api/comments?slugs=a,b,c` → `{ counts: { a: 2, … } }` —— 批量取条数，
   说说页进页面就要显示数字用的（口径**含回复**，两表 UNION ALL 一起数，与点开后的行数一致）。
 

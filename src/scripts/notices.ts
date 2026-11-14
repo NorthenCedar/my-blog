@@ -1,6 +1,6 @@
 
 import { onPage } from './page-lifecycle';
-onPage(({document, window, addEventListener}) => {
+onPage(({document, window}) => {
 /**
  * 顶栏消息铃铛：访客收回复，站主收全站新留言与回复。
  * 打开即读仅作用于当前展示的消息；可翻到更早消息，失败不清未读。
@@ -35,14 +35,18 @@ const bell = document.querySelector<HTMLButtonElement>('[data-notices]');
 if (bell) {
   const badge = bell.querySelector<HTMLElement>('[data-notices-count]');
 
-  const panel = node('div', 'notices-panel');
+  const panel = node('div', 'notices-panel music-glass');
   panel.hidden = true;
+  panel.id = 'notices-panel';
+  bell.setAttribute('aria-controls', panel.id);
+  const scroll = node('div', 'notices-scroll');
   const list = node('ul', 'notices-list');
   const empty = node('p', 'notices-empty');
   const more = node('button', 'notices-more', '更早消息');
   more.type = 'button';
   more.hidden = true;
-  panel.append(list, empty, more);
+  scroll.append(list, empty, more);
+  panel.append(scroll);
   bell.closest('.topbar')?.append(panel);
 
   let items: Notice[] = [];
@@ -66,10 +70,15 @@ if (bell) {
     list.replaceChildren(
       ...items.map((n) => {
         const li = node('li', n.readAt ? 'notice' : 'notice is-new');
-        const link = node('a', 'notice-actor', n.actorName);
-        // 跳到那条评论（回复永远是两层，锚在顶层评论上才看得见上下文）
+        const link = node('a', 'notice-link');
         link.href = n.href;
-        li.append(link, node('span', 'notice-time', `${n.label} · ${stamp(n.createdAt)}`), node('p', 'notice-body', n.excerpt));
+        link.addEventListener('click', event => {
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          close();
+          if (link.href === window.location.href) document.dispatchEvent(new Event('notice:follow'));
+        });
+        link.append(node('span', 'notice-actor', n.actorName), node('span', 'notice-time', `${n.label} · ${stamp(n.createdAt)}`), node('span', 'notice-body', n.excerpt));
+        li.append(link);
         return li;
       })
     );
@@ -90,6 +99,7 @@ if (bell) {
       empty.textContent = data.emptyMessage;
       nextBefore = data.nextBefore;
       render();
+      scroll.scrollTop = 0;
       paint(data.unread);
       if (!signedIn) close();
       return true;
@@ -114,7 +124,7 @@ if (bell) {
       const data = await response.json();
       if (started !== version) return;
       items = items.map((n) => ({ ...n, readAt: n.readAt ?? Date.now() }));
-      render();
+      for (const row of list.children) row.className = 'notice';
       paint(data.unread);
     } catch {
       /* 失败时保留未读，下次打开再试。 */

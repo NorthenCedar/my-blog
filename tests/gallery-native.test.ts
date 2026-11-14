@@ -38,7 +38,8 @@ function environment(reduced=false){
   doc.querySelector=selector=>singles[selector]??null;doc.querySelectorAll=selector=>selector==='[data-sp-item]'?items:[];doc.getElementById=name=>ids[name]??null;
   host.querySelector=doc.querySelector;host.querySelectorAll=doc.querySelectorAll;
   const media={matches:reduced,addEventListener(){}};window.setTimeout=later;
-  const context=vm.createContext({document:doc,window,Event,KeyboardEvent:Event,matchMedia:()=>media,getComputedStyle:()=>({getPropertyValue:()=>28}),IntersectionObserver:class{observe(){}disconnect(){}},Image:class{set src(url){prefetched.push(url)}},requestAnimationFrame:fn=>{const n=++id;frames.set(n,fn);return n},cancelAnimationFrame:n=>frames.delete(n),setTimeout:later,clearTimeout:n=>timers.delete(n),performance:{now:()=>time},location:{reload(){}}});
+  class Image extends Node {set src(url){prefetched.push(url)}}
+  const context=vm.createContext({document:doc,window,Event,KeyboardEvent:Event,AbortController,matchMedia:()=>media,getComputedStyle:()=>({getPropertyValue:()=>28}),IntersectionObserver:class{observe(){}disconnect(){}},Image,requestAnimationFrame:fn=>{const n=++id;frames.set(n,fn);return n},cancelAnimationFrame:n=>frames.delete(n),setTimeout:later,clearTimeout:n=>timers.delete(n),performance:{now:()=>time},location:{reload(){}}});
   vm.runInContext(bundle,context);const api=context.OriginalSpiral.mountOriginalHelix(host);api.setActive(true);
   const advance=(count=240)=>{for(let i=0;i<count;i++){time+=16;for(const [n,timer]of [...timers])if(timer.at<=time){timers.delete(n);timer.fn()}const current=[...frames.values()];frames.clear();for(const fn of current)fn(time)}};
   function click(index=null){const target=index===null?vp:items[index].querySelector('img');vp.fire('pointerdown',{target,pointerType:'mouse',button:0,pointerId:1,clientX:100});vp.fire('pointerup',{target:vp,pointerId:1});}
@@ -63,7 +64,7 @@ test('定位刻度连续追随，途中改向从当前画面接续并落到指�
 });
 test('首次点图按原站放大，再点同一张打开原灯箱，关闭后焦点回到盘面',async()=>{
   const e=environment();e.click(0);assert(e.items[0].classList.contains('zoom'));assert.equal(e.api.lightboxOpen,false);
-  e.click(0);await Promise.resolve();assert.equal(e.api.lightboxOpen,true);assert.equal(e.ids.splbImg.src,'big-0');assert.equal(e.ids.splbCap.textContent,'照片0');
+  e.click(0);await Promise.resolve();await Promise.resolve();assert.equal(e.api.lightboxOpen,true);assert.equal(e.ids.splbImg.src,'big-0');assert.equal(e.ids.splbCap.textContent,'照片0');
   e.ids.splbClose.fire('click');assert.equal(e.api.lightboxOpen,false);assert.equal(e.doc.activeElement,e.vp);
 });
 test('点空白按原站撤放大，并保留缩回保护层直到过渡结束',()=>{
@@ -83,7 +84,7 @@ test('悬停意图预取保持原站 250ms 延迟，提前移开会取消',()=>{
   const b=e.items[1].querySelector('a');b.fire('pointerenter');e.advance(8);b.fire('pointerleave');e.advance(20);assert.deepEqual(e.prefetched,['big-0']);
 });
 test('灯箱按原站顺序翻大图，图片解码后同步图注',async()=>{
-  const e=environment();e.click(0);e.click(0);await Promise.resolve();e.ids.splbNext.fire('click');await Promise.resolve();
+  const e=environment();e.click(0);e.click(0);await Promise.resolve();await Promise.resolve();e.ids.splbNext.fire('click');await Promise.resolve();await Promise.resolve();
   assert.equal(e.ids.splbImg.src,'big-1');assert.equal(e.ids.splbCap.textContent,'照片1');assert.equal(e.ids.splbNo.textContent,'002');
 });
 test('减少动效保留原站平铺视图及原图链接，不建立另一套静态转盘',()=>{

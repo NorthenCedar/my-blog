@@ -4,7 +4,7 @@ import { onPage } from './page-lifecycle';
 // 说说每条有自己的评论区，回复渲染和表单与文章、留言共用。
 type Comment = Authored & { body: string; createdAt: string };
 
-onPage(({ document }) => {
+onPage(({ document, window }) => {
   const boxes = [...document.querySelectorAll<HTMLElement>('[data-comments-for]')];
   if (!boxes.length) return;
 
@@ -92,13 +92,23 @@ onPage(({ document }) => {
       errorBox.hidden = false;
     };
 
+    const matchesNotice = () => location.hash === `#${box.id}`;
+    const focusComment = () => {
+      if (!matchesNotice() || !box.hasAttribute('data-open')) return;
+      const params = new URLSearchParams(location.search);
+      const target = [params.get('reply') && `reply-${params.get('reply')}`, `comment-${params.get('comment')}`]
+        .map(id => id ? document.getElementById(id) : null).find(el => el && box.contains(el));
+      (target ?? box).scrollIntoView({ block: 'center' });
+    };
+
     const load = () => {
       if (loaded || loading) return;
       loading = true;
       errorBox.hidden = true;
       retry.hidden = true;
       pulled.add(slug); // 自己会给 setCount 数一遍，别让批量回来的旧结果覆盖它
-      fetch(`/api/comments?slug=${encodeURIComponent(slug)}`)
+      const parent = matchesNotice() ? new URLSearchParams(location.search).get('comment') : null;
+      fetch(`/api/comments?slug=${encodeURIComponent(slug)}${parent ? `&comment=${encodeURIComponent(parent)}` : ''}`)
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('取评论失败'))))
         .then((data: { comments?: Comment[]; replies?: Reply[] }) => {
           loaded = true;
@@ -118,6 +128,7 @@ onPage(({ document }) => {
           empty.hidden = list.childElementCount > 0;
           results.dataset.open = '';
           setCount();
+          if (matchesNotice()) window.requestAnimationFrame(focusComment);
         })
         .catch(() => {
           showError('评论没加载出来，可以重试。已输入的内容会保留。');
@@ -127,14 +138,26 @@ onPage(({ document }) => {
     };
     retry.addEventListener('click', load);
 
-    toggle?.addEventListener('click', () => {
-      const open = toggle.getAttribute('aria-expanded') !== 'true';
+    const setOpen = (open: boolean) => {
       box.toggleAttribute('data-open', open);
       box.inert = !open;
       box.setAttribute('aria-hidden', String(!open));
-      toggle.setAttribute('aria-expanded', String(open));
+      toggle?.setAttribute('aria-expanded', String(open));
       if (open) load();
+    };
+    toggle?.addEventListener('click', () => {
+      box.removeAttribute('data-comment-jump');
+      setOpen(toggle.getAttribute('aria-expanded') !== 'true');
     });
+    const openFromNotice = () => {
+      if (!matchesNotice()) return;
+      box.setAttribute('data-comment-jump', '');
+      setOpen(true);
+      window.requestAnimationFrame(focusComment);
+    };
+    window.addEventListener('hashchange', openFromNotice);
+    document.addEventListener('notice:follow', openFromNotice);
+    openFromNotice();
 
     form.addEventListener('submit', (e) => {
       e.preventDefault();

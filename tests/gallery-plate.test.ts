@@ -31,7 +31,7 @@ import { RUNTIME_DEPS_ALLOWED } from './_deps';
  *   ③ ★★ **错缝必须是 `margin-top`，不许是 `transform`** —— transform 不占位，
  *      网格算行高时按"没下沉"算，下沉那一列会咬到下一行上；margin 占位才是真错缝。
  *   ④ ★★ **错缝档位必须是百分比**（按格宽解析）⇒ 4/3/2 列三档自动等比缩放。
- *   ⑤ ★ **档案视图一律不裁图**：砖墙那整块**没有** `object-fit`。
+ *   ⑤ ★ **档案视图一律不裁图**：砖墙按原比例摆放，灯箱用 contain 保持预览完整。
  *      ★ 2026-10-07 起这条**只管档案视图**：入口条的细条**必须**裁
  *        （十几 px 宽的槽要的是"照片的一条竖切面"，见 `AlbumRow` 里那段注释）。
  *   ⑥ ★ 每格是 **1:1 方槽**（`aspect-ratio: 1`）+ 图居中 contain。
@@ -176,10 +176,9 @@ describe('相册屏 · 错缝砖墙契约', () => {
     expect(body, '缺 align-items:start ⇒ 默认 stretch 会把矮 figure 拉高、图与格脱开').toMatch(/align-items:\s*start/);
   });
 
-  it('★★ 档案视图一律不裁图：砖墙那整块**没有** `object-fit`', () => {
-    /* 剥过注释再查 —— 注释里**故意**写着「`object-fit:cover` …明确没采用」，那是解释自己没做的事。 */
-    expect(WALL_CODE, '砖墙出现了 object-fit ⇒ 图会被裁（本站是档案不是社交相册）').not.toMatch(/object-fit/);
-    /* 正对照：图确实是 contain（靠 max-width/max-height + 居中，不是靠 object-fit） */
+  it('★★ 档案视图和灯箱显示完整照片', () => {
+    const fits = [...WALL_CODE.matchAll(/object-fit:\s*([\w-]+)/g)].map((match) => match[1]);
+    expect(fits).toEqual(['contain']);
     expect(WALL_CODE, '图没写 width/height:auto ⇒ 会被方槽拉变形').toMatch(/\.plate-body img\s*\{[^}]*height:\s*auto/);
     /* ★★ 边界必须写清楚（2026-10-07）：**入口条的细条反而是必须裁的** ——
        十几 px 宽的槽里要的是"照片的一条竖切面"，contain 会把整张照片压成一根发丝。

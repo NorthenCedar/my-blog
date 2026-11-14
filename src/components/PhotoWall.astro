@@ -46,11 +46,7 @@ const GRID_W = Math.min(...manifest.widths);
 const LIGHT_W = Math.max(...manifest.widths);
 const at = (f: Frame, w: number) => f.files.find((x) => x.w === w) ?? f.files[0];
 
-/* 灯箱那只 <img> 服务端就带上第一帧的地址与说明：不留空 src（空 src 会去请求页面自己），
-   也不留空 alt（既有全局契约「所有图片的 alt 都非空」）。容器 display:none + loading="lazy"
-   ⇒ 打开灯箱之前不会产生这次请求（有探针断言守着）。 */
 const first = albums[0].frames[0];
-const firstBig = at(first, LIGHT_W);
 const total = albums.reduce((n, a) => n + a.total, 0);
 ---
 
@@ -70,7 +66,8 @@ const total = albums.reduce((n, a) => n + a.total, 0);
                   （preventDefault 开大图），不会真的跳转 ⇒ 页面过渡必须放行，
                   否则墨色蒙版会盖在灯箱上、照片就看不到了。 */}
               <a class="frame" href={big.url} data-no-transition>
-                <img src={g.url} width={g.actualW ?? g.w} height={g.h} alt={f.alt} loading="lazy" decoding="async" />
+                <img src={g.url} width={g.actualW ?? g.w} height={g.h} alt={f.alt} loading="lazy" decoding="async"
+                  data-full-width={big.actualW ?? big.w} data-full-height={big.h} />
                 {/* 编目号：**按册**三位零填充（板内第几张），钉在框内左下角。
                     aria-hidden —— 它和图下的 alt 指的是同一样东西，读屏不必听两遍。 */}
                 <span class="no" aria-hidden="true">NO.{String(fi + 1).padStart(3, '0')}</span>
@@ -94,7 +91,7 @@ const total = albums.reduce((n, a) => n + a.total, 0);
   </div>
   <div class="lb-stage">
     <button type="button" id="lbPrev" aria-label="上一张（←）">←</button>
-    <figure><img id="lbImg" src={firstBig.url} alt={first.alt} loading="lazy" decoding="async" /></figure>
+    <figure><img id="lbImg" alt={first.alt} loading="lazy" decoding="async" /></figure>
     <button type="button" id="lbNext" aria-label="下一张（→）">→</button>
     <p class="lb-status" id="lbStatus" role="status" hidden></p>
   </div>
@@ -346,8 +343,8 @@ const total = albums.reduce((n, a) => n + a.total, 0);
     pointer-events: none;
   }
   .lb[data-exhibit] .lb-stage img {
+    --lb-height: min(58svh, 44rem);
     max-width: min(100%, 86vw, 64rem);
-    max-height: min(58svh, 44rem);
     border-radius: 12px;
     pointer-events: auto;
   }
@@ -413,10 +410,13 @@ const total = albums.reduce((n, a) => n + a.total, 0);
     line-height: 0;
   }
   .lb-stage img {
+    --lb-height: calc(100vh - 8rem);
     max-width: 100%;
-    max-height: calc(100vh - 8rem);
-    width: auto;
+    max-height: var(--lb-height);
+    width: min(var(--lb-image-width, 100%), calc(var(--lb-height) * var(--lb-image-ratio, 1)));
+    aspect-ratio: var(--lb-image-ratio, auto);
     height: auto;
+    object-fit: contain;
   }
   .lb-stage > button {
     /* 上一张 / 下一张：从纯文字换成**圆形白玻璃**（2026-10-15）。
@@ -467,7 +467,7 @@ const total = albums.reduce((n, a) => n + a.total, 0);
     #lbPrev {left:calc(50% - 3.5rem);}
     #lbNext {right:calc(50% - 3.5rem);}
     .lb-bar {gap:var(--sp-2);padding-inline:var(--sp-3);}
-    .lb-stage img {max-height:calc(100dvh - 10rem);}
+    .lb-stage img {--lb-height:calc(100dvh - 10rem);}
   }
 </style>
 
