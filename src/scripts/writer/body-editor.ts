@@ -188,6 +188,20 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
       if(sourceMode){const start=source.selectionStart??raw.length,end=source.selectionEnd??start;source.setRangeText(`\n${line}\n`,start,end,'end');source.dispatchEvent(new Event('input',{bubbles:true}));return true;}
       return run((state,dispatch)=>{dispatch?.(state.tr.insertText(`\n${line}\n`).scrollIntoView());return true;});
     },
+    /** 通用插入：`block` 为真时把 Markdown 片段解析成块、插到当前段落之后；带原始 HTML 的附件行强制走源码。 */
+    insertText(markdown:string,block=false){
+      if(sourceMode||(block&&markdown.includes('<'))){
+        if(!sourceMode)switchMode(true);
+        const start=source.selectionStart??raw.length,end=source.selectionEnd??start;
+        source.setRangeText(markdown,start,end,'end');source.dispatchEvent(new Event('input',{bubbles:true}));return true;
+      }
+      if(!block)return run((state,dispatch)=>{dispatch?.(state.tr.insertText(markdown).scrollIntoView());return true;});
+      const fragment=parseWriterMarkdown(markdown.trim()).content;
+      return run((state,dispatch)=>{
+        const selection=state.selection,after=selection.$from.depth?selection.$from.after(1):selection.from;
+        dispatch?.(state.tr.insert(after,fragment).scrollIntoView());return true;
+      });
+    },
     removeImage(src:string){
       if(sourceMode){
         // 特殊旧文中的原始图片引用也由源码编辑；删除资产时不得改写代码示例或视频。
