@@ -8,6 +8,7 @@ import { wrapInList,splitListItem,liftListItem,sinkListItem } from 'prosemirror-
 import { parseWriterMarkdown,serializeWriterMarkdown,visualMarkdownIssue,writerSchema as schema } from './markdown';
 import { safeWriterImage,safeWriterLink } from './preview';
 import { codeBlockCommand,codeLanguageCommand,markdownCodeBlock,markdownCodeLanguage } from './code-block';
+import { markdownBullet } from './bullet';
 import { indentText,tabIndentCommand } from './indentation';
 import { el,button,field } from './ui';
 
@@ -32,6 +33,9 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
   const sourceParagraph=button('转为正文',()=>editSourceCode('paragraph'));
   sourceParagraph.addEventListener('mousedown',event=>event.preventDefault());
   const languageLabel=el('label','代码语言','writer-block-label');languageLabel.append(language);codeTools.append(codeButton,languageLabel,sourceParagraph);
+  // 圆点两种模式都能用：可视化里是列表，源码里直接写「- 」，所以放在常驻的这排工具上。
+  const bulletButton=button('圆点',()=>{if(sourceMode)editSourceBullet();else run(wrapInList(schema.nodes.bullet_list));});
+  bulletButton.title='给选中的每一行加上「- 」圆点；整段都有圆点时再次点击取消';bulletButton.addEventListener('mousedown',event=>event.preventDefault());codeTools.append(bulletButton);
   modes.append(visualButton,sourceButton);host.append(el('p','正文','writer-body-label'),modes,note,codeTools,toolbar,visual,source);
   const block=el('select');block.className='writer-block-type';block.setAttribute('aria-label','正文与标题级别');
   for(const [value,label]of [['0','正文'],['2','章节标题（进入目录）'],['3','小标题（进入目录）'],['code','代码块']]){const option=el('option',label);option.value=value;block.append(option);}
@@ -93,6 +97,11 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
     try{applySourceEdit(indentText(source.value,source.selectionStart,source.selectionEnd,event.shiftKey));}
     catch(error){options.onError(error instanceof Error?error:Error(String(error)));}
   });
+  function editSourceBullet(){
+    if(sourceComposing){options.onError(Error('请先完成当前文字输入，再设置格式。'));return;}
+    try{applySourceEdit(markdownBullet(source.value,source.selectionStart,source.selectionEnd));}
+    catch(error){options.onError(error instanceof Error?error:Error(String(error)));}
+  }
   function editSourceCode(action:'insert'|'language'|'paragraph'){
     if(sourceComposing){options.onError(Error('请先完成当前文字输入，再设置代码格式。'));return;}
     try{
