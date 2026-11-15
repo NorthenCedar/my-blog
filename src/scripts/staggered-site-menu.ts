@@ -90,7 +90,7 @@ export function mountSiteMenu(anchor: HTMLButtonElement, fallback: HTMLElement) 
       isFixed: true,
       items,
       socialItems,
-      logoUrl: '/favicon.svg',
+      logoUrl: '/brand-infinity.svg',
       colors: ['var(--nav-trail-first)', 'var(--nav-trail-second)'],
       accentColor: 'var(--accent-ink)',
       menuButtonColor: 'var(--site-menu-toggle-ink)',
