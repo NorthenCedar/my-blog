@@ -76,6 +76,24 @@ export function splitTopLevelBlocks(markdown: string, md: MarkdownIt): RawBlock[
 
 const cheapEqual = (a: Node, b: Node) => a.type === b.type && a.nodeSize === b.nodeSize && a.eq(b);
 
+/**
+ * 原文用的换行符。
+ *
+ * ★ 为什么需要（2026-11-16）：桌面写作台在 Windows 上回写文章时用的是 CRLF。
+ *   序列化器只会吐 `\n`，若原样混进去，一篇 CRLF 文章改一个字就会变成「混合行尾」，
+ *   逐行 diff 看着像改了三行（`\r` 单独成一行），站主会以为我动了他的排版。
+ *   所以重写块的行尾统一跟随原文。
+ */
+function sourceEol(blocks: readonly RawBlock[]): string {
+  return blocks.some(block => block.text.includes('\r\n')) ? '\r\n' : '\n';
+}
+
+/** 把序列化器输出的 LF 换成原文的行尾。 */
+function matchEol(text: string, eol: string): string {
+  if (eol === '\n') return text;
+  return text.replace(/\r\n/g, '\n').split('\n').join(eol);
+}
+
 /** 顶层块的最长公共子序列：返回每个当前块匹配到的原始块下标（没有就是 -1）。 */
 function alignBlocks(current: readonly Node[], original: readonly Node[]): number[] {
   const rows = current.length, cols = original.length;
@@ -111,6 +129,7 @@ export function mergeVerbatim(
 ): string {
   if (current.length === 0) return '';
   const matched = alignBlocks(current, original);
+  const eol = sourceEol(blocks);
   let out = '';
   let pendingGap = '';
   for (let i = 0; i < current.length; i++) {
@@ -120,8 +139,8 @@ export function mergeVerbatim(
       out += blocks[index]!.text;
       pendingGap = blocks[index]!.gap;
     } else {
-      out += serializeBlock(current[i]!);
-      pendingGap = '\n\n';
+      out += matchEol(serializeBlock(current[i]!), eol);
+      pendingGap = eol + eol;
     }
   }
   // 末尾换行跟着原始字节走：原文结尾有换行就补回来，没有就不补。

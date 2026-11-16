@@ -178,6 +178,39 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     backdrop-filter: blur(var(--glass-blur));
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 40%);
   }
+  /* 顶栏的**药丸玻璃层**：滚动态收成圆条时出现的那一层。
+     ★ 它必须是独立的一层、只做 opacity 淡入 —— 这是本轮定量量出来的：
+       以前滚动态直接改 ::before 的 `border`/`background-image`/`box-shadow`/`backdrop-filter`，
+       而这几样要么不可补间（背景图、边框宽度）、要么从 `currentColor` 起步（`border-top-color`
+       在过渡第 0 帧是深色 #1a1a1a，再花 0.5s 淡成白色 ⇒ 圆条成形时先闪一道深描边），
+       实测 `_tmp-navprobe.html` 在 T=0 的 ::before 计算值是 `border-top-color rgb(26,26,26)`、
+       四层大阴影已就位、背景渐变已从 180° 换成 135° —— 三处硬跳，正是站主看到的「闪」。
+       现在：::before 只负责静止态的纸面玻璃（淡出），::after 只负责药丸（淡入），
+       两层的形状/模糊/描边/阴影都是**静态**的，动起来的只有 opacity 与顶栏自身的几何。
+     ⚠ 别把 `backdrop-filter` 写回过渡列表：逐帧重算模糊区在 Chrome 上会抖。 */
+  body > [data-scroll-topbar]::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 -1px 0;
+    z-index: 0;
+    pointer-events: none;
+    border-radius: 999px;
+    opacity: 0;
+    visibility: hidden;
+    /* 时长与顶栏自身的几何过渡（.5s）对齐：圆条收拢的同时这层淡入。 */
+    transition: opacity .5s ease, visibility .5s ease;
+  }
+  body > [data-scroll-topbar][data-topbar-scrolled]::after {
+    opacity: 1;
+    visibility: visible;
+  }
+  body.chrome-page .topbar::before {
+    transition: opacity .5s ease, visibility .5s ease;
+  }
+  body.chrome-page > [data-scroll-topbar][data-topbar-scrolled]::before {
+    opacity: 0;
+    visibility: hidden;
+  }
   /* 顶栏自己的**文字与图标**抬到玻璃层之上：玻璃层是 z-index:0 的定位元素，
      而定位元素画在内流内容**之后**，不抬的话站名/导航会被一起模糊掉。
      ⚠ 必须排除抽屉那两件：`.navshell` 是 `position:fixed`、`.navtog` 小屏下是 `position:absolute`
@@ -388,10 +421,8 @@ const scrolls = Astro.url.pathname !== '/gallery/';
   }
   .home-topbar > :is(.site, .navbtn, .nav-trigger) { position: relative; }
   html.boot-on .home-topbar { visibility: hidden; }
-  [data-scroll-topbar]::before {
-    transition: background-color .5s ease, border-color .5s ease, border-radius .5s ease,
-      box-shadow .5s ease, backdrop-filter .5s ease;
-  }
+  /* 滚动态只改几何（top / max-width / padding）：胶片的材质改由 `::after` 那层淡入，
+     两边都不再逐帧插值模糊、描边与阴影 —— 详见上面 `::after` 那段注释。 */
   body > [data-scroll-topbar][data-topbar-scrolled] {
     top: 20px;
     max-width: min(65rem, calc(100% - 2 * var(--gutter)));
@@ -400,6 +431,7 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     color: var(--ink);
   }
   body > [data-scroll-topbar][data-topbar-scrolled]::before {
+    /* 药丸的圆角现在画在 `::after` 上（这是最后一帧才生效的形状，不该参与补间）。 */
     border-radius: 999px;
   }
   .home-topbar[data-topbar-scrolled] .site { visibility: visible; pointer-events: auto; }
@@ -415,7 +447,7 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    [data-scroll-topbar], [data-scroll-topbar]::before { transition: none; }
+    [data-scroll-topbar], [data-scroll-topbar]::before, [data-scroll-topbar]::after { transition: none; }
   }
 
   /* ---------- 内页页头（外壳提供，各页复用） ----------

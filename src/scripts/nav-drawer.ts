@@ -3,7 +3,13 @@ import { onPage } from './page-lifecycle';
 onPage(({ document, keep, addEventListener }) => {
   const bar = document.querySelector('[data-scroll-topbar]');
   if (bar) {
-    // React Bits 首页 Navbar.jsx 的滚动阈值。
+    // React Bits 首页 Navbar.jsx 的滚动阈值 50px。
+    // 为什么不做迟滞（试过 50/36 的双阈值又撤了，2026-11-16）：
+    // ① 实测没有来回抽——滚到 45/52 是 0 次切换，滚到 60/120 各 1 次；
+    // ② 收条时 padding 从 --topbar-pad-block 收到 --sp-1、整条矮约 14px，
+    //    滚动锚定会把 scrollY 往回带几 px，但那是一次性补偿，不会反复触碰阈值；
+    // ③ 文章页 JS 有硬预算（tests/build-output.test.ts），双阈值要多 40 字节左右，
+    //    换来的是量不到的保护，不值。
     const scroll = () => bar.toggleAttribute('data-topbar-scrolled', scrollY > 50);
     addEventListener('scroll', scroll, { passive: true });
     scroll();

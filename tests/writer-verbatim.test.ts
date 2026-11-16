@@ -103,4 +103,23 @@ describe('排版结构', () => {
     expect(out).toContain('**加粗**');
     expect(out).toContain('<del>删除线</del>');
   });
+
+  it('CRLF 的文章改一处，行尾不变、也只改一行', () => {
+    const raw = '第一段\r\n\r\n- 甲\r\n- 乙\r\n\r\n结尾';
+    const doc = parseWriterMarkdown(raw);
+    let at = -1;
+    doc.descendants((node, pos) => {
+      if (at >= 0 || node.type.name !== 'text') return true;
+      const index = node.text!.indexOf('甲');
+      if (index >= 0) at = pos + index + 1;
+      return true;
+    });
+    const state = EditorState.create({ doc });
+    const out = serializeWriterMarkdown(state.apply(state.tr.insertText('（补）', at)).doc, { raw, doc });
+    expect(out).not.toMatch(/[^\r]\n/);
+    const before = raw.split('\n');
+    const after = out.split('\n');
+    expect(after.length).toBe(before.length);
+    expect(before.filter((line, index) => line !== after[index]).length).toBe(1);
+  });
 });
