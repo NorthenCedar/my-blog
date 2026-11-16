@@ -185,8 +185,13 @@ const scrolls = Astro.url.pathname !== '/gallery/';
        在过渡第 0 帧是深色 #1a1a1a，再花 0.5s 淡成白色 ⇒ 圆条成形时先闪一道深描边），
        实测 `_tmp-navprobe.html` 在 T=0 的 ::before 计算值是 `border-top-color rgb(26,26,26)`、
        四层大阴影已就位、背景渐变已从 180° 换成 135° —— 三处硬跳，正是站主看到的「闪」。
-       现在：::before 只负责静止态的纸面玻璃（淡出），::after 只负责药丸（淡入），
-       两层的形状/模糊/描边/阴影都是**静态**的，动起来的只有 opacity 与顶栏自身的几何。
+       现在：::before 只负责静止态的纸面玻璃，::after 只负责药丸，
+       两层的模糊/描边/阴影都是**静态**的，动起来的是 opacity、圆角与顶栏自身的几何。
+     ★ 2026-11-16（站主：「往上滑那个圆条直接消失，想让它像往下滑的倒放」）：
+       圆角也进补间（静止态 0 ↔ 滚动态 999px），并且**两层的交接错开**——
+       上滑时先花 .42s 让药丸把圆角摊平成整条（这 .42s 里它完全不透明），
+       最后 .18s 才淡出、纸面玻璃同时接上；下滑时反过来：纸面立刻让位、药丸随几何收成圆条。
+       以前两边是 .5s 同步交叉淡化、圆角恒为 999px ⇒ 观感是「圆条化掉」而不是「圆条摊开」。
      ⚠ 别把 `backdrop-filter` 写回过渡列表：逐帧重算模糊区在 Chrome 上会抖。 */
   body > [data-scroll-topbar]::after {
     content: '';
@@ -194,22 +199,30 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     inset: 0 0 -1px 0;
     z-index: 0;
     pointer-events: none;
-    border-radius: 999px;
+    /* 静止态是方角、滚动态才是圆条：中间那 .5s 就是「摊开 / 收拢」的变形过程。 */
+    border-radius: 0;
     opacity: 0;
     visibility: hidden;
-    /* 时长与顶栏自身的几何过渡（.5s）对齐：圆条收拢的同时这层淡入。 */
-    transition: opacity .5s ease, visibility .5s ease;
+    /* 回静止态（上滑）：先摊平再淡出；visibility 拖到淡出结束才切，
+       否则 Chrome 会在补间中途把这层藏掉（那就是「圆条直接消失」的来历）。 */
+    transition: border-radius .5s ease, opacity .18s ease .42s, visibility 0s linear .6s;
   }
   body > [data-scroll-topbar][data-topbar-scrolled]::after {
+    border-radius: 999px;
     opacity: 1;
     visibility: visible;
+    /* 进滚动态（下滑）：形状随整条的几何一起收，淡入放在最前面 .2s。 */
+    transition: border-radius .5s ease, opacity .2s ease, visibility 0s linear 0s;
   }
   body.chrome-page .topbar::before {
-    transition: opacity .5s ease, visibility .5s ease;
+    /* 回静止态（上滑）：等药丸摊平（.42s）再淡回来接住整条。 */
+    transition: opacity .18s ease .42s, visibility 0s linear .42s;
   }
   body.chrome-page > [data-scroll-topbar][data-topbar-scrolled]::before {
     opacity: 0;
     visibility: hidden;
+    /* 进滚动态（下滑）：纸面立刻让位给药丸。 */
+    transition: opacity .18s ease, visibility 0s linear .18s;
   }
   /* 顶栏自己的**文字与图标**抬到玻璃层之上：玻璃层是 z-index:0 的定位元素，
      而定位元素画在内流内容**之后**，不抬的话站名/导航会被一起模糊掉。
