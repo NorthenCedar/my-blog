@@ -452,6 +452,11 @@ const scrolls = Astro.url.pathname !== '/gallery/';
        给它（不可见时 `visibility: hidden` 仍占位）撑住这一格行高后，整条高度 = 2×padding + 行高，
        只有 padding 在补间 —— 和内页完全同一套节奏（内页那格行高由主题开关撑着）。 */
     min-block-size: var(--topbar-row);
+    /* ★ 2026-11-16（站主：「圆条上面那行站名你给他放到圆条中间，现在是靠着上方的」）：
+       这一格行高撑起来之后，里面那行字仍按 `line-height: normal` 排在盒子顶部 ——
+       圆条态看着就贴着上沿。把 line-height 也设成同一格行高，行盒与盒子等高，字自然居中；
+       它同时是单行文本、`text-overflow: ellipsis` 还能截断（换 `display: flex` 居中会破坏省略）。 */
+    line-height: var(--topbar-row);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
