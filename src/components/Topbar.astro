@@ -425,9 +425,9 @@ const scrolls = Astro.url.pathname !== '/gallery/';
        内页顶栏里有个主题开关撑着，整条 65px 高、菜单键纵向中心在 32px；
        首页只有一行站名（17px），整条只有 39px，菜单键就浮在上面 8px 处，换页时会跳。
        这里给首页留出同样的行高，菜单键与站名就落到与内页相同的位置。
-       `--topbar-row` 跟着主题开关的缩放走（手机档 0.58 见 ThemeToggle.astro）。 */
+       `--topbar-row` 跟着主题开关的缩放走（手机档 0.58 见 ThemeToggle.astro）。
+       ⚠ 这一格行高**挂在 `.site` 上**，不能给整条 `min-block-size`（见下面 `.site` 那段注释）。 */
     --topbar-row: 2.6rem;
-    min-block-size: calc(2 * var(--topbar-pad-block) + var(--topbar-row));
   }
   .home-topbar > :is(.navbtn, .nav-trigger) { pointer-events: auto; }
   .home-topbar .site {
@@ -444,6 +444,14 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     text-decoration: none;
     font: var(--fs-xs) "IBM Plex Mono", monospace;
     letter-spacing: .08em;
+    /* ★ 2026-11-16（站主：「首页的圆条在回去的时候会突然变高，有明显顿挫感，你就不能把他做的
+       和其他页一样吗」）：行高必须落在**内容**上，不能给整条 `min-block-size`。
+       整条有 min-block-size 时，滚动态那档（2×sp-1 + 行高 = 49.6）与静止档（2×pad-block + 行高
+       = 64）是两个不同的值，而 `min-block-size` 不在 transition 列表里 ⇒ 上滑摘掉属性那一帧
+       高度直接 49.6 → 64，跳一下。
+       给它（不可见时 `visibility: hidden` 仍占位）撑住这一格行高后，整条高度 = 2×padding + 行高，
+       只有 padding 在补间 —— 和内页完全同一套节奏（内页那格行高由主题开关撑着）。 */
+    min-block-size: var(--topbar-row);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -471,9 +479,10 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     padding-block: var(--sp-1);
     padding-inline: var(--sp-4);
     color: var(--ink);
-    /* 与上面首页那条同一个行高：收成圆条后首页的菜单键也和内页齐平（内页本身更高，这条不起作用）。
-       这里写死 2.6rem 而不跟 `--topbar-row`：手机档圆条两边都是这个高度（实测 49.6px）。 */
-    min-block-size: calc(2 * var(--sp-1) + 2.6rem);
+    /* ⚠ 这里**不要**再写 `min-block-size`：给整条固定行高会让上滑时高度跳变
+       （两档值不同、`min-block-size` 又不参与补间）。行高已改挂到 `.site` 上，
+       内页那边本来就由主题开关撑着，两页的高度都只随 padding 平滑变化。
+       见上面 `.site` 那段注释。 */
     /* ★ 2026-11-16（站主：「变的过程中大小来回抽搐」）：收条会把 padding-block
        从 --topbar-pad-block 收到 --sp-1，整条矮 2 × (pad-block − sp-1) ≈ 14px。
        顶栏在流里，矮下去 ⇒ 文档高度跟着变 ⇒ 浏览器**滚动锚定**把 scrollY 往回带

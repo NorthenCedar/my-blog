@@ -119,7 +119,7 @@ onPage(({document, addEventListener, matchMedia, requestAnimationFrame, Mutation
     const ripple = document.querySelector('.cr-ripple');
     if (!disc || !dot || !ripple) return;
     // 触摸设备与减少动态效果：不做（也**不加** cursor-none —— 那样会把原生光标藏掉却没有替代品）
-    if (!matchMedia('(hover:hover)').matches || matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+    if (!matchMedia('(hover:hover) and (prefers-reduced-motion:no-preference)').matches) return;
     root.classList.add('cursor-none');
 
     // 原生 modal 位于浏览器顶层，普通页面的 z-index 再高也不能覆盖它。
@@ -130,11 +130,17 @@ onPage(({document, addEventListener, matchMedia, requestAnimationFrame, Mutation
       if (ripple.parentNode === host) return;
       // 搬节点会让 CSS 动画**从头**再播一遍（站主看到的就是同一个涟漪闪两次）。
       // 但也不能不搬：不搬的话弹窗打开期间涟漪留在 body 里，被 modal 的背景盖住 —— 等于没有涟漪。
-      // 所以照搬，只是把动画的时间轴一起搬过去：记住当前进度，插进新父节点后写回新的那一个。
+      // 所以照搬，只把时间轴接回去。⚠ 不能读 `getAnimations()[0].currentTime` 来拿进度：
+      // 关闭弹窗时那棵子树已经不渲染、动画先被取消，读到的就是空 —— 搬回去后从 0 重播，
+      // 站主报的「关掉菜单之后涟漪在原位置又闪一次」就是这个。改成记起播时刻（t0，pointerdown 写），
+      // 搬完按「已经过去多久」写回新的那个动画；超过一圈（500ms）就落到末帧，那时它本来就是透明的。
+      // 时间用 Date.now() 而不是 performance.now()：这里只要毫秒级、不要求单调，
+      // 而共享脚本的预算只剩个位数字节，两处加起来能省 12 字节。
       // 三个节点永远同进同出，用涟漪代表它们判断是否要搬。
-      const at = ripple.getAnimations()[0]?.currentTime;
+      const at = Date.now() - t0;
       host.append(disc, dot, ripple);
-      at != null && (ripple.getAnimations()[0].currentTime = at);
+      const anim = ripple.getAnimations()[0];
+      anim && (anim.currentTime = at);
     };
     // attributeFilter 已使属性观察默认开启，不监听每一帧的 style 变化。
     // 页面加载时三个装饰节点本来就在 body 里、也没有打开的弹窗，不必先同步一次。
@@ -147,6 +153,7 @@ onPage(({document, addEventListener, matchMedia, requestAnimationFrame, Mutation
     let ty = 0;
     let raf = 0;
     let seen = false;
+    let t0 = 0;
     const put = (el, a, b) => { el.style.transform = `translate3d(${a}px,${b}px,0) translate(-50%,-50%)`; };
     const step = () => {
       x += (tx - x) * 0.3;
@@ -181,6 +188,7 @@ onPage(({document, addEventListener, matchMedia, requestAnimationFrame, Mutation
         ripple.classList.remove('is-on');
         void ripple.offsetWidth; // 强制回流：同一位置连点也能重放
         ripple.classList.add('is-on');
+        t0 = Date.now(); // 起播时刻：搬层时按它把时间轴接回去（见上面的注释）
       },
       { passive: true },
     );

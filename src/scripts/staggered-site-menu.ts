@@ -100,12 +100,17 @@ export function mountSiteMenu(anchor: HTMLButtonElement, fallback: HTMLElement) 
     }));
   }
 
+  // ★ 2026-11-16（站主：「把 close 往下调一点，还是比 menu 高一点，点开 menu 能看到那个 '+' 明显往上去了一点」）：
+  // 关闭键开合时只该**横向**挪（从顶栏那颗 Menu 滑到抽屉右上角），纵向要留在原来那一行。
+  // 原来 top 取的是抽屉 header 的 padding-top（16px），而顶栏 Menu 的纵向位置是 24px
+  // （收成圆条后 36.8px）⇒ 点开时它先往上跳 8px、关上再跳回来，站主看到的就是「+ 往上一动」。
+  // 纵向直接跟 anchor（那颗 Menu）走；横向仍用 header 的 padding-right
+  // （实测 Menu 右边缘的 offset 与它相等，都是 48px，所以横向飞行观感不变）。
   function cornerPosition() {
     const header = dialog.querySelector('.staggered-menu-header')!;
-    const style = getComputedStyle(header);
     return {
-      top: parseFloat(style.paddingTop),
-      right: parseFloat(style.paddingRight),
+      top: anchor.getBoundingClientRect().top,
+      right: parseFloat(getComputedStyle(header).paddingRight),
     };
   }
 
