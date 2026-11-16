@@ -189,8 +189,9 @@ const scrolls = Astro.url.pathname !== '/gallery/';
        两层的模糊/描边/阴影都是**静态**的，动起来的是 opacity、圆角与顶栏自身的几何。
      ★ 2026-11-16（站主：「往上滑那个圆条直接消失，想让它像往下滑的倒放」）：
        圆角也进补间（静止态 0 ↔ 滚动态 999px），并且**两层的交接错开**——
-       上滑时先花 .42s 让药丸把圆角摊平成整条（这 .42s 里它完全不透明），
-       最后 .18s 才淡出、纸面玻璃同时接上；下滑时反过来：纸面立刻让位、药丸随几何收成圆条。
+       上滑时先花 .5s 让药丸跟着文字一起放大（这 .5s 里它完全不透明、保持圆头），
+       等文字回到原位后最后 .18s 才收角淡出、纸面玻璃同时接上；
+       下滑时反过来：纸面立刻让位、药丸随几何收成圆条。
        以前两边是 .5s 同步交叉淡化、圆角恒为 999px ⇒ 观感是「圆条化掉」而不是「圆条摊开」。
      ⚠ 别把 `backdrop-filter` 写回过渡列表：逐帧重算模糊区在 Chrome 上会抖。 */
   body > [data-scroll-topbar]::after {
@@ -203,13 +204,14 @@ const scrolls = Astro.url.pathname !== '/gallery/';
        ⚠ 上滑时**不能**一路补间圆角：条高 60px，半径一超过 30px 就看不出圆头了，
        用 .5s 摊平的话刚上滑 100ms 圆条就「没形了」，而文字还要再飞 400ms ——
        站主看到的就是「圆条还是消失了，文字自己飞回去」。所以圆角只在**最后 .18s**
-       跟着淡出一起收：前 .42s 它一直是圆条，跟着几何一起放大。 */
+       跟着淡出一起收：前 .5s 它一直是圆条，跟着几何一起放大。 */
     border-radius: 0;
     opacity: 0;
     visibility: hidden;
-    /* 回静止态（上滑）：药丸先原样放大 .42s，等文字飞回原处，再用 .18s 收角+淡出交给纸面玻璃；
-       visibility 拖到这一切结束才切，否则 Chrome 会在补间中途把这层藏掉。 */
-    transition: border-radius .18s ease .42s, opacity .18s ease .42s, visibility 0s linear .62s;
+    /* 回静止态（上滑）：药丸先原样放大 .5s（与顶栏几何过渡同长），等文字飞回原处，
+       再用 .18s 收角+淡出交给纸面玻璃；visibility 拖到这一切结束才切，
+       否则 Chrome 会在补间中途把这层藏掉。 */
+    transition: border-radius .18s ease .5s, opacity .18s ease .5s, visibility 0s linear .68s;
   }
   body > [data-scroll-topbar][data-topbar-scrolled]::after {
     border-radius: 999px;
@@ -219,8 +221,8 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     transition: border-radius .2s ease, opacity .2s ease, visibility 0s linear 0s;
   }
   body.chrome-page .topbar::before {
-    /* 回静止态（上滑）：等药丸摊平（.42s）再淡回来接住整条。 */
-    transition: opacity .18s ease .42s, visibility 0s linear .42s;
+    /* 回静止态（上滑）：等药丸摊平（.5s）再淡回来接住整条。 */
+    transition: opacity .18s ease .5s, visibility 0s linear .5s;
   }
   body.chrome-page > [data-scroll-topbar][data-topbar-scrolled]::before {
     opacity: 0;
