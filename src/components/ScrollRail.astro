@@ -17,6 +17,8 @@
     height: min(44vh, 360px);
     transform: translateY(-50%);
     touch-action: none;
+    /* 这是拖动条，不是正文：指针用默认箭头（跟手圆盘仍靠 [data-rail] 判热）。 */
+    cursor: default;
   }
   .rail::before {
     content: '';

@@ -1377,7 +1377,11 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
        ⚠ 中间色**不从模块 import**：那样会把整块预览逻辑拉进首屏包（试过，多出 ~2.9 KB），
          现在只读事件 detail 里的 `mixed`，增量才是现在这个数。 */
     // 留言板使用同一套消息跳转及评论定位，完整闭包加 1 KiB。
-    const BUDGET = 69 * 1024 + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET;
+    /* ★ 2026-11-16：站主「拖动条的灰色条会露出系统光标、圆盘还在原地不动」⇒ 全站可滚动面板
+       换成自家滑块（`src/scripts/custom-scrollbar.ts`，挂在 Base 的共享脚本里 ⇒ 本页也付一次）。
+       共享块 20978 → 22020 B（+1042），本页实测 174354 B，撞线 530 B。
+       按规矩抬 1 KiB（69 → 70 KiB，余量 ~0.5 KB）；三条反面正对照照旧。 */
+    const BUDGET = 70 * 1024 + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET;
     expectMotionStartup(page, 67 * 1024 + THEME_TOGGLE_BOOT_BUDGET);
     const { code, files } = jsClosure(page, { skipMenu: true, skipTechHeading: true });
     const full = Buffer.byteLength(code, 'utf8') - siteWideLazyBytes(files);

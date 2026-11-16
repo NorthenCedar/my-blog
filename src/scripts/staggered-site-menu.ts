@@ -117,6 +117,8 @@ export function mountSiteMenu(anchor: HTMLButtonElement, fallback: HTMLElement) 
   flushSync(render);
   const toggle = dialog.querySelector<HTMLButtonElement>('.sm-toggle')!;
   const panel = dialog.querySelector<HTMLElement>('.staggered-menu-panel')!;
+  // 面板自己会滚（站主：这里的灰条露出系统光标、圆盘还僵在原地）⇒ 交给自家滑块。
+  panel.setAttribute('data-scrollbar', '');
   const selected = [...panel.querySelectorAll('.sm-panel-item')].find(link => link.getAttribute('href') === current);
   selected?.setAttribute('aria-current', 'page');
   panel.setAttribute('role', 'navigation');

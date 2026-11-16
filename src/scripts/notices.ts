@@ -40,6 +40,7 @@ if (bell) {
   panel.id = 'notices-panel';
   bell.setAttribute('aria-controls', panel.id);
   const scroll = node('div', 'notices-scroll');
+  scroll.setAttribute('data-scrollbar', '');
   const list = node('ul', 'notices-list');
   const empty = node('p', 'notices-empty');
   const more = node('button', 'notices-more', '更早消息');

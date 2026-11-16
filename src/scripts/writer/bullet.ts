@@ -1,7 +1,7 @@
 type TextEdit={body:string;start:number;end:number};
 
 /** 逐行切开源码：offset 是行首在原文里的位置，newline 原样保留（只认 CRLF / LF）。 */
-function textLines(raw:string){
+export function textLines(raw:string){
   const lines:{text:string;offset:number;newline:string}[]=[];
   for(const match of raw.matchAll(/([^\r\n]*)(\r?\n|$)/g)){
     if(!match[0]&&raw&&!raw.endsWith('\n'))continue;
@@ -11,7 +11,7 @@ function textLines(raw:string){
 }
 
 /** 围栏块内的行不参与行首编辑；沿用 CommonMark 的 ``` / ~~~ 记法。 */
-function codeLines(texts:string[]){
+export function codeLines(texts:string[]){
   const flags:boolean[]=[];
   let fence:string|null=null;
   for(const [index,text] of texts.entries()){

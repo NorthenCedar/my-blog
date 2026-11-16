@@ -4,8 +4,8 @@ import { mountWriterBody } from '../src/scripts/writer/body-editor';
 
 /* 2026-11-16 站主：「本地写作台和云端写作台都加一个一键加「- 」圆点的按钮」。
    本地那侧在 blog-desk 的 ui/app.js + _test_bullet_format.cjs；这里守云端：
-   ① 按钮必须挂在**两种模式都常驻**的那排工具上（可视化与 Markdown 源码），
-      否则源码模式（段落格式那排整排 hidden）下就点不到；
+   ① 按钮必须挂在**两种模式都常驻**的那排工具上（可视化与 Markdown 源码都看得见），
+      否则源码模式下就点不到；
    ② 源码模式下的改写规则是纯函数 markdownBullet（见 tests/writer-bullet.test.ts）。 */
 
 const noop = () => {};
@@ -25,7 +25,7 @@ it('圆点按钮在常驻工具排上，两种模式都看得见', () => {
   expect(bullet, '没有「圆点」按钮').toBeTruthy();
   expect(bullet!.hidden).toBe(false);
   expect(bullet!.title).toContain('- ');
-  /* 段落格式那一排在源码模式会整排隐藏；圆点必须在另一排。 */
+  /* 圆点与格式按钮分属两排；源码模式下两排都还在，但圆点不该被挪到会变的那排。 */
   const modeRow = bullet!.parentElement!;
   const bold = find('加粗')!;
   expect(bold.parentElement === modeRow, '圆点被放进了源码模式会隐藏的那排').toBe(false);

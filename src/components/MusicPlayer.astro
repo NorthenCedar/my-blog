@@ -41,7 +41,7 @@ if (musicOrder.playlist !== MUSIC_PLAYLIST) throw new Error('音乐顺序配置�
       <label class="music-volume"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/></svg><input data-music-volume aria-label="音量" type="range" min="0" max="1" step="0.05" value="0.35" /></label>
     </div>
     <div class="music-search-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg><input class="music-search" data-music-search aria-label="搜索歌单" type="search" placeholder="搜索歌名或歌手" /></div>
-    <ol class="music-list" data-music-list aria-label="歌曲列表"></ol>
+    <ol class="music-list" data-music-list data-scrollbar aria-label="歌曲列表"></ol>
     <div class="music-footer"><button type="button" data-music-reload><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5 8a8 8 0 0 1 13-3l2 2M4 17l2 2a8 8 0 0 0 13-3"/></svg>重新载入</button><a href={'https://music.163.com/playlist?id=' + MUSIC_PLAYLIST} target="_blank" rel="noopener noreferrer">去网易云听<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg></a></div>
     </div>
   </section>
@@ -104,7 +104,7 @@ if (musicOrder.playlist !== MUSIC_PLAYLIST) throw new Error('音乐顺序配置�
   .music-search-wrap>svg{width:16px;height:16px;color:var(--music-glass-muted)}
   .music-search{width:100%;min-width:0;min-height:42px;padding:var(--sp-2) 0;color:var(--ink);background:transparent;border:0;outline-offset:0!important;border-radius:var(--sp-2);font-size:.75rem!important}
   .music-search::placeholder{color:var(--music-glass-muted);opacity:.85}
-  .music-list{min-height:44px;max-height:228px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--hair) transparent;margin:var(--sp-3) calc(-1 * var(--sp-1));padding:var(--sp-1);list-style:none;flex:1 1 auto}
+  .music-list{min-height:44px;max-height:228px;overflow:auto;overscroll-behavior:contain;margin:var(--sp-3) calc(-1 * var(--sp-1));padding:var(--sp-1);list-style:none;flex:1 1 auto}
   .music-list :global(button){position:relative;display:flex;flex-direction:column;justify-content:center;gap:2px;width:100%;min-height:56px;padding:var(--sp-2) var(--sp-3);border:0;border-radius:12px;font:inherit;color:inherit;background:transparent;text-align:left;line-height:1.5;overflow-wrap:anywhere;transition:background .18s}
   .music-list :global(button span){font-size:.78rem;font-weight:500}.music-list :global(button small){font-size:.66rem;color:var(--music-glass-muted)}
   .music-list :global(button:focus-visible){outline:2px solid var(--music-glass-accent);outline-offset:0}

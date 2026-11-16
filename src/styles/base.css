@@ -24,6 +24,34 @@ html::-webkit-scrollbar {
   display: none;
 }
 
+/* ★ 2026-11-16 站主：「文章目录（小帆船那里）和菜单里的上下拖动的灰色条，鼠标放上去会显示系统光标，
+   拖动的时候本站的圆形光标在原地不动」。原生滚动条在 Chrome 里固定画系统箭头，拖动它也不会派发
+   pointermove（圆盘就僵住了）⇒ 带 data-scrollbar 的容器一律不画原生条，换成自家的细滑块
+   （脚本见 scripts/custom-scrollbar.ts）。滚轮 / 触控 / 键盘滚动完全不受影响。 */
+[data-scrollbar] {
+  scrollbar-width: none;
+}
+[data-scrollbar]::-webkit-scrollbar {
+  display: none;
+}
+.scrollthumb {
+  position: fixed;
+  z-index: 45;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--muted);
+  opacity: .35;
+  transition: opacity .16s ease;
+  touch-action: none;
+}
+.scrollthumb:hover,
+.scrollthumb.is-dragging {
+  opacity: .85;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scrollthumb { transition: none; }
+}
+
 body {
   margin: 0;
   background: var(--paper);

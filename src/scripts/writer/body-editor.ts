@@ -9,6 +9,8 @@ import { parseWriterMarkdown,serializeWriterMarkdown,visualMarkdownIssue,writerS
 import { safeWriterImage,safeWriterLink } from './preview';
 import { codeBlockCommand,codeLanguageCommand,markdownCodeBlock,markdownCodeLanguage } from './code-block';
 import { markdownBullet } from './bullet';
+import { markdownFormat,markdownLink,markdownUnlink,sourceFormatActive,type SourceFormat } from './source-format';
+import { appendParagraph,padAfterCode } from './code-exit';
 import { indentText,tabIndentCommand } from './indentation';
 import { el,button,field } from './ui';
 
@@ -75,25 +77,50 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
   const bulletButton=button('圆点',()=>{if(sourceMode)editSourceBullet();else run(wrapInList(schema.nodes.bullet_list));});
   bulletButton.title='给选中的每一行加上「- 」圆点；整段都有圆点时再次点击取消';bulletButton.addEventListener('mousedown',event=>event.preventDefault());codeTools.append(bulletButton);
   modes.append(visualButton,sourceButton);host.append(el('p','正文','writer-body-label'),modes,note,codeTools,toolbar,visual,source);
-  const block=el('select');block.className='writer-block-type';block.setAttribute('aria-label','正文与标题级别');
-  for(const [value,label]of [['0','正文'],['2','章节标题（进入目录）'],['3','小标题（进入目录）'],['code','代码块']]){const option=el('option',label);option.value=value;block.append(option);}
-  const blockLabel=el('label','段落格式','writer-block-label');blockLabel.append(block);toolbar.append(blockLabel);
-  const controls:{button:HTMLButtonElement;command:Command;mark?:string}[]=[];
+  /* 站主 2026-11-16：段落格式不再用下拉选项，正文 / 章节标题 / 小标题各给一个按钮，
+     可视化与 Markdown 源码两种模式都点得到（源码模式走 source-format 的纯函数）。 */
+  const blockButtons:{level:0|2|3;button:HTMLButtonElement}[]=[];
+  const blockGroup=el('div','','writer-block-group');
+  blockGroup.setAttribute('role','group');blockGroup.setAttribute('aria-label','段落格式');
+  for(const [level,label]of [[0,'正文'],[2,'章节标题'],[3,'小标题']] as const){
+    const control=button(label,()=>{
+      if(sourceMode){editSourceFormat(level===0?'h0':level===2?'h2':'h3');return;}
+      run(setBlockType(level===0?schema.nodes.paragraph:schema.nodes.heading,level===0?undefined:{level}));
+    });
+    control.title=level===0?'设为正文段落（去掉标题）':`设为${label}，会进入本文目录`;
+    control.addEventListener('mousedown',event=>event.preventDefault());
+    blockButtons.push({level,button:control});blockGroup.append(control);
+  }
+  toolbar.append(blockGroup);
+  const controls:{button:HTMLButtonElement;command:Command;mark?:string;format?:SourceFormat;source?:()=>void}[]=[];
   function run(command:Command){
     if(destroyed||sourceMode)return false;
     if(view.composing){options.onError(Error('请先完成当前文字输入，再设置格式。'));return false;}
     // 每次工具栏操作独立撤销；普通输入继续由 history 合并。
     view.dispatch(closeHistory(view.state.tr));const applied=command(view.state,view.dispatch,view);view.focus();return applied;
   }
-  function add(label:string,command:Command,mark?:string){const b=button(label,()=>run(command));b.addEventListener('mousedown',event=>event.preventDefault());controls.push({button:b,command,mark});toolbar.append(b);return b;}
-  add('加粗',toggleMark(schema.marks.strong),'strong');add('斜体',toggleMark(schema.marks.em),'em');add('删除线',toggleMark(schema.marks.strike),'strike');
-  add('无序列表',wrapInList(schema.nodes.bullet_list));add('有序列表',wrapInList(schema.nodes.ordered_list));add('引用',wrapIn(schema.nodes.blockquote));
+  function add(label:string,command:Command,mark?:string,format?:SourceFormat,sourceAction?:()=>void){
+    const b=button(label,()=>{
+      if(destroyed)return;
+      if(sourceMode){if(sourceAction)sourceAction();else if(format)editSourceFormat(format);return;}
+      run(command);
+    });
+    b.addEventListener('mousedown',event=>event.preventDefault());controls.push({button:b,command,mark,format,source:sourceAction});toolbar.append(b);return b;
+  }
+  add('加粗',toggleMark(schema.marks.strong),'strong','strong');add('斜体',toggleMark(schema.marks.em),'em','em');add('删除线',toggleMark(schema.marks.strike),'strike','strike');
+  add('无序列表',wrapInList(schema.nodes.bullet_list),undefined,'bullet');add('有序列表',wrapInList(schema.nodes.ordered_list),undefined,'ordered');add('引用',wrapIn(schema.nodes.blockquote),undefined,'quote');
   const linkForm=el('form','','writer-link-form'),href=field('链接地址（https://…）','url'),text=field('显示文字（未选中文字时填写）');linkForm.hidden=true;
   const linkButton=button('链接',()=>{linkForm.hidden=!linkForm.hidden;if(!linkForm.hidden)href.input.focus();});linkButton.addEventListener('mousedown',e=>e.preventDefault());toolbar.append(linkButton);
   const insert=el('button','插入链接');insert.type='submit';linkForm.append(href.label,text.label,insert,button('取消',()=>{linkForm.hidden=true;view.focus();}));host.append(linkForm);
   linkForm.addEventListener('submit',event=>{
     event.preventDefault();const url=safeWriterLink(href.input.value.trim(),location.origin);
     if(!url||!href.input.value.trim()){options.onError(Error('请输入 HTTP、HTTPS 或邮件链接。'));return;}
+    if(sourceMode){
+      // 源码模式直接改写 Markdown：有选中文字就包成 [文字](地址)。
+      try{applySourceEdit(markdownLink(source.value,source.selectionStart,source.selectionEnd,url,text.input.value.trim()||undefined));}
+      catch(error){options.onError(error instanceof Error?error:Error(String(error)));}
+      linkForm.hidden=true;href.input.value='';text.input.value='';return;
+    }
     run((state,dispatch)=>{
       const {from,to,empty}=state.selection,mark=schema.marks.link.create({href:url});let tr=state.tr;
       if(empty){const label=text.input.value.trim()||url;tr=tr.insertText(label,from,to).addMark(from,from+label.length,mark);}
@@ -101,9 +128,17 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
       dispatch?.(tr.scrollIntoView());return true;
     });linkForm.hidden=true;
   });
-  add('移除链接',(state,dispatch)=>{dispatch?.(state.tr.removeMark(state.selection.from,state.selection.to,schema.marks.link));return !state.selection.empty;});
-  add('撤销',undo);add('重做',redo);
-  block.addEventListener('change',()=>run(block.value==='code'?codeBlockCommand(language.value):setBlockType(block.value==='0'?schema.nodes.paragraph:schema.nodes.heading,block.value==='0'?undefined:{level:Number(block.value)})));
+  add('移除链接',(state,dispatch)=>{dispatch?.(state.tr.removeMark(state.selection.from,state.selection.to,schema.marks.link));return !state.selection.empty;},undefined,undefined,()=>{
+    try{applySourceEdit(markdownUnlink(source.value,source.selectionStart,source.selectionEnd));}
+    catch(error){options.onError(error instanceof Error?error:Error(String(error)));}
+  });
+  // 源码模式的撤销/重做交给 textarea 自己的撤销栈（工具栏改写也是用 execCommand 落盘的）。
+  const sourceHistory=(action:'undo'|'redo')=>()=>{
+    if(source.selectionStart===source.selectionEnd&&!source.value)return;
+    source.focus();document.execCommand(action);
+  };
+  add('撤销',undo,undefined,undefined,sourceHistory('undo'));
+  add('重做',redo,undefined,undefined,sourceHistory('redo'));
   language.addEventListener('change',()=>{
     preferredLanguage=language.value;
     if(sourceMode)editSourceCode('language');else if(codeLanguageCommand(language.value)(view.state))run(codeLanguageCommand(language.value));
@@ -140,6 +175,11 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
     try{applySourceEdit(markdownBullet(source.value,source.selectionStart,source.selectionEnd));}
     catch(error){options.onError(error instanceof Error?error:Error(String(error)));}
   }
+  function editSourceFormat(format:SourceFormat){
+    if(sourceComposing){options.onError(Error('请先完成当前文字输入，再设置格式。'));return;}
+    try{applySourceEdit(markdownFormat(source.value,source.selectionStart,source.selectionEnd,format));}
+    catch(error){options.onError(error instanceof Error?error:Error(String(error)));}
+  }
   function editSourceCode(action:'insert'|'language'|'paragraph'){
     if(sourceComposing){options.onError(Error('请先完成当前文字输入，再设置代码格式。'));return;}
     try{
@@ -148,9 +188,19 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
     }catch(error){options.onError(error instanceof Error?error:Error(String(error)));}
   }
 
+  // 光标在代码块里时怎么出去：站主 2026-11-16「正常换行用 ENTER，跳到外面用其他键」
+  // ⇒ Enter 不抢（代码块里就是老实换行、列表里续行），跳出只认 Ctrl / ⌘ + Enter，
+  // 点在块下方空白也落到同一个命令上。
+  const padAfter=(editor:EditorView)=>{
+    const command=appendParagraph();return command(editor.state,editor.dispatch,editor);
+  };
   const plugins=()=>[history(),keymap({
     'Mod-z':undo,'Mod-y':redo,'Mod-Shift-z':redo,'Mod-b':toggleMark(schema.marks.strong),'Mod-i':toggleMark(schema.marks.em),'Mod-Shift-x':toggleMark(schema.marks.strike),
-    Enter:splitListItem(schema.nodes.list_item),'Mod-[':liftListItem(schema.nodes.list_item),'Mod-]':sinkListItem(schema.nodes.list_item),
+    // Enter 只做列表续行：代码块里 Enter 就是老实换行（站主 2026-11-16 的要求）。
+    Enter:splitListItem(schema.nodes.list_item),
+    // 跳出代码块只认这个组合键，光标在哪种块里、哪一行都能用。
+    'Mod-Enter':(state,dispatch)=>padAfterCode()(state,dispatch)||padAfter(view),
+    'Mod-[':liftListItem(schema.nodes.list_item),'Mod-]':sinkListItem(schema.nodes.list_item),
     Tab:tabIndentCommand(),'Shift-Tab':tabIndentCommand(true),
   }),keymap(baseKeymap)];
   const view=new EditorView(visual,{
@@ -191,20 +241,40 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
       const images=Array.from(event.dataTransfer?.files??[]).filter(f=>f.type.startsWith('image/'));
       if(images.length)options.onImageFiles(images);return true;
     },
-    handleClick(_editor,_pos,event){if((event.target as Element).closest('a')){event.preventDefault();return true;}return false;},
+    handleClick(editor,pos,event){
+      if((event.target as Element).closest('a')){event.preventDefault();return true;}
+      // 点在正文末尾下方那片空白：最后一块是代码块 / 只读块时没有可落笔的位置，补一个空段落。
+      const last=editor.state.doc.lastChild;
+      if(pos>=editor.state.doc.content.size&&last&&(last.type===schema.nodes.code_block||last.type===schema.nodes.raw_block))return padAfter(editor);
+      return false;
+    },
   });
   function updateControls(){
     const state=view.state,{$from,$to}=state.selection;
     const inCode=$from.sameParent($to)&&$from.parent.type===schema.nodes.code_block;
-    block.value=inCode?'code':$from.parent=== $to.parent&&$from.parent.type===schema.nodes.heading?String($from.parent.attrs.level):'0';
+    const level=$from.parent=== $to.parent&&$from.parent.type===schema.nodes.heading?Number($from.parent.attrs.level):0;
+    // 源码模式没有编辑器状态可问，直接问那几行 Markdown 的写法。
+    const marks=sourceMode?sourceFormatActive(source.value,source.selectionStart,source.selectionEnd):null;
+    for(const entry of blockButtons)entry.button.setAttribute('aria-pressed',String(sourceMode?marks?.[entry.level===0?'h0':entry.level===2?'h2':'h3']??false:level===entry.level));
     codeButton.disabled=!sourceMode&&!codeBlockCommand(preferredLanguage)(state);codeButton.setAttribute('aria-pressed',String(!sourceMode&&inCode));
     const current=inCode?String($from.parent.attrs.params??'').split(/\s/)[0]||'text':preferredLanguage;
     if(!sourceMode)showLanguage(current);
-    for(const control of controls){control.button.disabled=!control.command(state);if(control.mark)control.button.setAttribute('aria-pressed',String(state.selection.empty?!!schema.marks[control.mark].isInSet(state.storedMarks??$from.marks()):state.doc.rangeHasMark(state.selection.from,state.selection.to,schema.marks[control.mark])));}
+    for(const control of controls){
+      if(sourceMode){
+        // 源码模式：只要这个按钮有对应的 Markdown 改写就能用。
+        const usable=!!(control.format||control.source);control.button.disabled=!usable;
+        control.button.setAttribute('aria-pressed',String(!!control.format&&!!marks?.[control.format]));
+      }else{
+        control.button.disabled=!control.command(state);
+        if(control.mark)control.button.setAttribute('aria-pressed',String(state.selection.empty?!!schema.marks[control.mark].isInSet(state.storedMarks??$from.marks()):state.doc.rangeHasMark(state.selection.from,state.selection.to,schema.marks[control.mark])));
+      }
+    }
     updateSourceControls();
   }
   function updateMode(){
-    const issue=visualMarkdownIssue(raw);source.hidden=!sourceMode;visual.hidden=sourceMode;toolbar.hidden=sourceMode;linkForm.hidden=true;
+    const issue=visualMarkdownIssue(raw);source.hidden=!sourceMode;visual.hidden=sourceMode;linkForm.hidden=true;
+    // 格式按钮在两种模式都留着（源码模式改写 Markdown 文本），不再整排藏起来。
+    toolbar.hidden=false;
     sourceParagraph.hidden=!sourceMode;
     updateSourceControls();
     visualButton.disabled=!!issue;visualButton.setAttribute('aria-pressed',String(!sourceMode));sourceButton.setAttribute('aria-pressed',String(sourceMode));

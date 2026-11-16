@@ -246,6 +246,7 @@ const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('
          不引入访客账户客户端；来源文案和落点由服务端生成，守住既有字节预算。 */
       import '../scripts/notices';
       import '../scripts/music-player';
+import '../scripts/custom-scrollbar';
       /* 正文和说说里的音频条。
          只在这一页真有 [data-audio] 时才按需加载：播放器（波形绘制、键盘、单曲互斥）
          体积不小，挂进首屏静态闭包会把文章页、相册页、螺旋盘页一起顶过预算。
