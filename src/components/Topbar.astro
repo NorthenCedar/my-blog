@@ -421,7 +421,13 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     inset: 0;
     pointer-events: none;
   }
-  .home-topbar > :is(.site, .navbtn, .nav-trigger) { position: relative; }
+  /* ★ 2026-11-16（站主：「首页往下划后，菜单那些字糊在磨砂玻璃下面看不到」）：
+     首页漏了内页那条抬升（见上面 `body.chrome-page .topbar > *` 的注释）。`.site` / 汉堡
+     只是 z-index:auto 的定位元素，而药丸玻璃层 `::after` 是 z-index:0 的定位伪元素、在文档树里
+     排在最后 ⇒ 玻璃画在文字之上，`backdrop-filter` 把站名糊成一片浅灰。实测线上首页滚动态
+     站名那块像素亮度只有 196–228（一个字都读不出来），内页同一块是 22–64（正常墨色）。
+     抬到 z-index:1 即可，和 `.navshell`(40) 的层级关系不变。 */
+  .home-topbar > :is(.site, .navbtn, .nav-trigger) { position: relative; z-index: 1; }
   html.boot-on .home-topbar { visibility: hidden; }
   /* 滚动态只改几何（top / max-width / padding）：胶片的材质改由 `::after` 那层淡入，
      两边都不再逐帧插值模糊、描边与阴影 —— 详见上面 `::after` 那段注释。 */
