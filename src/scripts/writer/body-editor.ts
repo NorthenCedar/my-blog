@@ -14,6 +14,44 @@ import { el,button,field } from './ui';
 
 type Options={onChange:()=>void;onImageFiles:(files:File[])=>void;resolveImage:(source:string)=>string|null;onError:(error:Error)=>void};
 
+/**
+ * 表格源码 → 只读预览。
+ * 单元格里的强调符号只用来**显示**（去掉 `**` 与反引号），原文完整存在节点属性里，
+ * 保存时按原字节写回，所以这里怎么显示都不会改到源码。
+ */
+function tablePreview(text:string):HTMLElement{
+  const table=el('table','','writer-raw-table');
+  const split=(line:string)=>{
+    const body=line.trim().replace(/^\|/,'').replace(/\|$/,'');
+    const cells:string[]=[];
+    let cell='';
+    for(let i=0;i<body.length;i++){
+      const char=body[i];
+      if(char==='\\'&&body[i+1]==='|'){cell+='|';i++;continue;}
+      if(char==='|'){cells.push(cell);cell='';continue;}
+      cell+=char;
+    }
+    cells.push(cell);
+    return cells.map(value=>value.trim());
+  };
+  const plain=(value:string)=>value.replace(/`([^`]*)`/g,'$1').replace(/\*\*([^*]+)\*\*/g,'$1').replace(/__([^_]+)__/g,'$1');
+  const rows=text.split(/\r?\n/).filter(line=>line.trim()!=='');
+  const align=/^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/;
+  const head=split(rows[0]??'');
+  const body=align.test(rows[1]??'')?rows.slice(2):rows.slice(1);
+  const headRow=el('tr');
+  for(const value of head){const th=el('th');th.textContent=plain(value);th.title=value;headRow.append(th);}
+  const thead=el('thead');thead.append(headRow);table.append(thead);
+  const tbody=el('tbody');
+  for(const line of body){
+    const tr=el('tr');
+    for(const value of split(line)){const td=el('td');td.textContent=plain(value);td.title=value;tr.append(td);}
+    tbody.append(tr);
+  }
+  table.append(tbody);
+  return table;
+}
+
 /** 正文编辑边界：对外只有 Markdown，保存、恢复和发布不认识编辑器内部结构。 */
 export function mountWriterBody(host:HTMLElement,initial:string,options:Options){
   let raw=initial,sourceMode=!!visualMarkdownIssue(initial),destroyed=false;
@@ -127,6 +165,14 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
       const dom=el('span','','writer-inline-image'),resolved=options.resolveImage(node.attrs.src),safe=resolved?safeWriterImage(resolved,location.origin):null;
       dom.contentEditable='false';if(safe){const image=el('img');image.src=safe;image.alt=node.attrs.alt||'配图';image.draggable=false;dom.append(image);}else dom.textContent=`[配图：${node.attrs.alt||'待获取'}]`;
       return {dom};
+    },raw_block(node){
+      // 只读小块：前后正文照常编辑，这一块保持原样（表格渲染成表格，HTML 露原文）。
+      const dom=el('div','','writer-raw-block');
+      dom.contentEditable='false';dom.dataset.kind=node.attrs.kind as string;
+      dom.append(el('span',node.attrs.kind==='table'?'表格 · 只读（原文完整保留）':'视频 / HTML · 只读（原文完整保留）','writer-raw-label'));
+      if(node.attrs.kind==='table')dom.append(tablePreview(node.attrs.text as string));
+      else{const pre=el('pre','','writer-raw-source');pre.textContent=node.attrs.text as string;dom.append(pre);}
+      return {dom};
     }},
     handlePaste(editor,event){
       const images=Array.from(event.clipboardData?.files??[]).filter(f=>f.type.startsWith('image/'));
@@ -162,7 +208,9 @@ export function mountWriterBody(host:HTMLElement,initial:string,options:Options)
     sourceParagraph.hidden=!sourceMode;
     updateSourceControls();
     visualButton.disabled=!!issue;visualButton.setAttribute('aria-pressed',String(!sourceMode));sourceButton.setAttribute('aria-pressed',String(sourceMode));
-    note.textContent=(issue?`正文包含${issue}，请在源码模式编辑；原始内容会完整保留。`:'选中正文后设置格式。代码块可直接输入或粘贴代码，Ctrl / ⌘ + Enter 继续正文；章节标题和小标题会进入本文目录。')+' Tab 缩进四个空格，Shift+Tab 减少缩进。';
+    let frozen=0;view.state.doc.descendants(node=>{if(node.type===schema.nodes.raw_block)frozen++;});
+    const hint=frozen?'表格与视频以只读小块保留（原文一个字节都不会改），要改它们请切到源码模式。':'';
+    note.textContent=(issue?`正文包含${issue}，请在源码模式编辑；原始内容会完整保留。`:hint+'选中正文后设置格式。代码块可直接输入或粘贴代码，Ctrl / ⌘ + Enter 继续正文；章节标题和小标题会进入本文目录。')+' Tab 缩进四个空格，Shift+Tab 减少缩进。';
   }
   function switchMode(next:boolean){
     if(next===sourceMode)return;

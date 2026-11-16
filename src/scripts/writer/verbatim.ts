@@ -18,7 +18,7 @@ import type MarkdownIt from 'markdown-it';
  *   之间的空行），只把真正改过 / 新插入的块交给序列化器。
  */
 
-export type RawBlock = { text: string; gap: string };
+export type RawBlock = { text: string; gap: string; lead?: string };
 
 /** 行首之后出现这些就当块级结构，不把空格换成实体。 */
 const BLOCK_START = /^(?:[-*+]|\d+[.)]|>|#|\||<|```|~~~)/;
@@ -69,6 +69,9 @@ export function splitTopLevelBlocks(markdown: string, md: MarkdownIt): RawBlock[
     blocks.push({
       text: markdown.slice(offsetOf(start), offsetOf(end)),
       gap: markdown.slice(offsetOf(end), offsetOf(next)),
+      // 正文开头的空行（写作台从 frontmatter 切出来的正文常常以空行起头）也得留住，
+      // 否则改一个字就把开头那行空行吃掉。
+      lead: i === 0 ? markdown.slice(0, offsetOf(start)) : undefined,
     });
   }
   return blocks;
@@ -130,7 +133,8 @@ export function mergeVerbatim(
   if (current.length === 0) return '';
   const matched = alignBlocks(current, original);
   const eol = sourceEol(blocks);
-  let out = '';
+  // 第一个块之前的空行（写作台切出来的正文常以空行起头）原样留在最前面。
+  let out = blocks[0]?.lead ?? '';
   let pendingGap = '';
   for (let i = 0; i < current.length; i++) {
     const index = matched[i]!;

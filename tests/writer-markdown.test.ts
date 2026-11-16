@@ -19,11 +19,23 @@ it('未修改以及撤销回初始文档时保留 CRLF、空行和原始 Markdow
   expect(serializeWriterMarkdown(parseWriterMarkdown('## 新章节'),{raw,doc})).toBe('## 新章节');
 });
 it.each([
-  '<video controls src="./a.mp4"></video>', '<!-- 保留注释 -->', '<span>内联 HTML</span>',
-  '| A | B |\n| --- | --- |\n| 1 | 2 |', '- [x] 任务', '文字[^1]\n\n[^1]: 脚注',
+  '- [x] 任务', '文字[^1]\n\n[^1]: 脚注',
   '[链接][ref]\n\n[ref]: https://example.com', '$x^2$', ':::note\n内容\n:::',
-  '<Component />', 'import Widget from "./x";',
+  'import Widget from "./x";',
+  // `<video>` 与 `<span>` 不在 markdown-it 的 html_block 标签表里，会落成 html_inline ⇒ 仍整篇退回源码模式。
+  '<video controls src="./a.mp4"></video>', '<span>内联 HTML</span>', '<del onclick="alert(1)">文字</del>',
 ])('特殊旧文进入源码模式并保留完整原文：%s',raw=>{expect(visualMarkdownIssue(raw)).toBeTruthy();});
+it.each([
+  '<!-- 保留注释 -->',
+  '| A | B |\n| --- | --- |\n| 1 | 2 |', '<Component />', '<script>x</script>',
+])('表格与原生 HTML 现在是整块只读、正文照常可视化编辑：%s',raw=>{
+  expect(visualMarkdownIssue(raw)).toBeNull();
+  const doc=parseWriterMarkdown(raw);
+  expect(doc.childCount).toBe(1);
+  expect(doc.child(0).type.name).toBe('raw_block');
+  expect(doc.child(0).attrs.text).toBe(raw);
+  expect(serializeWriterMarkdown(doc,{raw,doc})).toBe(raw);
+});
 it('删除线可以可视化编辑、与强调组合，代码中的格式符号仍是原文',async()=>{
   const raw='~~旧说法 **加粗** 与 *斜体*~~\n\n`~~代码~~`\n\n```cpp\nstd::cout << "**原文**";\n```';
   expect(visualMarkdownIssue(raw)).toBeNull();
@@ -51,7 +63,7 @@ it('编辑后字面量波浪线仍为文字，不会意外变成删除线',()=>{
 });
 it('仅放行配对无属性的删除线，其他HTML和字面标签不改成格式',()=>{
   expect(visualMarkdownIssue('这是<del>**旧字**</del>。')).toBeNull();
-  for(const raw of ['<del onclick="alert(1)">文字</del>','<del>文字','</del>文字','<script>x</script>','<del>a `</del>`','<del>a \\</del>','<del><del>a</del>'])expect(visualMarkdownIssue(raw)).toBeTruthy();
+  for(const raw of ['<del onclick="alert(1)">文字</del>','<del>文字','</del>文字','<del>a `</del>`','<del>a \\</del>','<del><del>a</del>'])expect(visualMarkdownIssue(raw)).toBeTruthy();
   const doc=parseWriterMarkdown('\\<del>字面量\\</del>');expect(parseWriterMarkdown(serializeWriterMarkdown(doc)).eq(doc)).toBe(true);
 });
 it('中文句中叠加三种格式后仍能无损往返，不露出星号',async()=>{

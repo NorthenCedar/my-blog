@@ -12,6 +12,18 @@ export const writerSchema=new Schema({
   nodes:commonmark.spec.nodes.update('image',{
     ...commonmark.spec.nodes.get('image')!,
     toDOM:node=>['span',{'data-writer-image':''},`[配图：${node.attrs.alt??''}]`],
+  }).addToEnd('raw_block',{
+    // ★ 为什么有这一块（2026-11-16）：站主有好几篇笔记带原生表格或 <video> 标签，
+    //   以前整篇被判进源码模式——「只打正文」在它们身上直接失效。表格和原始 HTML
+    //   又没法无损往返成 ProseMirror 节点，所以改成「整块原样冻结」：节点里存原文，
+    //   序列化时原字节吐回（配合 verbatim 的块级比对，没碰过就一个字节都不变），
+    //   在编辑器里显示成只读小块，前后正文照常可视化编辑。
+    group:'block',
+    atom:true,
+    selectable:true,
+    attrs:{text:{default:''},kind:{default:'html'}},
+    toDOM:(node:Node)=>['div',{'data-writer-raw':node.attrs.kind as string},node.attrs.text as string],
+    parseDOM:[],
   }),
   marks:commonmark.spec.marks.update('link',{
     ...commonmark.spec.marks.get('link')!,
@@ -98,6 +110,8 @@ const serializer=new MarkdownSerializer({...defaultMarkdownSerializer.nodes,
   heading:preserveIndent('heading'),
   // 站主的笔记一律用「- 」起头，不让序列化器改写成「* 」。
   bullet_list:(state,node)=>state.renderList(node,'  ',()=>'- '),
+  // 冻结块原字节吐回：配合 verbatim 的块级比对，没碰过就是一个字节都不变。
+  raw_block:(state,node)=>{state.write(node.attrs.text as string);state.closeBlock(node);},
 },{
   ...defaultMarkdownSerializer.marks,strike:{open:'<del>',close:'</del>',expelEnclosingWhitespace:true},
 },{escapeExtraCharacters:/</g});
@@ -112,9 +126,73 @@ export function writerBodyImages(raw:string) {
   }
   return images;
 }
+/**
+ * 可视化编辑里「整块只读」的原生块：Markdown 表格、原始 HTML（视频、details 等）。
+ *
+ * ★ 为什么不是解析成真节点（2026-11-16）：这两样都没有稳定的可逆映射——表格的列宽
+ *   对齐、单元格里的转义竖线、HTML 的每个属性，往返一次就会被改写。既然站主要的是
+ *   「正文能直接打字」，那就把它们当**不可拆的整块**：原文存进节点属性，序列化原样
+ *   吐回，编辑器里显示成只读小块，前后段落照常编辑。
+ */
+export type WriterFrozenBlock={start:number;end:number;kind:'table'|'html';text:string};
+/** 冻结块在解析期的占位符：用控制字符包住，作者正文里不可能出现。 */
+const FROZEN_MARK='\u0001WRITERRAW';
+const FROZEN_TOKEN=new RegExp(`^${FROZEN_MARK}(\\d+)\\u0001$`);
+
+/** 找出顶层那些要整块冻结的原生块（与 splitTopLevelBlocks 的切块口径一致）。 */
+export function writerFrozenBlocks(raw:string):WriterFrozenBlock[]{
+  const lines=raw.split('\n');
+  const offsets:number[]=[0];
+  for(let i=1;i<lines.length;i++)offsets.push(offsets[i-1]!+lines[i-1]!.length+1);
+  const at=(line:number)=>line>=lines.length?raw.length:offsets[line]??raw.length;
+  const blocks:WriterFrozenBlock[]=[];
+  for(const token of detector.parse(raw,{})){
+    if(token.level!==0||!token.map)continue;
+    const kind=token.type==='table_open'?'table':token.type==='html_block'?'html':null;
+    if(!kind)continue;
+    const [start,end]=token.map;
+    blocks.push({start,end,kind,text:raw.slice(at(start),at(end))});
+  }
+  return blocks;
+}
+
+/** 把冻结块换成占位段落，让剩下的正文照常解析。 */
+function maskFrozen(raw:string,blocks:readonly WriterFrozenBlock[]):string{
+  const lines=raw.split('\n');
+  const out:string[]=[];
+  let line=0;
+  blocks.forEach((block,index)=>{
+    out.push(...lines.slice(line,block.start),`${FROZEN_MARK}${index}\u0001`,'');
+    line=block.end;
+  });
+  out.push(...lines.slice(line));
+  return out.join('\n');
+}
+
+/** 把占位段落换回冻结节点；返回换回去了几个（少于冻结块数说明占位符被别的语法吃了）。 */
+function restoreFrozen(doc:Node,blocks:readonly WriterFrozenBlock[]):{doc:Node;restored:number}{
+  const children:Node[]=[];
+  let restored=0;
+  doc.forEach(node=>{
+    const match=node.type===writerSchema.nodes.paragraph&&node.childCount===1?FROZEN_TOKEN.exec(node.textContent):null;
+    const block=match?blocks[Number(match[1])]:undefined;
+    if(block){children.push(writerSchema.nodes.raw_block.create({text:block.text,kind:block.kind}));restored++;return;}
+    children.push(node);
+  });
+  return {doc:doc.type.create(doc.attrs,children,doc.marks),restored};
+}
+
+/** 解析 + 冻结块替换。`ok` 为假表示占位符没能全部还原，调用方应退回源码模式。 */
+function parseBody(raw:string):{doc:Node;frozen:WriterFrozenBlock[];ok:boolean}{
+  const frozen=writerFrozenBlocks(raw);
+  if(!frozen.length)return {doc:parser.parse(raw),frozen,ok:true};
+  const {doc,restored}=restoreFrozen(parser.parse(maskFrozen(raw,frozen)),frozen);
+  return {doc:frozen.length?doc:parser.parse(raw),frozen,ok:restored===frozen.length};
+}
+
 const blockCache=new WeakMap<Node,{raw:string;blocks:RawBlock[]}>();
 export const parseWriterMarkdown=(raw:string):Node=>{
-  const doc=parser.parse(raw);
+  const {doc}=parseBody(raw);
   blockCache.set(doc,{raw,blocks:splitTopLevelBlocks(raw,detector)});
   return doc;
 };
@@ -141,7 +219,15 @@ export function restoreImageAssets(raw:string,assets:WriterAssetRef[],known:Read
 
 /** 不认识的格式交给源码模式，绝不把预览 DOM 当作可逆的正文。 */
 export function visualMarkdownIssue(raw:string):string|null{
-  const env:{references?:unknown}={},tokens=detector.parse(raw,env);
+  let source=raw;
+  const frozen=writerFrozenBlocks(raw);
+  if(frozen.length){
+    // 顶层表格 / 原生 HTML 现在是「整块只读」，不再算不认识的格式；但占位符没能
+    // 完整还原（例如表格写在引用或列表里）时，仍然整篇退回源码模式，绝不半懂不懂地改。
+    if(!parseBody(raw).ok)return frozen[0]!.kind==='table'?'表格':'HTML、视频或组件';
+    source=maskFrozen(raw,frozen);
+  }
+  const env:{references?:unknown}={},tokens=detector.parse(source,env);
   if(env.references)return '引用式链接或图片';
   const visit=(items:typeof tokens):string|null=>{
     for(const token of items){
