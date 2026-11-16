@@ -199,20 +199,24 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     inset: 0 0 -1px 0;
     z-index: 0;
     pointer-events: none;
-    /* 静止态是方角、滚动态才是圆条：中间那 .5s 就是「摊开 / 收拢」的变形过程。 */
+    /* 静止态是方角、滚动态才是圆条。
+       ⚠ 上滑时**不能**一路补间圆角：条高 60px，半径一超过 30px 就看不出圆头了，
+       用 .5s 摊平的话刚上滑 100ms 圆条就「没形了」，而文字还要再飞 400ms ——
+       站主看到的就是「圆条还是消失了，文字自己飞回去」。所以圆角只在**最后 .18s**
+       跟着淡出一起收：前 .42s 它一直是圆条，跟着几何一起放大。 */
     border-radius: 0;
     opacity: 0;
     visibility: hidden;
-    /* 回静止态（上滑）：先摊平再淡出；visibility 拖到淡出结束才切，
-       否则 Chrome 会在补间中途把这层藏掉（那就是「圆条直接消失」的来历）。 */
-    transition: border-radius .5s ease, opacity .18s ease .42s, visibility 0s linear .6s;
+    /* 回静止态（上滑）：药丸先原样放大 .42s，等文字飞回原处，再用 .18s 收角+淡出交给纸面玻璃；
+       visibility 拖到这一切结束才切，否则 Chrome 会在补间中途把这层藏掉。 */
+    transition: border-radius .18s ease .42s, opacity .18s ease .42s, visibility 0s linear .62s;
   }
   body > [data-scroll-topbar][data-topbar-scrolled]::after {
     border-radius: 999px;
     opacity: 1;
     visibility: visible;
-    /* 进滚动态（下滑）：形状随整条的几何一起收，淡入放在最前面 .2s。 */
-    transition: border-radius .5s ease, opacity .2s ease, visibility 0s linear 0s;
+    /* 进滚动态（下滑）：圆角在头 .2s 就收成药丸（与淡入同步），随后整条继续缩小。 */
+    transition: border-radius .2s ease, opacity .2s ease, visibility 0s linear 0s;
   }
   body.chrome-page .topbar::before {
     /* 回静止态（上滑）：等药丸摊平（.42s）再淡回来接住整条。 */
