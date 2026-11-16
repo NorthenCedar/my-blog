@@ -128,7 +128,9 @@ onPage(({document, addEventListener, matchMedia, requestAnimationFrame, Mutation
     const syncModalLayer = () => {
       // 访客界面只允许同时打开一个弹窗。
       const host = document.querySelector('dialog[open]') ?? document.body;
-      for (const layer of layers) if (layer.parentNode !== host) host.append(layer);
+      // 涟漪正在播的时候别搬它：节点被重新插进 dialog 会让 CSS 动画从头再来一遍，
+      // 站主点开菜单会看到同一个涟漪闪两次。等它播完再搬（pointdown 时也会先搬一次）。
+      for (const layer of layers) if (layer.parentNode !== host && (layer !== ripple || !ripple.getAnimations().length)) host.append(layer);
     };
     // attributeFilter 已使属性观察默认开启，不监听每一帧的 style 变化。
     new MutationObserver(syncModalLayer).observe(document.body, { subtree: true, childList: true, attributeFilter: ['open'] });
@@ -162,7 +164,7 @@ onPage(({document, addEventListener, matchMedia, requestAnimationFrame, Mutation
         }
         // 悬停可点元素：盘缩小 + 描边转绿（给"这里能点"的反馈）。文字上不再特殊处理 ——
         // 站主要的就是"页面上只有白点"，所以点与盘在任何地方都显形。
-        if (e.target instanceof Element) disc.classList.toggle('is-hot', !!e.target.closest(HOT));
+        disc.classList.toggle('is-hot', !!e.target.closest?.(HOT));
         if (!raf) raf = requestAnimationFrame(step);
       },
       { passive: true },
@@ -170,8 +172,8 @@ onPage(({document, addEventListener, matchMedia, requestAnimationFrame, Mutation
     addEventListener(
       'pointerdown',
       (e) => {
-        ripple.style.setProperty('--x', e.clientX + 'px');
-        ripple.style.setProperty('--y', e.clientY + 'px');
+        syncModalLayer(); // 先落位再起涟漪：动画开播后就不能再搬（会从头重播）
+        ripple.style.cssText = `--x:${e.clientX}px;--y:${e.clientY}px`;
         ripple.classList.remove('is-on');
         void ripple.offsetWidth; // 强制回流：同一位置连点也能重放
         ripple.classList.add('is-on');
