@@ -82,7 +82,13 @@ onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, 
     if (maxScroll <= 0 || trackH <= thumbH) return;
     const top = rail!.getBoundingClientRect().top;
     const t = (clientY - top - thumbH / 2) / (trackH - thumbH);
-    window.scrollTo(0, Math.min(1, Math.max(0, t)) * maxScroll);
+    /* ★ 2026-11-16（站主：「文章页最右边那个能拖的条现在拖得非常不顺」）：
+       文章页的 CSS 允许动效时给 `html:has(body.post-plate)` 开了 `scroll-behavior: smooth`
+       —— `scrollTo(x, y)` 这种**数值形式**会走那个计算值，于是拖动的每一次 pointermove
+       都起一段「平滑滚动」动画，下一帧又被下一段打断 ⇒ 正文永远追不上滑块，手感发飘。
+       `behavior: 'instant'` 明确要即时滚动才绕得开它（`auto` 不算，它正是回落到 CSS 值）。
+       越界的 t 不用夹：`scrollTo` 自己会把目标钳在 [0, maxScroll]。 */
+    scrollTo({ top: t * maxScroll, behavior: 'instant' });
   }
 
   measure();
