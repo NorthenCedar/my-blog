@@ -478,20 +478,29 @@ const scrolls = Astro.url.pathname !== '/gallery/';
   /* ★ 2026-11-16（站主：「首页的圆条在回去的过程中就淡出，到顶正好看不到圆条，其他页不要动」）：
      内页是「药丸先跟着文字放大 .5s，等文字回位再 .18s 收角淡出」；首页反过来 ——
      回程一开始就跟着几何一起淡（.5s 匀速到 0），到顶时正好看不见，不留一层薄雾压在 hero 上。
-     这只是**回静止态**的规则：滚动态那条（[data-topbar-scrolled]，.2s 淡入）优先级更高，不受影响。 */
-  body > .home-topbar[data-scroll-topbar]::after {
-    transition: opacity .5s ease, visibility 0s linear .5s;
+     ⚠ 两条必须同时守住，都是站主报过的毛病：
+     1) 选择器只匹配**非滚动态**（`:not([data-topbar-scrolled])`）。写成 `[data-scroll-topbar]`
+        就同时盖住了滚动态那条（特异性同为 0,2,1，但这条在后面 ⇒ 它会赢），
+        于是下滑出现也变成 .5s、`visibility` 还被延到 .5s 才切 —— 前 500ms 那层根本是 hidden，
+        观感就是「圆条最后才突然冒出来」。滚动态必须继续用上面那条 .2s 淡入。
+     2) 圆角必须留在过渡里：漏掉它的话，上滑摘掉属性的那一帧 `border-radius` 直接从 999px
+        跳回 0，「圆条一上来就变成方的、然后才淡掉」。这里让它跟 opacity 同长 .5s 收 ——
+        那会儿整层已经淡到看不见，形状怎么变都读不出来。 */
+  body > .home-topbar[data-scroll-topbar]:not([data-topbar-scrolled])::after {
+    transition: border-radius .5s ease, opacity .5s ease, visibility 0s linear .5s;
   }
   body > [data-scroll-topbar][data-topbar-scrolled]::before {
     /* 药丸的圆角现在画在 `::after` 上（这是最后一帧才生效的形状，不该参与补间）。 */
     border-radius: 999px;
   }
-  /* 滚动态：站名与药丸一起出现（.2s 淡入，不再是一帧跳出来）。 */
+  /* 滚动态：站名跟药丸一起出现 —— **保持原来的瞬时出现**，不加淡入。
+     （站主 2026-11-16：「你不要动圆条出现的动画啊」；之前我给它加了 .2s 淡入，
+     观感变成「圆条都收好了字才冒出来」。下滑只管出现，淡出只发生在上滑到顶那一下。） */
   .home-topbar[data-topbar-scrolled] .site {
     visibility: visible;
     pointer-events: auto;
     opacity: 1;
-    transition: opacity .2s ease, visibility 0s linear 0s;
+    transition: opacity 0s linear, visibility 0s linear 0s;
   }
   body > .home-topbar[data-topbar-scrolled][data-topbar-over-hero] { color: var(--band-ink); }
   @media (prefers-reduced-transparency: reduce) {
