@@ -29,7 +29,7 @@ const { headings } = Astro.props;
           </svg>
         </div>
       </div>
-      <ol data-scrollbar>
+      <ol>
         {headings.map((h) => (
           <li class={'lv' + h.depth}><a class="st-link" href={'#' + h.id}>{h.text}</a></li>
         ))}
@@ -62,6 +62,8 @@ const { headings } = Astro.props;
     max-block-size: min(48svh, 28rem);
     overflow-y: auto;
     overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--hair) transparent;
     font-size: var(--fs-sm);
   }
   li.lv3 {

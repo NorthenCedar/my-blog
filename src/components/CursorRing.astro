@@ -47,7 +47,8 @@
       width 0.25s,
       height 0.25s,
       background-color 0.25s,
-      border-color 0.25s;
+      border-color 0.25s,
+      opacity 0.15s ease;
   }
   /* 悬停到可点元素：缩小 + 变稠 + 描边转绿（参考实现的 hold 状态） */
   .cr-disc.is-hot {
@@ -63,6 +64,7 @@
     /* 白点 + 发丝深色边：纸面上"白上白"会消失，这圈边只是保证它读得出来 */
     background: var(--cursor-dot);
     box-shadow: 0 0 0 1px var(--cursor-dot-line);
+    transition: opacity 0.15s ease;
   }
   .cr-ripple {
     z-index: 64;
@@ -96,6 +98,12 @@
   html.cursor-live .cr-disc,
   html.cursor-live .cr-dot {
     opacity: 1;
+  }
+  /* 指针落在原生滚动条上：淡出圆盘与白点，把指针还给系统光标（base.css 同名类里写了原因）。
+     只做透明度：三个装饰节点仍留在原地，移开时原处淡回来，不会有"从别处滑过来"的观感。 */
+  html[cbar] .cr-disc,
+  html[cbar] .cr-dot {
+    opacity: 0;
   }
   /* 减少动态效果 / 触摸设备：整个效果不出现，也不加 cursor-none（JS 侧直接返回） */
   @media (prefers-reduced-motion: reduce), (hover: none) {
@@ -173,9 +181,23 @@ onPage(({document, addEventListener, matchMedia, requestAnimationFrame, Mutation
           y = ty;
           root.classList.add('cursor-live'); // 第一次移动前不显形，否则会从左上角滑过来
         }
+        // 指针是否落在**原生滚动条**那条窄带上：Chrome 把滚动条画在 padding box 之外，
+        // 指针落上去时 target 仍是这个滚动容器，但拖动不派发 pointermove ⇒ 圆盘只会僵在原地。
+        // 一到这条带子就把圆盘/白点淡出、把系统光标还回去（CSS 见组件样式与 base.css 的 [cbar]）。
+        // 只往上看两层：滚动条可能属于弹窗里的面板，而 panel 又套在 dialog 里。
+        // 用 offsetX/offsetY 量：它们是相对 target 的 padding 边算的，滚动条正好在 padding 边之外，
+        // 所以「越过 clientWidth / clientHeight」就是压在那条带子上 —— 不用去查祖先、也不用再拿矩形
+        // （滚动条区域的命中目标就是那个滚动容器本身）。共享脚本的预算只剩几十字节，这里必须省。
+        // 位置越过 client 边、且这块确实有滚动条，才算压在滚动条上。
+        const t = e.target;
+        const [cw, ch] = [t.clientWidth, t.clientHeight];
+        root.toggleAttribute(
+          'cbar',
+          (t.offsetWidth > cw && e.offsetX >= cw) || (t.offsetHeight > ch && e.offsetY >= ch),
+        );
         // 悬停可点元素：盘缩小 + 描边转绿（给"这里能点"的反馈）。文字上不再特殊处理 ——
         // 站主要的就是"页面上只有白点"，所以点与盘在任何地方都显形。
-        disc.classList.toggle('is-hot', e.target.closest?.(HOT));
+        disc.classList.toggle('is-hot', t.closest?.(HOT));
         if (!raf) raf = requestAnimationFrame(step);
       },
       { passive: true },

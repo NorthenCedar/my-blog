@@ -935,11 +935,7 @@ describe('螺旋盘 · 红线与预算', () => {
        的中间色（否则拖软条时只有它停在亮档，松手才跳）。实测 155746 B，撞线 98 B。
        按规矩再抬 1 KiB（余量 926 B），全部反面正对照（three 禁入）照旧。 */
     // 灯箱加入预览、高清解码与请求取消。完整闭包实测 157983 B，预算增 1 KiB。
-    /* ★ 2026-11-16：站主「拖动条的灰色条会露出系统光标、圆盘还在原地不动」⇒ 全站可滚动面板
-       换成自家滑块（`src/scripts/custom-scrollbar.ts`，挂在 Base 的共享脚本里 ⇒ 本页也付一次）。
-       共享块 20978 → 22020 B（+1042），本页实测 159367 B，撞线 903 B。
-       按规矩抬 2 KiB（54 → 56 KiB，余量 ~1.1 KB）；three 的反面正对照照旧。 */
-    const BUDGET = 57344 + MOTION_ENGINE_BUDGET + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET;
+    const BUDGET = 55296 + MOTION_ENGINE_BUDGET + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET;
     expectMotionStartup(PAGE_PATH, 53248 + THEME_TOGGLE_BOOT_BUDGET);
     expect(hasDist, '先 npm run build').toBe(true);
     const { code, files } = jsClosure(PAGE_PATH, { skipMenu: true, skipTechHeading: true });

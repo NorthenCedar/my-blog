@@ -30,7 +30,7 @@ const { items } = Astro.props;
             <p class="log-meta">{isoDate(it.date)} · 共 {it.changes?.length ?? 0} 项更新</p>
             <h3 id={`home-log-title-${i}`}>{it.version ?? isoDate(it.date)}</h3>
           </header>
-          <ul class="log-changes" data-scrollbar>{it.changes?.map(change => <li>{change}</li>)}</ul>
+          <ul class="log-changes">{it.changes?.map(change => <li>{change}</li>)}</ul>
         </section>
       ))}
       </div>
@@ -166,7 +166,8 @@ const { items } = Astro.props;
     max-height: min(50vh, 26rem);
     min-height: 0;
     overflow-y: auto;
-    overscroll-behavior: contain;
+    overscroll-behavior: contain;
+    scrollbar-color: var(--muted) transparent;
     line-height: var(--lh-body);
   }
   .log-changes li { max-width: 76ch; padding-left: var(--sp-2); }
