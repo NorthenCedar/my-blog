@@ -424,7 +424,15 @@ const scrolls = Astro.url.pathname !== '/gallery/';
   }
   .home-topbar > :is(.navbtn, .nav-trigger) { pointer-events: auto; }
   .home-topbar .site {
+    /* ★ 2026-11-16（站主：「首页圆条回去的时候那行站名会直接消失，改成到顶的时候淡出」）：
+       站名在首页只在滚动态出现（顶上是 hero 自己那行大字），
+       以前是 `visibility: hidden` 的瞬时切换 —— 上滑摘掉 `data-topbar-scrolled` 的那一帧
+       它就被藏掉，而整条还要再长 .5s 才回到原样，所以看着像被剪掉。
+       现在改成与药丸同一套节奏：前 .5s 保持不透明、跟着整条一起放大，等文字回到原处
+       再用 .18s 淡出（`visibility` 拖到 .68s 才切，否则 Chrome 会在补间中途把它藏掉）。 */
+    opacity: 0;
     visibility: hidden;
+    transition: opacity .18s ease .5s, visibility 0s linear .68s;
     color: inherit;
     text-decoration: none;
     font: var(--fs-xs) "IBM Plex Mono", monospace;
@@ -467,11 +475,24 @@ const scrolls = Astro.url.pathname !== '/gallery/';
        注意它必须与 padding 一起补间，否则过渡途中流内高度仍会短暂变化。 */
     margin-block-end: calc(2 * (var(--topbar-pad-block) - var(--sp-1)));
   }
+  /* ★ 2026-11-16（站主：「首页的圆条在回去的过程中就淡出，到顶正好看不到圆条，其他页不要动」）：
+     内页是「药丸先跟着文字放大 .5s，等文字回位再 .18s 收角淡出」；首页反过来 ——
+     回程一开始就跟着几何一起淡（.5s 匀速到 0），到顶时正好看不见，不留一层薄雾压在 hero 上。
+     这只是**回静止态**的规则：滚动态那条（[data-topbar-scrolled]，.2s 淡入）优先级更高，不受影响。 */
+  body > .home-topbar[data-scroll-topbar]::after {
+    transition: opacity .5s ease, visibility 0s linear .5s;
+  }
   body > [data-scroll-topbar][data-topbar-scrolled]::before {
     /* 药丸的圆角现在画在 `::after` 上（这是最后一帧才生效的形状，不该参与补间）。 */
     border-radius: 999px;
   }
-  .home-topbar[data-topbar-scrolled] .site { visibility: visible; pointer-events: auto; }
+  /* 滚动态：站名与药丸一起出现（.2s 淡入，不再是一帧跳出来）。 */
+  .home-topbar[data-topbar-scrolled] .site {
+    visibility: visible;
+    pointer-events: auto;
+    opacity: 1;
+    transition: opacity .2s ease, visibility 0s linear 0s;
+  }
   body > .home-topbar[data-topbar-scrolled][data-topbar-over-hero] { color: var(--band-ink); }
   @media (prefers-reduced-transparency: reduce) {
     body > .home-topbar[data-topbar-scrolled][data-topbar-over-hero] { color: var(--ink); }
@@ -484,7 +505,7 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    [data-scroll-topbar], [data-scroll-topbar]::before, [data-scroll-topbar]::after { transition: none; }
+    [data-scroll-topbar], [data-scroll-topbar]::before, [data-scroll-topbar]::after, .home-topbar .site, body > .home-topbar[data-scroll-topbar]::after { transition: none; }
   }
 
   /* ---------- 内页页头（外壳提供，各页复用） ----------
