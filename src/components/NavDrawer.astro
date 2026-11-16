@@ -117,11 +117,17 @@ const socialLinks = [
   }
   .navshell .navclose {
     position: absolute;
-    top: 2rem;
+    /* ★ 2026-11-16（站主：「把抽屉里的 close 和原本其他页的 menu 对齐，现在 close 比 menu 高一点」）：
+       Close 的文字纵向中心要压在顶栏 Menu 的文字中心上。实测（1440×900）：
+       顶栏未滚动时 Menu 文字中心 31.5px ⇒ Close 的 1.5rem 顶边正好落在同一行；
+       收成圆条后顶栏矮下去、Menu 跟着下移到 45.3px，所以滚动态再多让 13.8px。 */
+    top: 1.5rem;
     right: 2rem;
     z-index: 1;
     color: var(--ink);
   }
+  /* 圆条态：顶栏 padding 由 --topbar-pad-block 收到 --sp-1，Menu 随之整体下移。 */
+  [data-topbar-scrolled] .navclose { top: 2.36rem; }
   .navtog:checked ~ .navshell { visibility: visible; }
   .navtog:checked ~ .navshell .navmask { pointer-events: auto; }
   .navtog:checked ~ .navshell .navpanel { pointer-events: auto; }

@@ -119,24 +119,28 @@ onPage(({document, addEventListener, matchMedia, requestAnimationFrame, Mutation
     const ripple = document.querySelector('.cr-ripple');
     if (!disc || !dot || !ripple) return;
     // 触摸设备与减少动态效果：不做（也**不加** cursor-none —— 那样会把原生光标藏掉却没有替代品）
-    if (!matchMedia('(hover: hover)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!matchMedia('(hover:hover)').matches || matchMedia('(prefers-reduced-motion:reduce)').matches) return;
     root.classList.add('cursor-none');
 
     // 原生 modal 位于浏览器顶层，普通页面的 z-index 再高也不能覆盖它。
     // 迁移同一组装饰节点，关闭/移除后归还 body；坐标仍由 fixed 定位指向视口。
-    const layers = [disc, dot, ripple];
     const syncModalLayer = () => {
       // 访客界面只允许同时打开一个弹窗。
       const host = document.querySelector('dialog[open]') ?? document.body;
-      // 涟漪正在播的时候别搬它：节点被重新插进 dialog 会让 CSS 动画从头再来一遍，
-      // 站主点开菜单会看到同一个涟漪闪两次。等它播完再搬（pointdown 时也会先搬一次）。
-      for (const layer of layers) if (layer.parentNode !== host && (layer !== ripple || !ripple.getAnimations().length)) host.append(layer);
+      if (ripple.parentNode === host) return;
+      // 搬节点会让 CSS 动画**从头**再播一遍（站主看到的就是同一个涟漪闪两次）。
+      // 但也不能不搬：不搬的话弹窗打开期间涟漪留在 body 里，被 modal 的背景盖住 —— 等于没有涟漪。
+      // 所以照搬，只是把动画的时间轴一起搬过去：记住当前进度，插进新父节点后写回新的那一个。
+      // 三个节点永远同进同出，用涟漪代表它们判断是否要搬。
+      const at = ripple.getAnimations()[0]?.currentTime;
+      host.append(disc, dot, ripple);
+      at != null && (ripple.getAnimations()[0].currentTime = at);
     };
     // attributeFilter 已使属性观察默认开启，不监听每一帧的 style 变化。
+    // 页面加载时三个装饰节点本来就在 body 里、也没有打开的弹窗，不必先同步一次。
     new MutationObserver(syncModalLayer).observe(document.body, { subtree: true, childList: true, attributeFilter: ['open'] });
-    syncModalLayer();
 
-    const HOT = 'a,button,input,textarea,select,summary,[role="button"],[role="tab"],[data-rail]';
+    const HOT = 'a,button,input,textarea,select,summary,[role=button],[role=tab],[data-rail]';
     let x = 0;
     let y = 0;
     let tx = 0;
@@ -164,7 +168,7 @@ onPage(({document, addEventListener, matchMedia, requestAnimationFrame, Mutation
         }
         // 悬停可点元素：盘缩小 + 描边转绿（给"这里能点"的反馈）。文字上不再特殊处理 ——
         // 站主要的就是"页面上只有白点"，所以点与盘在任何地方都显形。
-        disc.classList.toggle('is-hot', !!e.target.closest?.(HOT));
+        disc.classList.toggle('is-hot', e.target.closest?.(HOT));
         if (!raf) raf = requestAnimationFrame(step);
       },
       { passive: true },
