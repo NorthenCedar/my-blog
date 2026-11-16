@@ -405,6 +405,8 @@ sudo systemctl restart apache2
 
 **应该看到：** 页面上 `Security level is currently: low.` 这行字的 `low` 是绿色的。
 
+![4b5a897d b33e 4224 8898 b0ecff684052](./4b5a897d-b33e-4224-8898-b0ecff684052.jpg)
+
 DVWA 一共四关：Low / Medium / High / Impossible。**同一个漏洞，四份不同年代的代码**。我们按 Low → Medium → High → 看 Impossible 的顺序打，这四关基本就是「SQL 注入防御演进史」。
 
 ### 10. 打之前，先拍快照
@@ -1053,12 +1055,76 @@ Status...........: Cracked
 
 **`admin` 的密码是 `password`。** 对，就是这么直白，DVWA 故意的。
 
+![db745fb1 c7b0 4f51 9104 23cf13fa4f92](./db745fb1-c7b0-4f51-9104-23cf13fa4f92.jpg)
+
 **不对怎么办：**
 
 - `No such file or directory: rockyou.txt`：第 10.2 步没做，或者路径写错
 - `Exhausted`（跑完没找到）：字典里没有，换字典或者去在线站点查
 - 卡在 `Starting`：虚拟机没显卡加速，慢是正常的，MD5 + rockyou 一般也就几十秒
 - 提示 `Token length exception`：`h.txt` 里混进了空行或者别的字符，重新 `echo` 一遍
+
+### 如果遇到了以下报错
+
+![993dff92 a44e 43e0 af1b 0ff1b8c5157b](./993dff92-a44e-43e0-af1b-0ff1b8c5157b.png)
+
+问题在于 hashcat 找不到 OpenCL 运行时，hashcat 自身不直接运行计算，它只是把内核交给 OpenCL，再由 OpenCL 分派给 CPU 或 GPU。Kali 的预建镜像默认没有安装任何 OpenCL ICD（驱动接口），因此哈希计算没有可用的后端。
+
+在 VMware 的虚拟机里，GPU 是宿主机的虚拟显卡，没有 ROCm/CUDA/NEO，所以直接安装 Intel/AMD 都能用的 CPU 运行时 PoCL：
+
+```bash
+sudo apt update
+sudo apt install -y pocl-opencl-icd clinfo
+```
+
+装完检查：
+
+```bash
+clinfo -l      # 应该出现：Platform #0: Portable Computing Language
+hashcat -I     # 应该出现：Backend Device ID #1 ... Type: CPU
+```
+
+装完重新去跑hashcat -m 0 h.txt /usr/share/wordlists/rockyou.txt
+
+### 想要提升速度
+
+hashcat 为每个 hash mode 准备了两套 OpenCL 内核：
+
+Pure Kernel（你当前使用的）	Optimized Kernel（加 -O）
+
+hashcat 默认增加兼容性：任何长度的密码都能计算，但代价是速度；-O 则增加速度，代价是超过 31 字节的候选直接算不了。
+
+想要速度更快可以做三件事
+
+```bash
+# ① 换优化内核（最长 31 字节，够用了）
+hashcat -m 0 -O -a 0 h.txt /usr/share/wordlists/rockyou.txt
+
+# ② 拉满工作负载（1 最省电 / 4 最猛）
+hashcat -m 0 -O -w 3 -a 0 h.txt /usr/share/wordlists/rockyou.txt
+
+# ③ 自己量一下两档差多少，比听我说更靠谱
+hashcat -b -m 0        # 纯内核基准
+hashcat -b -m 0 -O     # 优化内核基准
+```
+
+如果输出是这样
+
+![6145b0f5 4309 4610 8b5d 2cbefeaa39ed](./6145b0f5-4309-4610-8b5d-2cbefeaa39ed.png)
+
+没跑起来是因为 potfile：上一次那条 5f4dcc…:password 已经被记进 potfile，hashcat 再拿到同一个哈希就直接判定「这条已经解过了」，不重复计算。这不是报错，它是结果缓存。
+
+想要重新跑一遍：
+
+```bash
+# 方式一：这次不用 potfile（也不写入）
+hashcat -m 0 -O -a 0 h.txt /usr/share/wordlists/rockyou.txt --potfile-disable
+
+# 方式二：用另一个 potfile，不污染默认那个（做实验最干净）
+hashcat -m 0 -O -a 0 h.txt /usr/share/wordlists/rockyou.txt --potfile-path ./lab.potfile
+```
+
+⚠️ 别用「删 potfile」当日常手段 —— 那里面是你所有解出来的密码，删了等于把之前几小时的算力扔了。
 
 **10.4 想看全部五行？**
 
