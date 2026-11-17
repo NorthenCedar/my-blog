@@ -185,5 +185,18 @@ const { posts, heading, covers } = Astro.props;
       transform: translate(var(--hover-nudge), var(--hover-lift));
       box-shadow: var(--glass-shadow);
     }
+    /* 封面视图：位移参数与列表同一套（`--hover-nudge` + `--hover-lift`）。
+       ★ 缺的是**补间**，不是位移本身：`hover.css` 给 `.index a` 的 transition
+         只列了 box-shadow，transform 不在其中 ⇒ 封面卡片是「啪」地跳到位的
+         （列表那半段早在上面写了 transition，所以只有封面显得没动画）。 */
+    :global([data-groups][data-view='card']) .index a {
+      transition:
+        transform var(--dur-hover) var(--ease-interact),
+        box-shadow var(--dur-hover) var(--ease-interact);
+    }
+    :global([data-groups][data-view='card']) .index li:is(:hover, :focus-within) > a {
+      transform: translate(var(--hover-nudge), var(--hover-lift));
+      box-shadow: var(--glass-shadow);
+    }
   }
 </style>
