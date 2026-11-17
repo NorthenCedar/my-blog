@@ -12,9 +12,15 @@
    推到线上换行全没了」就是这个原因。实测全站 7 篇文章：多行段落 50 处，
    像“长句硬折行”的 0 处，也就是说站主是一行写一条，按行渲染才是他要的样子。
    解析器把换行原样留在文本里，所以这里用 pre-wrap 就够，不必动 Markdown 管线。
-   只作用于段落与列表项；代码块另有规则（.prose pre）。 */
+   代码块另有规则（.prose pre）。
+
+   ⚠ 2026-11-17：不能直接给 `.prose li` 开 pre-wrap。松散列表的 HTML 是
+   `<li>\n<p>…</p>\n</li>`，那个紧跟 `<li>` 的结构性换行会被 pre-wrap 当成正文换行
+   ⇒ 圆点独占一行、文字从下一行开始（站主截图的「圆点按钮」问题）。
+   只给列表项里的段落开 pre-wrap；没有块级子节点的紧凑列表项仍保留逐行换行。 */
 .prose p,
-.prose li,
+.prose li:not(:has(> p, > ul, > ol, > pre, > blockquote, > table)),
+.prose li > p,
 .prose blockquote p {
   white-space: pre-wrap;
 }
