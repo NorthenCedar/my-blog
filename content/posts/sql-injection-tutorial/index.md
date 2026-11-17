@@ -4,6 +4,8 @@ date: 2026-11-16
 summary: 从零搭 DVWA 靶场，手把手打到 union、盲注、写文件和堆叠查询，再拆开 MOVEit 那场大规模泄露。
 tags: [教程, 工具]
 draft: false
+cover: ./4b5a897d-b33e-4224-8898-b0ecff684052.jpg
+coverAlt: DVWA
 ---
 
 这一篇是「你跟着敲，敲完真的能把一个数据库拖干净」。
