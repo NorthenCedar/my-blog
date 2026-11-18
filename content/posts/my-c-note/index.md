@@ -1457,3 +1457,135 @@ int main(int argc, char const *argv[]) {
 
 (注：在命令行输入带空格的参数时，需加双引号，例如 ./a.out "I love C"，系统会将其视作一个整体传给 argv\[1\]。)
 
+## 单字符输入输出
+
+### putchar
+
+- int putchar(int c);
+
+- 向标准输出写一个字符
+
+- 返回写了几个字符，EOF(-1)表示写失败
+
+### getchar
+
+- int getchar(void);
+
+- 从标准输入读入一个字符
+
+- 返回类型是int是为了返回EOF(-1)
+
+  &#32;&#32;&#32;&#32;Windows--->Ctrl-Z   直接在输入流中插入一个特殊控制字符（ASCII码为26），当getchar读到这个字符时，被Windows的c库拦截并翻译成了EOF
+
+  &#32;&#32;&#32;&#32;Linux--->Ctrl-D   本质是刷新缓冲区
+
+
+
+可以体验一下，Windows就按CTRL-Z，WSL和Linux按CTRL-D结束并输出End of input reached.
+
+```c
+#include <stdio.h>
+
+int main(void) 
+{
+    int ch;
+
+    while ((ch = getchar()) != EOF) 
+    {
+        putchar(ch);
+    }
+    printf("\nEnd of input reached.\n");
+
+    return 0; 
+}
+```
+
+## 字符串函数
+
+用这些函数都需要这个头文件
+
+#include\<string.h>
+
+### strlen
+
+- 函数申明：size_t strlen(const char \*s);
+
+  &#32;&#32;&#32;&#32;&#32;意思是：返回值类型size_t，专门用来表示“大小”或“长度”的无符号整数类型；函数名strlen；参数const char \*s就是字符指针，const保证他只读
+
+
+
+我们来写一个自己的strlen函数试试
+
+```c
+size_t mylen(const char *s)
+{
+    int idx = 0;
+    while (s[idx] != '\0' ){
+    idx++;
+    }
+    return idx;
+}
+```
+
+### strcmp
+
+- int strcmp(const char \*s1, const char \*s2);
+
+- 比较两个字符串，返回：
+
+  &#32;&#32;&#32;&#32;0：s1 == s2
+
+  &#32;&#32;&#32;&#32;1：s1 > s2
+
+  &#32;&#32;&#32;&#32;\-1：s1 \< s2
+
+我们直接来写个函数看看这个比大小是怎么比的
+
+```c
+int mycmp(const char *s1, const char *s2)
+{
+    while ( *s1 == *s2 && *s1 != '\0') {
+        s1++;
+        s2++;
+    }
+    return *s1 - *s2;
+}
+```
+
+就是从第一位开始找不一样的，找到第一个不一样的开始比较ASCII码的大小并输出相减的结果
+
+### strcpy
+
+- char \*strcpy(char \*restrict dst, const char \*restrict src);
+
+  &#32;&#32;&#32;&#32;把src的字符串拷贝到dst
+
+  &#32;&#32;&#32;&#32;&#32;&#32;&#32;&#32;restrict表明src和dst不重叠（c99）
+
+- 返回dst，为了能链起代码来
+
+复制一个字符串
+
+```c
+char *dst = (char*)malloc(strlen(src)+1);
+strcpy(dst,src);
+```
+
+把这个函数写一下
+
+```c
+char *macpy(char *dst, const char *src)
+{
+    // int idx = 0;
+    // while (src[idx]){
+    // dst[idx] = src[idx];
+    // idx++;
+    // }
+    // dst[idx] = '\0';    // 数组的写法
+    char *ret = dst;
+    while ( *dst++ = *src++ );   // 指针的写法
+    *dst = '\0';
+    
+    return ret;
+}
+```
