@@ -1,7 +1,7 @@
 ---
 title: C语言入门
 date: 2026-10-29
-updated: 2026-11-18
+updated: 2026-11-19
 summary: 了解c语言，也同样是一篇笔记
 tags: [个人, 备忘]
 draft: false
@@ -1587,5 +1587,159 @@ char *macpy(char *dst, const char *src)
     *dst = '\0';
     
     return ret;
+}
+```
+### strchr/strrchr
+
+在字符串中找字符
+
+- char \*strchr(const char \*s, int c);   // 从左开始找c第一次出现的位置，返回的是指针
+
+- char \*strrchr(const char \*s, int c);   // 从右开始找c第一次出现的位置
+
+- 返回NULL表示没找到如何找第二个字符呢
+
+```c
+    char s[] = "hello";
+    char *p = strchr(s, 'l');
+    p = strchr(p+1, 'l')     // 从第一个l后面开始找l
+    printf("%s\n", p);   // 输出lo
+```
+
+把找到的字符后的内容复制给另一个指针
+
+记得加#include \<stdlib.h> #include \<string.h>这两个头文件
+
+```c
+    char s[] = "hello";
+    char *p = strchr(s, 'l');
+    char *t = (char*)malloc(strlen(p)+1);
+    strcpy(t, p);
+    printf("%s\n", t);
+    free(t);
+    
+```
+
+想要找到字符的前面怎么办
+
+```c
+    char s[] = "hello";
+    char *p = strchr(s, 'l');
+    char c = *p;
+    *p = '\0';
+    char *t = (char*)malloc(strlen(s)+1);
+    strcpy(t, s);
+    printf("%s\n", t);
+    *p = c;
+    free(t);
+```
+
+### strstr/strcasestr
+
+- char \*strstr(const char \*s1, const char \*s2);   // 在s1里面找s2，返回值是找到的s2是首地址
+
+- char \*strcasestr(const char \*s1, const char \*s2);  // 不区分大小写
+
+### strcat/snprintf
+
+- char \*strcat(char \*dest, const char \*src);  // 找到dest的\\0,并从\\0的位置把src的字符一个个复制过来（会把dest的\\0覆写掉）
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main() {
+    char *s1 = "Hello";
+    char *s2 = " World, this is dynamic memory!";
+    
+    // 1. 计算需要的总空间（+1 是给 '\0' 的）
+    int total_len = strlen(s1) + strlen(s2) + 1;
+    
+    // 2. 动态申请空间。注意：malloc 返回的是 void*，通常需要强转为 char*
+    char *dest = (char *)malloc(total_len * sizeof(char));
+    
+    // 3. 安全检查（非常重要！）
+    if (dest == NULL) {
+        printf("内存分配失败！\n");
+        return 1;
+    }
+    
+    // 4. 拼接
+    strcpy(dest, s1); // 先把 s1 拷进去
+    strcat(dest, s2); // 再把 s2 接上去
+    
+    printf("拼接结果: %s\n", dest);
+    
+    // 5. 释放内存（必须做！）
+    free(dest);
+    return 0;
+}
+```
+
+- snprint包含在\<stdio.h> 头文件里（和printf是一家） // 如果被截断返回值会告诉原本需要的总长度，没截断就返回实际写入的字符数（拼后全部的实际长度，不包括\\0）
+
+  &#32;&#32;&#32;&#32;int snprintf(char \*str, size_t size, const char \*format, ...);
+
+- 下面有两个示例
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main() {
+    char *s1 = "Hello";
+    char *s2 = " World, dynamic!";
+    
+    // 1. 计算需要的精确大小 (+1 是给 '\0' 的)
+    int total_size = strlen(s1) + strlen(s2) + 1;
+    
+    // 2. 动态分配内存
+    char *dest = (char *)malloc(total_size * sizeof(char));
+    if (dest == NULL) return 1;
+    
+    // 3. 用 snprintf 进行拼接，第二个参数传入我们计算好的 total_size
+    snprintf(dest, total_size, "%s%s", s1, s2);
+    
+    printf("结果: %s\n", dest);
+    
+    // 4. 用完记得释放
+    free(dest);
+    return 0;
+}
+```
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+    char *s1 = "This is a very long string";
+    char *s2 = " that we want to concatenate dynamically.";
+    
+    // 1. 先申请一个很小的内存（试探）
+    int initial_size = 10;
+    char *dest = (char *)malloc(initial_size);
+    
+    // 2. 尝试拼接。因为空间只有 10，它肯定会被截断
+    // 但是！ret 会告诉我们：如果空间足够，本应该需要多少个字节
+    int ret = snprintf(dest, initial_size, "%s%s", s1, s2);
+    
+    // 3. 发现空间不够，重新分配！
+    if (ret >= initial_size) {
+        printf("空间不够！需要 %d 个字节，正在扩容...\n", ret + 1);
+        
+        // 重新申请一块刚刚好的大内存（ret 是真实长度，+1 给 '\0'）
+        dest = (char *)realloc(dest, ret + 1); 
+        
+        // 4. 再次拼接，这次绝对装得下
+        snprintf(dest, ret + 1, "%s%s", s1, s2);
+    }
+    
+    printf("最终结果: %s\n", dest);
+    
+    free(dest);
+    return 0;
 }
 ```
