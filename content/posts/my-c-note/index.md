@@ -1745,6 +1745,8 @@ int main() {
 ```
 ## 枚举
 
+### 基础知识
+
 - 枚举是一种用户定义的数据类型，它用关键字enum以如下语法来申明
 
   &#32;&#32;&#32;&#32;enum 枚举类型的名字 {名字0, ..., 名字n}；
@@ -1776,4 +1778,58 @@ void f(enum color c)
 {
     printf("d\n", c);     // 实际是以整数来做内部计算和外部输出输出的
 }
+```- 声明枚举量的时候可以指定值
+
+  &#32;&#32;&#32;&#32;enum COLOR { RED = 1, YELLOW, GREEN = 5};   // YELLOW往RED后面移一位，所以是2
+
+```c
+#include <stdio.h>
+
+enum COLOR {RED = 1, YELLOW, GREEN = 5}
 ```
+
+### 自动记数的枚举
+
+需要遍历所有的枚举量或者需要建立一个用枚举量做下标的数组的时候可以用以下方法：
+
+```c
+#include <stdio.h>
+
+enum COLOR {RED, YELLOW, GREEN, NumCOLORS};   // 最后一个正好可以用来统计前面一共有多少
+
+int main(int argc, char const *argv[])
+{
+    int color = -1;
+    char *ColorNames[NumCOLORS] = {
+        "red", "yellow", "green", 
+    };
+    char *colorName = NULL;
+
+    printf("请输入你喜欢的颜色的代码：");
+    scanf("%d", &color);
+    if ( color >= 0 && color < NumCOLORS ) {
+        colorName = ColorNames[color];
+    } else {
+        colorName = "unknown";
+    }
+    printf("你喜欢的颜色是%s\n", colorName);
+
+    return 0;
+}
+```
+
+### 枚举只是int
+
+```c
+enum COLOR {RED = 1, YELLOW, GREEN = 5, NumCOLORS};
+
+int main()
+{
+    enum COLOR color = 0;  // 这里不会报错，因为在c里面枚举只是int，这句话相当于int color = 0;  enum COLOR是你定义的数据类型，等于int
+    // 但是像c++这样更加严格的语言这句话就会报错
+}
+```
+
+- 枚举作为类型不好用，所以不建议用
+
+- 枚举比宏（macro）好，因为枚举有int类型，宏没有类型
