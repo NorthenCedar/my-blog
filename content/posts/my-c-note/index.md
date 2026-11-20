@@ -1,7 +1,7 @@
 ---
 title: C语言入门
 date: 2026-10-29
-updated: 2026-11-19
+updated: 2026-11-20
 summary: 了解c语言，也同样是一篇笔记
 tags: [个人, 备忘]
 draft: false
@@ -1741,5 +1741,38 @@ int main() {
     
     free(dest);
     return 0;
+}
+```## 枚举
+
+- 枚举是一种用户定义的数据类型，它用关键字enum以如下语法来申明
+
+  &#32;&#32;&#32;&#32;enum 枚举类型的名字 {名字0, ..., 名字n}；
+
+- 枚举类型名字通常不真的使用，要用的是在大括号里面的名字，因为它们就是常量符号，它们的类型是int，值依次从0到n。如：
+
+  &#32;&#32;&#32;&#32;enum colors { red, yellow, green };
+
+- 就创建了三个常量，red的值是0， yellow的值是1， green的值是2
+
+- 当需要一些可以排列起来的常量值时，定义枚举的意义就是给了这些常量值名字
+
+```c
+#include <stdio.h>
+
+enum color { red, yellow, green};
+ 
+void f(enum color c); 
+
+int main(void) 
+{
+    enum color t = red;    // 枚举类型可以跟上enum作为类型
+    scanf("d",&t);    // 枚举量可以作为值
+    f(t);
+ 
+    return 0; 
+} 
+void f(enum color c) 
+{
+    printf("d\n", c);     // 实际是以整数来做内部计算和外部输出输出的
 }
 ```
