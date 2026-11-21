@@ -46,7 +46,8 @@ export function documentCsp(scripts, trustedInline) {
     "object-src 'none'",
     "frame-ancestors 'self'",
     "form-action 'self'",
-    `connect-src 'self' ${new URL(MUSIC_API).origin}`,
+    // GLTFLoader 将模型内嵌贴图交给 ImageBitmapLoader，通过 fetch 读取本地 Blob。
+    `connect-src 'self' blob: ${new URL(MUSIC_API).origin}`,
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     "frame-src 'self'",
