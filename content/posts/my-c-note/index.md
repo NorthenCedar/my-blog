@@ -1,9 +1,9 @@
 ---
 title: C语言入门
 date: 2026-10-29
-updated: 2026-11-20
+updated: 2026-11-21
 summary: 了解c语言，也同样是一篇笔记
-tags: [个人, 备忘]
+tags: [教程, 个人, 备忘]
 draft: false
 cover: ./cover.webp
 coverAlt: 木桌上的程序流程图笔记、铅笔与机械键盘

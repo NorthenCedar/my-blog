@@ -17,14 +17,20 @@ const d = (entry?.data ?? {}) as unknown as { intro?: string; items?: Parameters
 const items = sortLogItems(d.items ?? []);
 const iso = isoDate;
 
-/** 跳转锚点：**同一天只在第一条上挂 id**。
- *  09-30 那天有 9 条，逐条挂就会产出 9 个同名 id（非法 HTML，`getElementById` 只认第一个）。 */
+/** 日锚点保留当天最新版；月格跳到倒序列表中该月的最后一条。两者重合时共用同一锚点。 */
 const seenDay = new Set<string>();
-const rows = items.map((it) => {
+const monthTargets = new Map<string, string>();
+const rows = items.map((it, index) => {
   const day = iso(it.date);
+  const month = day.slice(0, 7);
   const anchor = seenDay.has(day) ? undefined : `day-${day}`;
   seenDay.add(day);
-  return { date: it.date, version: it.version, changes: it.changes, day, anchor };
+  const next = items[index + 1];
+  if (next && iso(next.date).startsWith(month)) return { ...it, day, anchor };
+
+  const monthTarget = anchor ?? `month-${month}`;
+  monthTargets.set(month, monthTarget);
+  return { ...it, day, anchor: monthTarget };
 });
 
 /* ============================================================================
@@ -60,10 +66,9 @@ const rows = items.map((it) => {
  *    而不是「密」；非零间隔只有 0/1/2 三档 ⇒ 密度只有三档，拉不开。
  *    （与阅读尺那轮同一条纪律：对照过的映射连同开关一起删，留着两套只会各自腐化。）
  *
- * ── 零 JS ────────────────────────────────────────────────────────
- *    整台是**构建期算好的一支 SVG** + 几十行 CSS。没有 rAF、没有脚本、没有 canvas。
- *    ⇒ 降级链是**空集**：reduced-motion 只需把 hover 过渡压到 0ms（信息量不变）、
- *      无 JS 时每个日格仍是 `<a href="#day-…">`（退化成一张可点的日期目录）。
+ * ── 构建期渲染 ──────────────────────────────────────────────────
+ *    刻线和读数是构建期输出的 SVG，生长和悬停由 CSS 绘制。
+ *    点击时增强页内跳转，无 JS 时仍由各日期或月份的原生锚点定位。
  *      这是全站第一台「没有可降级之物」的装置 —— 它不是"实现得更稳"，是**没有可坏的部件**。
  * ========================================================================== */
 const CHRONO = (() => {
@@ -220,7 +225,6 @@ const CHRONO = (() => {
         });
       const count = ds.reduce((a, b) => a + b.count, 0);
       const total = ds.reduce((a, b) => a + b.total, 0);
-      const first = ds.find((d) => d.count > 0);
       return {
         kind: 'month' as const,
         key: mk,
@@ -228,8 +232,7 @@ const CHRONO = (() => {
         count,
         total,
         slots,
-        /* 锚点指向该月**第一个有更新的日子**（`day-…` 每天一个，天然存在 ⇒ 不产生死锚） */
-        anchor: first ? first.anchor : null,
+        anchor: monthTargets.get(mk) ?? null,
         title: `${mk} · ${count} 版 · ${total} 项`,
         monthMark: yearMark,
       };
@@ -328,8 +331,7 @@ const CHRONO = (() => {
               /* ★ 空格（当天 0 版）**不挂 href**：那天没有任何条目 ⇒ 跳过去是一个死锚。
                  不写 href 的 `<a>` 在 HTML 里不是链接（不可点、不进 Tab 序），
                  刚好是这里要的语义 —— 它仍然可以被 hover 读出「0 版 · 0 项」。
-                 ★ 月格档的 href 指向该月**第一个有更新的日子**的 `day-…`
-                   （`day-…` 是每天一个、真实存在的 id ⇒ 换档不会造出死锚）。 */
+                 月格的 href 指向当月最早的一版。 */
               <a
                 class="chrono-day"
                 data-period={cell.kind}
@@ -644,7 +646,7 @@ const CHRONO = (() => {
     right: max(var(--gutter), calc(50% - var(--wrap) / 2 + var(--gutter)));
     width: min(34vw, 520px);
     transform: translateY(-50%);
-    z-index: 1;
+    z-index: 2; /* 正文层为 1，日期命中区要位于正文之上。 */
     /* 整台不拦指针，只有日格接 —— 否则它会在右侧抢走一大片选择/滚动区域 */
     pointer-events: none;
     font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
@@ -805,4 +807,63 @@ const CHRONO = (() => {
 
 <script>
   import '../scripts/scroll-rail';
+  import { createAnchorMotion, isPlainAnchorClick } from '../scripts/anchor-motion';
+  import { onPage } from '../scripts/page-lifecycle';
+
+  onPage(({ document, window, keep, addEventListener }) => {
+    const nav = document.querySelector('.chrono');
+    const list = document.querySelector<HTMLElement>('ol.log');
+    if (!nav || !list) return;
+    const header = document.querySelector<HTMLElement>('main .pagehead');
+    const areas = header ? [header, list] : [list];
+    const motion = createAnchorMotion(document, list);
+    const root = document.documentElement;
+    const events = new AbortController();
+    const options = { signal: events.signal };
+    let expectedHash = window.location.hash;
+    const syncHash = () => {
+      if (window.location.hash !== expectedHash) motion.cancel();
+    };
+
+    nav.addEventListener('click', event => {
+      if (!(event instanceof MouseEvent) || !isPlainAnchorClick(event)) return;
+      const hash = (event.target as Element | null)?.closest('.chrono-day[href]')?.getAttribute('href');
+      if (!hash) return;
+      const entry = document.getElementById(hash.slice(1));
+      if (!entry || !list.contains(entry)) return;
+      event.preventDefault();
+      expectedHash = window.location.hash;
+      motion.jump(entry, areas, behavior => {
+        entry.tabIndex = -1;
+        if (window.location.hash !== hash) {
+          // 仍通过浏览器的锚点导航写历史与 :target 高亮。
+          expectedHash = hash;
+          const { scrollX, scrollY } = window;
+          const value = root.style.getPropertyValue('scroll-behavior');
+          const priority = root.style.getPropertyPriority('scroll-behavior');
+          root.style.setProperty('scroll-behavior', 'auto', 'important');
+          try {
+            window.location.hash = hash;
+            // 在首帧绘制前恢复近跳起点，随后发起显式的平滑滚动。
+            if (behavior === 'smooth') window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
+          }
+          finally { root.style.setProperty('scroll-behavior', value, priority); }
+        }
+        entry.scrollIntoView({ block: 'start', behavior });
+        entry.focus({ preventScroll: true });
+      });
+    }, options);
+    addEventListener('hashchange', syncHash);
+    addEventListener('popstate', syncHash);
+    addEventListener('wheel', motion.cancel, { passive: true });
+    addEventListener('touchmove', motion.cancel, { passive: true });
+    addEventListener('pointerdown', event => {
+      if ((event.target as Element | null)?.closest?.('[data-rail]')) motion.cancel();
+    }, { passive: true });
+    addEventListener('keydown', event => {
+      if (!event.defaultPrevented && /^(?:Escape|ArrowUp|ArrowDown|PageUp|PageDown|Home|End| )$/.test(event.key)) motion.cancel();
+    });
+    motion.reduce.addEventListener('change', motion.cancel, options);
+    keep(() => { events.abort(); motion.cancel(); });
+  }, '.chrono');
 </script>

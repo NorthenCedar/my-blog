@@ -3,7 +3,12 @@ import { expect } from 'vitest';
 import { isSiteMenuEntry, isTechHeadingEntry, jsClosure } from './_writer-output';
 
 export const MOTION_ENGINE_BUDGET = 96 * 1024;
+// 换页状态和局部滑块的公共引导合计净增约 1 KiB，首屏静态上限照旧检查。
+export const NAVIGATION_UI_BOOT_BUDGET = 1024;
 const SITE_MENU_BUDGET = 232 * 1024;
+// 同一模块覆盖页面内滚动区、顶层弹窗和横向滚动，实测约 3.8 KB。
+const INNER_SCROLLBAR_BUDGET = 4 * 1024;
+const INNER_SCROLLBAR = /[/\\]inner-scrollbar\.[^/\\]+\.js$/;
 export const TECH_HEADING_BOOT_BUDGET = 768;
 const TECH_HEADING_BUDGET = 240 * 1024;
 
@@ -28,8 +33,8 @@ export const THEME_TOGGLE_BOOT_BUDGET = 4 * 1024;
  */
 export const THEME_RENDERER_BUDGET = 480 * 1024;
 
-/** 全站共享的懒加载装置在某个页面闭包里的字节数（目前只有主题开关渲染器）。 */
-const SITE_WIDE_LAZY = /[/\\]theme-toggle\.[^/\\]+\.js$/;
+/** 全站共享的按需装置各有独立上限，从页面闭包中分开计量。 */
+const SITE_WIDE_LAZY = /[/\\](?:theme-toggle|inner-scrollbar)\.[^/\\]+\.js$/;
 export function siteWideLazyBytes(files: string[]): number {
   return files.filter((p) => SITE_WIDE_LAZY.test(p)).reduce((n, p) => n + statSync(p).size, 0);
 }
@@ -42,6 +47,10 @@ export function expectMotionStartup(page: string, budget: number) {
   const other = jsClosure(page, { skipMenu: true, skipTechHeading: true });
   const techFiles = withoutMenu.files.filter(path => !other.files.includes(path));
   const menuFiles = full.files.filter(path => !withoutMenu.files.includes(path));
+  const innerScrollbars = full.files.filter(path => INNER_SCROLLBAR.test(path));
+  expect(innerScrollbars, '站内滚动区共用一个滑块模块').toHaveLength(1);
+  expect(initial.files.filter(path => INNER_SCROLLBAR.test(path)), '滑块按需加载').toEqual([]);
+  expect(statSync(innerScrollbars[0]).size, '滑块模块超出独立预算').toBeLessThan(INNER_SCROLLBAR_BUDGET);
   expect(full.files.filter(isSiteMenuEntry), '原版导航有单独的按需入口').toHaveLength(1);
   expect(initial.files.filter(isSiteMenuEntry), '首屏不得静态加载原版导航').toEqual([]);
   expect(menuFiles.reduce((bytes, path) => bytes + statSync(path).size, 0), '原版导航及独占依赖超出预算')
@@ -60,7 +69,7 @@ export function expectMotionStartup(page: string, budget: number) {
     .toBeLessThan(MOTION_ENGINE_BUDGET);
   const html = readFileSync(page,'utf8');
   const preloads = [...html.matchAll(/<link\b[^>]*rel="modulepreload"[^>]*>/g)].map(m => m[0]).join('');
-  for (const path of [...engines, ...gsap, ...menuFiles, ...techFiles]) {
+  for (const path of [...engines, ...gsap, ...menuFiles, ...techFiles, ...innerScrollbars]) {
     expect(preloads, '交互模块只能在操作意图后预热').not.toContain(path.split(/[/\\]/).at(-1)!);
   }
 }

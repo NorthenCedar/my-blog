@@ -51,7 +51,7 @@
  *   `.bi`          fixed 定位 + overflow:hidden —— **自己不画任何东西**（透明）
  *   `.bi-curtain`  暗场幕布（背景渐变 + 底部绿洗色）；剪幕的 clip-path 挂**这一层**
  *   `.bi-field`    ∞ 笔画（在幕布之上）；aria-hidden
- *   `.bi-skip`     **在幕布之外** —— 剪幕裁不到它，它自己按时间淡出
+ *   `.bi-skip`     **在幕布之外** —— 剪幕裁不到它，直到解除遮罩前始终可用
  *   `.bi-clock`    0 尺寸时长钟，只用来触发一次 animationend
  *   ★ 第七版的教训：剪幕挂在 `.bi-stage`（内容层）上，而幕布色在 `.bi`（父层）上 ⇒
  *     "剪幕"裁的是内容、不透明底色一直留到最后，撤走时硬切 ⇒ 最后 700ms 一整屏墨绿。
@@ -90,7 +90,7 @@
 const MARK = 'M12 6c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2-2.67 4-4 6-4a4 4 0 0 1 0 8c-2 0-4-1.33-6-4';
 ---
 
-<div class="bi" data-boot-overlay>
+<dialog class="bi" data-boot-overlay aria-label="首页开场动画">
   {/* 幕布：唯一承载不透明底色的层 ⇒ 剪幕就裁它。绿洗色是它的子元素（同样被裁掉，
       不会像第七版那样"幕布没了、洗色还在"）。 */}
   <div class="bi-curtain">
@@ -106,51 +106,60 @@ const MARK = 'M12 6c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2-2.67 4-4 6-4a
   </div>
 
   <p class="bi-hint" role="status">开场动画播放中。按 Escape 或空格跳过。</p>
-  <button class="bi-skip" type="button">跳过</button>
+  <button class="bi-skip" type="button" autofocus>跳过</button>
   {/* 时长钟：0 尺寸，只用来在总时长走完时触发一次 animationend（子元素事件会冒泡，必须认 target） */}
   <span class="bi-clock"></span>
-</div>
+</dialog>
 
-{/* ===== 开场行为（目标 <900 B）=====
-     ① 点击 skip / Esc / 空格 → 同一条 close()
-     ② 总时长走完（clock 的 animationend）→ close()
-     ③ 主动跳过时把焦点交回主标题，保持滚动位置；自然播完保留用户当前焦点。
-     ★ 空格必须 preventDefault —— 默认行为是向下滚页；而"空格只在遮罩还在时劫持"
-       靠的是 close() 之后本监听器随覆盖层一起失效（overlay.remove() + boot-on 摘掉）。
-     ★ skip 按钮在 2900ms 起自己淡出（见 .bi-skip 的 bi-skip-out），但 Esc / 空格的
-       监听器**一直有效到 close()** —— 键盘用户不会因为按钮先退场而失去跳过能力。
-*/}
-<script>
+{/* 在 HTML 解析时绑定退出，再同时启动时长钟与滚动锁。外部模块下载失败也能自然退场。 */}
+<script is:inline>
+  (() => {
+    document.documentElement.classList.add('js');
+    const html = document.documentElement;
+    const overlay = document.querySelector('[data-boot-overlay]');
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+    try {
+      const seen = sessionStorage.getItem('boot-intro');
+      sessionStorage.setItem('boot-intro', '1');
+      if (seen || reduce.matches || typeof overlay?.showModal !== 'function') return;
+    } catch {
+      return;
+    }
 
-import { onPage } from '../scripts/page-lifecycle';
-onPage(({ document, setTimeout, clearTimeout }) => {
-  const html = document.documentElement;
-  const overlay = document.querySelector('[data-boot-overlay]');
-  if (!overlay || !html.classList.contains('boot-on')) return;
+    const events = new AbortController();
+    const options = { signal: events.signal };
+    const close = (skipped = false) => {
+      events.abort();
+      clearTimeout(fallback);
+      html.classList.remove('boot-on', 'boot-mini');
+      if (overlay.open) overlay.close();
+      overlay.remove();
+      if (skipped) document.querySelector('.band-copy h1')?.focus({ preventScroll: true });
+    };
+    const fallback = setTimeout(close, 8000);
+    overlay.querySelector('.bi-skip').addEventListener('click', () => close(true), options);
+    overlay.querySelector('.bi-clock').addEventListener('animationend', () => close(), options);
+    overlay.addEventListener('cancel', event => {
+      event.preventDefault();
+      close(true);
+    }, options);
+    document.addEventListener('keydown', event => {
+      if (event.key !== ' ' && event.key !== 'Spacebar') return;
+      event.preventDefault();
+      close(true);
+    }, options);
+    reduce.addEventListener('change', event => { if (event.matches) close(); }, options);
+    window.addEventListener('pagehide', () => close(), options);
+    document.addEventListener('astro:before-swap', () => close(), options);
 
-  const clock = overlay.querySelector('.bi-clock');
-  const listeners = new AbortController();
-  const close = (skipped = false) => {
-    listeners.abort();
-    clearTimeout(fallback);
-    html.classList.remove('boot-on', 'boot-mini');
-    if (skipped) document.querySelector<HTMLElement>('.band-copy h1')?.focus({ preventScroll: true });
-    overlay.remove();
-  };
-  const fallback = setTimeout(close, 8000);
-  const options = { signal: listeners.signal };
-
-  overlay.querySelector('.bi-skip')?.addEventListener('click', () => close(true), options);
-  document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' && event.key !== ' ' && event.key !== 'Spacebar') return;
-    event.preventDefault();
-    close(true);
-  }, options);
-  overlay.addEventListener('animationend', event => {
-    if (event.target === clock) close();
-  }, options);
-  return () => listeners.abort();
-}, '[data-boot-overlay]');
+    if (innerWidth < 768) html.classList.add('boot-mini');
+    html.classList.add('boot-on');
+    try {
+      overlay.showModal();
+    } catch {
+      close();
+    }
+  })();
 </script>
 
 <style>
@@ -170,9 +179,18 @@ onPage(({ document, setTimeout, clearTimeout }) => {
   .bi {
     position: fixed;
     inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
     z-index: 60;
     overflow: hidden;
   }
+  .bi::backdrop { background: transparent; }
 
   /* ---------- 幕布 + 剪幕 ---------- */
   .bi-curtain {
@@ -253,14 +271,6 @@ onPage(({ document, setTimeout, clearTimeout }) => {
     background: none;
     border: 0;
     opacity: 0.5;
-    /* 与揭帘同时退场 —— 首屏内容一上来，幕布期的控件就该消失，别在页面上飘着。
-       ★ 只写 forwards、不写 both：延迟期不填充 ⇒ :hover 的 opacity:1 照常生效
-         （both 会在整个延迟期用 from 按住 opacity，把 hover 反馈压死）。 */
-    animation: bi-skip-out 320ms linear var(--bi-copy-at) forwards;
-  }
-  @keyframes bi-skip-out {
-    from { opacity: 0.5; }
-    to { opacity: 0; pointer-events: none; }
   }
   .bi-skip:hover,
   .bi-skip:focus-visible { opacity: 1; }

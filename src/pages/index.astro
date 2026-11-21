@@ -102,27 +102,6 @@ const titleLines: { ch: string; i: number }[][] = (() => {
 ---
 
 <Base description={site.metaDescription} current="index" chrome="console">
-  {/* ===== 开场门控：必须在覆盖层之前**同步**执行，否则会先闪一下再隐藏 =====
-       不播的两情形：reduced-motion / 无 JS / 本会话已播。
-       ≤767px **照播**，但换成 1.5 s 的极简版（加 .boot-mini，由 CSS 压时间轴）。
-       方向是 fail-safe：默认不显示，只有判定"该播"才挂 .boot-on。
-       `.js` 这个字面量有断言守着（tests/b2-motion.test.ts「门控脚本只落首页」），别改。 */}
-  <script is:inline>
-    document.documentElement.classList.add('js');
-    try {
-      var play =
-        !matchMedia('(prefers-reduced-motion: reduce)').matches &&
-        !sessionStorage.getItem('boot-intro');
-      if (play) {
-        document.documentElement.classList.add('boot-on');
-        if (innerWidth < 768) document.documentElement.classList.add('boot-mini');
-      }
-      sessionStorage.setItem('boot-intro', '1'); /* 进入播放即记：刷新不重播；skip 也不重播 */
-    } catch (e) {
-      /* 无痕 / 禁用 storage：退化成"可能重播一次"，不影响可用性 */
-    }
-  </script>
-
   <BootIntro />
 
   {/* ===== 背景层（原型 .bg）=====

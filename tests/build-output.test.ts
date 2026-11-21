@@ -1,6 +1,7 @@
 import {buildSync} from 'esbuild';
 import {
   MOTION_ENGINE_BUDGET,
+  NAVIGATION_UI_BOOT_BUDGET,
   TECH_HEADING_BOOT_BUDGET,
   THEME_RENDERER_BUDGET,
   THEME_TOGGLE_BOOT_BUDGET,
@@ -1377,7 +1378,7 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
        ⚠ 中间色**不从模块 import**：那样会把整块预览逻辑拉进首屏包（试过，多出 ~2.9 KB），
          现在只读事件 detail 里的 `mixed`，增量才是现在这个数。 */
     // 留言板使用同一套消息跳转及评论定位，完整闭包加 1 KiB。
-    const BUDGET = 69 * 1024 + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET;
+    const BUDGET = 69 * 1024 + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET + NAVIGATION_UI_BOOT_BUDGET;
     expectMotionStartup(page, 67 * 1024 + THEME_TOGGLE_BOOT_BUDGET);
     const { code, files } = jsClosure(page, { skipMenu: true, skipTechHeading: true });
     const full = Buffer.byteLength(code, 'utf8') - siteWideLazyBytes(files);

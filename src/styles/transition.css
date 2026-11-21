@@ -30,6 +30,33 @@
   display: none;
 }
 
+.pt-status:not(:empty) {
+  position: fixed;
+  inset-block-start: max(var(--sp-3), env(safe-area-inset-top));
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  z-index: 46;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  pointer-events: none;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--hair);
+  border-radius: 99px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.pt-status:not(:empty)::before {
+  content: '';
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: var(--accent-ink);
+}
+
 /* ⚠️ --pt-sweep 必须能被 `.shell` 读到（v2 实测踩到，原理不变）：
    第四段要动画的是 `.shell`（正文），它**不在 `.pt` 子树里** ⇒
    如果变量只声明在 `.pt` 上，那边解析为空 ⇒ 整条 `animation` 简写被判定无效而丢弃 ⇒

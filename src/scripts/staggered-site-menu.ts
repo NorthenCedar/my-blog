@@ -65,16 +65,22 @@ export function mountSiteMenu(anchor: HTMLButtonElement, fallback: HTMLElement) 
     syncInk();
     const returning = moveToggle(anchorPosition(), false);
     queueMicrotask(() => {
+      if (reduce.matches) {
+        finishMotion();
+        finishClose();
+        return;
+      }
       const slide = gsap.getTweensOf(panel).at(-1);
-      if (reduce.matches) finishMotion();
-      void Promise.all([slide, returning]).then(() => {
-        if (!dialog.isConnected || !closing) return;
-        closing = false;
-        delete anchor.dataset.menuMounted;
-        dialog.close();
-        anchor.focus({ preventScroll: true });
-      });
+      void Promise.all([slide, returning]).then(finishClose);
     });
+  }
+
+  function finishClose() {
+    if (!dialog.isConnected || !closing) return;
+    closing = false;
+    delete anchor.dataset.menuMounted;
+    dialog.close();
+    anchor.focus({ preventScroll: true });
   }
 
   function finishMotion() {
@@ -131,7 +137,7 @@ export function mountSiteMenu(anchor: HTMLButtonElement, fallback: HTMLElement) 
   anchor.addEventListener('click', open, options);
   dialog.addEventListener('cancel', event => {
     event.preventDefault();
-    if (toggle.getAttribute('aria-expanded') === 'true') toggle.click();
+    if (!closing) toggle.click();
   }, options);
   toggle.addEventListener('click', event => {
     if (closing) event.stopPropagation();

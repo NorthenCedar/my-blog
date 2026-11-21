@@ -24,12 +24,13 @@ const { headings } = Astro.props;
             <ellipse cx="51" cy="79" rx="24" ry="6" />
             <ellipse cx="51" cy="79" rx="45" ry="12" />
           </svg>
-          <svg viewBox="0 0 100 88" focusable="false">
+          <svg class="st-vessel" viewBox="0 0 100 88" focusable="false">
             {SAILING_SHIP_PATHS.map((d, index) => <path class:list={{ 'st-line': [1, 2, 10].includes(index) }} d={d} />)}
           </svg>
+          <span class="st-portal"></span>
         </div>
       </div>
-      <ol>
+      <ol data-scrollbars>
         {headings.map((h) => (
           <li class={'lv' + h.depth}><a class="st-link" href={'#' + h.id}>{h.text}</a></li>
         ))}
@@ -63,9 +64,9 @@ const { headings } = Astro.props;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    scrollbar-color: var(--hair) transparent;
     font-size: var(--fs-sm);
   }
+  ol[data-inner-scroll] { padding-inline-end: calc(var(--sp-3) + var(--sp-2)); }
   li.lv3 {
     padding-inline-start: var(--sp-3);
     color: var(--muted);
@@ -121,6 +122,23 @@ const { headings } = Astro.props;
     will-change: transform;
   }
   .st-ship svg { width: 100%; height: 100%; overflow: visible; }
+  .st-vessel { transform-origin: center; }
+  .st-portal {
+    position: absolute;
+    inset: 29% 10%;
+    border: 1px solid var(--accent-ink);
+    border-radius: 50%;
+    opacity: 0;
+    scale: .58;
+  }
+  .st-portal::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border: 1px solid var(--accent-ink);
+    border-radius: inherit;
+    opacity: .48;
+  }
   .st-ship path {
     fill: var(--paper);
     stroke: var(--accent-ink);

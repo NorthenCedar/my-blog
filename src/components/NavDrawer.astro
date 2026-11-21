@@ -20,6 +20,12 @@ const socialLinks = [
 ];
 ---
 
+<button class="nav-trigger sm-toggle" type="button" lang="en" data-nav-open aria-label="Open menu" aria-haspopup="dialog" hidden>
+  <span>Menu</span>
+  <svg class="bars" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+    <path d="M1 7h12M7 1v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+  </svg>
+</button>
 <input type="checkbox" id="nav-toggle" class="navtog" aria-label="Open menu" aria-controls="site-menu" />
 <label for="nav-toggle" class="navbtn sm-toggle" aria-hidden="true" lang="en">
   <span>Menu</span>
@@ -27,17 +33,14 @@ const socialLinks = [
     <path d="M1 7h12M7 1v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
   </svg>
 </label>
-<button class="nav-trigger sm-toggle" type="button" lang="en" data-nav-open aria-label="Open menu" aria-haspopup="dialog" hidden>
-  <span>Menu</span>
-  <svg class="bars" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-    <path d="M1 7h12M7 1v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-  </svg>
-</button>
 
-<div class="navshell" id="site-menu" data-staggered-menu lang="en">
+<dialog class="navshell" id="site-menu" data-staggered-menu lang="en" aria-label="Site menu">
   <label for="nav-toggle" class="navmask" aria-hidden="true"></label>
   <nav class="navpanel staggered-menu-panel" aria-label="主导航">
     <label class="navclose sm-toggle" for="nav-toggle" aria-hidden="true">Close ×</label>
+    <form method="dialog">
+      <button class="navclose sm-toggle" type="submit" data-nav-close aria-label="Close menu" autofocus>Close ×</button>
+    </form>
     <div class="sm-panel-inner">
       <ul class="sm-panel-list" data-numbering>
         {NAV_LINKS.map(link => (
@@ -58,7 +61,7 @@ const socialLinks = [
       </div>
     </div>
   </nav>
-</div>
+</dialog>
 
 <style is:global>
   @font-face {
@@ -81,7 +84,8 @@ const socialLinks = [
     opacity: 0;
     pointer-events: none;
   }
-  .navbtn[hidden], .nav-trigger[hidden], .navtog[hidden] { display: none; }
+  .nav-trigger[hidden],
+  .nav-trigger:not([hidden]) ~ :is(.navtog, .navbtn) { display: none; }
   :is(.navbtn, .nav-trigger, .site-staggered .sm-toggle) {
     padding: 0;
     color: inherit;
@@ -92,6 +96,13 @@ const socialLinks = [
     font: 500 1rem/1 Geist, sans-serif;
   }
   .nav-trigger[data-menu-mounted] { visibility: hidden; }
+  /* 触区向外延伸，顶栏文字的位置和高度照旧。 */
+  .nav-trigger::before {
+    content: '';
+    position: absolute;
+    inset: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-2));
+  }
+  .nav-trigger:active { opacity: .72; }
   .navtog:focus-visible + .navbtn, .nav-trigger:focus-visible {
     outline: 2px solid currentColor;
     outline-offset: 4px;
@@ -109,9 +120,10 @@ const socialLinks = [
     position: absolute;
     inset: 0;
   }
-  .navpanel {
+  .navshell .navpanel {
     position: absolute;
     pointer-events: none;
+    /* 静态面板打开后直接可见，动画面板的初始透明度留给动画控制。 */
     opacity: 1;
     --sm-num-opacity: 1;
   }
@@ -128,13 +140,27 @@ const socialLinks = [
   }
   /* 圆条态：顶栏 padding 由 --topbar-pad-block 收到 --sp-1，Menu 随之整体下移。 */
   [data-topbar-scrolled] .navclose { top: 2.36rem; }
-  .navtog:checked ~ .navshell { visibility: visible; }
+  .navtog:checked ~ .navshell { visibility: visible; display: block; }
   .navtog:checked ~ .navshell .navmask { pointer-events: auto; }
   .navtog:checked ~ .navshell .navpanel { pointer-events: auto; }
+  .navshell[open] { visibility: visible; pointer-events: auto; }
+  .navshell[open] .navpanel { pointer-events: auto; }
+  .navshell [data-nav-close], .navshell[open] label { display: none; }
+  .navshell[open] [data-nav-close] {
+    display: inline-flex;
+    right: var(--gutter);
+    padding: 0;
+  }
+  .navshell[open] [data-nav-close]:focus-visible { outline-color: currentColor; }
 
   .site-menu-dialog {
     position: fixed;
     inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 40;
+  }
+  :is(.site-menu-dialog, .navshell) {
     width: 100%;
     height: 100%;
     max-width: none;
@@ -142,14 +168,11 @@ const socialLinks = [
     margin: 0;
     padding: 0;
     border: 0;
-    overflow: hidden;
     background: transparent;
-    pointer-events: none;
-    z-index: 40;
   }
   .site-menu-dialog:modal { pointer-events: auto; }
-  .site-menu-dialog::backdrop { background: transparent; }
-  html:has(.site-menu-dialog:modal, .navtog:checked) { overflow: hidden; }
+  :is(.site-menu-dialog, .navshell)::backdrop { background: transparent; }
+  html:has(.site-menu-dialog:modal, .navshell[open], .navtog:checked) { overflow: hidden; }
 
   .site-staggered { line-height: 1.5; }
   .site-staggered .staggered-menu-header { padding: var(--sp-4) var(--gutter); }
@@ -185,9 +208,14 @@ const socialLinks = [
       border-radius: var(--sp-2) 0 0 var(--sp-2);
     }
     .site-menu-dialog:modal .staggered-menu-panel,
+    .navshell[open] .staggered-menu-panel,
     .navtog:checked ~ .navshell .staggered-menu-panel {
       box-shadow: -16px 0 42px var(--nav-panel-shadow);
     }
+  }
+  @media (max-width: 767px) {
+    .navshell[open] [data-nav-close] { top: calc(var(--topbar-pad-block) + .4425rem); }
+    [data-topbar-scrolled] .navshell[open] [data-nav-close] { top: calc(var(--sp-2) + var(--sp-1) + .4425rem); }
   }
   @media (max-width: 1024px) {
     .site-staggered .sm-logo {

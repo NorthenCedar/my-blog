@@ -120,6 +120,50 @@ html.cursor-none[cbar] * {
   cursor: auto !important;
 }
 
+/* 原生降级同用中性灰，强制配色时交回系统。 */
+html { scrollbar-color: var(--scrollbar-thumb) transparent; }
+@media (forced-colors: active) { html { scrollbar-color: auto; } }
+
+/* 只有滑块就绪的区域才关原生槽，覆盖组件里带作用域的 scrollbar-width。 */
+[data-inner-scroll] { scrollbar-width: none !important; scrollbar-gutter: auto !important; }
+[data-inner-scroll]::-webkit-scrollbar { display: none; }
+.inner-scroll-frame {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+.inner-scroll-frame.is-fixed { position: fixed; }
+.inner-scroll-rail {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  inline-size: 14px;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.inner-scroll-rail[data-axis="x"] {
+  inset: auto auto 0 0;
+  block-size: 14px;
+}
+.inner-scroll-rail > span {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 4px;
+  border-radius: 99px;
+  background: var(--scrollbar-thumb);
+}
+.inner-scroll-rail[data-axis="x"] > span { inset: 4px auto 4px 0; }
+.inner-scroll-rail[data-dragging] > span { background: var(--scrollbar-thumb-drag); }
+:is(.navshell, .site-staggered) > .inner-scroll-frame { z-index: 11; }
+.staggered-menu-panel[inert] + .inner-scroll-frame { visibility: hidden; }
+.site-staggered[data-open] > .inner-scroll-frame { animation: inner-scroll-in .12s .48s both; }
+@keyframes inner-scroll-in {
+  from { opacity: 0; visibility: hidden; }
+  to { opacity: 1; visibility: visible; }
+}
+
 /* 原生视频控件在浏览器的内部树里，普通 * 选不到；控件自己的 UA 光标会盖过继承。
    分开声明，避免某个浏览器不认识一个伪元素时连带丢掉全部规则。
    仍由 cursor-none 门闩启用，无脚本、触摸或减少动态时保留系统光标。 */

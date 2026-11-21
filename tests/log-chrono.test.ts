@@ -278,33 +278,29 @@ const vbBox = PAGE.match(/<svg class="chrono-svg"[^>]*viewBox="0 0 [\d.]+ ([\d.]
 
 describe.skipIf(!hasDist)('日志页 · 走时仪：可点、可降级', () => {
   it('无 JS 可用：每个"有更新"的格子是 SSR 的 `<a href="…">`，条目侧真的有那个 id', () => {
-    /* ★ 这条的期望**随档位变**（2026-11-10 第一次真的跨过 45 天阈值 ⇒ 头一回在月格档下跑）：
-       日格档 = 每个有更新的日子一格 ⇒ 锚数 = DATES.length；
-       月格档 = 每个有更新的月份一格，href 指向该月**第一个有更新的日子**
-       （log.astro 里就这么写，`day-…` 每天一个真实存在的 id ⇒ 换档不产生死锚）
-       ⇒ 锚数 = MONTH_KEYS.length。 */
     const wantAnchors = TIER === 'day' ? DATES.length : MONTH_KEYS.length;
     const hrefs = [...PAGE.matchAll(/<a class="chrono-day"[^>]*href="#([^"]+)"/g)].map((m) => m[1]);
     expect(hrefs.length).toBe(wantAnchors);
-    const ids = [...PAGE.matchAll(/<li class="entry" id="([^"]+)"/g)].map((m) => m[1]);
-    // 死锚：href 指向的 id 必须存在（两档都查 —— 月格档的"每月一格"同样不许指空）
+    const entries = [...PAGE.matchAll(/<li class="entry" id="([^"]+)"[^>]*>\s*<p class="head"[^>]*>\s*<time datetime="([^"]+)"[^>]*>[^<]+<\/time>\s*(?:<span class="ver"[^>]*>([^<]+)<\/span>)?/g)];
+    const ids = entries.map((entry) => entry[1]);
     expect(hrefs.filter((h) => !ids.includes(h)), '有指向不存在的 id 的死锚').toEqual([]);
-    if (TIER === 'day') {
-      // 孤儿：每个 id 都要有日格指着它
-      expect(ids.filter((i) => !hrefs.includes(i)), '有条目锚点没被任何日格指着').toEqual([]);
-    } else {
-      /* 月格档里"每个 id 都被指着"**不成立**（按设计只锚每月第一格）⇒ 覆盖判据
-         换成月级：每个有更新的月份都被锚着，且锚的就是该月**最早**那个有更新日。 */
-      const monthFirst = MONTH_KEYS
-        .map((mk) => DATES.filter((d) => d.slice(0, 7) === mk)[0])
-        .map((d) => `day-${d}`)
-        .sort();
-      expect(
-        [...hrefs].sort(),
-        '月格档的锚没落在"该月第一个有更新日"上，或有月份漏锚',
-      ).toEqual(monthFirst);
+    const dayIds = DATES.map((date) => `day-${date}`);
+    for (const id of dayIds) {
+      const date = id.slice(4);
+      expect(entries.find((entry) => entry[1] === id)?.slice(2, 4)).toEqual([
+        date, ITEMS.find((item) => item.date === date)?.version,
+      ]);
     }
-    // 重复：同一天多条只能挂一个 id（09-30 那天有 9 条）
+    if (TIER === 'day') {
+      expect([...hrefs].sort()).toEqual(dayIds);
+    } else {
+      const targets = hrefs.map((id) => entries.find((entry) => entry[1] === id)?.slice(2, 4));
+      const oldest = MONTH_KEYS.map((month) => {
+        const item = ASC.find((item) => item.date.startsWith(month))!;
+        return [item.date, item.version];
+      });
+      expect(targets, '月格应落到该月最早的一版，最早一天有多版时也一样').toEqual(oldest);
+    }
     expect(new Set(ids).size, '条目 id 有重复').toBe(ids.length);
   });
 
@@ -316,18 +312,14 @@ describe.skipIf(!hasDist)('日志页 · 走时仪：可点、可降级', () => {
     expect(emptyHref, '空格日格挂了 href ⇒ 死锚').toEqual([]);
   });
 
-  it('★ 走时仪零 JS：本页唯一的脚本是滚动轨，且它一个字节都不碰走时仪', () => {
-    /* 原契约是「本页一个 `<script>` 都没有」。2026-10-08 站主要求在日志页加一根可拖的
-       滚动条（「再加一个拖动的条要不然太长了」）—— 拖动**必须**有脚本，所以那条被
-       站主自己推翻了。这里换成它真正要守的那件事：**走时仪本身零 JS**
-       （不吃它的数据、不查它的 DOM、不改它的样式）。 */
+  it('刻线仍由构建生成，页内导航复用文章的跳转动效', () => {
     const scripts = [...CODE.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
-    expect(scripts.length, '脚本入口只该有一个（滚动轨）').toBe(1);
-    expect(scripts[0], '那个脚本必须是滚动轨').toMatch(/import '\.\.\/scripts\/scroll-rail'/);
-    expect(scripts[0], '滚动轨碰了走时仪 —— 那台的身份就是「零 JS」').not.toMatch(/chrono|CHRONO/);
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0]).toMatch(/import '\.\.\/scripts\/scroll-rail'/);
+    expect(scripts[0]).toMatch(/createAnchorMotion/);
+    expect(scripts[0]).toMatch(/\.chrono-day\[href\]/);
     expect(CODE, '不许引装置公共层（走时仪连 rl-core 都不需要）').not.toMatch(/\brl-core\b/);
     expect(CODE, '不许出现 canvas / rAF —— 那不是走时仪的机制').not.toMatch(/canvas|requestAnimationFrame/);
-    expect(existsSync(join(ROOT, 'src/scripts/log-chrono.ts')), '不该有走时仪脚本文件').toBe(false);
   });
 
   it('≤1023px 不渲染（装置在 DOM 里、靠 display:none 拿掉）', () => {

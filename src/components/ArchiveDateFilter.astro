@@ -33,7 +33,7 @@ const step = Math.min(82, 420 / Math.max(1, options.length - 1));
       <span id={`${id}-value`} data-date-value>全部</span>
     </button>
     <div class="date-drawer" style={`--date-last-delay:${step * (options.length - 1)}ms`}>
-      <div id={`${id}-options`} class="date-options" role="listbox" aria-labelledby={`${id}-label`} inert>
+      <div id={`${id}-options`} class="date-options" data-scrollbars role="listbox" aria-labelledby={`${id}-label`} inert>
         {options.map(({ value, text }, index) => (
           <div
             id={`${id}-option-${value}`}

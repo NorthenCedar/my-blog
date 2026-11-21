@@ -53,11 +53,11 @@ export function createTocMotion(nav: HTMLElement) {
   observer?.observe(host);
 
   return {
-    moveTo(link: HTMLAnchorElement, bringIntoView = false) {
+    moveTo(link: HTMLAnchorElement, bringIntoView = false, snap = false) {
       if (events.signal.aborted || !list.contains(link)) return;
       current = link;
-      if (bringIntoView) reveal(link, media.matches ? 'instant' : 'smooth');
-      place();
+      if (bringIntoView) reveal(link, snap || media.matches ? 'instant' : 'smooth');
+      place(snap);
     },
     finish,
     dispose() {

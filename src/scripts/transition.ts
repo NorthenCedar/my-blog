@@ -33,22 +33,34 @@ const HANDOFF_MS = 1000;
 // 万一跳转没真的发生（被别的东西拦下、或用户中途取消），自己收掉。
 // v2 是 3000ms（对应 2200ms 的时间线）；v3 只有 900ms，1.5s 足够。
 const STALE_MS = 1500;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 /** 站内、可整页跳转的普通左键点击才值得盖（其余一律放行，别影响正常浏览）。 */
 function precheck(e: MouseEvent, a: HTMLAnchorElement): boolean {
   if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
   if (a.matches('[target="_blank"],[download],[data-no-transition]')) return false;
   if (a.origin !== location.origin) return false;
-  // 同页（只有 hash 或查询串不同）不整页跳转，别盖
+  // 同页锚点由页面自己处理。
   return !(a.pathname === location.pathname && a.search === location.search);
 }
 
 // ---- 收尾：目标页播完就把标记摘掉 ----
 // **必须摘**：`pt-content` 的结束帧带着 transform，留在类上就等于给 .shell 永久加了一个层叠上下文。
 let cleanupTimer: number | undefined;
+let waitTimer: number | undefined;
 let preparing: AbortSignal | undefined;
+let swapping: AbortSignal | undefined;
+function showWait(pending = false) {
+  window.clearTimeout(waitTimer);
+  const status = document.querySelector('.pt-status');
+  if (!status) return;
+  status.textContent = '';
+  // 快换页直接交给转场，避免提示一闪而过。
+  if (pending) waitTimer = window.setTimeout(() => { status.textContent = '正在打开页面…'; }, 180);
+}
 function clearOverlay() {
   window.clearTimeout(cleanupTimer);
+  showWait();
   root.classList.remove('pt-on', 'pt-play');
 }
 function finishAfter(ms: number) {
@@ -57,38 +69,37 @@ function finishAfter(ms: number) {
 }
 if (root.classList.contains('pt-play')) finishAfter(HANDOFF_MS);
 
-// 系统开了「减少动态效果」就整套不参与（CSS 那边也有一套保险）
-if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-  document.addEventListener(
-    'click',
-    (e) => {
-      const el = e.target as Element | null;
-      const a = el?.closest?.('a') as HTMLAnchorElement | null;
-      if (!a || !precheck(e, a)) return;
-      // 微任务：等本轮事件的所有同步处理器跑完，再看有没有人把它拦下（相册灯箱就是这么干的）
-      queueMicrotask(() => {
-        if (e.defaultPrevented) return; // 有人接管了这次点击 ⇒ 不盖、不写标记
-        try {
-          sessionStorage.setItem(KEY, '1');
-        } catch {
-          return; // 隐私模式下写不进去：这次就没有过渡，不影响导航
-        }
-        root.classList.add('pt-on');
-        finishAfter(STALE_MS);
-      });
-    },
-    true, // 捕获阶段只做初筛；真正的判断在微任务里（见上）
-  );
-}
+// 客户端路由接管的点击由 before-preparation 接手，其余站内导航走浏览器。
+window.addEventListener('click', event => {
+  const link = (event.target as Element | null)?.closest?.('a');
+  if (!link || !precheck(event, link)) return;
+  if (!reducedMotion.matches) {
+    try {
+      sessionStorage.setItem(KEY, '1');
+      root.classList.add('pt-on');
+    } catch { /* 存储不可用时仍然显示等待状态。 */ }
+  }
+  showWait(true);
+  finishAfter(STALE_MS);
+});
+window.addEventListener('pageshow', event => { if (event.persisted) clearOverlay(); });
 
 // 客户端换页沿用原来的墨色过渡，不替换持久播放器。
 document.addEventListener('astro:before-preparation', event => {
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const { signal } = event as TransitionBeforePreparationEvent;
+  const navigation = event as TransitionBeforePreparationEvent;
+  const { signal, loader } = navigation;
   window.clearTimeout(cleanupTimer);
   preparing = signal;
   root.classList.remove('pt-play');
-  root.classList.add('pt-on');
+  if (!reducedMotion.matches) root.classList.add('pt-on');
+  showWait(true);
+  navigation.loader = async () => {
+    try {
+      await loader();
+    } finally {
+      if (preparing === signal) showWait();
+    }
+  };
   signal.addEventListener('abort', () => {
     if (preparing !== signal) return;
     preparing = undefined;
@@ -96,8 +107,9 @@ document.addEventListener('astro:before-preparation', event => {
   }, { once: true });
 });
 document.addEventListener('astro:after-swap', () => {
+  if (preparing !== swapping) return;
   preparing = undefined;
-  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  if (!reducedMotion.matches) {
     root.classList.add('pt-on', 'pt-play');
     finishAfter(HANDOFF_MS);
   } else {
@@ -108,6 +120,7 @@ document.addEventListener('astro:after-swap', () => {
 // 单册返回按钮只回到已经确认的站内来源。
 document.addEventListener('astro:before-swap', event => {
   const { from, to, navigationType, newDocument, signal } = event as TransitionBeforeSwapEvent;
+  swapping = signal;
   if (navigationType !== 'push' || from.origin !== to.origin || from.pathname === to.pathname) return;
   if (!newDocument.querySelector('[data-album-return]')) return;
 

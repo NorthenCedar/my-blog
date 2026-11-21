@@ -1,16 +1,41 @@
+import { createAnchorMotion, isPlainAnchorClick, verticalOffset } from './anchor-motion';
+
 /** 阅读侧栏的增强：章节跳转留在文章的同一条历史里。 */
-export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement, changed: boolean) => void): () => void {
+export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement, changed: boolean, snap?: boolean) => void): () => void {
   const win = doc.defaultView;
   if (!win) return () => {};
   const pairs = [...doc.querySelectorAll<HTMLAnchorElement>('.post-rail .toc a')]
     .map(link => ({ link, heading: doc.getElementById(link.getAttribute('href')!.slice(1)) }))
     .filter((pair): pair is { link: HTMLAnchorElement; heading: HTMLElement } => !!pair.heading);
+  type Section = typeof pairs[number];
+  const prose = doc.querySelector<HTMLElement>('.prose');
+  const reading = [doc.querySelector<HTMLElement>('.post-body > .pagehead'), prose]
+    .filter((area): area is HTMLElement => !!area);
+  const rail = doc.querySelector<HTMLElement>('.post-rail');
+  const ship = doc.querySelector<HTMLElement>('.st-ship');
+  const vessel = ship?.querySelector('.st-vessel');
+  const portal = ship?.querySelector('.st-portal');
+  const wake = ship?.querySelector('.st-wake');
+  const motion = createAnchorMotion(doc, prose);
+  const { reduce, cancel } = motion;
+  const events = new AbortController();
+  const options = { signal: events.signal };
+  const passive = { ...options, passive: true };
   let frame = 0;
   let current = -1;
   let live = true;
+  const mark = (next: number, snap = false) => {
+    const changed = next !== current;
+    if (changed) {
+      pairs[current]?.link.removeAttribute('aria-current');
+      pairs[next].link.setAttribute('aria-current', 'location');
+      current = next;
+    }
+    onActive?.(pairs[next].link, changed, snap);
+  };
   const update = () => {
     frame = 0;
-    if (!live || !pairs.length) return;
+    if (!live || !pairs.length || motion.active) return;
     const viewportTop = win.visualViewport?.offsetTop ?? 0;
     const threshold = viewportTop + (win.visualViewport?.height ?? win.innerHeight) * 0.2;
     let next = 0;
@@ -27,37 +52,77 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
         if (top >= inset - 2) next = index;
       }
     }
-    const changed=next!==current;
-    if(changed){
-      current = next;
-      pairs.forEach(({ link }, i) => {
-        if (i === next) link.setAttribute('aria-current', 'location');
-        else link.removeAttribute('aria-current');
-      });
-    }
-    onActive?.(pairs[next].link,changed);
+    mark(next);
   };
   const schedule = () => { if (live && !frame && pairs.length) frame = win.requestAnimationFrame(update); };
-  const jumpToHeading = (event: MouseEvent) => {
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const pair = pairs.find(({ link }) => link === event.currentTarget);
-    if (!pair) return;
-    const { link, heading } = pair;
-    event.preventDefault();
+  const interrupt = () => {
+    if (!motion.active) return;
+    cancel();
+    schedule();
+  };
+  const jump = ({ link, heading }: Section, behavior: ScrollBehavior) => {
     // 保留路由的历史状态；返回键直接回到进入本文前的页面。
     if (win.location.hash !== link.hash) win.history.replaceState(win.history.state, '', link.href);
     if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
     heading.focus({ preventScroll: true });
-    heading.scrollIntoView({ block: 'start' });
+    heading.scrollIntoView({ block: 'start', behavior });
+    if (behavior === 'instant') mark(pairs.findIndex(pair => pair.link === link), true);
     schedule();
   };
-  pairs.forEach(({ link }) => link.addEventListener('click', jumpToHeading));
-  win.addEventListener('scroll', schedule, { passive: true });
-  win.addEventListener('resize', schedule, { passive: true });
-  win.addEventListener('hashchange', schedule);
-  win.visualViewport?.addEventListener('scroll', schedule, { passive: true });
-  win.visualViewport?.addEventListener('resize', schedule, { passive: true });
-  const prose = doc.querySelector('.prose');
+  const prepareShip = (direction: number) => {
+    const snapshot = (element: Element) => {
+      const { opacity, translate, scale } = win.getComputedStyle(element);
+      return { opacity, translate, scale };
+    };
+    const vesselFrom = vessel && snapshot(vessel);
+    const portalFrom = portal && snapshot(portal);
+    const wakeOpacity = wake && win.getComputedStyle(wake).opacity;
+    const atDock = { opacity: 0, scale: .24 };
+    const open = { opacity: .78, scale: 1 };
+    return (entering: boolean, timing: KeyframeAnimationOptions) => {
+      const animations: Animation[] = [];
+      if (!ship || ship.hidden) return animations;
+      const dock = verticalOffset(11 * direction * (entering ? 1 : -1));
+      const doorway = { ...open, translate: dock };
+      const smallShip = { ...atDock, translate: dock };
+
+      if (portal && portalFrom) animations.push(portal.animate(entering
+        ? [doorway, { ...doorway, offset: .32 }, { opacity: 0, scale: .58, translate: dock }]
+        : [portalFrom, { ...doorway, offset: .32 }, doorway], timing));
+      if (vessel && vesselFrom) animations.push(vessel.animate(entering
+        ? [smallShip, { opacity: 1, scale: 1, translate: verticalOffset(0) }]
+        : [vesselFrom, { ...vesselFrom, offset: .18 }, smallShip], timing));
+      if (wake) animations.push(wake.animate(entering
+        ? [{ opacity: 0 }, { opacity: 1 }]
+        : [{ opacity: wakeOpacity }, { opacity: 0 }], timing));
+      return animations;
+    };
+  };
+  const jumpToHeading = (event: MouseEvent) => {
+    if (!isPlainAnchorClick(event)) return;
+    const pair = pairs.find(({ link }) => link === event.currentTarget);
+    if (!pair) return;
+    event.preventDefault();
+    // 手机目录在正文流内，离开时一起淡出。桌面的粘性目录留在原位。
+    const areas = rail && win.getComputedStyle(rail).position !== 'sticky' ? [...reading, rail] : reading;
+    motion.jump(pair.heading, areas, behavior => jump(pair, behavior), prepareShip);
+  };
+  pairs.forEach(({ link }) => link.addEventListener('click', jumpToHeading, options));
+  win.addEventListener('scroll', schedule, passive);
+  win.addEventListener('resize', schedule, passive);
+  win.addEventListener('hashchange', () => { interrupt(); schedule(); }, options);
+  win.visualViewport?.addEventListener('scroll', schedule, passive);
+  win.visualViewport?.addEventListener('resize', schedule, passive);
+  win.addEventListener('wheel', interrupt, passive);
+  win.addEventListener('touchmove', interrupt, passive);
+  win.addEventListener('popstate', interrupt, options);
+  reduce.addEventListener('change', () => { if (reduce.matches) interrupt(); }, options);
+  win.addEventListener('pointerdown', event => {
+    if (motion.active && (event.target as Element | null)?.closest?.('[data-rail], .inner-scroll-rail')) interrupt();
+  }, passive);
+  win.addEventListener('keydown', event => {
+    if (motion.active && !event.defaultPrevented && /^(?:Escape|ArrowUp|ArrowDown|PageUp|PageDown|Home|End| )$/.test(event.key)) interrupt();
+  }, options);
   const observer = prose && win.ResizeObserver ? new win.ResizeObserver(schedule) : null;
   if (observer && prose) observer.observe(prose);
   doc.fonts?.ready.then(schedule);
@@ -85,19 +150,14 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
   };
   if (button && canonical && win.navigator.clipboard?.writeText) {
     button.hidden = false;
-    button.addEventListener('click', copy);
+    button.addEventListener('click', copy, options);
   }
   return () => {
     live = false;
+    events.abort();
+    cancel();
     win.cancelAnimationFrame(frame);
     win.clearTimeout(timer);
     observer?.disconnect();
-    pairs.forEach(({ link }) => link.removeEventListener('click', jumpToHeading));
-    win.removeEventListener('scroll', schedule);
-    win.removeEventListener('resize', schedule);
-    win.removeEventListener('hashchange', schedule);
-    win.visualViewport?.removeEventListener('scroll', schedule);
-    win.visualViewport?.removeEventListener('resize', schedule);
-    button?.removeEventListener('click', copy);
   };
 }

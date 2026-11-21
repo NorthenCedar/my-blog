@@ -139,6 +139,8 @@ html.theme-previewing *::after {
   --cursor-disc-fill: #1a1a1a14;
   --cursor-disc-hot-fill: #1a1a1a29;
   --cursor-dot: #ffffff;
+  --scrollbar-thumb: #909090;
+  --scrollbar-thumb-drag: #7c7c7c;
   --cursor-dot-line: #1a1a1a59;
   --cursor-ripple: #ffffffe6;
   --cursor-ripple-line: #1a1a1a40;

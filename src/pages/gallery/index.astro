@@ -32,7 +32,13 @@ const bathFrames = albums.flatMap(album => album.frames.flatMap(frame => {
       <section class="slide kind-develop" data-slide="0" data-kind="develop" data-title="显影板" aria-labelledby="develop-title">
         <h2 class="sr-only" id="develop-title">显影板</h2>
         <div class="develop-topnote" data-reveal data-order="-1"><span>{albums.length} 本相册</span><i></i><span>{total} 张照片</span></div>
-        <div class="develop-bottom" data-reveal data-order="3"><p>移动鼠标，让照片显影。<span>触屏可涂抹，点击箭头继续。</span></p><button type="button" data-advance>翻到相册封面 <span aria-hidden="true">↓</span></button></div>
+        <div class="develop-bottom" data-reveal data-order="3">
+          <p class="develop-guide">
+            <span class="develop-mouse">移动鼠标，让照片显影。向下滚动可翻页。</span>
+            <span class="develop-touch">用手指在画面上涂抹，让照片显影。</span>
+          </p>
+          <button type="button" data-advance>翻到相册封面 <span aria-hidden="true">↓</span></button>
+        </div>
       </section>
       <section id="gallery-overview" class="slide kind-arc" data-slide="1" data-kind="arc" data-title="弧形封面" data-gallery-overview aria-labelledby="cover-arc-title">
         <h2 class="sr-only" id="cover-arc-title">弧形封面</h2>
@@ -55,7 +61,7 @@ const bathFrames = albums.flatMap(album => album.frames.flatMap(frame => {
           </section>
         )}
         {albums.length > 0 ? (
-          <ul class="catalog-albums" data-arc-fallback>
+          <ul class="catalog-albums" data-arc-fallback data-scrollbars>
             {albums.map((album, index) => {
               const cover = coverPresentation(album, index)!;
               return (
@@ -78,7 +84,7 @@ const bathFrames = albums.flatMap(album => album.frames.flatMap(frame => {
     </div>
     <div class="pager">
       <div class="page-reading"><span class="position"><b data-current>01</b><span>/ {String(count).padStart(2,'0')}</span></span><span class="album-current" data-current-title>显影板</span></div>
-      <p class="view-hint"><span class="desktop-hint">滚动翻页</span><span class="mobile-hint">上下滑动翻页</span><i aria-hidden="true"></i><span data-hint>涂抹显影，再往下翻</span></p>
+      <p class="view-hint"><span class="desktop-hint">滚动翻页</span><span class="mobile-hint">上下滑动翻页</span><i aria-hidden="true"></i><span data-hint>左右拖动封面 · 点击进册</span></p>
       <div class="pager-actions">
         <button type="button" class="catalog-button" data-catalog aria-haspopup="dialog">相册目录<span aria-hidden="true">☷</span></button>
         <div class="direction-buttons"><button type="button" data-prev aria-label="上一页"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" data-next aria-label="下一页"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button></div>
@@ -86,7 +92,7 @@ const bathFrames = albums.flatMap(album => album.frames.flatMap(frame => {
     </div>
   </div>
   <p class="sr-only" data-status role="status" aria-live="polite"></p>
-  <dialog class="gallery-catalog" aria-labelledby="catalog-title">
+  <dialog class="gallery-catalog" data-scrollbars aria-labelledby="catalog-title">
     <header><div><p>{total} 张照片</p><h2 id="catalog-title">挑一本，慢慢看。</h2></div><button type="button" data-close-catalog aria-label="关闭相册目录">×</button></header>
     <div class="catalog-scenes true-focus"><TrueFocusFrame /><button type="button" data-pick="0"><span>01</span>显影板</button><button type="button" data-pick="1"><span>02</span>弧形封面</button></div>
     <div class="catalog-list">{albums.map((album,index)=>{const cover=coverPresentation(album,index)!;return <button type="button" data-pick={index+2}><img src={cover.src} alt={cover.alt} width="80" height="90" loading="lazy"/><span><b>{album.title}</b><small>{album.total} 张照片</small></span><span class="catalog-no">{String(index+1).padStart(2,'0')}</span></button>})}</div>

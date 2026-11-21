@@ -46,7 +46,7 @@ function hide(slide){
   slide.classList.remove('is-active','is-out');slide.style.visibility='hidden';slide.style.opacity='0';slide.inert=true;slide.setAttribute('aria-hidden','true');
 }
 function syncHint(target=slides[selection.index]){
-  const hints={develop:'涂抹显影，再往下翻',arc:'左右拖动封面 · 点击进册'};
+  const hints={arc:'左右拖动封面 · 点击进册'};
   const hint=document.querySelector('[data-hint]');if(hint)hint.textContent=hints[target.dataset.kind]||'点击照片或文字看相册';
 }
 function show(index,direction=1,initial=false){
@@ -94,7 +94,8 @@ function go(index){const current=selection.index;const clamped=Math.max(0,Math.m
 /* ★ 绑定一律经 on()：控件缺了就跳过（装置降级），不许在首幕揭开前炸掉。 */
 const on=(el,event,fn)=>el&&el.addEventListener(event,fn);
 on(prev,'click',()=>go(selection.index-1));on(next,'click',()=>go(selection.index+1));
-on(document.querySelector('[data-advance]'),'click',()=>go(1));
+const advance=document.querySelector('[data-advance]');
+on(advance,'click',()=>go(1));
 mountWheelNavigation(document,{
   scene:()=>slides[selection.index].dataset.kind,
   blocked:overlayOpen,
@@ -131,9 +132,18 @@ document.addEventListener('keydown',event=>{
   if(index!==null){event.preventDefault();go(index)}
 });
 let touch=null;
-on(stage,'pointerdown',event=>{if(event.pointerType==='touch'&&!event.target.closest('[data-bath]'))touch={x:event.clientX,y:event.clientY,target:event.target}});
+on(stage,'pointerdown',event=>{
+  if(event.pointerType==='touch'&&event.isPrimary)touch={id:event.pointerId,x:event.clientX,y:event.clientY,target:event.target};
+});
 on(stage,'pointerup',event=>{
-  if(event.pointerType!=='touch'||!touch)return;const direction=swipeIntent(event.clientX-touch.x,event.clientY-touch.y);touch=null;
+  if(event.pointerId!==touch?.id)return;
+  const {clientX,clientY}=event,dx=clientX-touch.x,dy=clientY-touch.y,target=touch.target;
+  touch=null;
+  // 紧接显影涂抹的轻触可能被浏览器抑制 click，按钮在确认抬手位置后直接翻页。
+  if(Math.hypot(dx,dy)<12&&advance?.contains(target)&&advance.contains(document.elementFromPoint(clientX,clientY))){
+    go(1);return;
+  }
+  const direction=swipeIntent(dx,dy);
   if(direction){go(selection.index+direction);suppressClickUntil=performance.now()+400;}
 });
 on(stage,'pointercancel',()=>{touch=null});

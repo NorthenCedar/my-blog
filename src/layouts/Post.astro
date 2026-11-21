@@ -66,13 +66,14 @@ const shareCover = !entry.data.draft && entry.data.cover ? `/post-covers/${meta.
   <div class="post-layout">
   <article class="post-body">
   <header class="pagehead" id={topId} tabindex="-1">
+    <a class="post-back" href="/archive/"><span aria-hidden="true">←</span> 返回归档</a>
     <Meta post={meta} />
     <h1 class="hero-title">{meta.title}</h1>
     <p class="standfirst">{meta.summary}</p>
   </header>
 
   {/* 电脑目录与页头一起进入两栏；手机继续按页头、目录、正文的自然顺序阅读。 */}
-    <aside class="post-rail" aria-label="阅读导航">
+    <aside class="post-rail" data-scrollbars aria-label="阅读导航">
       <Toc headings={toc} />
       <div class="post-tools">
         <button type="button" data-copy-link hidden>复制链接</button>
@@ -108,6 +109,20 @@ const shareCover = !entry.data.draft && entry.data.cover ? `/post-covers/${meta.
      四角定位点与页头内边距由外壳的 .pagehead 提供（内页外壳基础设施，各页复用）。 */
   .pagehead {
     max-width: var(--measure);
+  }
+  .post-back {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    min-block-size: 44px;
+    margin-block-end: var(--sp-2);
+    color: var(--accent-ink);
+    font-size: var(--fs-sm);
+    text-decoration: none;
+  }
+  .post-back:is(:hover, :focus-visible) {
+    text-decoration: underline;
+    text-underline-offset: .22em;
   }
   .post-layout {
     max-width: var(--measure);
@@ -218,8 +233,8 @@ const shareCover = !entry.data.draft && entry.data.cover ? `/post-covers/${meta.
       max-height: calc(100dvh - var(--sp-6) * 2);
       overflow-y: auto;
       scrollbar-width: thin;
-      scrollbar-color: var(--hair) transparent;
     }
+    .post-rail[data-inner-scroll] { padding-inline-end: 14px; }
     .post-rail :global(.toc) {
       margin: 0;
       padding: var(--sp-3) 0;
@@ -300,9 +315,9 @@ onPage(({ document, keep, addEventListener, IntersectionObserver }) => {
   let motion: ReturnType<typeof createTocMotion> | undefined;
   let active: HTMLAnchorElement | undefined;
   let live = true;
-  const disposeRail = initPostRail(document, (link, changed) => {
+  const disposeRail = initPostRail(document, (link, changed, snap) => {
     active = link;
-    motion?.moveTo(link, changed);
+    motion?.moveTo(link, changed || snap, snap);
   });
 
   const dispose = () => {

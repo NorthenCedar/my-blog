@@ -15,39 +15,47 @@ onPage(({ document, keep, addEventListener }) => {
     scroll();
   }
   const fallback = document.querySelector<HTMLInputElement>('.navtog');
-  const label = document.querySelector<HTMLLabelElement>('.navbtn');
   const trigger = document.querySelector<HTMLButtonElement>('[data-nav-open]');
-  const drawer = document.querySelector<HTMLElement>('[data-staggered-menu]');
-  if (!fallback || !label || !trigger || !drawer || !('showModal' in HTMLDialogElement.prototype)) return;
+  const drawer = document.querySelector<HTMLDialogElement>('[data-staggered-menu]');
+  if (!fallback || !trigger || typeof drawer?.showModal !== 'function') return;
 
-  let active = true;
-  let opening = false;
-  let loading: ReturnType<typeof load> | undefined;
-  const load = () => import('./staggered-site-menu');
+  let mount: typeof import('./staggered-site-menu').mountSiteMenu | undefined;
   const preload = () => {
-    loading ??= load();
-    void loading.catch(() => { loading = undefined; });
+    void import('./staggered-site-menu').then(module => { mount = module.mountSiteMenu; }, () => {});
+  };
+  const open = () => {
+    trigger.focus({ preventScroll: true });
+    drawer.showModal();
+    preload();
   };
 
-  label.hidden = fallback.hidden = true;
   trigger.hidden = false;
   const events = new AbortController();
   const options = { signal: events.signal };
-  for (const event of ['pointerenter', 'pointerdown', 'focus']) trigger.addEventListener(event, preload, options);
-  trigger.addEventListener('click', async () => {
-    if (opening) return;
-    opening = true;
-    try {
-      const { mountSiteMenu } = await (loading ?? load());
-      if (active) keep(mountSiteMenu(trigger, drawer));
-    } catch (error) {
-      if (!active) return;
-      trigger.hidden = true;
-      label.hidden = fallback.hidden = false;
-      fallback.checked = true;
-      fallback.focus({ preventScroll: true });
-      console.error('菜单加载失败', error);
+  trigger.addEventListener('pointerenter', preload, options);
+  trigger.addEventListener('click', () => {
+    if (drawer.open) return;
+    // 冷启动直接打开现有链接。动画加载完成后，从下一次开启开始使用。
+    if (mount) {
+      keep(mount(trigger, drawer));
+      events.abort();
+      return;
+    }
+    open();
+  }, options);
+  drawer.addEventListener('click', event => {
+    if (event.target === drawer || (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey
+      && (event.target as Element).closest('.sm-panel-item'))) {
+      drawer.close();
     }
   }, options);
-  keep(() => { active = false; events.abort(); });
+  // 公共脚本迟到时接管已打开的无脚本菜单。
+  if (fallback.checked) {
+    fallback.checked = false;
+    open();
+  }
+  keep(() => {
+    events.abort();
+    if (drawer.open) drawer.close();
+  });
 }, '[data-staggered-menu]');
