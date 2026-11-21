@@ -1,6 +1,6 @@
 import { recordPageview, type PageviewEnv } from './api/_lib/pageviews';
 import { browserHeaders } from '../src/lib/browser-security.mjs';
-import documentCsp from './api/_generated/document-csp.json' with { type: 'json' };
+import documentCsp from './api/_generated/document-csp.json';
 
 /** 统计直接访问，并为经过 Functions 的页面和接口补响应头。 */
 export const onRequest: PagesFunction<PageviewEnv> = async (context) => {
