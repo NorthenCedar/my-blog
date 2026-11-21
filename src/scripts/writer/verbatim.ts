@@ -138,7 +138,11 @@ export function mergeVerbatim(
   let pendingGap = '';
   for (let i = 0; i < current.length; i++) {
     const index = matched[i]!;
-    if (i > 0) out += pendingGap;
+    if (i > 0) {
+      out += pendingGap;
+      // 原末块可能没有行尾，插入相邻块时需要补上分隔。
+      if (out && !out.endsWith('\n')) out += eol + eol;
+    }
     if (index >= 0) {
       out += blocks[index]!.text;
       pendingGap = blocks[index]!.gap;
