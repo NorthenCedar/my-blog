@@ -97,7 +97,8 @@ p1和p2都是point，里面有x和y的值
 
   &#32;&#32;&#32;&#32;p1 = (struct point){5, 10};  // 相当于p1.x = 5;   p1.y = 10;
 
-  &#32;&#32;&#32;&#32;p1 = p2;  // 相当于p1.x = p2.x;  p1.y = p2.y;```c
+  &#32;&#32;&#32;&#32;p1 = p2;  // 相当于p1.x = p2.x;  p1.y = p2.y;
+```c
 #include <stdio.h>
 
 struct date {
@@ -133,4 +134,113 @@ int main(int argc, char const **argv) {
 
 - 整个结构可以作为参数的值传入函数
 
-- 这时候是在函数内新建一个结构变量，并复制diao'y
+- 这时候是在函数内新建一个结构变量，并复制调用者的结构的值
+
+- 也可以返回一个结构，这与数组完全不同
+```c
+#include <stdio.h>
+#include <stdbool.h>
+
+struct date {
+    int month;
+    int day;
+    int year;
+};
+
+bool isLeap(struct date d);
+int numberOfDays(struct date d);
+
+int main(int argc, char const **argv) {
+    struct date today, tomorrow;
+
+    printf("Enter today's date (mm dd yyyy): ");
+    scanf("%i %i %i", &today.month, &today.day, &today.year);   // &的优先级高于.
+
+    if (today.day != numberOfDays(today)) {
+        tomorrow.day = today.day + 1;
+        tomorrow.month = today.month;
+        tomorrow.year = today.year;
+    } else if (today.month == 12) {
+        tomorrow.day = 1;
+        tomorrow.month = 1;
+        tomorrow.year = today.year + 1;
+    } else {
+        tomorrow.day = 1;
+        tomorrow.month = today.month + 1;
+        tomorrow.year = today.year;
+    }
+
+    printf("Tomorrow's date is %i-%i-%i\n", tomorrow.month, tomorrow.day, tomorrow.year);
+
+    return 0;
+}
+
+int numberOfDays(struct date d) {
+    int days;
+    
+    const int daysPerMonth[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
+
+    if (d.month == 2 && isLeap(d))
+        days = 29;
+    else
+        days = daysPerMonth[d.month - 1];
+
+    return days;
+}
+
+bool isLeap(struct date d)
+{
+    bool leap = false;
+
+    if ((d.year % 4 == 0 && d.year % 100 != 0) || d.year % 400 == 0)
+        leap = true;
+
+    return leap;
+}
+```
+### 输入结构
+
+- 没有直接的方式可以一次scanf一个结构
+
+- 如果准备写一个函数来读入结构
+
+```c
+#include <stdio.h>
+
+struct point {
+    int x;
+    int y;
+};
+
+void getStruct(struct point);
+void output(struct point);
+int main() {
+    struct point y = {0,0};
+    getStruct(y);
+    output(y);
+
+    return 0;
+}
+
+void getStruct(struct point p) {
+    scanf("%d", &p.x);
+    scanf("%d", &p.y);
+    printf("%d %d\n", p.x, p.y);   // 这里会输出你输入的值
+}
+
+void output(struct point p) {
+    printf("%d %d\n", p.x, p.y);   // 这里会输出0 0，因为p是局部变量，函数结束时会销毁
+}
+```
+
+但是读入的结构如何送回来呢
+
+- 记住c在函数调用时是传值的
+
+  &#32;&#32;&#32;&#32;所以函数中的p与main中的y是不同的
+
+  &#32;&#32;&#32;&#32;在函数读入了p的数值之后，还没有任何东西回到main，所以y还是{0,0}
+
+### 解决方案
+
+熬不动了，明天接着写，欲知后事如何，且听下回分解
