@@ -158,7 +158,7 @@ title: 关于
 
 我叫北杉，是一个大学生。这个博客写我个人的成长经历。
 
-想联系我，发邮件到 a13655515876@163.com。
+想联系我，发邮件到 owner@example.com。
 ```
 
 - [ ] **Step 5: 写 `astro.config.mjs`**
@@ -1210,7 +1210,7 @@ const year = new Date().getFullYear();
   <div class="wrap">
     <span>© {year} 北杉札记</span>
     <span>
-      <a href="mailto:a13655515876@163.com">a13655515876@163.com</a>
+      <a href="mailto:owner@example.com">owner@example.com</a>
       <a href="https://github.com/NorthenCedar" rel="me noopener">GitHub</a>
       <a href="/rss.xml">RSS</a>
     </span>

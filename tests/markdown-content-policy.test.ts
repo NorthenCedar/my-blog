@@ -2,9 +2,14 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { beforeAll, expect, it } from 'vitest';
 import config from '../astro.config.mjs';
+import { validatePublish } from '../src/lib/writer/content';
 
 const options = { fileURL: pathToFileURL(resolve('markdown-policy-fixture.md')) };
 let renderer: Awaited<ReturnType<typeof config.markdown.processor.createRenderer>>;
+const post = (body: string) => ({
+  fields: { title: '测试正文', date: '2026-11-01', summary: '兼容性检查', tags: ['随笔'] },
+  body, assets: [], audios: [],
+});
 
 beforeAll(async () => {
   renderer = await config.markdown.processor.createRenderer(config.markdown);
@@ -12,7 +17,7 @@ beforeAll(async () => {
 
 it('保留作者视频、折叠说明、删除线、表格、语音和任务列表', async () => {
   const audio = `/audio/${'a'.repeat(64)}.mp3`;
-  const result = await renderer.render(`## 标题
+  const body = `## 标题
 
 <details><summary>展开</summary><video controls playsinline preload="none"><source src="/videos/demo.mp4" type="video/mp4"></video></details>
 
@@ -30,7 +35,9 @@ it('保留作者视频、折叠说明、删除线、表格、语音和任务列�
 
 ~~~
 <custom-note>这是代码示例</custom-note>
-~~~`, options);
+~~~`;
+  expect(() => validatePublish('post', post(body))).not.toThrow();
+  const result = await renderer.render(body, options);
 
   expect(result.code).toContain('<details><summary>展开</summary><video controls playsinline preload="none">');
   expect(result.code).toContain('<source src="/videos/demo.mp4" type="video/mp4">');
@@ -49,6 +56,7 @@ it.each([
   ['<aside data-note="普通说明">正文</aside>', /dataNote 属性/],
   ['<a href="urn:isbn:9780131103627">书目</a>', /href 属性/],
 ])('白名单之外的正文记法在发布构建前报告规则与文件', async (body, reason) => {
+  expect(() => validatePublish('post', post(body))).toThrow(reason);
   const build = renderer.render(body, options);
   await expect(build).rejects.toThrow('markdown-policy-fixture.md');
   await expect(build).rejects.toThrow(reason);

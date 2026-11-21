@@ -26,7 +26,7 @@
 """
 import subprocess, os, sys, pathlib
 
-ROOT = pathlib.Path(r'D:\router\blog')
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 SHADERS = ROOT / 'src/scripts/fin-shaders.ts'
 SCENE = ROOT / 'src/scripts/fin-scene.ts'
 CTRL = ROOT / 'src/scripts/fin-infinity.ts'

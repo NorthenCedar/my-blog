@@ -12,6 +12,7 @@ import type { VisitorEnv } from './visitor-store';
 
 /** 「我回复的是哪一条」—— 顶层评论或它下面的一条回复 */
 export type NoticeTarget = { kind: 'comment' | 'reply'; id: number };
+export type NoticePosition = { createdAt: string; id: number };
 
 export type ReplyNotice = {
   id: number;
@@ -153,12 +154,19 @@ export async function listReplyNotices(
   env: VisitorEnv,
   userId: string,
   limit = 20,
-  beforeId?: number
-): Promise<{ unread: number; items: ReplyNotice[]; nextBefore: number | null }> {
+  before?: NoticePosition | number
+): Promise<{ unread: number; items: ReplyNotice[]; nextBefore: number | null; nextCursor: string | null }> {
   try {
-    // 游标必须属于当前账户；时间相同时以编号排序，旧通知也能稳定翻页。
-    const filter = beforeId ? ' AND (created_at, id) < (SELECT created_at, id FROM reply_notices WHERE user_id = ? AND id = ?)' : '';
-    const values = beforeId ? [userId, beforeId] : [];
+    let filter = '';
+    const values: (string | number)[] = [userId];
+    if (typeof before === 'number') {
+      // 兼容仍只发送编号的旧页面，按当前账户查找起点。
+      filter = ' AND (created_at, id) < (SELECT created_at, id FROM reply_notices WHERE user_id = ? AND id = ?)';
+      values.push(userId, before);
+    } else if (before) {
+      filter = ' AND (created_at, id) < (?, ?)';
+      values.push(before.createdAt, before.id);
+    }
     const [, counted, listed] = await env.COMMENTS_DB.batch([
       // 旧信箱在首次读取时清理，计数和分页都基于同一批保留记录。
       pruneNotices(env, userId),
@@ -166,16 +174,18 @@ export async function listReplyNotices(
       env.COMMENTS_DB.prepare(
         'SELECT id, slug, parent_id, reply_id, actor_name, excerpt, created_at, read_at ' +
           `FROM reply_notices WHERE user_id = ?${filter} ORDER BY created_at DESC, id DESC LIMIT ?`
-      ).bind(userId, ...values, limit + 1),
+      ).bind(...values, limit + 1),
     ]);
     const unread = (counted.results?.[0] as { n?: number } | undefined)?.n ?? 0;
     const rows = (listed.results ?? []) as Array<{
       id: number; slug: string; parent_id: number; reply_id: number | null;
       actor_name: string; excerpt: string; created_at: string; read_at: number | null;
     }>;
+    const last = rows.length > limit ? rows[limit - 1] : undefined;
     return {
       unread,
-      nextBefore: rows.length > limit ? rows[limit - 1].id : null,
+      nextBefore: last?.id ?? null,
+      nextCursor: last ? `${last.created_at}|${last.id}` : null,
       items: rows.slice(0, limit).map((r) => ({
         id: r.id,
         slug: r.slug,
@@ -192,7 +202,7 @@ export async function listReplyNotices(
       })),
     };
   } catch (error) {
-    if (forgiveMissingTable(error)) return { unread: 0, items: [], nextBefore: null };
+    if (forgiveMissingTable(error)) return { unread: 0, items: [], nextBefore: null, nextCursor: null };
     throw error;
   }
 }

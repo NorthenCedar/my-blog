@@ -26,7 +26,7 @@ import { join, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // 默认值从**脚本自身位置**推导，不再硬编码本机绝对路径。
-// 之前写的是 `D:\router\...` 那类绝对路径；开源脱敏时被换成了占位符，
+// 之前写的是 `<工作区>\...` 那类绝对路径；开源脱敏时被换成了占位符，
 // 而占位符不是合法路径 —— 这两个默认值会静默指向不存在的目录。
 // `scripts/` 的上一级就是仓库根，所以 dist 也在脚下。
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));

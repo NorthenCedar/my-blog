@@ -7,6 +7,7 @@ import { forgePageSchema } from '../forge-page-schema.ts';
 import { z } from 'astro/zod';
 import MarkdownIt from 'markdown-it';
 import { requireContentLink } from '../content-urls.mjs';
+import { postMarkdownIssue } from './markdown-policy.ts';
 import { writerFail,writerTargetPath,writerAssetDirectory,utf8Length,validateTarget,validateWriterValue,type WriterValue,type WriterDraft,type WriterChange } from './model.ts';
 const bad=(message='原文格式暂不支持安全编辑，请在本地处理')=>writerFail(400,'invalid_content',message);
 const conflict=()=>writerFail(409,'content_conflict','这篇内容已在其他地方修改，请重新导入并对照当前草稿');
@@ -221,6 +222,12 @@ export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:
       (!/^(?:\.\/)?[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(cover)||cover.includes('..')))bad('请选择本篇文章目录中的封面图片');
   }
   if(!value.body.trim()&&!value.assets.length&&!Array.isArray(fields.images)&&!Array.isArray(fields.videos)) bad('请先填写正文或配图');
+  if (kind === 'post' && value.body) {
+    // 私密素材引用在实际发布时会变为这些站内路径，预检使用相同的正文替换方式。
+    const withImages = replaceImages(value.body, sha => `./writer-${sha}.webp`);
+    const issue = postMarkdownIssue(replaceAudio(withImages, sha => `/audio/${sha}.mp3`));
+    if (issue) bad(`正文校验失败：${issue}`);
+  }
 }
 export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,currentText:string|null,assetBytes:Map<string,Uint8Array>):WriterChange[]{
   const {kind,key}=validateTarget(draft.kind,draft.key),value=validateWriterValue(kind,draft.value,draft.base);validatePublish(kind,value,draft.base);

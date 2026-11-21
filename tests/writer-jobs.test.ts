@@ -1,4 +1,4 @@
-import { expect,it } from 'vitest';
+import { expect,it,vi } from 'vitest';
 import { writerFixture } from './_writer';
 import { writerProof } from '../functions/api/_lib/writer-auth';
 import { createDraft,saveDraft,readDraft } from '../functions/api/_lib/writer-drafts';
@@ -6,8 +6,29 @@ import { createJob,readJob,claimJob,authorizePush,recordJob,cancelJob } from '..
 import { putAsset,deleteAsset } from '../functions/api/_lib/writer-assets';
 import sharp from 'sharp';
 import { onRequestPost as runner } from '../functions/api/writer/runner';
+import { onRequestPost as publish } from '../functions/api/writer/publish';
 async function setup(){const s=await writerFixture(),proof=await writerProof(s.request(),{id:s.owner,auth_version:0} as never),value={fields:{title:'标题',date:'2026-10-23',summary:'简介',tags:['随笔']},body:'准备发布',assets:[]};const draft=await createDraft(s.db,proof,{kind:'post',key:'example',base:null,value});return {...s,proof,draft,value};}
 const requestId='1'.repeat(32),commit='3'.repeat(40);
+
+it('发布入口解释正文不支持的标记，保留草稿且不创建任务', async () => {
+  const s = await setup();
+  const body = '<custom-note>一段普通说明</custom-note>';
+  await saveDraft(s.db, s.proof, { id: s.draft.id, requestId: '2'.repeat(32), expectedRevision: 1, value: { ...s.value, body } });
+  const dispatch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+  try {
+    const env = { ...s.env, WRITER_GITHUB_TOKEN: '测试凭据', WRITER_RUNNER_SECRET: 'a'.repeat(32) };
+    const request = s.request('/publish', 'POST', { action: 'publish', draftId: s.draft.id, revision: 2, requestId });
+    const response = await publish({ env, request } as never);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'invalid_content', error: expect.stringContaining('不支持 <custom-note> 标签') });
+    expect(s.sqlite.prepare('SELECT count(*) AS n FROM writer_jobs').get()?.n).toBe(0);
+    expect((await readDraft(s.db, s.owner, s.draft.id)).value.body).toBe(body);
+    expect(dispatch).not.toHaveBeenCalled();
+  } finally {
+    dispatch.mockRestore();
+  }
+});
+
 it('冻结快照不随编辑变化，推送只推进基线和已发布版本，不覆盖新正文',async()=>{
   const s=await setup(),input={draftId:s.draft.id,revision:1,requestId},job=await createJob(s.db,s.proof,input);
   expect((await createJob(s.db,s.proof,input)).id).toBe(job.id);

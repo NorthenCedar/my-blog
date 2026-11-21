@@ -1,9 +1,25 @@
 // @vitest-environment happy-dom
 import {afterEach,expect,it,vi} from 'vitest';
 import {createMusicDock} from '../src/scripts/music-dock';
+
+const forgeScene = vi.hoisted(() => ({ draw: null as ((progress: number) => void) | null }));
+vi.mock('../src/scripts/forge-scene.js', () => ({
+  createForgeScene(_canvas: HTMLCanvasElement, draw: (progress: number) => void) {
+    forgeScene.draw = draw;
+    return { setTheme() {}, setProgress() {}, dispose() { forgeScene.draw = null; } };
+  },
+}));
+vi.mock('../src/scripts/scene-startup', () => ({
+  scheduleSceneStartup(run: () => void) {
+    let canceled = false;
+    queueMicrotask(() => { if (!canceled) run(); });
+    return () => { canceled = true; };
+  },
+}));
+
 let cleanup=()=>{};
 const originalW=Object.getOwnPropertyDescriptor(window,'innerWidth'),originalH=Object.getOwnPropertyDescriptor(window,'innerHeight');
-afterEach(()=>{cleanup();vi.restoreAllMocks();vi.useRealTimers();if(originalW)Object.defineProperty(window,'innerWidth',originalW);if(originalH)Object.defineProperty(window,'innerHeight',originalH);document.body.replaceChildren();});
+afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();vi.useRealTimers();if(originalW)Object.defineProperty(window,'innerWidth',originalW);if(originalH)Object.defineProperty(window,'innerHeight',originalH);document.body.replaceChildren();});
 const rect=(left:number,top:number,width:number,height:number)=>({left,top,right:left+width,bottom:top+height,width,height}) as DOMRect;
 function setup(prefix=''){
   document.body.innerHTML=prefix+'<aside data-music><div class="music-bar"><button>播放</button><button>展开</button></div><section id="music-panel" hidden></section></aside>';
@@ -105,6 +121,53 @@ it('帆船与尾波的样式更新不会重测控件，移动按钮的容器仍�
   const anchor = bar.getBoundingClientRect();
   measure.mockReturnValue(rect(anchor.left + 10, anchor.top + 5, 80, 44));
   button.parentElement!.style.transform = 'translateY(600px)';
+  await settle();
+  expect(bar.inert).toBe(true);
+});
+
+it('造物台连接阶段的 30 帧装饰变化不测量控件，实际出现的链接仍会触发避让', async () => {
+  const { root, bar, flush } = setup(`<section class="hero"><div class="hero-stage">
+    <div class="etched-surface"></div><div class="hero-heading"></div><div class="connection-copy"></div>
+    <div class="scene-wrap"><canvas id="forge-scene"></canvas></div>
+    <div class="stage-progress"><i></i></div><button data-stage="0.48">连接</button>
+    <div class="arrival-note" inert><a href="#works">看作品</a></div>
+  </div></section>${'<button>页面操作</button>'.repeat(58)}`);
+  const stage = document.querySelector<HTMLElement>('.hero-stage')!;
+  const link = stage.querySelector('a')!;
+  stage.getBoundingClientRect = () => rect(0, 0, 1280, 600);
+  vi.stubGlobal('IntersectionObserver', class {
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+    observe(target: Element) {
+      if (target === stage) this.callback([{ intersectionRatio: 1 } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+    }
+    disconnect() {}
+  });
+  const measures = [...document.querySelectorAll('button:not(.music-bar button), .arrival-note a')]
+    .map(control => vi.spyOn(control, 'getBoundingClientRect').mockReturnValue(rect(20, 100, 80, 44)));
+
+  const { initForge } = await import('../src/scripts/forge');
+  const disposeForge = initForge(document.body);
+  cleanup = disposeForge;
+  await vi.dynamicImportSettled();
+  const draw = forgeScene.draw!;
+  expect(typeof draw).toBe('function');
+  const dock = createMusicDock(root, () => {});
+  cleanup = () => { dock.dispose(); disposeForge(); };
+  const settle = async () => { await new Promise(resolve => setTimeout(resolve, 0)); flush(); };
+  draw(.32);
+  await settle();
+  for (const measure of measures) measure.mockClear();
+
+  for (let frame = 1; frame <= 30; frame++) {
+    draw(.32 + frame * .003);
+    await settle();
+  }
+  expect(stage.dataset.progress).toBe('0.410');
+  expect(measures.reduce((reads, measure) => reads + measure.mock.calls.length, 0)).toBe(0);
+
+  const anchor = bar.getBoundingClientRect();
+  vi.mocked(link.getBoundingClientRect).mockReturnValue(rect(anchor.left + 10, anchor.top + 5, 80, 44));
+  draw(.92);
   await settle();
   expect(bar.inert).toBe(true);
 });

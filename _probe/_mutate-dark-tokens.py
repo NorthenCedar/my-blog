@@ -15,7 +15,7 @@
 """
 import subprocess, shutil, re, sys, pathlib
 
-ROOT = pathlib.Path(r'D:\router\blog')
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 TOKENS = ROOT / 'src/styles/tokens.css'
 CONSTS = ROOT / 'src/vendor/jelly-slider/constants.ts'
 

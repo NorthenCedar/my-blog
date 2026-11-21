@@ -72,11 +72,12 @@ Pages 的变量变更须随一次新部署生效。不要只保存设置便声�
 
 应用限额为 100 份草稿、64 MiB 图片有效载荷、96 MiB 写作总有效载荷，包含草稿、不可变快照及回写预留。它不代表 SQLite 文件实际大小，也不涵盖账户内其他应用的用量。
 
-以下为得到当次生产授权后执行的命令，当前文档不表示已经运行：
+取得当次生产授权后，在包含 work 目录的工作区根目录执行以下命令：
 
 ```powershell
-Set-Location D:/router/work/blog-cloud-writer
-$writerBackup = Join-Path D:/router/work ('comments-before-writer-' + (Get-Date -Format yyyyMMdd-HHmmss) + '.sql')
+$writerWorkspace = (Get-Location).Path
+Set-Location (Join-Path $writerWorkspace 'work/blog-cloud-writer')
+$writerBackup = Join-Path (Join-Path $writerWorkspace 'work') ('comments-before-writer-' + (Get-Date -Format yyyyMMdd-HHmmss) + '.sql')
 npx wrangler d1 export beishan-comments --remote --output $writerBackup
 ```
 

@@ -53,7 +53,7 @@
 
 ## 进度
 
-- 已备份三册配置和内容模型到 `D:/router/work/gallery-20261013-backup/`。
+- 已备份三册配置和内容模型到 `<工作区>/work/gallery-20261013-backup/`。
 - 系统 npm shim 完整性失败；不改 shim，使用 NVM 已安装且签名有效的 Node 24.21.0 和其 npm-cli。TEMP/TMP 指向工作区后，基线 646 通过、1 跳过。
 - 任务一已实现：纯函数初始占位时 7 失败、2 通过；实现后通过；内容集合新增字段有单独 RED→GREEN。
 - 任务二已实现：产物场景测试先见 2 失败、后通过；全量检查发现禁止 grabbing 光标，已删除该声明。
@@ -64,9 +64,9 @@
 - 切片标题原先以负 top 挂在 world，矮窗口会越过裁切上沿；改为 viewport 的独立标题层，从上沿留白定位，照片中心下移。
 - 生成文件名加入源图字节＋编码参数摘要，修复中间插入/重排/换源图与 immutable 缓存的冲突。纯函数先见 2 失败，修后通过；普通 YAML 行尾注释同样先红后绿。
 - 最终审查两项 P2 已修；两个较轻问题（首次 reduce 恢复、行尾注释）也已修。当前全量 verify 为 36 文件通过、668 条通过、1 设计内跳过。视觉和真实输入验收继续保留待办。
-- 最终证据：`D:/router/work/gallery-20261013-final-verify.log`，全量 verify 退出 0；图片 164 档全部缓存命中、0 重编码；`git diff --check` 无空白错误。
+- 最终证据：`<工作区>/work/gallery-20261013-final-verify.log`，全量 verify 退出 0；图片 164 档全部缓存命中、0 重编码；`git diff --check` 无空白错误。
 - 环境记录：构建两次间歇性报告本地依赖找不到；直接 Node 导入确认依赖存在，启用 Vite 解析日志的最终 verify 全绿，未修改依赖或应用配置。未推断为产品缺陷。
-- 站主随后指定全屏、更大惯性、散片大小与位置变化、柔和边缘、去除系统手指光标。已修改 Base 的单册全宽入口、场景布局/样式与手势衰减；编辑前备份在 `D:/router/work/album-fullscreen-backup/`。
-- 最新浏览器证据在 `D:/router/work/fullscreen-browser-check.json`，真实鼠标拖动、1440px 桌面、390px 手机、切片标题/按钮、索引往返、灯箱、减少动效及桌面自定义光标共六组检查通过；截图在 `D:/router/work/_tmp-verified-*.png`。此前“视觉/真实输入待验收”只描述第一阶段，现已完成本地浏览器验收。
-- 新增切片纵向滚轮惯性与两侧距离渐隐；纯函数先见 3 红、实现后全绿，真实控制器新增纵向滚轮回归先红后绿。浏览器滚轮证据在 `D:/router/work/slice-wheel-browser-check.json`，截图在 `D:/router/work/_tmp-slice-wheel-fade.png`。
-- 本轮全量核对日志在 `D:/router/work/slice-wheel-final-verify.log`：36 文件通过、676 条通过、1 跳过；浏览器无异常，源码空白检查通过。独立审查发现的极小滚动空转和灯箱打开后仍滑行均已用先红后绿的控制器测试修复。
+- 站主随后指定全屏、更大惯性、散片大小与位置变化、柔和边缘、去除系统手指光标。已修改 Base 的单册全宽入口、场景布局/样式与手势衰减；编辑前备份在 `<工作区>/work/album-fullscreen-backup/`。
+- 最新浏览器证据在 `<工作区>/work/fullscreen-browser-check.json`，真实鼠标拖动、1440px 桌面、390px 手机、切片标题/按钮、索引往返、灯箱、减少动效及桌面自定义光标共六组检查通过；截图在 `<工作区>/work/_tmp-verified-*.png`。此前“视觉/真实输入待验收”只描述第一阶段，现已完成本地浏览器验收。
+- 新增切片纵向滚轮惯性与两侧距离渐隐；纯函数先见 3 红、实现后全绿，真实控制器新增纵向滚轮回归先红后绿。浏览器滚轮证据在 `<工作区>/work/slice-wheel-browser-check.json`，截图在 `<工作区>/work/_tmp-slice-wheel-fade.png`。
+- 本轮全量核对日志在 `<工作区>/work/slice-wheel-final-verify.log`：36 文件通过、676 条通过、1 跳过；浏览器无异常，源码空白检查通过。独立审查发现的极小滚动空转和灯箱打开后仍滑行均已用先红后绿的控制器测试修复。

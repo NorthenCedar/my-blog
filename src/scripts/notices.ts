@@ -19,7 +19,7 @@ type Notice = {
   createdAt: string;
   readAt: number | null;
 };
-type NoticePage = { unread: number; items: Notice[]; signedIn: boolean; title: string; emptyMessage: string; nextBefore: number | null };
+type NoticePage = { unread: number; items: Notice[]; signedIn: boolean; title: string; emptyMessage: string; nextBefore: number | null; nextCursor?: string | null };
 
 /** 本地的 node 助手（≈80 字节），不 import visitor-client 的那一个 —— 理由见文件头。 */
 const node = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text = '') => {
@@ -92,15 +92,15 @@ if (bell && panel) {
     );
     empty.textContent = page?.emptyMessage ?? '';
     empty.hidden = items.length > 0;
-    more.hidden = !page?.nextBefore;
+    more.hidden = !(page?.nextCursor ?? page?.nextBefore);
   };
 
-  const pull = async (before?: number, markRead = false) => {
+  const pull = async (before?: string | number, markRead = false) => {
     const signal = requests.signal;
     const started = ++version;
     const current = () => !signal.aborted && started === version;
     try {
-      const response = await fetch(`/api/notices${before ? `?before=${before}` : ''}`, { cache: 'no-store', signal });
+      const response = await fetch(`/api/notices${before ? `?before=${encodeURIComponent(before)}` : ''}`, { cache: 'no-store', signal });
       if (!response.ok) return;
       const data = (await response.json()) as NoticePage;
       if (!current()) return;
@@ -157,7 +157,7 @@ if (bell && panel) {
     void pull(undefined, true);
   });
   more.addEventListener('click', () => {
-    const before = page?.nextBefore;
+    const before = page?.nextCursor ?? page?.nextBefore;
     if (before) void pull(before, true);
   });
 

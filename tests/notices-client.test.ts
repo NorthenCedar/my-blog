@@ -40,7 +40,7 @@ const message = (id: number, slug = 'guestbook', kind = 'comment') => ({
   actorName: '访客', excerpt: `消息 ${id}`, createdAt: '2026-11-01T10:00:00.000Z', readAt: null,
 });
 
-async function open(options: { owner?: boolean; items?: ReturnType<typeof message>[]; nextBefore?: number | null; unread?: number } = {}) {
+async function open(options: { owner?: boolean; items?: ReturnType<typeof message>[]; nextBefore?: number | null; nextCursor?: string; unread?: number } = {}) {
   const root = new Element('div'); root.className = 'topbar';
   const bell = new Element('button'); bell.setAttribute('data-notices', ''); bell.hidden = true;
   bell.setAttribute('aria-label', '回复提醒'); bell.setAttribute('aria-expanded', 'false');
@@ -57,7 +57,7 @@ async function open(options: { owner?: boolean; items?: ReturnType<typeof messag
   const user = { id: 'reader', nickname: '读者', bio: '', avatarUrl: '/avatars/leaf.svg', isOwner: options.owner ?? true };
   const state = { failRead: false, failPull: false, marked: [] as number[], user: user as typeof user | null,
     pendingRead: undefined as Promise<Response> | undefined, pendingPull: undefined as Promise<Response> | undefined,
-    data: { items: options.items ?? [], unread: options.unread ?? options.items?.length ?? 0, signedIn: true, isOwner: options.owner ?? true, nextBefore: options.nextBefore ?? null,
+    data: { items: options.items ?? [], unread: options.unread ?? options.items?.length ?? 0, signedIn: true, isOwner: options.owner ?? true, nextBefore: options.nextBefore ?? null, nextCursor: options.nextCursor,
       title: options.owner === false ? '回复提醒' : '全站消息', emptyMessage: options.owner === false ? '还没有人回复你。' : '还没有新的全站消息。' },
     older: { items: [message(1)], unread: 1, signedIn: true, isOwner: true, nextBefore: null as number | null, title: '全站消息', emptyMessage: '还没有新的全站消息。' } };
   const window = new EventTarget();
@@ -98,6 +98,19 @@ it('首屏只拉一次，只有浏览器缓存恢复时才因 pageshow 刷新', 
   expect(s.calls).toHaveLength(2);
   expect(s.badge.textContent).toBe('2');
   expect(s.rows()[0].textContent).toContain('消息 2');
+});
+
+it('翻页优先使用带时间的游标', async () => {
+  const cursor = '2026-11-01T00:00:00.000Z|2';
+  const s = await open({ items: [message(2)], nextBefore: 2, nextCursor: cursor });
+  s.bell.click();
+  await settle();
+  s.more().click();
+  await settle();
+
+  const requested = s.calls.find(call => call.url.includes('?before='));
+  expect(new URL(requested!.url, 'https://content.test/').searchParams.get('before')).toBe(cursor);
+  expect(s.rows()[0].textContent).toContain('消息 1');
 });
 
 it('退出立即清空已打开的提醒，迟到的已读响应无法恢复角标', async () => {

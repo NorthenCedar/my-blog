@@ -51,6 +51,17 @@ function allowedAttribute(tag, key, value) {
   return true;
 }
 
+export function markdownElementIssue(tag, attrs) {
+  if (!ELEMENTS.has(tag)) return `不支持 <${tag}> 标签`;
+  for (const [key, value] of Object.entries(attrs)) {
+    if (!allowedAttribute(tag, key, value)) return `<${tag}> 的 ${key} 属性或值不受支持`;
+  }
+  if (tag === 'input' && (attrs.type !== 'checkbox' || attrs.disabled !== true)) {
+    return '任务列表只允许静态复选框';
+  }
+  return null;
+}
+
 /** 在 Sätteri 的 HTML 解析之后校验整棵正文树，保留允许的原生富文本。 */
 export const markdownContentPolicy = {
   name: 'northcedar-markdown-content-policy',
@@ -61,14 +72,9 @@ export const markdownContentPolicy = {
       if (node.type === 'raw' || node.type === 'doctype') reject('请使用支持的正文 HTML 标记');
       if (node.type === 'element') {
         const tag = node.tagName;
-        if (!ELEMENTS.has(tag)) reject(`不支持 <${tag}> 标签`);
         const attrs = node.properties ?? {};
-        for (const [key, value] of Object.entries(attrs)) {
-          if (!allowedAttribute(tag, key, value)) reject(`<${tag}> 的 ${key} 属性或值不受支持`);
-        }
-        if (tag === 'input' && (attrs.type !== 'checkbox' || attrs.disabled !== true)) {
-          reject('任务列表只允许静态复选框');
-        }
+        const issue = markdownElementIssue(tag, attrs);
+        if (issue) reject(issue);
         if (tag === 'a' && typeof attrs.target === 'string' && attrs.target.toLowerCase() === '_blank') {
           const rel = Array.isArray(attrs.rel) ? attrs.rel : [];
           context.setProperty(node, 'rel', [...new Set([...rel.filter(value => value.toLowerCase() !== 'opener'), 'noopener'])]);

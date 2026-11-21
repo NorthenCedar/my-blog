@@ -224,6 +224,19 @@ describe('站主的全站消息提醒', () => {
     expect((await s.notices('reader', `?before=${first.nextBefore}`)).items).toEqual([]);
   });
 
+  it('同一时间的通知按编号翻页，删除页尾留言后仍能读到更早的消息', async () => {
+    const s = setup();
+    for (let i = 0; i < 23; i++) await s.publish({ body: `留言 ${i}` });
+    s.sqlite.exec("UPDATE reply_notices SET created_at = '2026-11-01T00:00:00.000Z'");
+    const first = await s.notices('owner');
+    const before = first.nextCursor ?? first.nextBefore;
+    s.sqlite.prepare('DELETE FROM comments WHERE id = ?').run(first.items[19].parentId);
+
+    const next = await s.notices('owner', `?before=${encodeURIComponent(before)}`);
+    expect(next.items.map((notice: { excerpt: string }) => notice.excerpt)).toEqual(['留言 2', '留言 1', '留言 0']);
+    expect(next.nextCursor).toBeNull();
+  });
+
   it('每个账户最多保留最新 100 条，清理旧提醒时保留原评论、回复和其他人的提醒', async () => {
     const s = setup();
     const parent = await s.publish({}, 'reader');

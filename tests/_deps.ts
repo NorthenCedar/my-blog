@@ -59,6 +59,9 @@ export const RUNTIME_DEPS_ALLOWED = [
   'wgpu-matrix',
   // 云端写作：只在 Functions / runner 保留式解析内容，不进入访客脚本。
   'yaml',
+  // 正文发布预检复用构建的元素规则；两个解析依赖已经在 Astro 的锁文件中。
+  'property-information',
+  'ultrahtml',
   // 仅私密 /write/ 可视化编辑器加载；保存格式仍是 Markdown。
   'markdown-it',
   'prosemirror-commands',

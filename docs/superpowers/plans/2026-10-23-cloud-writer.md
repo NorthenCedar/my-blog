@@ -38,7 +38,7 @@
 
 ## 文件与接口地图
 
-所有路径相对 `D:/router/blog/`，新增目录按职责分组：
+所有路径相对仓库根目录，新增目录按职责分组：
 
 | 文件 | 职责 |
 |---|---|
@@ -347,7 +347,8 @@ expect((await readJob(db, owner, pushed.id)).state).toBe('deployment_failed');
 - [ ] 全量 npm run verify；创建本次唯一临时目录后实测 Functions 打包：
 
 ```powershell
-$writerBundle = Join-Path 'D:\router\work' ('_tmp-writer-bundle-' + [guid]::NewGuid().ToString('N'))
+$writerWork = Join-Path (Split-Path -Parent ((git rev-parse --show-toplevel).Trim())) 'work'
+$writerBundle = Join-Path $writerWork ('_tmp-writer-bundle-' + [guid]::NewGuid().ToString('N'))
 npx wrangler pages functions build --compatibility-date 2026-09-01 --compatibility-flags nodejs_compat --outdir $writerBundle
 ```
 

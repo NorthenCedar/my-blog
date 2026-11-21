@@ -13,7 +13,7 @@
 """
 import pathlib, subprocess, os, shutil, re, sys
 
-ROOT = pathlib.Path(r'D:\router\blog')
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASE = ROOT / 'src/layouts/Base.astro'
 
 base_bak = BASE.read_text(encoding='utf-8')

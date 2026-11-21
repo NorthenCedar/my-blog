@@ -1,7 +1,7 @@
 """本地交互回归：独立 Chrome、合成接口数据，不读取真实会话或写入线上。"""
 from pathlib import Path
 import json,threading,http.server,subprocess,socket,time,urllib.request,urllib.parse,base64,os
-OUT=Path(os.environ.get('SITE_UI_EVIDENCE_DIR',r'D:/router/work/site-fixes-20261021/ui/after'))
+OUT=Path(os.environ.get('SITE_UI_EVIDENCE_DIR', Path(__file__).resolve().parents[2] / 'work/site-fixes-20261021/ui/after'))
 OUT.mkdir(parents=True,exist_ok=True)
 # 只复用 WebSocket 帧客户端，严格截在旧脚本的顶层验收逻辑之前。
 harness=(Path(__file__).resolve().parent/'verify-visitor-accounts.py').read_text(encoding='utf8')

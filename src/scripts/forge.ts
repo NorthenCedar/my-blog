@@ -12,6 +12,9 @@ export function initForge(body: HTMLElement): () => void {
   const reducedQuery = matchMedia('(prefers-reduced-motion: reduce)'), finePointer = matchMedia('(hover:hover) and (pointer:fine)');
   const stages = [...body.querySelectorAll<HTMLButtonElement>('[data-stage]')];
   const arrival = [...body.querySelectorAll<HTMLElement>('.arrival-note')];
+  const progressLayers = stage?.querySelectorAll<HTMLElement>('.etched-surface, .stage-progress') ?? [];
+  const departureLayers = stage?.querySelectorAll<HTMLElement>('.hero-heading, .object-caption, .scene-wrap') ?? [];
+  const connectionLayers = stage?.querySelectorAll<HTMLElement>('.connection-copy') ?? [];
   const caption = body.querySelector<HTMLElement>('#stage-caption');
   const captions: string[] = JSON.parse(caption?.dataset.captions || '[]');
   let reduced = reducedQuery.matches;
@@ -26,18 +29,32 @@ export function initForge(body: HTMLElement): () => void {
   const scrollLock=createForgeScrollLock(body,()=>({start,end:start+distance}));
   const clamp = (v:number) => Math.min(1,Math.max(0,v));
   const ease = (a:number,b:number,x:number) => { const t=clamp((x-a)/(b-a));return t*t*(3-2*t); };
+  const paint = (layers: Iterable<HTMLElement>, property: string, value: number) => {
+    const next = String(value);
+    for (const layer of layers) {
+      if (layer.style.getPropertyValue(property) !== next) layer.style.setProperty(property, next);
+    }
+  };
   const draw = (progress:number,release=1) => {
     if (!stage || disposed) return;
     scrollLock.frame(release);
     if (reduced) progress=0;
-    stage.style.setProperty('--progress', String(progress));
-    stage.style.setProperty('--leave', String(ease(.22,.47,progress)));
-    stage.style.setProperty('--connection', String(ease(.3,.47,progress)*(1-ease(.64,.76,progress))));
-    const amount = ease(.68,.93,progress); stage.style.setProperty('--arrive',String(amount));
+    // 装饰变量只写到使用它的层，避免舞台上的按钮跟着触发播放器重测。
+    paint(progressLayers, '--progress', progress);
+    paint(departureLayers, '--leave', ease(.22,.47,progress));
+    paint(connectionLayers, '--connection', ease(.3,.47,progress) * (1 - ease(.64,.76,progress)));
+    const amount = ease(.68,.93,progress);
+    paint(arrival, '--arrive', amount);
     stage.dataset.progress = progress.toFixed(3);
     const step=progress<.28?0:progress<.78?1:2;
     if(step!==activeStage){activeStage=step;stages.forEach((button,i)=>i===step?button.setAttribute('aria-current','step'):button.removeAttribute('aria-current'));if(caption)caption.textContent=captions[step]||'';}
-    arrival.forEach(note=>{note.classList.toggle('is-active',amount>.9);note.inert=amount<.9;});
+    const interactive = amount > .9;
+    for (const note of arrival) {
+      if (note.inert === interactive) {
+        note.inert = !interactive;
+        note.classList.toggle('is-active', interactive);
+      }
+    }
   };
   const update = () => {const progress=clamp((scrollY-start)/distance);if(scene)scene.setProgress(progress);else draw(progress);};
   const measure = () => { if(!hero||!stage)return;start=hero.getBoundingClientRect().top+scrollY;distance=Math.max(1,hero.offsetHeight-stage.offsetHeight);update(); };

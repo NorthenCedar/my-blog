@@ -1,8 +1,14 @@
 # 北杉札记
 
-个人博客，使用 Astro 构建静态页面。评论、点赞、访客账户、访问统计和云端写作台由 Cloudflare Pages Functions 与 D1 提供。
+北杉札记是我的第一个项目。我用这个博客记录学习和生活，也把拍过的照片与做过的作品收在这里。
 
-[访问北杉札记](https://northcedar.top)
+[访问博客](https://northcedar.top) · [更新记录](content/pages/log.md) · [维护手册](docs/writing-guide.md)
+
+## 站点功能
+
+- 文章可按年月和标签查找。长文配有阅读目录，代码块可以展开和复制。[归档](https://northcedar.top/archive/)
+- 照片按册整理，造物台展示站点实验和手工作品。[相册](https://northcedar.top/gallery/) · [造物台](https://northcedar.top/forge/)
+- 读者可以留言、回复和回看通知。站主可保存私密草稿，发布文章前会收到具体的正文校验提示。[留言板](https://northcedar.top/guestbook/)
 
 配套的本地编辑器（写作台）在独立仓库 [blog-desk](https://github.com/NorthenCedar/blog-desk)，
 两边通过 `content/` 下的 Markdown 文件对接。
@@ -20,15 +26,14 @@
 
 ## 本地开发
 
-使用 [.node-version](.node-version) 指定的 Node.js 26.13.1。
+使用 [.node-version](.node-version) 指定的 Node.js 版本，在仓库根目录运行以下命令。
 
 ```bash
 npm ci
 npm run dev
 ```
 
-开发服务器会给出访问地址。静态产物用 `npm run preview` 查看。需要在本地使用评论等接口时，
-依次运行 `npm run db:init`、`npm run build` 和 `npm run dev:cf`。
+开发服务器会给出访问地址。改完后运行 `npm run verify`，同时检查构建和测试。需要在本地使用评论等接口时，依次运行 `npm run db:init`、`npm run build` 和 `npm run dev:cf`。
 
 ## 命令
 
@@ -54,14 +59,17 @@ npm run dev
 使用留言管理接口时，在 Pages 项目里将 `ADMIN_TOKEN` 配为 Secret，并触发新部署。
 云端写作发布流程绑定本站域名、GitHub 仓库和 `main` 分支，独立部署需适配这些入口与密钥。[云端写作配置](docs/cloud-writer-setup.md)
 
-## 内容模型
+## 目录与文档
 
 - `content/posts/<slug>/index.md` —— 文章，正文图片放同目录
 - `content/pages/*.md` —— 页面（关于 / 留言 / 说说 / 更新日志 / 友链）
 - `content/gallery/<专辑>/` —— 相册
 - `content/projects/<slug>/` —— 造物台项目
 - `content/site.md` —— 站名、简介、联系方式等文案层
+- `src/` —— 页面、组件、样式和浏览器脚本
 - `src/tag-registry.ts` —— 标签注册表
+- `functions/api/` 与 `migrations/` —— Pages 接口与 D1 数据库迁移
+- `tests/` —— 内容、交互、接口和构建产物测试
 
 生产构建只输出已发布的文章与相册。公开仓库中的草稿源码对读者可见。
 
