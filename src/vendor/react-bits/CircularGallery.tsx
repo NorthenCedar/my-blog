@@ -65,7 +65,7 @@ type Settings = {
   dpr?: number;
 };
 
-type TextureEntry = { texture: WebGLTexture | null; aspect: number; ready: number; loaded: boolean };
+type TextureEntry = { texture: WebGLTexture | null; image?: HTMLImageElement; aspect: number; ready: number; loaded: boolean };
 
 type Point = { x: number; y: number };
 
@@ -442,6 +442,7 @@ const CircularGallery = ({
 
     const program = link(gl);
     if (!program) {
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
       onUnavailable?.();
       return undefined;
     }
@@ -535,10 +536,12 @@ const CircularGallery = ({
       const entry: TextureEntry = { texture: null, aspect: 1, ready: 0, loaded: false };
       textures.set(url, entry);
       const image = new Image();
+      entry.image = image;
       image.crossOrigin = 'anonymous';
       image.decoding = 'async';
       image.onload = () => {
         if (textures.get(url) !== entry) return;
+        entry.image = undefined;
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -558,15 +561,24 @@ const CircularGallery = ({
         entry.loaded = true;
         wake();
       };
+      image.onerror = () => { entry.image = undefined; };
       image.src = url;
       return entry;
+    };
+
+    const releaseTexture = (entry: TextureEntry) => {
+      if (entry.texture) gl.deleteTexture(entry.texture);
+      if (entry.image) {
+        entry.image.onload = entry.image.onerror = null;
+        entry.image.removeAttribute('src');
+      }
     };
 
     const prune = (list: GalleryItem[]) => {
       const keep = new Set(list.map(item => item.image));
       textures.forEach((entry, url) => {
         if (keep.has(url)) return;
-        if (entry.texture) gl.deleteTexture(entry.texture);
+        releaseTexture(entry);
         textures.delete(url);
       });
     };
@@ -1184,7 +1196,7 @@ const CircularGallery = ({
       document.removeEventListener('pointerdown', onAnyPointer, true);
       canvas.removeEventListener('webglcontextlost', onContextLost);
       labelLayer.replaceChildren();
-      textures.forEach(entry => entry.texture && gl.deleteTexture(entry.texture));
+      textures.forEach(releaseTexture);
       textures.clear();
       gl.deleteTexture(blank);
       gl.deleteProgram(program.program);

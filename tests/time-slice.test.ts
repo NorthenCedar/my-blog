@@ -166,7 +166,7 @@ describe('时间切片 · 源码红线', () => {
     expect(SRC).toContain("tok('--dusk-1')");
     expect(SRC).toContain("tok('--accent-bright')");
     expect(SRC).toContain('getComputedStyle');
-    expect(SRC).toContain('createTslScene(cvs, palette)');
+    expect(SRC).toContain('createTslScene(cvs, palette, isCurrent)');
   });
 
   it('跳转地址不写死在 JS：从静态回退层链接的 href 读（内容改路径不用改脚本）', () => {

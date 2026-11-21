@@ -70,9 +70,9 @@ async function readAudio(sourceDir, name) {
   return { name, contentType: TYPES[match[2]], bytes };
 }
 
-export function exportAudioAssets({ rootDir = process.cwd(), distDir = join(rootDir, 'dist') } = {}) {
+export function exportAudioAssets({ rootDir = process.cwd(), distDir = join(rootDir, 'dist'), htmlIndex } = {}) {
   return exportReferencedMedia({
-    rootDir, distDir, folder: 'audio', tag: 'audio', manifest: MANIFEST,
+    rootDir, distDir, htmlIndex, folder: 'audio', tag: 'audio', manifest: MANIFEST,
     pattern: NAME, getName: audioName, read: readAudio,
   });
 }

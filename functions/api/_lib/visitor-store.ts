@@ -1,6 +1,6 @@
 import { digest, fail, randomToken } from './visitor-core';
 import { defaultAvatarUrl } from '../../../src/lib/visitor-avatars';
-import { guardPublicWrite, readJsonBody } from './public-write';
+import { guardPublicWrite, readJsonBodyWithSize } from './public-write';
 
 export interface VisitorEnv { COMMENTS_DB: D1Database; OWNER_USER_ID?: string }
 export type Account = {
@@ -48,9 +48,11 @@ export async function createSession(user: Account, env: VisitorEnv) {
 }
 export async function consumeLimit(env: VisitorEnv, scope: string, key: string, maximum: number, window = 60000) {
   const now = Date.now();
-  const row = await env.COMMENTS_DB.prepare('INSERT INTO visitor_rate_limits (scope,key_hash,window_start,hits) VALUES (?,?,?,1) ON CONFLICT(scope,key_hash,window_start) DO UPDATE SET hits = hits + 1 RETURNING hits')
-    .bind(scope, await digest(key), Math.floor(now / window) * window).first<{ hits: number }>();
-  if (!row || row.hits > maximum) fail(429, '操作太频繁，请稍后再试');
+  const row = await env.COMMENTS_DB.prepare(`INSERT INTO visitor_rate_limits (scope,key_hash,window_start,hits)
+    VALUES (?,?,?,1) ON CONFLICT(scope,key_hash,window_start) DO UPDATE SET hits = hits + 1
+    WHERE hits < ? RETURNING hits`)
+    .bind(scope, await digest(key), Math.floor(now / window) * window, maximum).first();
+  if (!row) fail(429, '操作太频繁，请稍后再试');
 }
 export async function cleanupAccounts(env: VisitorEnv) {
   await env.COMMENTS_DB.batch([
@@ -59,11 +61,13 @@ export async function cleanupAccounts(env: VisitorEnv) {
   ]);
 }
 export function guardWrite(request: Request) {
-  if (request.headers.get('Origin') !== new URL(request.url).origin || request.headers.get('X-NC-Request') !== '1') fail(403, '请从本站页面操作');
-  guardPublicWrite(request);
+  if (request.headers.get('X-NC-Request') !== '1') fail(403, '请从本站页面操作');
+  guardPublicWrite(request, true);
 }
 export async function readAccountBody(request: Request) {
-  return readJsonBody(request, 144 * 1024, '请求太大，请缩小头像');
+  const { payload, byteLength } = await readJsonBodyWithSize(request, 144 * 1024, '请求太大，请缩小头像');
+  if (payload.action !== 'avatar' && byteLength > 16 * 1024) fail(413, '请求太大');
+  return payload;
 }
 export const accountJson = (body: unknown, status = 200, cookie?: string) => new Response(JSON.stringify(body), {
   status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...(cookie ? { 'Set-Cookie': cookie } : {}) },

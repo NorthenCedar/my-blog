@@ -52,7 +52,7 @@ const scrolls = Astro.url.pathname !== '/gallery/';
 
 <div class:list={['topbar', home && 'home-topbar']} data-scroll-topbar={scrolls ? '' : undefined}>
   <a class="site" href="/">{wordmark}</a>
-  {!home && <button class="notices" type="button" data-notices aria-expanded="false" aria-label="回复提醒" hidden>
+  {!home && <button class="notices" type="button" data-notices aria-controls="notices-panel" aria-expanded="false" aria-label="回复提醒" hidden>
     <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">
       <path d="M8 1.6a4.1 4.1 0 0 0-4.1 4.1v3.1L2.6 11.2h10.8L12.1 8.8V5.7A4.1 4.1 0 0 0 8 1.6Zm0 12.9a1.75 1.75 0 0 0 1.75-1.75H6.25A1.75 1.75 0 0 0 8 14.5Z" fill="currentColor" />
     </svg>
@@ -61,6 +61,13 @@ const scrolls = Astro.url.pathname !== '/gallery/';
   {/* 主题开关（2026-11-12 从关于页搬上来）：裁切小窗版，见 ThemeToggle.astro。 */}
   {!home && <ThemeToggle variant="nav" />}
   <NavDrawer current={current} />
+  {!home && <div class="notices-panel music-glass" id="notices-panel" hidden>
+    <div class="notices-scroll">
+      <ul class="notices-list"></ul>
+      <p class="notices-empty"></p>
+      <button class="notices-more" type="button" hidden>更早消息</button>
+    </div>
+  </div>}
 </div>
 
 <style is:global>

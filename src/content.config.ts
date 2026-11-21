@@ -11,10 +11,7 @@ const posts = defineCollection({
     // 显式生成 id：默认行为由 github-slugger 决定，对 foo/index.md 的结果没有明文保证，
     // 而 slug 会被永久写进 URL，不能赌。
     generateId: ({ entry }) => entry.replace(/\/index\.md$/, ''),
-    // 默认行为是同步阶段就渲染所有条目 —— 那会把草稿的图片也优化并产出到 dist/。
-    // 注意：deferRender: true **实测不足以**阻止草稿素材产出（Astro 7.3.5），
-    // 真正兜住这件事的是 scripts/prune-draft-assets.mjs（挂 build 步骤）。
-    // 这里保留 deferRender 是为了不把渲染结果常驻在数据存储里（省内存），不是为了素材隔离。
+    // 正文按需渲染，标题树由文章布局读取。生产草稿素材由 Astro 配置中的 Markdown 集成隔离。
     deferRender: true,
   }),
   schema: postSchema,

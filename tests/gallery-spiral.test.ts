@@ -1,5 +1,5 @@
 import { jsClosure } from './_writer-output';
-import { MOTION_ENGINE_BUDGET, NAVIGATION_UI_BOOT_BUDGET, TECH_HEADING_BOOT_BUDGET, THEME_TOGGLE_BOOT_BUDGET, expectMotionStartup, siteWideLazyBytes } from './_motion-budget';
+import { MOTION_ENGINE_BUDGET, NAVIGATION_FEEDBACK_BOOT_BUDGET, NAVIGATION_UI_BOOT_BUDGET, PAGE_STATS_BOOT_BUDGET, TECH_HEADING_BOOT_BUDGET, THEME_TOGGLE_BOOT_BUDGET, expectMotionStartup, siteWideLazyBytes } from './_motion-budget';
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -935,7 +935,8 @@ describe('螺旋盘 · 红线与预算', () => {
        的中间色（否则拖软条时只有它停在亮档，松手才跳）。实测 155746 B，撞线 98 B。
        按规矩再抬 1 KiB（余量 926 B），全部反面正对照（three 禁入）照旧。 */
     // 灯箱加入预览、高清解码与请求取消。完整闭包实测 157983 B，预算增 1 KiB。
-    const BUDGET = 55296 + MOTION_ENGINE_BUDGET + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + NAVIGATION_UI_BOOT_BUDGET;
+    const BUDGET = 55296 + MOTION_ENGINE_BUDGET + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET
+      + NAVIGATION_UI_BOOT_BUDGET + NAVIGATION_FEEDBACK_BOOT_BUDGET + PAGE_STATS_BOOT_BUDGET;
     expectMotionStartup(PAGE_PATH, 53248 + THEME_TOGGLE_BOOT_BUDGET);
     expect(hasDist, '先 npm run build').toBe(true);
     const { code, files } = jsClosure(PAGE_PATH, { skipMenu: true, skipTechHeading: true });

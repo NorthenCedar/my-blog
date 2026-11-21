@@ -1,5 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { Window } from 'happy-dom';
 import { tslWindow } from '../src/scripts/time-slice-core';
+
+const createScene = vi.hoisted(() => vi.fn());
+vi.mock('../src/scripts/time-slice-scene', () => ({ createTslScene: createScene }));
+vi.mock('astro:transitions/client', () => ({ navigate: vi.fn() }));
+vi.mock('../src/scripts/rl-core', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/scripts/rl-core')>(),
+  createActivityGate: () => ({ onScreen: true, visible: true, dispose() {} }),
+  startLoop: () => () => {},
+}));
 
 function bounds(path: string) {
   const values = path.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
@@ -47,4 +57,53 @@ describe('时间切片 · 双层玻璃入口', () => {
     expect(tslWindow(1440, 900, -1)).toEqual(tslWindow(1440, 900, 0));
     expect(tslWindow(1440, 900, 2)).toEqual(tslWindow(1440, 900, 1));
   });
+});
+
+it.each(['就绪', '失败'])('时间切片快速重新启用后，旧场景迟到%s不干扰当前装置', async outcome => {
+  const win = new Window();
+  const doc = win.document;
+  doc.body.innerHTML = `<div data-tsl>
+    <div data-tsl-stage></div><div data-tsl-view hidden><canvas data-tsl-cv></canvas></div>
+    <div data-tsl-hud></div><div data-tsl-green></div>
+    <div data-tsl-wait hidden><span data-tsl-wait-text></span><a data-tsl-retry></a></div>
+    <svg data-tsl-ring><path data-tsl-front/><path data-tsl-back/><path data-tsl-edges/></svg>
+    <div class="tsl-static"><a href="/gallery/">进入相册</a></div>
+  </div>`;
+  const motion = new win.EventTarget() as unknown as MediaQueryList;
+  const reduce = (matches: boolean) => {
+    Object.defineProperty(motion, 'matches', { value: matches, configurable: true });
+    motion.dispatchEvent(new win.Event('change') as unknown as Event);
+  };
+  reduce(false);
+  const matchMedia = (query: string) => query.includes('reduced-motion') ? motion : { matches: true, addEventListener() {}, removeEventListener() {} };
+  vi.spyOn(win, 'matchMedia').mockImplementation(matchMedia as typeof win.matchMedia);
+  vi.stubGlobal('window', win); vi.stubGlobal('document', doc);
+  vi.stubGlobal('history', win.history); vi.stubGlobal('matchMedia', matchMedia);
+  vi.stubGlobal('getComputedStyle', win.getComputedStyle.bind(win));
+  vi.stubGlobal('PageTransitionEvent', win.PageTransitionEvent);
+  const oldScene = { resize: vi.fn(), dispose: vi.fn() };
+  const newScene = { resize: vi.fn(), dispose: vi.fn() };
+  let resolve!: (value: typeof oldScene) => void;
+  let reject!: (reason: Error) => void;
+  createScene.mockReturnValueOnce(new Promise((ok, fail) => { resolve = ok; reject = fail; })).mockResolvedValueOnce(newScene);
+  try {
+    await import('../src/scripts/time-slice');
+    await vi.dynamicImportSettled();
+    expect(createScene).toHaveBeenCalledOnce();
+    reduce(true); reduce(false);
+    await vi.dynamicImportSettled();
+    expect(createScene).toHaveBeenCalledTimes(2);
+    expect(createScene.mock.calls[0][2]()).toBe(false);
+    if (outcome === '就绪') resolve(oldScene);
+    else reject(new Error('旧动画加载失败'));
+    await vi.dynamicImportSettled();
+    expect(doc.querySelector('[data-tsl]')?.classList.contains('tsl-on')).toBe(true);
+    expect(newScene.resize).toHaveBeenCalledOnce();
+    expect(newScene.dispose).not.toHaveBeenCalled();
+    expect(oldScene.resize).not.toHaveBeenCalled();
+    if (outcome === '就绪') expect(oldScene.dispose).toHaveBeenCalledOnce();
+  } finally {
+    doc.dispatchEvent(new win.Event('astro:before-swap'));
+    vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.resetModules(); createScene.mockReset();
+  }
 });

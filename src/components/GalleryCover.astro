@@ -15,7 +15,7 @@ const mobile=mobileArtwork(cover?.stroke);
     <a class="caption" data-reveal data-order="4" href={cover.href}>{cover.alt}<span aria-hidden="true">↗</span></a>
     <svg class="copy-ink" viewBox="0 0 400 240" preserveAspectRatio="none" aria-hidden="true"><path class="main-ink" d={mobile.main} pathLength="1000" data-draw data-delay="380"/><path class="echo-ink" d={mobile.echo} pathLength="1000" data-draw data-delay="570"/></svg>
   </div>
-  <div class="visual"><figure class="frame"><a class="cover-link" href={cover.href}><img src={cover.src} alt={cover.alt} width={cover.width} height={cover.height} loading="eager" decoding="async" draggable="false"/></a></figure></div>
+  <div class="visual"><figure class="frame"><a class="cover-link" href={cover.href}><img src={cover.thumbnail} data-cover-src={cover.src === cover.thumbnail ? undefined : cover.src} alt={cover.alt} width={cover.width} height={cover.height} loading="lazy" decoding="async" draggable="false"/></a></figure></div>
   <svg class="ink-layer desktop-ink" viewBox="0 0 1400 800" preserveAspectRatio="none" aria-hidden="true"><path class="main-ink" d={strokes.main} pathLength="1000" data-draw data-delay="380"/><path class="echo-ink" d={strokes.echo} pathLength="1000" data-draw data-delay="570"/><path class="corner-ink" d={strokes.corner} pathLength="1000" data-draw data-delay="680"/></svg>
   <svg class="ink-layer mobile-ink" viewBox="0 0 400 700" preserveAspectRatio="none" aria-hidden="true"><path class="corner-ink" d="M65 24 Q202 8 329 32 L345 111" pathLength="1000" data-draw data-delay="680"/></svg>
 </section>}

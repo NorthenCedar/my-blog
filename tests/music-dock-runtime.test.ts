@@ -88,6 +88,27 @@ it('按钮通过动效移入横条时也让出点击，不需要滚动来触发'
   expect(bar.inert).toBe(true);expect(root.style.cssText).toBe(initial);
 });
 
+it('帆船与尾波的样式更新不会重测控件，移动按钮的容器仍会触发避让', async () => {
+  const { root, bar, flush } = setup('<nav><span class="st-ship" aria-hidden="true"><i></i></span><div><button>页面操作</button></div></nav>');
+  const button = document.querySelector('nav button')!;
+  const measure = vi.spyOn(button, 'getBoundingClientRect').mockReturnValue(rect(20, 100, 80, 44));
+  const dock = createMusicDock(root, () => {});
+  cleanup = dock.dispose;
+  const settle = async () => { await new Promise(resolve => setTimeout(resolve, 0)); flush(); };
+  await settle();
+  measure.mockClear();
+  document.querySelector<HTMLElement>('.st-ship')!.style.transform = 'translateY(10px)';
+  document.querySelector<HTMLElement>('.st-ship i')!.style.opacity = '.2';
+  await settle();
+  expect(measure).not.toHaveBeenCalled();
+
+  const anchor = bar.getBoundingClientRect();
+  measure.mockReturnValue(rect(anchor.left + 10, anchor.top + 5, 80, 44));
+  button.parentElement!.style.transform = 'translateY(600px)';
+  await settle();
+  expect(bar.inert).toBe(true);
+});
+
 it('大卡片轻微相交、禁用按钮和不接收指针的装饰都不让横条消失',()=>{
   const {root,bar}=setup('<a id="card" href="/posts/">整张文章卡片</a><button id="disabled" disabled>未开放</button><button id="decoration" style="pointer-events:none">读数装饰</button>');
   document.getElementById('card')!.getBoundingClientRect=()=>rect(12,600,1256,200);

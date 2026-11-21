@@ -7,7 +7,7 @@ const { id, src, alt, poster } = Astro.props;
 <dialog id={id} class="talk-video-dialog" aria-label="说说视频">
   <form method="dialog"><button data-talk-video-close aria-label="关闭视频（Esc）" autofocus>关闭 ✕</button></form>
   <figure>
-    <video controls playsinline preload="metadata" src={src} poster={poster}></video>
+    <video controls playsinline preload="none" poster={poster}></video>
     <figcaption><a href={src} target="_blank" rel="noopener">{alt}</a></figcaption>
   </figure>
 </dialog>

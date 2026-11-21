@@ -95,7 +95,7 @@ const bathFrames = albums.flatMap(album => album.frames.flatMap(frame => {
   <dialog class="gallery-catalog" data-scrollbars aria-labelledby="catalog-title">
     <header><div><p>{total} 张照片</p><h2 id="catalog-title">挑一本，慢慢看。</h2></div><button type="button" data-close-catalog aria-label="关闭相册目录">×</button></header>
     <div class="catalog-scenes true-focus"><TrueFocusFrame /><button type="button" data-pick="0"><span>01</span>显影板</button><button type="button" data-pick="1"><span>02</span>弧形封面</button></div>
-    <div class="catalog-list">{albums.map((album,index)=>{const cover=coverPresentation(album,index)!;return <button type="button" data-pick={index+2}><img src={cover.src} alt={cover.alt} width="80" height="90" loading="lazy"/><span><b>{album.title}</b><small>{album.total} 张照片</small></span><span class="catalog-no">{String(index+1).padStart(2,'0')}</span></button>})}</div>
+    <div class="catalog-list">{albums.map((album,index)=>{const cover=coverPresentation(album,index)!;return <button type="button" data-pick={index+2}><img src={cover.thumbnail} alt={cover.alt} width="80" height="90" loading="lazy" decoding="async"/><span><b>{album.title}</b><small>{album.total} 张照片</small></span><span class="catalog-no">{String(index+1).padStart(2,'0')}</span></button>})}</div>
     <p class="catalog-note">选中封面后，点击照片或文字进入相册。</p>
     <p class="catalog-note"><a href="/gallery/spiral/">全屏打开螺旋盘 ↗</a></p>
     <div data-gallery-site-meta></div>

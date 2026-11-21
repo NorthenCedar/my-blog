@@ -21,12 +21,31 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
   root.replaceChildren();const workspace=el('div','','writer-workspace'),sidebar=el('aside','','writer-sidebar'),catalog=el('details'),summary=el('summary','内容与草稿'),navigation=el('nav'),list=el('ul','','writer-list'),pane=el('section','','writer-editor'),notice=el('p','','writer-error');notice.hidden=true;notice.setAttribute('role','alert');
   catalog.open=matchMedia('(min-width:768px)').matches;catalog.append(summary,navigation,list);sidebar.append(catalog);workspace.append(sidebar,pane);root.append(notice,workspace);
   let active:WriterDraft|null=null,controller:ReturnType<typeof createSaveController>|null=null,generation=0,listGeneration=0,disposed=false,currentMode='drafts',pending:PendingImage[]=[],urls=new Set<string>(),tags:string[]=[];
+  let draftSelection: AbortController | undefined;
   let galleryDestroy:(()=>void)|null=null;
   let bodyEditor:ReturnType<typeof mountWriterBody>|null=null;
   const status=el('p','','writer-status'),backup=el('p','','writer-backup');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
-  const showError=(error:unknown)=>{notice.hidden=false;notice.textContent=errorText(error);};
-  const perform=async(action:()=>Promise<unknown>)=>{notice.hidden=true;try{await action();}catch(error){showError(error);}};
+  const showError=(error:unknown)=>{if(disposed)return;notice.hidden=false;notice.textContent=errorText(error);};
+  const perform=async(action:()=>Promise<unknown>, selection?:AbortSignal)=>{
+    if(disposed||selection?.aborted)return;
+    notice.hidden=true;
+    try{await action();}catch(error){if(!selection?.aborted)showError(error);}
+  };
+  // 点击时就登记选择；现有编辑器继续保存，直到接替它的草稿确实准备好。
+  const selectDraft = () => {
+    draftSelection?.abort();
+    draftSelection = new AbortController();
+    return draftSelection.signal;
+  };
   const releaseUrls=()=>{galleryDestroy?.();galleryDestroy=null;bodyEditor?.destroy();bodyEditor=null;for(const url of urls)URL.revokeObjectURL(url);urls.clear();pending=[];};
+  const closeDraft = () => {
+    const closing = controller?.dispose();
+    controller = null;
+    active = null;
+    generation++;
+    releaseUrls();
+    return closing;
+  };
   const imageUrl=(sha:string)=>'/api/writer/assets?sha256='+sha;
   const newValue=(kind:WriterKind):WriterValue=>({fields:kind==='gallery'?{title:'',titleEn:'',date:today(),images:[],layout:'scatter',draft:true}:kind==='post'?{title:'',date:today(),summary:'',tags:[],draft:false}:kind==='project'?{title:'',summary:'',tagline:'',category:'',status:'',order:0,tags:[],visual:'image',effect:'auto',images:[],links:[]}:kind==='talk'?{date:today()}:{},body:'',assets:[]});
   function markdownExport(){if(!controller)return;const d=controller.current();const text=d.kind!=='talk'?`---\n${Object.entries(d.value.fields).map(([k,v])=>JSON.stringify(k)+': '+JSON.stringify(v)).join('\n')}\n---\n${d.value.body}`:d.value.body;download(`${d.key}.md`,text,'text/markdown;charset=utf-8');}
@@ -36,42 +55,105 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
   }
   async function flush(){if(controller?.isDirty())await controller.saveNow();}
   async function loadList(mode=currentMode,commit?:string,page=1){
+    if(disposed)return;
     currentMode=mode;const ticket=++listGeneration;list.replaceChildren(el('li','正在读取…'));let data:any;
     if(mode==='drafts')data=await api('/drafts');else if(mode==='jobs')data=await api('/publish');else data=await api(`/content?kind=${mode}&page=${page}${commit?'&commit='+commit:''}`);
     if(disposed||ticket!==listGeneration)return;list.replaceChildren();
     const items=mode==='drafts'?data.drafts:mode==='jobs'?data.jobs:data.items;
-    for(const item of items){const row=el('li'),title=mode==='jobs'?`${JOB_LABELS[item.state]??item.state} · ${item.draftId.slice(0,8)}`:item.title||item.key||'未命名草稿';const b=button(title,()=>perform(async()=>{
-      await flush();if(mode==='jobs'){await options.onJob?.(item.id);return;}
-      const result=mode==='drafts'?await api('/drafts?id='+item.id):await api('/drafts',{method:'POST',body:JSON.stringify({action:'import',kind:mode,key:item.key})});await openDraft(result.draft);catalog.open=matchMedia('(min-width:768px)').matches;
-    }));b.append(el('small',mode==='drafts'?`${writerKindLabel(item.kind)} · ${item.revision===item.publishedRevision?'已发布':'未发布修改'}`:item.date??''));row.append(b);list.append(row);}
+    for(const item of items){
+      const row=el('li'),title=mode==='jobs'?`${JOB_LABELS[item.state]??item.state} · ${item.draftId.slice(0,8)}`:item.title||item.key||'未命名草稿';
+      const b=button(title,()=>{
+        if(disposed)return;
+        const selection=selectDraft();
+        return perform(async()=>{
+          await flush();
+          if(selection.aborted)return;
+          if(mode==='jobs'){await options.onJob?.(item.id);return;}
+          const result=mode==='drafts'
+            ?await api('/drafts?id='+item.id,{signal:selection})
+            :await api('/drafts',{method:'POST',body:JSON.stringify({action:'import',kind:mode,key:item.key})});
+          await openDraft(result.draft,selection,true);
+          if(!selection.aborted)catalog.open=matchMedia('(min-width:768px)').matches;
+        },selection);
+      });
+      b.append(el('small',mode==='drafts'?`${writerKindLabel(item.kind)} · ${item.revision===item.publishedRevision?'已发布':'未发布修改'}`:item.date??''));
+      row.append(b);list.append(row);
+    }
     if(!items.length)list.append(el('li','这里还没有内容。'));
     if(data.more){const row=el('li');row.append(button('下一页',()=>perform(()=>loadList(mode,data.commit,page+1))));list.append(row);}
     if(page>1){const row=el('li');row.append(button('上一页',()=>perform(()=>loadList(mode,data.commit,page-1))));list.prepend(row);}
   }
-  async function start(kind:WriterKind){
-    if(kind==='forge')return;
-    await flush();await controller?.dispose();controller=null;active=null;generation++;releaseUrls();pane.replaceChildren(el('h2','新建'+writerKindLabel(kind)));
-    const form=el('form'),slug=field(`${kind==='gallery'?'相册':kind==='project'?'项目':'文章'}网址（创建后固定）`),title=field('标题');slug.input.name='key';title.input.name='title';if(kind!=='gallery')slug.input.pattern='[a-z0-9]+(-[a-z0-9]+)*';slug.input.maxLength=kind==='gallery'?100:60;slug.input.required=true;slug.input.placeholder=kind==='project'?'my-new-project':'my-new-post';
-    if(kind==='post'||kind==='project'||kind==='gallery')form.append(title.label,slug.label);
-    const create=el('button','创建私密草稿','primary');create.type='submit';form.append(create,el('p','创建和保存不会发布到网站。','writer-note'));pane.append(form);
-    form.addEventListener('submit',event=>{event.preventDefault();void perform(async()=>{create.disabled=true;try{const value=newValue(kind);if(kind==='post'||kind==='project'||kind==='gallery')value.fields.title=title.input.value;const result=await api('/drafts',{method:'POST',body:JSON.stringify({action:'create',kind,key:slug.input.value,value})});await openDraft(result.draft);await loadList('drafts');}finally{create.disabled=false;}});});
-    if(kind==='talk')form.requestSubmit();
+  function start(kind:WriterKind){
+    if(kind==='forge'||disposed)return;
+    const selection=selectDraft();
+    return perform(async()=>{
+      await flush();
+      if(selection.aborted)return;
+      const closing=closeDraft(), formGeneration=generation;
+      pane.replaceChildren(el('h2','新建'+writerKindLabel(kind)));
+      const form=el('form'),slug=field(`${kind==='gallery'?'相册':kind==='project'?'项目':'文章'}网址（创建后固定）`),title=field('标题');slug.input.name='key';title.input.name='title';if(kind!=='gallery')slug.input.pattern='[a-z0-9]+(-[a-z0-9]+)*';slug.input.maxLength=kind==='gallery'?100:60;slug.input.required=true;slug.input.placeholder=kind==='project'?'my-new-project':'my-new-post';
+      if(kind==='post'||kind==='project'||kind==='gallery')form.append(title.label,slug.label);
+      const create=el('button','创建私密草稿','primary');create.type='submit';form.append(create,el('p','创建和保存不会发布到网站。','writer-note'));pane.append(form);
+      form.addEventListener('submit',event=>{
+        event.preventDefault();
+        if(disposed||generation!==formGeneration||create.disabled)return;
+        const creation=selectDraft();
+        void perform(async()=>{
+          create.disabled=true;
+          try{
+            const value=newValue(kind);
+            if(kind==='post'||kind==='project'||kind==='gallery')value.fields.title=title.input.value;
+            const result=await api('/drafts',{method:'POST',body:JSON.stringify({action:'create',kind,key:slug.input.value,value})});
+            await openDraft(result.draft,creation);
+            if(!creation.aborted)await loadList('drafts');
+          }finally{if(generation===formGeneration)create.disabled=false;}
+        },creation);
+      });
+      if(kind==='talk')form.requestSubmit();
+      await closing;
+    },selection);
   }
-  async function openDraft(draft:WriterDraft){
-    await controller?.dispose();releaseUrls();active=structuredClone(draft);const ticket=++generation;let copies:RecoveryRecord[]=[];
-    try{copies=await recovery.findDraft(options.user.id,draft.id);}catch{backup.textContent='本设备备份不可用，请及时保存或下载';}
-    if(disposed||ticket!==generation)return;
+  async function openDraft(draft:WriterDraft,selection:AbortSignal,saveCurrent=false){
+    if(selection.aborted)return;
+    let copies:RecoveryRecord[]=[], backupFailed=false;
+    try{copies=await recovery.findDraft(options.user.id,draft.id);}catch{backupFailed=true;}
+    if(selection.aborted)return;
+    if(saveCurrent){
+      await flush();
+      if(selection.aborted)return;
+      // 读取同一份草稿期间也可能保存了更新的版本。
+      if(active?.id===draft.id&&controller!.current().revision>draft.revision)return;
+    }
+    const closing=closeDraft(), recoveryGeneration=generation;
+    if(backupFailed)backup.textContent='本设备备份不可用，请及时保存或下载';
     const candidates=copies.filter(copy=>JSON.stringify(copy.value)!==JSON.stringify(draft.value)||copy.pendingImages?.length);
     if(candidates.length){
       pane.replaceChildren(el('h2','发现本设备恢复副本'),el('p','选择要继续编辑的版本。其他发布基线的副本也列在这里；恢复后仍会检查云端版本，不会覆盖其他设备的新内容。'));
       const comparison=(value:WriterValue)=>(draft.kind==='project'||draft.kind==='forge'||draft.kind==='gallery'?JSON.stringify(value.fields,null,2)+'\n\n':'')+value.body;
       const cloud=el('label',draft.kind==='project'||draft.kind==='forge'||draft.kind==='gallery'?'当前云端文案与正文（只读）':'当前云端正文','writer-field'),area=el('textarea');area.value=comparison(draft.value);area.readOnly=true;cloud.append(area);pane.append(cloud);
       for(const restore of candidates){
-        const section=el('section'),base=restore.key.split('/').at(-1)??'new',label=el('label',`本设备 · ${new Date(restore.updatedAt).toLocaleString()} · 基线 ${base==='new'?'未发布':base.slice(0,12)}`,'writer-field'),body=el('textarea');body.value=comparison(restore.value);body.readOnly=true;label.append(body);section.append(label,el('p',`${restore.pendingImages?.length??0} 张待上传配图`,'writer-note'),button('恢复本设备版本',()=>renderDraft(draft,restore)),button('下载恢复副本',()=>perform(()=>recoveryExport(draft.key,restore))));pane.append(section);
+        const section=el('section'),base=restore.key.split('/').at(-1)??'new',label=el('label',`本设备 · ${new Date(restore.updatedAt).toLocaleString()} · 基线 ${base==='new'?'未发布':base.slice(0,12)}`,'writer-field'),body=el('textarea');body.value=comparison(restore.value);body.readOnly=true;label.append(body);
+        const restoreButton=button('恢复本设备版本',()=>{
+          if(recoveryGeneration!==generation)return;
+          selectDraft();
+          renderDraft(draft,restore);
+        });
+        section.append(label,el('p',`${restore.pendingImages?.length??0} 张待上传配图`,'writer-note'),restoreButton,button('下载恢复副本',()=>perform(()=>recoveryExport(draft.key,restore))));pane.append(section);
       }
-      pane.append(el('p','选择使用云端版本会清理本设备上此草稿的上述恢复副本，请先下载需要保留的版本。','writer-note'),button('使用云端版本',()=>perform(async()=>{for(const copy of copies)await recovery.remove(copy.key);renderDraft(draft);})));return;
-    }
-    renderDraft(draft);
+      const useCloud=button('使用云端版本',()=>{
+        if(recoveryGeneration!==generation)return;
+        const choice=selectDraft();
+        return perform(async()=>{
+          for(const copy of copies){
+            if(choice.aborted)return;
+            await recovery.remove(copy.key);
+          }
+          if(!choice.aborted)renderDraft(draft);
+        },choice);
+      });
+      pane.append(el('p','选择使用云端版本会清理本设备上此草稿的上述恢复副本，请先下载需要保留的版本。','writer-note'),useCloud);
+    }else renderDraft(draft);
+    await closing;
   }
   function renderDraft(draft:WriterDraft,restore?:RecoveryRecord){
     active=structuredClone(draft);if(restore){active.value=structuredClone(restore.value);active.revision=restore.revision;pending=(restore.pendingImages??[]).map(p=>{const url=URL.createObjectURL(p.blob);urls.add(url);return {...p,url};});}
@@ -97,8 +179,20 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     const renderPreview=()=>{preview.replaceChildren();if(working.kind==='project'||working.kind==='forge')preview.append(renderForgePreview(working.kind,working.value,resolveImage));if(working.kind!=='forge')preview.append(renderWriterMarkdown(bodyEditor!.getMarkdown(),resolveImage));};
     async function showConflict(){
       try{const result=await api('/drafts?id='+working.id);if(ticket!==generation)return;conflict.hidden=false;conflict.replaceChildren(el('h3','对照版本'));const comparison=el('div','','writer-compare');
-        for(const [name,text]of [['当前输入',JSON.stringify(controller!.current().value.fields,null,2)+'\n\n'+working.value.body],['云端版本',JSON.stringify(result.draft.value.fields,null,2)+'\n\n'+result.draft.value.body]]){const label=el('label',name,'writer-field'),area=el('textarea');area.value=text;area.readOnly=true;label.append(area);comparison.append(label);}conflict.append(comparison,el('p','另存会保留当前输入和原内容网址，原草稿不变。发布前仍需对照仓库最新内容。','writer-note'),button('将当前输入另存为新草稿',()=>perform(async()=>{const current=controller!.current();const result=await api('/drafts',{method:'POST',body:JSON.stringify({action:'copy',id:current.id,baseCommit:current.base?.commit??null,value:current.value})});if(ticket!==generation)return;await openDraft(result.draft);await loadList('drafts');})),button('下载当前输入',markdownExport));
-      }catch(error){showError(error);}
+        for(const [name,text]of [['当前输入',JSON.stringify(controller!.current().value.fields,null,2)+'\n\n'+working.value.body],['云端版本',JSON.stringify(result.draft.value.fields,null,2)+'\n\n'+result.draft.value.body]]){const label=el('label',name,'writer-field'),area=el('textarea');area.value=text;area.readOnly=true;label.append(area);comparison.append(label);}
+        const copyDraft=button('将当前输入另存为新草稿',()=>{
+          if(ticket!==generation)return;
+          const selection=selectDraft();
+          return perform(async()=>{
+            const current=controller!.current();
+            const result=await api('/drafts',{method:'POST',body:JSON.stringify({action:'copy',id:current.id,baseCommit:current.base?.commit??null,value:current.value})});
+            if(ticket!==generation)return;
+            await openDraft(result.draft,selection);
+            if(!selection.aborted)await loadList('drafts');
+          },selection);
+        });
+        conflict.append(comparison,el('p','另存会保留当前输入和原内容网址，原草稿不变。发布前仍需对照仓库最新内容。','writer-note'),copyDraft,button('下载当前输入',markdownExport));
+      }catch(error){if(ticket===generation)showError(error);}
     }
     controller=createSaveController({beforeSave:async()=>{await galleryFields?.prepare();},load:()=>draft,initialRecovery:restore,save:async input=>(await api('/drafts',{method:'POST',body:JSON.stringify({action:'save',...input})})).draft,recovery:{put:storeCopy},onState:(state,info)=>{if(disposed||ticket!==generation)return;status.textContent=SAVE_LABELS[state]+(state==='saved'&&info.revision===(controller?.current().publishedRevision??working.publishedRevision)?' · 已发布':' · 未发布修改');backup.textContent=info.backedUp?'':'本设备备份失败，请及时保存到云端或下载当前输入。';if(state==='conflict')void showConflict();}});
     const save=button('保存草稿',()=>perform(async()=>{await galleryFields?.prepare();await controller!.saveNow();await loadList('drafts');}),'primary'),toggle=button('预览',()=>{preview.hidden=!preview.hidden;bodyLabel.hidden=!preview.hidden;toggle.textContent=preview.hidden?'预览':'继续编辑';toggle.setAttribute('aria-pressed',String(!preview.hidden));if(!preview.hidden)renderPreview();});toggle.setAttribute('aria-pressed','false');
@@ -244,7 +338,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     pane.append(tools,status,backup,fields);if(working.kind!=='forge')pane.append(bodyLabel);pane.append(preview);if(working.kind!=='forge')pane.append(imageSection);if(working.kind==='post'||working.kind==='talk')pane.append(audioSection);pane.append(metadata,conflict,publishing,el('p',options.publish?'保存不会发布，点击发布后还需确认本次内容。':'发布尚未配置；私密草稿仍可保存和导出。','writer-note'),deleteDraft);renderImages();renderAudio();void controller.ready;
   }
   navigation.setAttribute('aria-label','内容分类');for(const [mode,label]of [['drafts','草稿'],['post','文章'],['talk','说说'],['project','造物台项目'],['gallery','相册'],['forge','页面文案'],['jobs','发布记录']])navigation.append(button(label,()=>perform(()=>loadList(mode))));
-  const newButtons=el('div','','writer-toolbar');newButtons.append(button('新文章',()=>perform(()=>start('post')),'primary'),button('新说说',()=>perform(()=>start('talk'))),button('新项目',()=>perform(()=>start('project'))),button('新相册',()=>perform(()=>start('gallery'))));sidebar.prepend(newButtons);
+  const newButtons=el('div','','writer-toolbar');newButtons.append(button('新文章',()=>start('post'),'primary'),button('新说说',()=>start('talk')),button('新项目',()=>start('project')),button('新相册',()=>start('gallery')));sidebar.prepend(newButtons);
   const storage=el('div','','writer-storage');storage.append(button('配图占用与清理',()=>perform(async()=>{await flush();await showWriterStorage(pane,api);})));sidebar.append(storage);
   pane.append(el('h2',`你好，${options.user.nickname}`),el('p','选择一份草稿，或写下新的文章、说说与造物台项目。造物台页面文案可从左侧导入编辑。保存只会留在你的私密空间里。'));
   void perform(async()=>{tags=(await api('/content?mode=tags')).tags;await loadList('drafts');});
@@ -252,5 +346,15 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
   const online=()=>{if(controller)void perform(()=>controller!.saveNow());};window.addEventListener('online',online);
   return {getDraft:()=>controller?.current(),showError,
     async refreshPublished(draftId:string){if(!active||active.id!==draftId||!controller)return;const id=active.id,result=await api('/drafts?id='+id);if(!active||active.id!==id||!controller)return;const oldKey=recoveryKey(options.user.id,active);active.base=result.draft.base;active.publishedRevision=result.draft.publishedRevision;await controller.advanceBase(active.base,active.publishedRevision);if(oldKey!==recoveryKey(options.user.id,active))await recovery.remove(oldKey);},
-    async dispose(){disposed=true;generation++;listGeneration++;window.removeEventListener('beforeunload',beforeUnload);window.removeEventListener('online',online);await controller?.dispose();releaseUrls();root.replaceChildren();}};
+    async dispose(){
+      if(disposed)return;
+      disposed=true;
+      draftSelection?.abort();
+      listGeneration++;
+      window.removeEventListener('beforeunload',beforeUnload);
+      window.removeEventListener('online',online);
+      const closing=closeDraft();
+      root.replaceChildren();
+      await closing;
+    }};
 }

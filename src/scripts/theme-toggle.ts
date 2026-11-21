@@ -8,19 +8,18 @@ import { createPageScope } from './page-lifecycle';
  *     指针事件改挂 window（拖出画布继续跟手）；
  *   · camera.ts：加 project()（CPU 侧世界→画布投影，给命中测试用）；
  *   · scene.ts：setupScene 返回 eventHandler、注入 hitTest。
- * 本文件只做三件事：初始化 WebGPU 场景、把"连续滑块"收成"两端吸附的开关"、
- * 无 WebGPU 时降级为普通开关（主题照样能切）。
+ * 本文件初始化 WebGPU 场景，将连续滑块收成两端吸附的开关。基础按钮由顶栏组件提供。
  *
  * 行为：左端 = 亮色（0%），右端 = 暗色（100%），百分比显示原样保留。
  * 拖动时页面与头部颜色随位置渐变，松手吸附落定后保存主题；点按仍直接切换。
- * 键盘 ←/→/空格/回车可用。
+ * 方向键使用软条吸附，空格和回车沿用原生按钮。
  * 空白处按住挪动再松手 = 什么都不发生（见下面松手判定的注释）。
  */
 import { tgpu, d } from 'typegpu';
 import { setupScene } from '../vendor/jelly-slider/scene.ts';
 import { DARK_END, LIGHT_END } from '../vendor/jelly-slider/events.ts';
 import { GROUND_TINT_DARK, GROUND_TINT_LIGHT } from '../vendor/jelly-slider/constants.ts';
-import { getTheme, setTheme, type Theme } from './theme.ts';
+import { setTheme, type Theme } from './theme.ts';
 import { colorChannels, createThemePreview, mixThemeColor } from './theme-preview';
 
 const MID = (LIGHT_END + DARK_END) / 2;
@@ -49,70 +48,49 @@ function applyGround(
   scene.groundTint = theme === 'dark' ? GROUND_TINT_DARK : GROUND_TINT_LIGHT;
 }
 
-function syncAria(root: HTMLElement): void {
-  root.setAttribute('aria-checked', String(getTheme() === 'dark'));
-}
-
-/** 无 WebGPU 时的降级：普通开关，主题照样切（样式极简，不伪装成果冻） */
-function mountFallback(root: HTMLElement): void {
-  root.innerHTML = '';
-  // 降级按钮独自承担交互语义，避免 Tab 先落到一个没有事件的外层开关。
-  root.removeAttribute('role');
-  root.removeAttribute('aria-checked');
-  root.removeAttribute('aria-label');
-  root.removeAttribute('tabindex');
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'tt-fallback';
-  btn.setAttribute('role', 'switch');
-  const paint = (): void => {
-    const dark = getTheme() === 'dark';
-    btn.setAttribute('aria-checked', String(dark));
-    btn.textContent = dark ? '暗' : '亮';
-    btn.setAttribute('aria-label', '切换深色模式（当前' + (dark ? '深色' : '浅色') + '）');
-  };
-  btn.addEventListener('click', () => {
-    setTheme(getTheme() === 'dark' ? 'light' : 'dark');
-    paint();
-  });
-  document.addEventListener('themechange', paint);
-  window.addEventListener('pagehide',()=>document.removeEventListener('themechange',paint),{once:true});
-  root.appendChild(btn);
-  paint();
-}
-
-export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
-  const scope=createPageScope(globalThis.window,globalThis.document);
-  const {window,document}=scope;
-  window.addEventListener('pagehide',()=>scope.dispose(),{once:true});
-  const canvas = root.querySelector('canvas');
-  if (!canvas) return;
-
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  if (!('gpu' in navigator)) {
-    mountFallback(root);
-    return;
-  }
-  let tgRoot;
-  try {
-    tgRoot = await tgpu.init();
-  } catch {
-    mountFallback(root);
-    return;
-  }
-
-  if (!root.isConnected) { tgRoot.destroy(); scope.dispose(); return; }
+export async function initJellyThemeToggle(root: HTMLElement, signal: AbortSignal): Promise<void> {
+  const previous = root.querySelector('canvas');
+  if (!previous || signal.aborted || !root.isConnected) return;
+  const tgRoot = await tgpu.init();
+  if (signal.aborted || !root.isConnected) { tgRoot.destroy(); return; }
+  // 每次增强持有独立画布，迟到的旧场景不会重配当前画布。
+  const canvas = previous.cloneNode(false) as HTMLCanvasElement;
+  previous.replaceWith(canvas);
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
   canvas.width = Math.round(W * dpr);
   canvas.height = Math.round(H * dpr);
 
   /* ★ premultiplied：地面层完全靠 alpha 表达（纸色 = 透明，暗部 = 半透明墨影），
      于是关于页的 ∞ 底纹从按钮底下透出来、影子也落在页面上，见 scene.ts 的 blit 注释。 */
-  const context = tgRoot.configureContext({ canvas, alphaMode: 'premultiplied' });
-  const scene = await setupScene(tgRoot, context);
-  if (!root.isConnected) { scene.onCleanup(); tgRoot.destroy(); scope.dispose(); return; }
-  scope.keep(()=>{scene.onCleanup();tgRoot.destroy();});
+  let scene: Awaited<ReturnType<typeof setupScene>>;
+  try {
+    scene = await setupScene(tgRoot, tgRoot.configureContext({ canvas, alphaMode: 'premultiplied' }));
+  } catch (error) {
+    tgRoot.destroy();
+    throw error;
+  }
+  if (signal.aborted || !root.isConnected) { scene.onCleanup(); tgRoot.destroy(); return; }
+  const scope = createPageScope(globalThis.window, globalThis.document);
+  const { window: scopedWindow, document: scopedDocument } = scope;
+  const { device } = tgRoot;
+  let ready = false;
+  let frameRevision = 0;
+  signal.addEventListener('abort', scope.dispose, { once: true });
+  scope.keep(() => signal.removeEventListener('abort', scope.dispose));
+  scope.keep(() => {
+    frameRevision++;
+    root.removeAttribute('data-tt-ready');
+  });
+  device.addEventListener('uncapturederror', scope.dispose);
+  scope.keep(() => device.removeEventListener('uncapturederror', scope.dispose));
+  const listeners = new AbortController();
+  scope.keep(() => listeners.abort());
+  scope.keep(() => scene.onCleanup());
+  scope.keep(() => tgRoot.destroy());
+  void device.lost.then(scope.dispose);
+  const options = { signal: listeners.signal };
+  const reduceMotion = scopedWindow.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const currentTheme = (): Theme => scopedDocument.documentElement.classList.contains('dark') ? 'dark' : 'light';
   const events = scene.eventHandler;
   const preview = createThemePreview();
   scope.keep(()=>preview.clear());
@@ -139,17 +117,27 @@ export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
   };
   scene.onProgress = progress => { if (dragPreview) paintProgress(progress); };
 
-  // 首帧即停在当前主题对应的端
-  const startTheme = getTheme();
+  // 场景先排帧；等 GPU 完成同一主题的绘制，才移开静态软条。
+  const reveal = () => {
+    const revision = ++frameRevision;
+    scopedWindow.requestAnimationFrame(() => {
+      void device.queue.onSubmittedWorkDone().then(() => {
+        if (revision !== frameRevision || !root.isConnected) return;
+        ready = true;
+        root.setAttribute('data-tt-ready', '');
+      }, scope.dispose);
+    });
+  };
+  const startTheme = currentTheme();
   applyGround(scene, startTheme);
   paintTip(startTheme === 'dark' ? 1 : 0);
   events.setInitial(startTheme === 'dark' ? DARK_END : LIGHT_END);
-  syncAria(root);
+  reveal();
 
   const endPreview = (): void => {
     dragPreview = false;
     preview.clear();
-    const theme = getTheme();
+    const theme = currentTheme();
     applyGround(scene, theme);
     paintTip(theme === 'dark' ? 1 : 0);
   };
@@ -158,10 +146,10 @@ export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
     dragPreview = false;
     preview.clear();
     const t = themeOfEnd(end);
-    if (getTheme() !== t) setTheme(t);
+    if (currentTheme() !== t) setTheme(t);
     applyGround(scene, t);
     paintTip(end === DARK_END ? 1 : 0);
-    syncAria(root);
+    if (!ready) reveal();
   };
 
   const snapToEnd = (end: number): void => {
@@ -188,15 +176,15 @@ export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
     downY = e.clientY;
     downT = performance.now();
     gestureMoved = false;
-  });
-  window.addEventListener('pointermove', (e) => {
+  }, options);
+  scopedWindow.addEventListener('pointermove', (e) => {
     if (!downOnCanvas || e.pointerId !== pointerId) return;
     if (Math.hypot(e.clientX - downX, e.clientY - downY) >= 6) gestureMoved = true;
     if (!events.isPointerDown || reduceMotion) return;
     if (!events.didGrab) return;
     if (gestureMoved) dragPreview = true;
   });
-  window.addEventListener('pointerup', (e) => {
+  scopedWindow.addEventListener('pointerup', (e) => {
     if (!downOnCanvas || e.pointerId !== pointerId) return;
     downOnCanvas = false;
     pointerId = null;
@@ -224,7 +212,7 @@ export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
     const dt = performance.now() - downT;
     // 中途拖出再拉回，也属于拖动；不能只看松手时首尾的距离。
     const tapped = moved < 6 && dt < 400 && !gestureMoved;
-    const other = getTheme() === 'dark' ? LIGHT_END : DARK_END;
+    const other = currentTheme() === 'dark' ? LIGHT_END : DARK_END;
     if (events.didGrab) {
       if (tapped) {
         endPreview(); // 吸附未结束就重新点按，也要回到直接切换路径。
@@ -255,33 +243,31 @@ export async function initJellyThemeToggle(root: HTMLElement): Promise<void> {
   const cancelPreview = () => {
     downOnCanvas = false; pointerId = null; dragPreview = false;
     preview.clear(); events.cancelDrag();
-    const theme = getTheme();
+    const theme = currentTheme();
     events.setInitial(theme === 'dark' ? DARK_END : LIGHT_END);
     applyGround(scene, theme); paintTip(theme === 'dark' ? 1 : 0);
   };
-  window.addEventListener('pointercancel', (e) => { if (e.pointerId === pointerId) cancelPreview(); });
-  window.addEventListener('blur', cancelPreview);
-  window.addEventListener('pagehide', cancelPreview);
+  scopedWindow.addEventListener('pointercancel', (e) => { if (e.pointerId === pointerId) cancelPreview(); });
+  scopedWindow.addEventListener('blur', cancelPreview);
 
   root.addEventListener('keydown', (e) => {
-    if (['ArrowRight', 'End', 'ArrowLeft', 'Home', ' ', 'Enter'].includes(e.key)) endPreview();
     if (e.key === 'ArrowRight' || e.key === 'End') {
+      endPreview();
       snapToEnd(DARK_END);
       e.preventDefault();
     } else if (e.key === 'ArrowLeft' || e.key === 'Home') {
+      endPreview();
       snapToEnd(LIGHT_END);
       e.preventDefault();
-    } else if (e.key === ' ' || e.key === 'Enter') {
-      snapToEnd(getTheme() === 'dark' ? LIGHT_END : DARK_END);
-      e.preventDefault();
     }
-  });
+  }, options);
 
   // 同页别的开关切了主题 → 手柄跟过去（画布地面色也跟着换，否则按钮又变成一块贴片）
-  document.addEventListener('themechange', (e) => {
+  scopedDocument.addEventListener('themechange', (e) => {
     const t = (e as CustomEvent<Theme>).detail;
+    // 等待期间仍可切主题，取消旧帧的交接，等新位置绘制完成。
+    if (!ready) frameRevision++;
     applyGround(scene, t);
-    syncAria(root);
     snapToEnd(t === 'dark' ? DARK_END : LIGHT_END);
   });
 }

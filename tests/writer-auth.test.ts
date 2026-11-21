@@ -24,6 +24,7 @@ describe('写作台站主边界', () => {
     const s=await writerFixture();
     expect((await call(s.request('/session','GET',undefined,{Cookie:`__Host-nc_session=${s.token}; __Host-nc_session=${s.token}`}),s.env)).status).toBe(401);
     expect((await call(s.request('/session','GET',undefined,{'Sec-Fetch-Site':'cross-site'}),s.env)).status).toBe(403);
+    expect((await call(s.request('/session','GET',undefined,{'Sec-Fetch-Site':'same-site'}),s.env)).status).toBe(403);
     expect((await call(s.request('/session','GET',undefined,{Origin:'null'}),s.env)).status).toBe(403);
   });
   it('写入需要同源与请求标记，本地开发需要服务端显式开关',async()=>{

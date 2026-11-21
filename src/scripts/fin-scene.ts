@@ -172,18 +172,8 @@ function instanced(base: BufferGeometry, count: number): InstancedBufferGeometry
 export async function createFinScene(
   canvas: HTMLCanvasElement,
   palette: FinPalette,
+  context: WebGL2RenderingContext,
 ): Promise<FinScene | null> {
-  const context = canvas.getContext('webgl2', {
-    antialias: true,
-    alpha: true,
-    powerPreference: 'high-performance',
-    failIfMajorPerformanceCaveat: true,
-  });
-  if (!context) return null;
-  const debug = context.getExtension('WEBGL_debug_renderer_info');
-  const device = debug ? String(context.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : '';
-  // 某些浏览器允许软件 WebGL，但后处理足以让换页停顿；此时使用已有静态图。
-  if (/swiftshader|llvmpipe|softpipe|software|basic render driver/i.test(device)) return null;
   const renderer = new WebGLRenderer({ canvas, context, antialias: true, alpha: true });
   renderer.outputColorSpace = SRGBColorSpace;
   /* ★★ 原版是 `NoToneMapping`（Stage.ts:162）—— 它自己做 grade：exposure 1.5

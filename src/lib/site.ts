@@ -1,4 +1,5 @@
 import { getEntry } from 'astro:content';
+import { webContentUrl } from './content-urls.mjs';
 
 export type Site = {
   name: string;
@@ -24,5 +25,7 @@ export async function getSite(): Promise<Site> {
   if (!entry) {
     throw new Error('缺少 content/site.md —— 它是站点文案的唯一来源（站名/简介/meta/联系方式）');
   }
-  return entry.data as Site;
+  const data = entry.data as Site;
+  if (!webContentUrl(data.github)) throw new Error('content/site.md 的 github 必须使用不含凭据的网页地址');
+  return data;
 }

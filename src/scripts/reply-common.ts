@@ -60,14 +60,16 @@ export function groupReplies<T extends { parentId: number }>(
 export const parentIdsOf = (rows: { id: number }[]) => rows.map((r) => r.id);
 
 /** 提交一条（顶层评论或回复都走这里）：非 2xx 一律把服务端的中文原因抛出去 */
-export async function postComment(payload: Record<string, unknown>): Promise<Reply> {
+export async function postComment(payload: Record<string, unknown>, isCurrent?: () => boolean): Promise<Reply> {
   const r = await fetch('/api/comments', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-NC-Request': '1' },
     body: JSON.stringify(payload),
   });
   const b = (await r.json().catch(() => ({}))) as { comment?: Reply; error?: string };
-  if (r.status === 401 && payload.identity === 'account') window.dispatchEvent(new Event('visitor-session-expired'));
+  if (r.status === 401 && payload.identity === 'account' && isCurrent?.() !== false) {
+    window.dispatchEvent(new Event('visitor-session-expired'));
+  }
   if (!r.ok || !b.comment) throw new Error(b.error || '没发出去，稍后再试。');
   return b.comment;
 }
@@ -104,8 +106,10 @@ export function replyLi(r: Reply, onReply: () => void, fresh = false): HTMLLIEle
 export function toggleReplyForm(
   list: HTMLElement,
   li: HTMLElement,
-  ctx: { slug: string; parentId: number; replyTo: string; target?: ReplyTarget; name: () => string; onAdded: () => void }
+  ctx: { slug: string; parentId: number; replyTo: string; target?: ReplyTarget; name: () => string; onAdded: (reply: Reply) => void; isCurrent?: () => boolean }
 ): void {
+  const isCurrent = ctx.isCurrent ?? (() => true);
+  if (!isCurrent()) return;
   const open = li.querySelector(':scope > .reply-form');
   list.querySelectorAll('.reply-form').forEach(removeReplyForm);
   if (open) return;
@@ -148,9 +152,10 @@ export function toggleReplyForm(
   error.hidden = true;
 
   form.append(name, body, hp, send, cancel, error);
-  replyIdentityCleanup.set(form, identityControls(form));
+  replyIdentityCleanup.set(form, identityControls(form, isCurrent));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (!isCurrent() || send.disabled) return;
     error.hidden = true;
     send.disabled = true;
     postComment({
@@ -163,19 +168,23 @@ export function toggleReplyForm(
       website: hpInput.value,
       // 回的是哪一条（顶层评论 or 某条回复）—— 服务端据此把提醒落到被回复者账户上
       replyTarget: ctx.target ?? { kind: 'comment', id: ctx.parentId },
-    })
+    }, isCurrent)
       .then((r) => {
+        if (!isCurrent()) return;
         // 回复按**旧的在上**（站主 2026-09-28 拍板，对话要顺着读）⇒ append，不是 prepend
-        box.append(replyLi(r, () => toggleReplyForm(list, li, { ...ctx, replyTo: r.name, target: { kind: 'reply', id: r.id } })));
+        if (!box.querySelector(`:scope > li[data-reply-id="${r.id}"]`)) {
+          box.append(replyLi(r, () => toggleReplyForm(list, li, { ...ctx, replyTo: r.name, target: { kind: 'reply', id: r.id } })));
+        }
         removeReplyForm(form);
-        ctx.onAdded();
+        ctx.onAdded(r);
       })
       .catch((err: Error) => {
+        if (!isCurrent() || !form.isConnected) return;
         error.textContent = err.message;
         error.hidden = false;
       })
       .finally(() => {
-        send.disabled = false;
+        if (isCurrent() && form.isConnected) send.disabled = false;
       });
   });
 

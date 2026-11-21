@@ -479,12 +479,18 @@ export interface TslScene {
 export async function createTslScene(
   canvas: HTMLCanvasElement,
   pal: TslPalette,
-): Promise<TslScene> {
+  isCurrent: () => boolean,
+): Promise<TslScene | null> {
   /* 调试开关：?tsl-dump=1 ⇒ 状态出口挂 window 供探针读取（放在最前，因为下面的
      翅膀掩膜自检、以及 update 里的状态出口都要用到它） */
   const dumpOn = new URLSearchParams(location.search).has('tsl-dump');
 
   const { geo: butGeo, map: butMap } = await loadButterfly();
+  if (!isCurrent()) {
+    butGeo.dispose();
+    butMap.dispose();
+    return null;
+  }
   /* ★ 站主第十轮：「触角和肢体不要乱动，不要交叉」⇒ 先把翅膀膜认出来，
      扑翼形变只作用在掩膜内的顶点（判据与实测见 time-slice-core.ts 的 splitWings）。 */
   const wingSplit = splitWings(

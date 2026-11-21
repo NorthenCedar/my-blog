@@ -24,6 +24,7 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
   let frame = 0;
   let current = -1;
   let live = true;
+  let geometry: { box: DOMRect; tops: (number | null)[] } | null | undefined;
   const mark = (next: number, snap = false) => {
     const changed = next !== current;
     if (changed) {
@@ -38,8 +39,22 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
     if (!live || !pairs.length || motion.active) return;
     const viewportTop = win.visualViewport?.offsetTop ?? 0;
     const threshold = viewportTop + (win.visualViewport?.height ?? win.innerHeight) * 0.2;
+    if (geometry === undefined && (!prose || !rail || win.getComputedStyle(rail).position !== 'sticky')) geometry = null;
+    const box = geometry === null ? null : prose!.getBoundingClientRect();
+    // 标题记相对正文的位置；页头重排或滚动时，正文的当前顶边直接带动整组位置。
+    if (box && (!geometry || box.width !== geometry.box.width || box.height !== geometry.box.height)) {
+      const tops = pairs.map(({ heading }) => {
+        const rect = heading.getBoundingClientRect();
+        return rect.width || rect.height ? rect.top - box.top : null;
+      });
+      geometry = { box, tops };
+    }
+    const topOf = (index: number) => {
+      const offset = geometry?.tops[index];
+      return box && offset != null ? box.top + offset : pairs[index].heading.getBoundingClientRect().top;
+    };
     let next = 0;
-    pairs.forEach(({ heading }, i) => { if (heading.getBoundingClientRect().top <= threshold) next = i; });
+    pairs.forEach((_, i) => { if (topOf(i) <= threshold) next = i; });
 
     // 跳到紧邻小标题的章节时，船先停在链接指向的标题。
     const hash = win.location?.hash;
@@ -47,7 +62,7 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
       const index = pairs.findIndex(({ link }) => link.hash === hash);
       if (index >= 0 && index < next) {
         const heading = pairs[index].heading;
-        const top = heading.getBoundingClientRect().top - viewportTop;
+        const top = topOf(index) - viewportTop;
         const inset = parseFloat(win.getComputedStyle(heading).scrollMarginTop) || 0;
         if (top >= inset - 2) next = index;
       }
@@ -55,6 +70,7 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
     mark(next);
   };
   const schedule = () => { if (live && !frame && pairs.length) frame = win.requestAnimationFrame(update); };
+  const invalidate = () => { geometry = undefined; schedule(); };
   const interrupt = () => {
     if (!motion.active) return;
     cancel();
@@ -109,10 +125,10 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
   };
   pairs.forEach(({ link }) => link.addEventListener('click', jumpToHeading, options));
   win.addEventListener('scroll', schedule, passive);
-  win.addEventListener('resize', schedule, passive);
+  win.addEventListener('resize', invalidate, passive);
   win.addEventListener('hashchange', () => { interrupt(); schedule(); }, options);
   win.visualViewport?.addEventListener('scroll', schedule, passive);
-  win.visualViewport?.addEventListener('resize', schedule, passive);
+  win.visualViewport?.addEventListener('resize', invalidate, passive);
   win.addEventListener('wheel', interrupt, passive);
   win.addEventListener('touchmove', interrupt, passive);
   win.addEventListener('popstate', interrupt, options);
@@ -123,9 +139,14 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
   win.addEventListener('keydown', event => {
     if (motion.active && !event.defaultPrevented && /^(?:Escape|ArrowUp|ArrowDown|PageUp|PageDown|Home|End| )$/.test(event.key)) interrupt();
   }, options);
-  const observer = prose && win.ResizeObserver ? new win.ResizeObserver(schedule) : null;
-  if (observer && prose) observer.observe(prose);
-  doc.fonts?.ready.then(schedule);
+  const observer = prose && win.ResizeObserver ? new win.ResizeObserver(invalidate) : null;
+  const edits = prose && win.MutationObserver ? new win.MutationObserver(invalidate) : null;
+  if (prose) {
+    observer?.observe(prose);
+    edits?.observe(prose, { subtree: true, childList: true, characterData: true, attributeFilter: ['hidden', 'open'] });
+  }
+  doc.fonts?.ready.then(invalidate);
+  doc.fonts?.addEventListener('loadingdone', invalidate, options);
   schedule();
 
   const button = doc.querySelector<HTMLButtonElement>('[data-copy-link]');
@@ -159,5 +180,6 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
     win.cancelAnimationFrame(frame);
     win.clearTimeout(timer);
     observer?.disconnect();
+    edits?.disconnect();
   };
 }

@@ -92,7 +92,7 @@ function studioEnvironment(renderer) {
   map.dispose(); pmrem.dispose(); return environment;
 }
 
-export function createForgeScene(canvas, onFrame) {
+export function createForgeScene(canvas, onFrame, onFailure) {
   const mobile = matchMedia('(max-width:760px)').matches;
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power' });
   renderer.setClearAlpha(0); renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.5 : 1.75));
@@ -146,7 +146,7 @@ export function createForgeScene(canvas, onFrame) {
   const release = createChainRelease();
   const temp = new THREE.Object3D(), xAxis = new THREE.Vector3(1, 0, 0), axisQ = new THREE.Quaternion(), zero = new THREE.Vector3(0, 0, 0);
   let target = 0, current = 0, pointerX = 0, pointerY = 0, currentX = 0, currentY = 0;
-  let dark = false, reduced = false, active = true, disposed = false, contextLost = false, raf = 0, last = 0, viewHeight = 8, viewWidth = 16, smallScreen = mobile, receivedProgress = false;
+  let dark = false, reduced = false, active = true, ready = false, disposed = false, raf = 0, last = 0, viewHeight = 8, viewWidth = 16, smallScreen = mobile, receivedProgress = false;
   const events = new AbortController();
 
   function writeLinks(mesh, curve) {
@@ -235,7 +235,7 @@ export function createForgeScene(canvas, onFrame) {
   }
   function renderFrame(time) {
     raf = 0;
-    if (disposed || contextLost || !active || document.hidden) { last = 0; return; }
+    if (disposed || !active || document.hidden) { last = 0; return; }
     const dt = last ? Math.min((time - last) / 1000, .06) : 1 / 60; last = time;
     const blend = reduced ? 1 : 1 - Math.exp(-8.5 * dt);
     const next = current + (target - current) * blend;
@@ -254,11 +254,18 @@ export function createForgeScene(canvas, onFrame) {
     drawChains(p, burst.amount);
     canvas.dataset.chainRelease = burst.amount.toFixed(3);
     rim.intensity = (dark ? 3.4 : 2.0) + Math.sin(p * Math.PI) * .7;
-    renderer.render(scene, camera); onFrame(current, burst.amount);
+    try { renderer.render(scene, camera); }
+    catch (error) {
+      if (!onFailure) throw error;
+      onFailure();
+      return;
+    }
+    if (!ready) { ready = true; canvas.parentElement.dataset.ready = 'true'; }
+    onFrame(current, burst.amount);
 
     if (!settled || burst.active) raf = requestAnimationFrame(renderFrame); else last = 0;
   }
-  function wake() { if (disposed || contextLost) return; if (!raf && active && !document.hidden) raf = requestAnimationFrame(renderFrame); }
+  function wake() { if (!disposed && !raf && active && !document.hidden) raf = requestAnimationFrame(renderFrame); }
   function resize() {
     const width = canvas.clientWidth, height = canvas.clientHeight; if (!width || !height) return;
     smallScreen = width <= 760;
@@ -272,9 +279,7 @@ export function createForgeScene(canvas, onFrame) {
   const observer = new IntersectionObserver(entries => { active = entries[0].isIntersecting; if (active) wake(); else if (raf) { cancelAnimationFrame(raf); raf = 0; last = 0; } });
   observer.observe(canvas);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); else if (raf) { cancelAnimationFrame(raf); raf = 0; last = 0; } }, {signal:events.signal});
-  canvas.addEventListener('webglcontextlost', event => { event.preventDefault(); contextLost = true; if (raf) cancelAnimationFrame(raf); raf = 0; last = 0; canvas.parentElement.dataset.ready = 'false'; }, {signal:events.signal});
-  canvas.addEventListener('webglcontextrestored', () => { contextLost = false; canvas.parentElement.dataset.ready = 'true'; resize(); wake(); }, {signal:events.signal});
-  resize(); canvas.parentElement.dataset.ready = 'true';
+  resize();
   /* ★ 主题端点与权重统一在这里算（2026-11-13）：
      setTheme（松手落定）与 setPreview（拖动中间态）共用 —— 保证 w=1 时两种路径
      得到**同一组值**，松手那一帧不会跳。数值端点抄自旧 setTheme 的三元写法，
@@ -305,7 +310,7 @@ export function createForgeScene(canvas, onFrame) {
       [metal,edgeMaterial,chainMaterial,fragmentMaterial,filingMaterial,flashMaterial].forEach(material => material.dispose());
       brush.dispose(); environment.dispose(); renderer.dispose();
     },
-    setProgress(v) { target = clamp(v); if(!receivedProgress){current=target;receivedProgress=true;} if(contextLost)onFrame(target); wake(); },
+    setProgress(v) { target = clamp(v); if(!receivedProgress){current=target;receivedProgress=true;} wake(); },
     setPointer(x, y) { pointerX = reduced ? 0 : x; pointerY = reduced ? 0 : y; wake(); },
     setReduced(value) { reduced = value; pointerX = pointerY = 0; wake(); },
     setTheme(value) {

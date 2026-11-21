@@ -6,7 +6,7 @@ beforeAll(async () => {
   if (existsSync('src/scripts/post-rail.ts')) init = (await import('../src/scripts/post-rail')).initPostRail;
 });
 
-function fixture(clipboard: 'ok' | 'denied' | 'absent' = 'ok', onActive?: (link: HTMLAnchorElement, changed: boolean, snap?: boolean) => void, showShip = false) {
+function fixture(clipboard: 'ok' | 'denied' | 'absent' = 'ok', onActive?: (link: HTMLAnchorElement, changed: boolean, snap?: boolean) => void, showShip = false, desktop = false) {
   const animations: { element: Box; keyframes: Keyframe[]; finish: () => void; cancelled: boolean; duration?: number }[] = [];
   const jumps: { target: Box; behavior?: ScrollBehavior }[] = [];
   let focused: Box | undefined;
@@ -17,13 +17,15 @@ function fixture(clipboard: 'ok' | 'denied' | 'absent' = 'ok', onActive?: (link:
     attrs = new Map<string, string>();
     children = new Map<string, Box>();
     top = 0;
+    height = 24;
+    reads = 0;
     getAttribute(name: string) { return this.attrs.get(name) ?? null; }
     get hash() { return this.attrs.get('href') ?? ''; }
     get href() { return this.hash; }
     hasAttribute(name: string) { return this.attrs.has(name); }
     setAttribute(name: string, value: string) { this.attrs.set(name, value); }
     removeAttribute(name: string) { this.attrs.delete(name); }
-    getBoundingClientRect() { return { top: this.top }; }
+    getBoundingClientRect() { this.reads++; return { top: this.top, width: 400, height: this.height }; }
     querySelector(selector: string) { return this.children.get(selector) ?? null; }
     focus() { focused = this; }
     scrollIntoView(options: ScrollIntoViewOptions) { jumps.push({ target: this, behavior: options.behavior }); }
@@ -48,6 +50,7 @@ function fixture(clipboard: 'ok' | 'denied' | 'absent' = 'ok', onActive?: (link:
   let nextId = 0;
   const reduce = Object.assign(new EventTarget(), { matches: false });
   const prose = new Box();
+  const rail = new Box();
   const ship = new Box();
   const vessel = new Box();
   const portal = new Box();
@@ -62,7 +65,7 @@ function fixture(clipboard: 'ok' | 'denied' | 'absent' = 'ok', onActive?: (link:
     visualViewport: Object.assign(new EventTarget(), { offsetTop: 0, height: 900 }),
     location: { hash: '' },
     getComputedStyle: (element: Box) => ({
-      scrollMarginTop: '32px', scrollPaddingTop: '64px', opacity: element === portal ? '0' : '1', translate: 'none', scale: 'none',
+      scrollMarginTop: '32px', scrollPaddingTop: '64px', opacity: element === portal ? '0' : '1', translate: 'none', scale: 'none', position: desktop && element === rail ? 'sticky' : 'static',
     }),
     history: { state: { entry: true }, replaceState: (_state: unknown, _title: string, hash: string) => { view.location.hash = hash; } },
     navigator: { clipboard: clipboard === 'absent' ? undefined : { writeText: async (text: string) => {
@@ -80,7 +83,7 @@ function fixture(clipboard: 'ok' | 'denied' | 'absent' = 'ok', onActive?: (link:
     querySelectorAll: () => links,
     getElementById: (id: string) => headings[Number(id.replace('section-', ''))] ?? null,
     querySelector: (selector: string) => selector.includes('canonical') ? { href: 'https://northcedar.top/posts/real-note/' }
-      : selector === '.prose' ? prose : selector === '.st-ship' && showShip ? ship
+      : selector === '.prose' ? prose : selector === '.post-rail' && desktop ? rail : selector === '.st-ship' && showShip ? ship
         : selector === '[data-copy-link]' ? copy : selector === '[data-copy-status]' ? status : null,
   };
   const dispose = init?.(doc as unknown as Document, onActive);
@@ -230,6 +233,26 @@ describe('文章阅读侧栏', () => {
     page.view.dispatchEvent(new Event('resize'));
     page.flush();
     expect(page.links[2].getAttribute('aria-current')).toBe('location');
+  });
+
+  it('桌面稳态滚动复用标题位置，正文重排后重新测量', () => {
+    const page = fixture('ok', undefined, false, true);
+    page.flush();
+    const reads = page.headings.map(heading => heading.reads);
+    page.prose.top -= 680;
+    page.headings.forEach(heading => { heading.top -= 680; });
+    page.view.scrollY = 680;
+    page.view.dispatchEvent(new Event('scroll'));
+    page.flush();
+    expect(page.links[1].getAttribute('aria-current')).toBe('location');
+    expect(page.headings.map(heading => heading.reads)).toEqual(reads);
+
+    page.headings[2].top = 150;
+    page.prose.height -= 10;
+    page.view.dispatchEvent(new Event('scroll'));
+    page.flush();
+    expect(page.links[2].getAttribute('aria-current')).toBe('location');
+    page.dispose?.();
   });
 
   it('复制正式地址，并以状态文字反馈成功', async () => {

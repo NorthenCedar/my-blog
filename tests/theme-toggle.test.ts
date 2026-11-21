@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
+import sharp from 'sharp';
 import ThemeToggle from '../src/components/ThemeToggle.astro';
 import {
   DARK_END,
@@ -20,12 +21,40 @@ import {
  * 这里只保证它真的出现在 HTML 里且无障碍属性齐全。
  */
 describe('ThemeToggle 渲染', () => {
-  it('有 role=switch 与画布', async () => {
+  it('首屏有原生开关、静态软条和可选画布', async () => {
     const container = await AstroContainer.create();
     const html = await container.renderToString(ThemeToggle, {});
     expect(html).toContain('role="switch"');
-    expect(html).toContain('data-theme-toggle');
+    expect(html).toMatch(/<button\b[^>]*\bdata-theme-toggle\b/);
+    expect(html).toMatch(/<span\b[^>]*\bclass="tt-soft-strip\b[^"]*"[^>]*\baria-hidden="true"/);
+    expect(html).not.toMatch(/>\s*[亮暗]\s*</);
     expect(html).toContain('<canvas');
+  });
+
+  it('静态软条沿用两档透明凹槽、暖橘和墨绿', async () => {
+    const file = fileURLToPath(new URL('../src/assets/theme-soft-strip.webp', import.meta.url));
+    const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    expect(info).toMatchObject({ width: 440, height: 208, channels: 4 });
+
+    const framePixels = info.width * info.height / 2;
+    const frameBytes = framePixels * info.channels;
+    function measure(start: number) {
+      let solid = 0, transparent = 0, orange = 0, green = 0;
+      for (let i = start; i < start + frameBytes; i += info.channels) {
+        const [r, g, b, a] = data.subarray(i, i + info.channels);
+        if (a === 0) transparent++;
+        if (a < 230) continue;
+        solid++;
+        if (r >= 165 && r > g * 1.15 && g > b * 1.2) orange++;
+        if (g >= 30 && g > r * 1.2 && g > b * 1.1) green++;
+      }
+      return { solid, transparent, orange, green };
+    }
+    const light = measure(0), dark = measure(frameBytes);
+    expect(light.orange).toBeGreaterThan(1000);
+    expect(dark.green).toBeGreaterThan(300);
+    expect(dark.solid).toBeGreaterThan(light.solid);
+    expect(Math.min(light.transparent, dark.transparent)).toBeGreaterThan(framePixels / 2);
   });
 
   it('开关初始未选中且可聚焦、有中文标签', async () => {

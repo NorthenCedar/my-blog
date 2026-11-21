@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it';
 import { withWriterStrike } from './strike-markdown';
+import { contentLinkUrl } from './content-urls.mjs';
 
 const markdown = withWriterStrike(new MarkdownIt('commonmark', {
   html: false,
@@ -39,11 +40,7 @@ markdown.inline.ruler.before('emphasis', 'talk_cjk_strong', (state, silent) => {
 markdown.validateLink = (value: string): boolean => {
   // 首段带冒号时必须明确写允许的协议，避免编码控制字符被当成相对地址。
   if (/^[^/?#]*:/.test(value) && !/^(?:https?|mailto):/i.test(value)) return false;
-  try {
-    return ['http:', 'https:', 'mailto:'].includes(new URL(value, 'https://talks.invalid/').protocol);
-  } catch {
-    return false;
-  }
+  return Boolean(contentLinkUrl(value));
 };
 
 // 配图仍走页面既有的构建期资源管线，正文图片只保留转义后的替代文字。

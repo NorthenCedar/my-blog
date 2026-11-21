@@ -11,7 +11,8 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { transformSync } from 'esbuild';
-import { describe, it, expect } from 'vitest';
+import { Window } from 'happy-dom';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
 const CODE = read('src/scripts/comments.ts');
@@ -33,7 +34,7 @@ describe('留言页声纹带 · 接缝（comments.ts 是唯一取数方）', () 
   });
 
   it('提交：成功后才派发那一条，失败不做庆祝', () => {
-    const post = CODE.indexOf('postComment(payload)');
+    const post = CODE.indexOf('postComment(payload,');
     const catchAt = CODE.indexOf('.catch(', post);
     const dispatch = CODE.indexOf("CustomEvent('voiceprint:new'");
     expect(dispatch, '提交成功后必须派发新留言').toBeGreaterThan(post);
@@ -62,6 +63,181 @@ describe('留言页声纹带 · 接缝（comments.ts 是唯一取数方）', () 
        不剥就是拿自己的注释把自己判红（这条老坑本轮已经中过一次）。 */
     const CODE_NC = CODE.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
     expect(CODE_NC, '连类型 import 也不留').not.toMatch(/voiceprint-core/);
+  });
+});
+
+describe('评论请求交错与切页', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const markup = (slug: string) => `
+    <section data-comments data-slug="${slug}">
+      <span data-count></span><p data-empty>还没有留言</p><ol data-list hidden></ol>
+      <p data-error hidden></p>
+      <form data-form><input name="name" value="访客"><textarea name="body">新留言</textarea><button data-submit>发表</button></form>
+    </section>`;
+  const comment = (id: number, body = '一条留言') => ({ id, name: '访客', body, createdAt: '2026-11-21T00:00:00Z' });
+
+  async function mount(slug: string) {
+    vi.resetModules();
+    const win = new Window();
+    const requests: { url: string; init?: RequestInit; resolve(data: unknown): void; fail(status: number): void }[] = [];
+    const snapshots: { comments: ReturnType<typeof comment>[]; replies?: { id: number }[] }[] = [];
+    const additions: { note: { id: number } }[] = [];
+    const expirations: Event[] = [];
+    for (const name of ['document', 'location', 'FormData', 'HTMLButtonElement', 'PageTransitionEvent', 'CustomEvent', 'Event'] as const) {
+      vi.stubGlobal(name, win[name]);
+    }
+    vi.stubGlobal('Option', function (text: string, value: string) {
+      const option = win.document.createElement('option');
+      option.textContent = text;
+      option.value = value;
+      return option;
+    });
+    vi.stubGlobal('window', win);
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      if (url === '/api/account') return Promise.resolve({ ok: true, json: async () => ({ user: null }) });
+      return new Promise(resolve => requests.push({
+        url, init, resolve: data => resolve({ ok: true, json: async () => data }),
+        fail: status => resolve({ ok: false, status, json: async () => ({ error: '请求失败' }) }),
+      }));
+    });
+    win.document.body.innerHTML = markup(slug);
+    win.addEventListener('voiceprint', event => snapshots.push((event as CustomEvent).detail));
+    win.addEventListener('voiceprint:new', event => additions.push((event as CustomEvent).detail));
+    win.addEventListener('visitor-session-expired', event => expirations.push(event));
+    await import('../src/scripts/comments');
+    return { win, requests, snapshots, additions, expirations };
+  }
+
+  const finishResponse = () => new Promise<void>(resolve => setImmediate(resolve));
+
+  it('往返缓存恢复后仍可切换发表身份，正常离页时清理身份控件', async () => {
+    const { win } = await mount('guestbook');
+    const { setViewer } = await import('../src/scripts/visitor-client');
+    setViewer({ id: 'visitor-id', nickname: '账户昵称', bio: '', avatarUrl: '', isOwner: false });
+    const form = win.document.querySelector('form')!;
+    const name = form.querySelector<HTMLInputElement>('input[name="name"]')!;
+    const identity = form.querySelector('select')!;
+    const login = form.querySelector<HTMLButtonElement>('button.visitor-link')!;
+    const pageTransition = (type: 'pagehide' | 'pageshow', persisted: boolean) => {
+      // Happy DOM 的 PageTransitionEvent 兼容类尚不保留 persisted 初始化值。
+      const event = new win.PageTransitionEvent(type);
+      Object.defineProperty(event, 'persisted', { value: persisted });
+      win.dispatchEvent(event);
+    };
+    const choose = (value: string) => {
+      identity.value = value;
+      identity.dispatchEvent(new win.Event('change'));
+    };
+    expect(identity.value).toBe('account');
+    expect(name.readOnly).toBe(true);
+
+    pageTransition('pagehide', true);
+    pageTransition('pageshow', true);
+    choose('anonymous');
+    expect(name.readOnly).toBe(false);
+    expect(name.value).toBe('访客');
+    choose('account');
+    expect(name.readOnly).toBe(true);
+    expect(name.value).toBe('账户昵称');
+
+    pageTransition('pagehide', false);
+    win.dispatchEvent(new win.Event('visitor-session-expired'));
+    expect(login.hidden).toBe(true);
+  });
+
+  it.each(['读取先返回', '发表先返回', '旧快照未包含新留言'])('%s时，新留言只出现一次且列表与声纹一致', async order => {
+    const { win, requests, snapshots, additions } = await mount('guestbook');
+    const doc = win.document;
+    const older = comment(1);
+    const posted = comment(2, '新留言');
+    doc.querySelector('form')!.requestSubmit();
+    const [read, write] = requests;
+    expect(write.init?.method).toBe('POST');
+    const resolveRead = () => read.resolve({
+      comments: order === '旧快照未包含新留言' ? [older] : [posted, older],
+      replies: [{ ...comment(4), parentId: 2, replyTo: '' }],
+    });
+    if (order === '读取先返回') {
+      resolveRead();
+      await finishResponse();
+      write.resolve({ comment: posted });
+    } else {
+      write.resolve({ comment: posted });
+      await finishResponse();
+      resolveRead();
+    }
+    await finishResponse();
+
+    expect([...doc.querySelectorAll('[data-list] > li')].map(node => node.id)).toEqual(['comment-2', 'comment-1']);
+    expect(doc.querySelectorAll('#reply-4')).toHaveLength(1);
+    expect(doc.querySelector('[data-count]')!.textContent).toBe(' 3 条');
+    expect(doc.querySelector('#comment-2 time')!.textContent).toContain('刚发表');
+    expect(doc.querySelector('textarea')!.value).toBe('');
+    const snapshot = snapshots.at(-1)!;
+    expect(snapshot.comments.map(row => row.id)).toEqual([2, 1]);
+    expect(additions).toHaveLength(order === '读取先返回' ? 0 : 1);
+  });
+
+  it.each([201, 401, 500])('从文章切到留言板后，文章的迟到请求不改变表单、声纹或登录状态（发表响应 %s）', async status => {
+    const { win, requests, snapshots, additions, expirations } = await mount('old-article');
+    const doc = win.document;
+    const article = doc.querySelector('[data-comments]')!;
+    article.querySelector('select')!.value = 'account';
+    article.querySelector('form')!.requestSubmit();
+    const [articleRead, articleWrite] = requests;
+    expect(JSON.parse(String(articleWrite.init?.body)).identity).toBe('account');
+    const beforeLeave = article.innerHTML;
+
+    doc.dispatchEvent(new win.Event('astro:before-swap'));
+    expect(articleRead.init?.signal?.aborted).toBe(true);
+    expect(articleWrite.init?.signal).toBeUndefined();
+    doc.body.innerHTML = markup('guestbook');
+    doc.dispatchEvent(new win.Event('astro:page-load'));
+    expect(requests[2].url).toBe('/api/comments?slug=guestbook');
+    requests[2].resolve({ comments: [comment(10, '留言板')] });
+    await finishResponse();
+    articleRead.resolve({ comments: [comment(20, '文章评论')] });
+    if (status === 201) articleWrite.resolve({ comment: comment(21, '文章新评论') });
+    else articleWrite.fail(status);
+    await finishResponse();
+
+    expect(snapshots.map(snapshot => snapshot.comments.map(row => row.id))).toEqual([[10]]);
+    expect(additions).toEqual([]);
+    expect(expirations).toEqual([]);
+    expect(doc.querySelector('[data-list] > li')?.id).toBe('comment-10');
+    expect(article.innerHTML).toBe(beforeLeave);
+    expect(article.querySelector('textarea')!.value).toBe('新留言');
+  });
+
+  it.each(['先读取', '先发表回复'])('%s时，回复按从旧到新排列，条数和声纹只算一次', async order => {
+    const { win, requests, snapshots } = await mount('guestbook');
+    const doc = win.document;
+    const parent = comment(2);
+    doc.querySelector('form')!.requestSubmit();
+    requests[1].resolve({ comment: parent });
+    await finishResponse();
+    doc.querySelector<HTMLButtonElement>('#comment-2 > .reply-btn')!.click();
+    doc.querySelector<HTMLTextAreaElement>('.reply-form textarea')!.value = '我的回复';
+    doc.querySelector<HTMLFormElement>('.reply-form')!.requestSubmit();
+    const olderReply = { ...comment(3, '更早的回复'), parentId: 2, replyTo: '' };
+    const sentReply = { ...comment(4, '我的回复'), parentId: 2, replyTo: '' };
+    const resolveRead = () => requests[0].resolve({ comments: [parent], replies: [olderReply, sentReply] });
+    const resolveWrite = () => requests[2].resolve({ comment: sentReply });
+    if (order === '先读取') {
+      resolveRead();
+      await finishResponse();
+      resolveWrite();
+    } else {
+      resolveWrite();
+      await finishResponse();
+      resolveRead();
+    }
+    await finishResponse();
+
+    expect([...doc.querySelectorAll('.reply-list > li')].map(node => node.id)).toEqual(['reply-3', 'reply-4']);
+    expect(doc.querySelector('[data-count]')!.textContent).toBe(' 3 条');
+    expect(snapshots.at(-1)?.replies?.map(row => row.id)).toEqual([3, 4]);
   });
 });
 

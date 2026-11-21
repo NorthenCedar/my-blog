@@ -5,6 +5,13 @@ import { isSiteMenuEntry, isTechHeadingEntry, jsClosure } from './_writer-output
 export const MOTION_ENGINE_BUDGET = 96 * 1024;
 // 换页状态和局部滑块的公共引导合计净增约 1 KiB，首屏静态上限照旧检查。
 export const NAVIGATION_UI_BOOT_BUDGET = 1024;
+// 本地同源构建中，等待交接与停靠过滤令公共入口增加 319 B。
+export const NAVIGATION_FEEDBACK_BOOT_BUDGET = 384;
+// 访问事件和页脚可见性控制的编译增量使用独立预算。
+export const PAGE_STATS_BOOT_BUDGET = 1024;
+// 只给评论和文章各自的并发归并、目录缓存计入新增开销。
+export const COMMENT_LIFECYCLE_BUDGET = 1024;
+export const TOC_LAYOUT_BOOT_BUDGET = 640;
 const SITE_MENU_BUDGET = 232 * 1024;
 // 同一模块覆盖页面内滚动区、顶层弹窗和横向滚动，实测约 3.8 KB。
 const INNER_SCROLLBAR_BUDGET = 4 * 1024;
@@ -14,15 +21,15 @@ const TECH_HEADING_BUDGET = 240 * 1024;
 
 /**
  * ★ 2026-11-12：主题开关从关于页搬进顶栏后，`ThemeToggle.astro` 的引导脚本
- * （动态 import 渲染器的那几行 + 空闲调度）会出现在**每一个**内页上。
+ * （原生按钮和按需加载入口）会出现在**每一个**内页上。
  * 实测代价（同一份源码，只摘掉 Topbar 里那一行重跑构建，差出来的就是这笔）：
- *   · `ThemeToggle.astro_*.js` 825 B（顶栏那个小窗的引导）；
+ *   · `ThemeToggle.astro_*.js` 825 B（原引导），加入即时主题切换后为 1245 B；
  *   · `page-lifecycle.*.js` 2794 B —— 引导脚本 import 了它，于是它从"只有部分页面
  *     静态引用"变成"所有内页都静态引用"（对全站只多付一次，对文章页是本轮才开始付）；
  *   · 页内内联 ~236 B。
- * 合计 3855 B ⇒ 记 4 KiB 一笔，加在真正吃这条开销的页面上。
+ * 基础开关的增量为 420 B，计入额外 512 B；渲染器继续独立计量。
  */
-export const THEME_TOGGLE_BOOT_BUDGET = 4 * 1024;
+export const THEME_TOGGLE_BOOT_BUDGET = 4608;
 
 /**
  * jelly-slider 主题开关的**渲染器本体**（vendored TypeGPU 光追场景，单 chunk ≈458 KB）。
@@ -63,7 +70,8 @@ export function expectMotionStartup(page: string, budget: number) {
   const engines = full.files.filter(path => /motion-engine\.[^/\\]+\.js$/.test(path));
   expect(engines, '只有一份共享的 GSAP/Flip 引擎').toHaveLength(1);
   expect(initial.files.filter(path => engines.includes(path)), '首屏不得静态加载动效引擎').toEqual([]);
-  expect(Buffer.byteLength(initial.code), '首屏静态闭包超出预算').toBeLessThan(budget + TECH_HEADING_BOOT_BUDGET);
+  expect(Buffer.byteLength(initial.code), '首屏静态闭包超出预算')
+    .toBeLessThan(budget + TECH_HEADING_BOOT_BUDGET + NAVIGATION_FEEDBACK_BOOT_BUDGET + PAGE_STATS_BOOT_BUDGET);
   const gsap = other.files.filter(path => /[/\\]gsap\.[^/\\]+\.js$/.test(path));
   expect([...engines, ...gsap].reduce((bytes, path) => bytes + statSync(path).size, 0), '按需 GSAP/Flip 引擎超出预算')
     .toBeLessThan(MOTION_ENGINE_BUDGET);

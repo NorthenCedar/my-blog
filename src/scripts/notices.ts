@@ -7,8 +7,8 @@ onPage(({document, window}) => {
  *
  * ⚠ 预算：本文件随 Base 的共享 <script> 进**每一页**，各页剩余预算很紧，
  * 见 tests/build-output.test.ts 与 tests/gallery-spiral.test.ts。所以：
- *   · 不许 import 任何东西（尤其 visitor-client：7.6 KB，会把相册页一起顶爆）；
- *   · 不许加动画/多余分支，DOM 一律 createElement/textContent，不碰 innerHTML。
+ *   · 通过会话事件同步账户变化，避免引入访客账户界面及其依赖；
+ *   · DOM 一律用 createElement/textContent，按文本显示消息内容。
  */
 type Notice = {
   id: number;
@@ -19,6 +19,7 @@ type Notice = {
   createdAt: string;
   readAt: number | null;
 };
+type NoticePage = { unread: number; items: Notice[]; signedIn: boolean; title: string; emptyMessage: string; nextBefore: number | null };
 
 /** 本地的 node 助手（≈80 字节），不 import visitor-client 的那一个 —— 理由见文件头。 */
 const node = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text = '') => {
@@ -30,104 +31,104 @@ const node = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text =
 
 const stamp = (iso: string) => new Date(iso).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' });
 
+function noticeHref(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  try {
+    const url = new URL(value, window.location.href);
+    if ((url.protocol === 'http:' || url.protocol === 'https:') &&
+      url.origin === window.location.origin && !url.username && !url.password) return url.href;
+  } catch { /* 无法解析的通知保留文字。 */ }
+  return '';
+}
+
 const bell = document.querySelector<HTMLButtonElement>('[data-notices]');
+const panel = document.querySelector<HTMLElement>('#notices-panel');
 
-if (bell) {
+if (bell && panel) {
   const badge = bell.querySelector<HTMLElement>('[data-notices-count]');
+  const defaultTitle = bell.getAttribute('aria-label') ?? '';
+  const scroll = panel.querySelector<HTMLElement>('.notices-scroll')!;
+  const list = panel.querySelector<HTMLElement>('.notices-list')!;
+  const empty = panel.querySelector<HTMLElement>('.notices-empty')!;
+  const more = panel.querySelector<HTMLButtonElement>('.notices-more')!;
 
-  const panel = node('div', 'notices-panel music-glass');
-  panel.hidden = true;
-  panel.id = 'notices-panel';
-  bell.setAttribute('aria-controls', panel.id);
-  const scroll = node('div', 'notices-scroll');
-  const list = node('ul', 'notices-list');
-  const empty = node('p', 'notices-empty');
-  const more = node('button', 'notices-more', '更早消息');
-  more.type = 'button';
-  more.hidden = true;
-  scroll.append(list, empty, more);
-  panel.append(scroll);
-  bell.closest('.topbar')?.append(panel);
-
-  let items: Notice[] = [];
-  let signedIn = false;
-  let title = '';
-  let nextBefore: number | null = null;
+  let page: NoticePage | undefined;
+  // 翻页后已发出的已读提交可以完成，界面只接受当前这一页的响应。
   let version = 0;
+  let requests = new AbortController();
 
-  const paint = (count: number) => {
+  const paint = (count = 0) => {
     if (badge) {
       badge.textContent = count > 9 ? '9+' : String(count);
       badge.hidden = count === 0;
     }
     /* 匿名访客不显示；**登录了就一直留着**——包括全部读完的时候：
        那时它是「打开历史回复列表」的唯一入口，收起来等于把人锁在外面。 */
-    bell.hidden = !signedIn;
+    bell.hidden = !page;
+    const title = page?.title ?? defaultTitle;
     bell.setAttribute('aria-label', count > 0 ? `${title}，${count} 条未读` : title);
   };
 
   const render = () => {
+    const items = page?.items ?? [];
     list.replaceChildren(
       ...items.map((n) => {
         const li = node('li', n.readAt ? 'notice' : 'notice is-new');
-        const link = node('a', 'notice-link');
-        link.href = n.href;
-        link.addEventListener('click', event => {
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-          close();
-          if (link.href === window.location.href) document.dispatchEvent(new Event('notice:follow'));
-        });
-        link.append(node('span', 'notice-actor', n.actorName), node('span', 'notice-time', `${n.label} · ${stamp(n.createdAt)}`), node('span', 'notice-body', n.excerpt));
-        li.append(link);
+        const href = noticeHref(n.href);
+        const link = href ? node('a', 'notice-link') : null;
+        if (href && link) {
+          link.href = href;
+          link.addEventListener('click', event => {
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            close();
+            if (link.href === window.location.href) document.dispatchEvent(new Event('notice:follow'));
+          });
+        }
+        const summary = link ?? node('span', 'notice-link');
+        summary.append(node('span', 'notice-actor', n.actorName), node('span', 'notice-time', `${n.label} · ${stamp(n.createdAt)}`), node('span', 'notice-body', n.excerpt));
+        li.append(summary);
         return li;
       })
     );
+    empty.textContent = page?.emptyMessage ?? '';
     empty.hidden = items.length > 0;
-    more.hidden = !nextBefore;
+    more.hidden = !page?.nextBefore;
   };
 
-  const pull = async (before?: number) => {
+  const pull = async (before?: number, markRead = false) => {
+    const signal = requests.signal;
     const started = ++version;
+    const current = () => !signal.aborted && started === version;
     try {
-      const response = await fetch(`/api/notices${before ? `?before=${before}` : ''}`, { cache: 'no-store' });
-      if (!response.ok) return false;
-      const data = (await response.json()) as { unread: number; items: Notice[]; signedIn: boolean; title: string; emptyMessage: string; nextBefore: number | null };
-      if (started !== version) return false;
-      items = data.items;
-      signedIn = data.signedIn;
-      title = data.title;
-      empty.textContent = data.emptyMessage;
-      nextBefore = data.nextBefore;
+      const response = await fetch(`/api/notices${before ? `?before=${before}` : ''}`, { cache: 'no-store', signal });
+      if (!response.ok) return;
+      const data = (await response.json()) as NoticePage;
+      if (!current()) return;
+      if (!data.signedIn) return reset();
+      page = data;
       render();
       scroll.scrollTop = 0;
       paint(data.unread);
-      if (!signedIn) close();
-      return true;
-    } catch {
-      return false;
-    }
-  };
 
-  /** 只标刚展示的编号；等待后端确认，不误清分页外或请求期间新到的消息。 */
-  const markVisibleRead = async () => {
-    if (panel.hidden || !signedIn) return;
-    const ids = items.filter((n) => !n.readAt).map((n) => n.id);
-    if (!ids.length) return;
-    const started = version;
-    try {
-      const response = await fetch('/api/notices', {
+      // 只标本次实际展示的未读消息。
+      if (!markRead || panel.hidden) return;
+      const ids = data.items.filter(n => !n.readAt).map(n => n.id);
+      if (!ids.length) return;
+      const marked = await fetch('/api/notices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-NC-Request': '1' },
         body: JSON.stringify({ ids }),
+        signal,
       });
-      if (!response.ok) return;
-      const data = await response.json();
-      if (started !== version) return;
-      items = items.map((n) => ({ ...n, readAt: n.readAt ?? Date.now() }));
+      if (!current()) return;
+      if (marked.status === 401) return reset();
+      if (!marked.ok) return;
+      const { unread } = await marked.json();
+      if (!current()) return;
       for (const row of list.children) row.className = 'notice';
-      paint(data.unread);
+      paint(unread);
     } catch {
-      /* 失败时保留未读，下次打开再试。 */
+      /* 请求失败时保留已展示内容与未读状态。 */
     }
   };
 
@@ -136,15 +137,28 @@ if (bell) {
     bell.setAttribute('aria-expanded', 'false');
   };
 
-  const show = async (before?: number) => { if (await pull(before)) await markVisibleRead(); };
+  const reset = (refresh = false) => {
+    requests.abort();
+    page = undefined;
+    close();
+    render();
+    paint();
+    if (refresh) {
+      requests = new AbortController();
+      void pull();
+    }
+  };
+
   bell.addEventListener('click', () => {
+    if (!page) return;
     if (!panel.hidden) return close();
     panel.hidden = false;
     bell.setAttribute('aria-expanded', 'true');
-    void show();
+    void pull(undefined, true);
   });
   more.addEventListener('click', () => {
-    if (nextBefore) void show(nextBefore);
+    const before = page?.nextBefore;
+    if (before) void pull(before, true);
   });
 
   // 铃铛本身与其子节点已排除，无需延迟绑定文档监听。
@@ -159,11 +173,16 @@ if (bell) {
     }
   });
 
-  /* 登录态在别处维护（评论表单里登录 / 登出、会话过期）。
-     ⚠ 不 import visitor-client 去订阅：它 7.6 KB，会连累相册页与螺旋盘页的预算。
-     够用的便宜办法 —— 回到这一页（含 bfcache 恢复）再拉一次。 */
-  window.addEventListener('pageshow', () => void pull());
+  window.addEventListener('visitor-session-change', (event) => reset((event as CustomEvent<boolean>).detail));
+  window.addEventListener('visitor-session-expired', () => reset());
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'nc-account-change' && event.newValue) reset(true);
+  });
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) reset(true);
+  });
   void pull();
+  return () => requests.abort();
 }
 
 });

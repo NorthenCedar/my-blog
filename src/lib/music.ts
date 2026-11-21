@@ -1,5 +1,7 @@
+import { MUSIC_API } from './music-provider.mjs';
+
 export const MUSIC_PLAYLIST = '18562297354';
-export const MUSIC_API = 'https://api.qijieya.cn/meting/';
+export { MUSIC_API };
 export type MusicTrack = { id: string; title: string; artist: string };
 
 export function orderMusicTracks(tracks: MusicTrack[], baseline: readonly string[]) {

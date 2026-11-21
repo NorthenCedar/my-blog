@@ -14,8 +14,9 @@ interface OverviewOptions {
 export function mountGalleryOverview(host: HTMLElement, options: OverviewOptions) {
   const root = createRoot(host, { onUncaughtError: options.onUnavailable });
   const onItemClick = (_item: GalleryItem, index: number) => options.onOpen(index);
+  const width = matchMedia('(max-width: 640px)');
   const refresh = () => {
-    const narrow = matchMedia('(max-width: 640px)').matches;
+    const narrow = width.matches;
     root.render(createElement(CircularGallery, {
       items: options.albums,
       initialIndex: options.restoredIndex,
@@ -44,5 +45,12 @@ export function mountGalleryOverview(host: HTMLElement, options: OverviewOptions
     }));
   };
   refresh();
-  return { refresh, dispose: () => root.unmount() };
+  const theme = new MutationObserver(refresh);
+  theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  width.addEventListener('change', refresh);
+  return () => {
+    theme.disconnect();
+    width.removeEventListener('change', refresh);
+    root.unmount();
+  };
 }

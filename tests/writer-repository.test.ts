@@ -32,7 +32,7 @@ it('二进制按 base64 解码，不走文本；符号链接被拒绝',async()=>
   const linked=createWriterRepository('secret',async()=>json({type:'symlink',target:'../../../.env'}));
   await expect(linked.readPost(commit,'example')).rejects.toMatchObject({status:400});
 });
-it('仅 GET 的 429/5xx 有限重试，错误不泄露远端正文，派发不重试',async()=>{
+it('仅 GET 的 5xx 有限重试，错误不泄露远端正文，派发不重试',async()=>{
   let calls=0;const repo=createWriterRepository('secret',async()=>{calls++;return json({secret:'不应出现'},503);});
   await expect(repo.head()).rejects.toMatchObject({status:502});expect(calls).toBe(3);
   calls=0;await expect(repo.dispatch('a'.repeat(32))).rejects.not.toThrow('不应出现');expect(calls).toBe(1);

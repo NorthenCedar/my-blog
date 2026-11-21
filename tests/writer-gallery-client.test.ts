@@ -41,7 +41,7 @@ async function open(kind:string,fields:Record<string,unknown>,assets:{sha256:str
     if(path==='/content?mode=tags')return {tags:[]};if(path==='/drafts')return {drafts:[draft]};if(path.startsWith('/drafts?id='))return {draft};
     throw Error(path);
   };
-  const request=async(path:string,init?:RequestInit)=>path==='/assets'?assetUpload!(init!.body as Blob):init?(()=>{const payload=JSON.parse(String(init.body));saved.push(payload);return {draft:{...draft,revision:payload.expectedRevision+1,value:payload.value}};})():api(path);
+  const request=async(path:string,init?:RequestInit)=>path==='/assets'?assetUpload!(init!.body as Blob):init?.method==='POST'?(()=>{const payload=JSON.parse(String(init.body));saved.push(payload);return {draft:{...draft,revision:payload.expectedRevision+1,value:payload.value}};})():api(path);
   const published:any[]=[];mounted=mountWriterEditor(root as any,request as any,{findDraft:async()=>recoveryCopies,put:async()=>{},remove:async()=>{}} as any,{user:{id:'owner',nickname:'站主'},publish:true,onPublish:async draft=>{published.push(draft);}});
   await settle();find(root,kind==='forge'?'forge':'example').click();await settle();return {root,draft,saved,published};
 }

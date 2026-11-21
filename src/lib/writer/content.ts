@@ -6,6 +6,7 @@ import { projectSchema,safeLink } from '../project-schema.ts';
 import { forgePageSchema } from '../forge-page-schema.ts';
 import { z } from 'astro/zod';
 import MarkdownIt from 'markdown-it';
+import { requireContentLink } from '../content-urls.mjs';
 import { writerFail,writerTargetPath,writerAssetDirectory,utf8Length,validateTarget,validateWriterValue,type WriterValue,type WriterDraft,type WriterChange } from './model.ts';
 const bad=(message='原文格式暂不支持安全编辑，请在本地处理')=>writerFail(400,'invalid_content',message);
 const conflict=()=>writerFail(409,'content_conflict','这篇内容已在其他地方修改，请重新导入并对照当前草稿');
@@ -206,6 +207,9 @@ export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:
   const fields=value.fields,date=fields.date;
   if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) bad('请填写有效日期');
   if(value.assets.some(a=>!a.alt.trim())) bad('请为每张新增配图填写说明');
+  if(kind==='talk'&&fields.href!=null&&fields.href!==''){
+    try{requireContentLink(fields.href,'说说链接');}catch(error){bad((error as Error).message);}
+  }
   if(kind==='post'&&(typeof fields.title!=='string'||!fields.title.trim()||typeof fields.summary!=='string'||!fields.summary.trim()||fields.summary.length>80||!Array.isArray(fields.tags)||fields.tags.length<1||fields.tags.length>3||fields.tags.some(t=>!(TAGS as readonly unknown[]).includes(t)))) bad('文章需填写标题、80 字内摘要及 1–3 个已登记标签');
   if(kind==='post'&&fields.cover){
     if(typeof fields.coverAlt!=='string'||!fields.coverAlt.trim())bad('请填写文章封面说明');

@@ -9,6 +9,7 @@ import PageTitle from '../components/PageTitle.astro';
 import TalkImageViewer from '../components/TalkImageViewer.astro';
 import TalkVideoViewer from '../components/TalkVideoViewer.astro';
 import { renderTalkText } from '../lib/talk-text';
+import { requireContentLink } from '../lib/content-urls.mjs';
 import { validateTalkVideos } from '../lib/video-assets.mjs';
 import { validateTalkAudio } from '../lib/audio-assets.mjs';
 // 回复区样式（2026-09-28）：全局引入。本页 <style> 是 scoped，
@@ -91,6 +92,7 @@ const talkAssets = import.meta.glob<{ default: ImageMetadata }>('/src/assets/tal
 const assetOf = (name: string) => talkAssets[`/src/assets/talks/${name}`]?.default;
 const rows = items.map((t) => {
   const slug = slugOf(t);
+  if (t.href != null && t.href !== '') requireContentLink(t.href, `content/pages/talks.md 的 ${slug}.href`);
   const videos = validateTalkVideos(t.videos, `content/pages/talks.md 的 ${slug}`);
   const images = (t.images ?? []).map((img, index) => ({ ...img, index, asset: assetOf(img.src) }));
   /* ★ 2026-11-12（第二轮）站主：「图片和视频的排版太乱了，做整齐一点」。
@@ -247,6 +249,8 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
                     data-build="rect"
                     href={m.src}
                     data-talk-video={`talk-video-${slug}-${m.index}`}
+                    data-astro-prefetch="false"
+                    data-astro-reload
                     data-no-transition
                     aria-label={`播放视频：${m.alt}`}
                   >

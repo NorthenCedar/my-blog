@@ -7,6 +7,7 @@ import SocialIcon from '../components/SocialIcon.astro';
 import gallery from '../../public/gallery/manifest.json';
 import { coverPresentation, type GalleryAlbum } from '../lib/gallery-stage';
 import { LANGUAGE_STATS_DIRS, readLanguageStats } from '../lib/lang-stats';
+import { requireContentLink } from '../lib/content-urls.mjs';
 
 const entry = await getEntry('pages', 'about');
 const Content = entry ? (await render(entry)).Content : null;
@@ -25,6 +26,12 @@ const p = d.presentation ?? {};
 const assets = import.meta.glob<{default: ImageMetadata}>('/src/assets/about/*.{jpg,jpeg,png,webp,avif}', {eager: true});
 const avatar = d.avatar ? assets[`/src/assets/about/${d.avatar}`]?.default : undefined;
 const social = d.social ?? [];
+for (const [index, item] of social.entries()) {
+  requireContentLink(item.href, `content/pages/about.md 的 social[${index}].href`);
+}
+for (const [index, item] of (p.interests ?? []).entries()) {
+  if (item.href != null && item.href !== '') requireContentLink(item.href, `content/pages/about.md 的 presentation.interests[${index}].href`);
+}
 const stack = (d.stack ?? []).filter(g => g.items?.length);
 const email = social.find(s => s.href.startsWith('mailto:'))?.href.slice(7);
 const intro = entry?.body?.trim().split(/\r?\n\s*\r?\n/)[0] ?? '';

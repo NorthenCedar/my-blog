@@ -6,7 +6,7 @@ import { readFileSync, existsSync } from 'node:fs';
 const closers: (() => void)[] = [];
 afterEach(() => closers.splice(0).forEach(close => close()));
 /** 账户和 SQL 真实运行；仅省去与写作权限无关的重复密码计算。 */
-export async function writerFixture(options: { owner?: boolean; configured?: boolean; cookie?: boolean; expires?: number } = {}) {
+export async function writerFixture(options: { owner?: boolean; configured?: boolean; cookie?: boolean; expires?: number; reconcile?: boolean } = {}) {
   const { sqlite, db } = visitorDatabase();
   for (const name of ['0005_reply_targets.sql', '0006_reply_notices.sql', '0007_cloud_writer.sql']) {
     if (existsSync(`migrations/${name}`)) sqlite.exec(readFileSync(`migrations/${name}`, 'utf8'));
@@ -18,6 +18,7 @@ export async function writerFixture(options: { owner?: boolean; configured?: boo
     catch (error) { sqlite.exec('ROLLBACK'); throw error; }
   }
   sqlite.exec(readFileSync('migrations/0012_writer_audio.sql', 'utf8'));
+  if(options.reconcile!==false)sqlite.exec(readFileSync('migrations/0014_writer_job_reconcile.sql','utf8'));
   closers.push(() => sqlite.close());
   const owner = 'b'.repeat(32), token = 'a'.repeat(64);
   sqlite.prepare('INSERT INTO visitor_accounts(id,username,nickname,password_hash,recovery_hash,created_at) VALUES(?,?,?,?,?,?)')

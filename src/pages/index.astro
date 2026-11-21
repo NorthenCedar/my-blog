@@ -369,9 +369,18 @@ const titleLines: { ch: string; i: number }[][] = (() => {
               ))}
             </dl>
           </details>
-          {/* 紧邻明细同步执行，首次布局前收起；无 JS 时保留服务端展开内容。
-              内联脚本压缩以遵守首页总字节预算。 */}
-          <script is:inline data-home-stack-init>(()=>{const details=document.currentScript.previousElementSibling,mobile=matchMedia('(max-width:767px)'),sync=()=>{details.open=!mobile.matches};sync();mobile.addEventListener('change',sync)})();</script>
+          {/* 紧邻明细同步执行，首次布局前收起，无 JS 时保留服务端展开内容。
+              站内换回首页时重新初始化，旧明细的监听在换页前解绑。 */}
+          <script is:inline data-home-stack-init data-astro-rerun>
+            (() => {
+              const details = document.currentScript.previousElementSibling;
+              const mobile = matchMedia('(max-width:767px)');
+              const sync = () => { details.open = !mobile.matches; };
+              sync();
+              mobile.addEventListener('change', sync);
+              document.addEventListener('astro:before-swap', () => mobile.removeEventListener('change', sync), { once: true });
+            })();
+          </script>
         </div>
       </section>
     )}

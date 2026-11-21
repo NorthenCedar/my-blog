@@ -20,7 +20,7 @@ async function run() {
   const elements = {
     '[data-fin-infinity]': host,
     '[data-fin-view]': { hidden: true },
-    '[data-fin-cv]': { addEventListener() {}, getBoundingClientRect: host.getBoundingClientRect },
+    '[data-fin-cv]': { addEventListener() {}, getBoundingClientRect: host.getBoundingClientRect, getContext: () => ({ getExtension: () => null }) },
   };
   const scene = state.scene = {
     // 这个返回值代表场景按当前可见几何给出的命中结果。

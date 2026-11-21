@@ -355,6 +355,8 @@ npm run verify                        # 构建 + 测试都过再推
 （顺带：`draft: true` 的文章**不会**上线，这是设计 —— 列表/标签/归档/RSS 全隐藏、直接访问 404。
 写完了想发，把那行改成 `false` 再推。）
 
+生产构建在 Markdown 转换前隔离草稿正文。草稿旁边的素材只有被已发布内容引用时才进入产物，共用图按实际源文件处理。`npm run dev` 仍可预览草稿。放进 `public/` 的文件会按公开静态资源处理。
+
 （相册是另一条路：照片放进 `public/gallery/<专辑名>/`，构建时由脚本生成 WebP 与缩略图，见相册那节。）
 
 ---
@@ -996,7 +998,7 @@ npx wrangler d1 execute beishan-comments --remote --command "DELETE FROM comment
 
 挡不住的：**人工发的广告**。看到就用 14.2 的命令删掉。
 
-公开留言/点赞接口只接收 `Content-Type: application/json`。无 `Origin` 的非浏览器客户端可用，但不能声明 `Sec-Fetch-Site: cross-site`；携带来源时必须与请求站点同源，`Origin: null` 也会拒绝。账户操作继续要求同源与原有请求标记。页面白名单由构建最后一步 `scripts/generate-comment-targets.mjs` 从清理草稿后的 `dist/` 生成，新增文章/说说照常构建即可；不要手改生成的 JSON，也不要只构建 Astro 而跳过完整 `npm run build`。`functions/api/_generated/comment-targets.json` 是忽略提交的构建产物，首次构建会创建，Functions 打包时读取；新增内容不会再把它列为写作台工作区改动。它也不计入源码语言统计。本次复用既有账户限流表，不需要额外数据库迁移。
+公开留言/点赞接口只接收 `Content-Type: application/json`。无 `Origin` 的非浏览器客户端可用，但不能声明 `Sec-Fetch-Site: cross-site`；携带来源时必须与请求站点同源，`Origin: null` 也会拒绝。账户操作继续要求同源与原有请求标记。完整构建的最后一步 `scripts/finalize-build.mjs` 共用一份公开 HTML 索引，生成留言白名单并导出音视频。新增文章或说说后运行 `npm run build` 即可。`functions/api/_generated/comment-targets.json` 由构建生成并供 Functions 打包读取，已从版本管理和写作台工作区改动中排除。
 
 ### 14.5 回复（2026-09-28 上线，像 QQ 动态的楼中楼）
 
@@ -1029,22 +1031,7 @@ npx wrangler d1 execute beishan-comments --remote --command "DELETE FROM comment
 
 **忘记密码与注销：** 使用账号、恢复码设置新密码，成功后旧恢复码与所有旧登录失效，并给出新恢复码。资料页也可验证当前密码后换密码或重新生成恢复码。密码和恢复码都丢失时无法可靠找回。注销需当前密码并确认处理说明；清除账户凭据、头像、签名与登录会话，留言保留原发表昵称和正文、去掉账户关联，其他人的回复保留。
 
-**本地初始化：** `npm run db:init` 已包含 `migrations/0004_visitor_accounts.sql`。已有本地库只需执行：
-
-```powershell
-npx wrangler d1 execute beishan-comments --local --file=migrations/0004_visitor_accounts.sql
-```
-
-迁移只新增四张账户/会话/限流/身份关联表及删除清理触发器，可重复执行，不修改旧评论/回复列。本文这次验收使用 `_tmp-visitor-state/` 独立本地库，未执行远端迁移。
-
-**上线前：** 先备份线上 D1，再在得到发布授权后执行：
-
-```powershell
-npx wrangler d1 export beishan-comments --remote --output=<工作区备份目录>/comments-before-accounts.sql
-npx wrangler d1 execute beishan-comments --remote --file=migrations/0004_visitor_accounts.sql
-```
-
-随后部署新代码。新代码在未迁移时仍能读取旧匿名留言，账户接口会提示服务不可用。普通 `npm run dev` 不运行 Functions；完整账户预览需要构建后 `npm run dev:cf`。
+新旧本地库统一运行 `npm run db:init`，其中 0004 建立账户、会话、限流及身份关联表。线上备份、迁移顺序和恢复方式见 §26.1。普通 `npm run dev` 不运行 Functions，完整账户预览需构建后运行 `npm run dev:cf`。
 
 **站主怎样登录：** 先和普通访客一样注册自己的账号、保存恢复码。本人登录后访问 `/api/account`，读取 `user.id` 完整值；在 Cloudflare Pages `personal` 的生产环境变量中绑定 `OWNER_USER_ID`，值为该 ID，再触发新部署。先核对确为本人账户再绑定；不要把短身份标识、昵称或登录名当成完整 ID。未绑定时任何新账户都只是普通访客，首个注册者也不会自动成为站主。站主登录显示可信身份，可使用保留昵称；现有留言删除管理继续通过本机写作台，管理密钥仍只在本机/服务端，访客网页不接收它。
 
@@ -1068,29 +1055,11 @@ npx wrangler d1 execute beishan-comments --remote --file=migrations/0004_visitor
 
 登录后可用铃铛打开圆角玻璃面板，材质及透明度与播放器展开面板一致。角标最多显示 9+。点击消息的任意位置，跳到对应评论或回复，说说会自动展开评论区。每页 20 条，点“更早消息”可查看最近 100 条中的其余消息。打开或翻页后，仅将本次展示的未读条目标记已读。网络失败时保留未读状态。
 
+进入页面时只读取一次未读状态，浏览器从页面缓存恢复时刷新。退出账户会清空铃铛和已打开的消息列表。
+
 `reply_targets` 记录回复对象，`reply_notices` 保存提醒和已读状态。每账户收到新提醒或读取消息时，按时间和编号清理第 100 条以后的提醒。清理只操作 `reply_notices`，原评论、回复和回复关系继续保留，现有数据库无需额外迁移。
 
-**本地初始化：** `npm run db:init` 包含 0005/0006，完成后需执行新增 0010。已初始化过 0005/0006 的本地库只执行下面最后一条：
-
-```powershell
-npx wrangler d1 execute beishan-comments --local --file=migrations/0005_reply_targets.sql
-npx wrangler d1 execute beishan-comments --local --file=migrations/0006_reply_notices.sql
-npx wrangler d1 execute beishan-comments --local --file=migrations/0010_owner_notices.sql
-```
-
-0005/0006 使用 `CREATE ... IF NOT EXISTS`；0010 整份作为原子迁移执行，扩展原提醒表以支持顶层留言，保留通知编号、自增上界、摘要、已读和未读，不扫描或回填历史评论。成功后可重复执行。不要拆开执行 0010 的语句。
-
-**上线前：** 先备份线上 D1。已有提醒功能的生产库只需执行 0010，随后再部署新版代码；`npm run db:init:remote` 目前只包含 0002–0006，不能代替这一步。下面列出从尚未启用提醒的数据库开始的完整顺序：
-
-```powershell
-npx wrangler d1 export beishan-comments --remote --output=<工作区备份目录>/comments-before-notices.sql
-npx wrangler d1 execute beishan-comments --remote --file=migrations/0005_reply_targets.sql
-npx wrangler d1 execute beishan-comments --remote --file=migrations/0006_reply_notices.sql
-npx wrangler d1 execute beishan-comments --remote --file=migrations/0010_owner_notices.sql
-npx wrangler d1 execute beishan-comments --remote --command "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'reply_%'"
-```
-
-最后一条应返回 `reply_notices` 与 `reply_targets` 两行；再用 `PRAGMA table_info(reply_notices)` 核对 `reply_id` 的 `notnull` 为 0，并核对旧通知数量及已读状态。缺表时提醒接口会返回空列表；未执行 0010 时原回复提醒可用，新顶层留言通知无法保存。`--local` 只操作本地模拟库；生产迁移需明确使用 `--remote`。本轮开发未执行生产迁移或部署。
+提醒表由统一迁移入口管理，使用方法见 §26.1。0005 和 0006 建立回复与提醒结构，0010 扩展顶层留言提醒，保留原有编号、摘要、自增上界和已读状态。验收时可以用 `PRAGMA table_info(reply_notices)` 核对 `reply_id` 允许空值，并与备份对照旧通知数量及已读状态。
 
 ---
 
@@ -1714,7 +1683,7 @@ items:
   两个旋钮 `--plate-w` / `--plate-op` 挂在底纹层上。
 - 整页使用留白更舒展的透明时间线：桌面日期在左、正文在右，手机日期放在正文上方。正文与配图保持稳定，雨滴背景继续独立运行。
 - 视频在列表里只出**正方形封面方块**（圆角、与单张配图同宽），封面取 `public/videos/<摘要>.poster.jpg`；
-  点开才在弹窗里载入播放，关闭即暂停。重新生成封面：`node scripts/gen-video-poster.mjs`。
+  悬停只显示封面，点开才在弹窗里载入播放，关闭即暂停。重新生成封面可用 `node scripts/gen-video-poster.mjs`。
 - 弹窗内保留浏览器原生播放控件，播放、音量、进度与全屏键沿用本站光标；无脚本时封面链接直接指向原件。覆盖规则放在全局 `base.css`，组件作用域与普通通配符无法覆盖浏览器内部控件。
 - 每条说说的**底色是透明的**（不垫色块），所以那层墨点螺旋底纹会一直透出来。
   想让某一条或全部加个底色，改 `.talk` 的 `background` 一行即可。
@@ -2476,33 +2445,31 @@ node _probe/_pleat-ink.mjs
 ## 26. 页脚统计（本站已运行 + PV/UV）
 
 > 2026-09-26 上线（站主要求，体例参考图：**本站已经运行 X 天 X 时 X 分 X 秒** + **总访问量（PV）/ 总访客数（UV）**）。
-> **每一页底部都有**（首页用的是单独一份 —— 首页是控制台外壳，没有内页那个页脚）。
+> 显示在内页页脚，首页的运行天数由首页单独计算。
 
-- **运行时长的起点**：`content/site.md` 里的 `since: 2026-09-25`，改这一行就行（现在填的是本站首次提交的日期）。
-- **PV/UV 怎么来的**：服务端数的（`functions/_middleware.ts`），**不加客户端脚本、也不需要第三方统计**：
-  · 只数"页面请求"（GET + 要 HTML + 不是 `/api/` + 返回 200）⇒ 图片/CSS/接口调用/404 都不算；
-  · 访客号是一个随机 16 位 cookie（`nc_vid`，一年有效）；**不存 IP、不存 UA、不存来源**；
-  · PV = 总浏览次数，UV = 不同访客号个数（同一台设备同一天多次浏览算 1 个 UV）。
-- 数字有 60 秒缓存，所以刚发的访问可能晚一分钟才反映到页面上。
-- 取不到数字时页脚显示「—」，**不会显示假的 0**。
+- 运行时长从 `content/site.md` 的 `since` 算起。滚到页脚附近才开始计时和加载数字，滚远或切到后台后暂停计时。
+- 直接打开或刷新时，成功的 HTML 响应由中间件计数，禁用脚本也生效。站内换入不同文档、浏览器从页面缓存恢复、用户打开浏览器已预取或预渲染的文档时，由同源接口补记。链接预取、未完成的站内换页、页面内锚点和 404 不计数。
+- PV 是浏览次数，UV 是不同的随机访客号数量。`nc_vid` 有效期一年，数据库保存访客号和 UTC 时刻。
+- 浏览器可缓存统计数字 60 秒。接口不可用时页脚显示「—」。
 
-### 26.1 换台电脑要做的两件事（数据库迁移）
+### 26.1 初始化和迁移数据库
 
-这两块功能用了数据库（Cloudflare D1）。**表结构在 `migrations/` 里，仓库带着**，但新表要**执行**才建出来：
+空库和已有库使用同一入口。Wrangler 在 `d1_migrations` 记录已完成文件，按文件名应用待执行迁移。曾手工升级的旧库会先核对草稿和提醒结构，为确认完成的表重建补记账本。发现中断残留时先核查备份和表结构。
 
 ```powershell
-# 第一次在这台电脑上跑本地开发前（建本地库）
+# 初始化或更新本地库
 npm run db:init
 
-# 线上库（只在"有新的迁移文件时"跑一次；0002 就是说说点赞/统计那次）
+# 验证用的独立本地库
+npm run db:init -- --persist-to <独立目录>
+
+# 核对目标库并备份后，迁移线上库
 npm run db:init:remote
 ```
 
-- 迁移文件是**纯加表**（`CREATE TABLE IF NOT EXISTS`），重复执行无害。
-- 想看线上库里有什么：`npx wrangler d1 execute beishan-comments --remote --command "SELECT name FROM sqlite_master WHERE type='table'"`
-- **别忘了**：`npx wrangler` 要先登录（`npx wrangler login`，只需一次）。
+上线顺序是备份、迁移、核对历史记录和汇总、部署应用。0013 从既有浏览记录回填汇总，并随新浏览增量更新。0014 为发布核对建立独立的任务记录。应用回退时可以保留这两项增量结构。单个文件迁移失败后，处理异常再重跑统一入口，已完成文件由账本保留。
 
-### 26.2 本地把后端跑起来（改接口/统计时才需要）
+### 26.2 本地把后端跑起来
 
 ```powershell
 npm run build      # 先出产物
@@ -3051,6 +3018,8 @@ links: []
 
 歌单或曲目不可用时，使用「重新载入」、再次播放或下一首；也可点「去网易云听」进入原歌单。公共服务不需要在本站登录网易云，但其可用曲目与播放权限由服务及音乐平台决定，不能保证 VIP 歌曲都能完整播放。本站不存第三方账户、凭据或临时音频链接。
 
+重新载入歌单时，正在听的歌曲保持原来的歌名、进度和播放状态。刷新成功后按新歌单选下一首，刷新失败时仍能用上一份歌单。
+
 歌单内容直接在网易云维护；当前歌单编号和服务入口在 src/lib/music.ts，标题在 src/components/MusicPlayer.astro。写作台尚无音乐配置入口。本地验收后，站主已授权合入主分支发布。
 
 播放器液化玻璃体验（2026-11-05）：入口改为玻璃胶囊，展开面板有透光背景、折射亮边与独立的圆形播放键。歌名和歌手分行显示，当前曲目有细色标记。配色跟随明暗主题；减少动态关闭展开与声波动画，减少透明度或不支持背景模糊时使用实色回退。此样式正在独立分支本地体验，未替换正式站。
@@ -3200,7 +3169,7 @@ GSAP 3.15.1 与 Flip 只在指针靠近、触摸或焦点进入相关控件后�
 
 ### 换页、文章入口与相册显影（2026-11-21）
 
-站内导航等待超过 180 毫秒时，页首显示「正在打开页面…」。页面就绪后接上墨色转场。开启减少动态效果时，慢换页显示静态提示。
+站内导航等待超过 180 毫秒时，页首显示「正在打开页面…」，接到目标页的墨色转场开始。开启减少动态效果时，静态提示留到目标页绘制。
 
 文章标题上方的「返回归档」可从文章直达归档。长目录和菜单可用鼠标拖动右侧滑块，圆形光标随指针移动，也能照常使用滚轮和键盘。触屏、减少动态效果和系统强制配色使用浏览器滚动条。
 
@@ -3209,3 +3178,19 @@ GSAP 3.15.1 与 Flip 只在指针靠近、触摸或焦点进入相关控件后�
 日志新版本的次版本号和补丁号各用一位数字，例如 `v3.0.9` 的下一版写成 `v3.1.0`。
 
 相册首幕用鼠标移动或手指涂抹显影。桌面可向下滚动翻页，两种设备都可以直接选择「翻到相册封面」。
+
+手机首页的语言占比明细默认收起，离开首页后返回也一样。手动展开后，同一断点内调整窗宽仍保留展开状态。
+
+顶栏亮暗开关从首屏就是果冻软条。可直接点按，也可用 Tab 聚焦后按 Enter 或空格。支持 WebGPU 且允许动效时，指针靠近或触屏操作后可载入果冻拖动。减少动效或渲染器不可用时，静态软条仍可直接切换。
+
+相册先用缩略图准备封面，翻到对应幕再启用弧形场景或高清封面。关于和造物台先提供静态画面，场景可见且允许动效时再启用三维渲染。
+
+写作台发布过程中可以继续切换标签页。轮询直接读取任务当前状态，多个页面对同一待确认任务的 GitHub 核对由 D1 合并。收到限流响应时按服务器给出的时间恢复核对，任务保留原来的发布状态。
+
+### 浏览器与公开接口防护（2026-11-21）
+
+完整构建把脚本策略写入静态资源响应规则和 Functions 读取的产物。页面脚本经 Astro 本地打包，首屏内联脚本只接受现有模板中的原始内容并按字节核对。表单和嵌入限制为同源，API 默认须从同源读取，响应缓存沿用接口声明。歌单的连接授权来自播放器使用的同一份配置。
+
+文章、页面和造物台正文在构建时校验解析后的标签、属性和链接。视频、音频、折叠块和表格可以照原写法使用。校验报错会带源文件信息，通知异常地址只显示标题和正文。
+
+评论、点赞、账户、消息和统计补记有来源与正文边界。非头像账户操作、评论和点赞的请求体上限为 16 KiB，头像为 144 KiB，消息已读为 4 KiB。页面直达和统计补记共用每来源 60 秒 120 次的统计写入额度，超量时继续正常浏览。旧库要先通过 §26.1 的入口应用 0004，才能继续记录新访问。

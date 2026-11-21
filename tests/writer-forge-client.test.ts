@@ -1,6 +1,8 @@
 import { afterEach,expect,it,vi } from 'vitest';
 import { mountWriterEditor } from '../src/scripts/writer/editor';
 import { mountPublish } from '../src/scripts/writer/publish';
+import type { WriterDraft } from '../src/lib/writer/model';
+import type { RecoveryRecord } from '../src/scripts/writer/recovery';
 // DOM 边界只提供浏览器节点/事件；字段组件、保存控制器和发布确认均运行真实实现。
 // ProseMirror 的编辑/撤销/IME 由既有用例覆盖，本组只保持正文以检查字段保存没有改文。
 vi.mock('../src/scripts/writer/body-editor',()=>({mountWriterBody:(_host:unknown,body:string)=>({getMarkdown:()=>body,destroy(){},insertImage:()=>true,removeImage:()=>true})}));
@@ -9,7 +11,7 @@ class Node extends EventTarget{
   constructor(tag:string){super();this.tagName=tag.toUpperCase();}
   set textContent(value:string){this.own=value;this.children=[];}get textContent():string{return this.own+this.children.map(c=>c.textContent).join('');}
   append(...nodes:Node[]){this.children.push(...nodes);}prepend(...nodes:Node[]){this.children.unshift(...nodes);}replaceChildren(...nodes:Node[]){this.own='';this.children=nodes;}
-  setAttribute(k:string,v:string){this.attrs[k]=v;}getAttribute(k:string){return this.attrs[k]??null;}
+  setAttribute(k:string,v:string){this.attrs[k]=v;}getAttribute(k:string){return this.attrs[k]??null;}removeAttribute(k:string){delete this.attrs[k];}
   scrollIntoView(){}click(){this.dispatchEvent(new Event('click'));}
   focus(){(document as any).activeElement=this;}setCustomValidity(message:string){this.attrs.validity=message;}
   all():Node[]{return [this,...this.children.flatMap(c=>c.all())];}
@@ -27,10 +29,110 @@ async function open(kind:string,fields:Record<string,unknown>,assets:{sha256:str
     if(path==='/content?mode=tags')return {tags:[]};if(path==='/drafts')return {drafts:[draft]};if(path.startsWith('/drafts?id='))return {draft};
     throw Error(path);
   };
-  const request=async(path:string,init?:RequestInit)=>init?(()=>{const payload=JSON.parse(String(init.body));saved.push(payload);return {draft:{...draft,revision:payload.expectedRevision+1,value:payload.value}};})():api(path);
+  const request=async(path:string,init?:RequestInit)=>init?.method==='POST'?(()=>{const payload=JSON.parse(String(init.body));saved.push(payload);return {draft:{...draft,revision:payload.expectedRevision+1,value:payload.value}};})():api(path);
   const published:any[]=[];mounted=mountWriterEditor(root as any,request as any,{findDraft:async()=>recoveryCopies,put:async()=>{},remove:async()=>{}} as any,{user:{id:'owner',nickname:'站主'},publish:true,onPublish:async draft=>{published.push(draft);}});
   await settle();find(root,kind==='forge'?'forge':'example').click();await settle();return {root,draft,saved,published};
 }
+
+function delayedDraftSelection() {
+  const root = dom();
+  const drafts: WriterDraft[] = ['first', 'second'].map((key, index) => ({
+    id: String(index + 1).repeat(32), kind: 'post', key, revision: 1, publishedRevision: 0, base: null,
+    value: { fields: { title: key }, body: key + ' 正文', assets: [] },
+  }));
+  const reads = drafts.map(() => Promise.withResolvers<{ draft: WriterDraft }>());
+  const requested: { id: string; signal?: AbortSignal | null }[] = [];
+  const saved: { id: string; value: WriterDraft['value'] }[] = [];
+  const findDraft = vi.fn(async (_owner: string, _id: string): Promise<RecoveryRecord[]> => []);
+  async function api(path: string, init?: RequestInit) {
+    if (path === '/content?mode=tags') return { tags: [] };
+    if (path === '/drafts' && !init) return { drafts };
+    if (path === '/drafts' && init?.method === 'POST') {
+      const input = JSON.parse(String(init.body));
+      saved.push(input);
+      return { draft: { revision: input.expectedRevision + 1 } };
+    }
+    const index = drafts.findIndex(draft => path === '/drafts?id=' + draft.id);
+    if (index < 0) throw Error(path);
+    requested.push({ id: drafts[index].id, signal: init?.signal });
+    return reads[index].promise;
+  }
+  mounted = mountWriterEditor(root as any, api as any, { findDraft, put: async () => {}, remove: async () => {} } as any, {
+    user: { id: 'owner', nickname: '站主' }, publish: true,
+  });
+  const editor = mounted;
+  const read = (index: number) => reads[index].resolve({ draft: drafts[index] });
+  return { root, drafts, read, requested, saved, findDraft, editor };
+}
+
+it('草稿读取乱序时仍编辑最后选择的一份，新输入和原正文能一起保存', async () => {
+  const { root, drafts, read, requested, saved, editor } = delayedDraftSelection();
+  await settle();
+  find(root, 'first').click(); await settle();
+  find(root, 'second').click(); await settle();
+  expect(requested.map(request => request.id)).toEqual(drafts.map(draft => draft.id));
+  read(1); await settle();
+  expect(editor.getDraft()?.id).toBe(drafts[1].id);
+  edit(input(root, 'title'), '保留这次输入');
+  read(0); await settle();
+
+  expect(editor.getDraft()?.id).toBe(drafts[1].id);
+  expect(input(root, 'title').value).toBe('保留这次输入');
+  expect(requested[0].signal?.aborted).toBe(true);
+  find(root, '保存草稿').click(); await settle();
+  expect(saved.at(-1)).toMatchObject({ id: drafts[1].id, value: { fields: { title: '保留这次输入' }, body: 'second 正文' } });
+});
+
+it('准备切换草稿时仍能编辑当前稿，读完后先保存这段输入再切换', async () => {
+  const { root, drafts, read, saved, editor } = delayedDraftSelection();
+  await settle();
+  find(root, 'second').click(); await settle();
+  read(1); await settle();
+  find(root, 'first').click(); await settle();
+  edit(input(root, 'title'), '等待读取时修改的标题');
+  read(0); await settle();
+
+  expect(saved).toHaveLength(1);
+  expect(saved[0]).toMatchObject({ id: drafts[1].id, value: { fields: { title: '等待读取时修改的标题' } } });
+  expect(editor.getDraft()?.id).toBe(drafts[0].id);
+});
+
+it.each(['云端草稿', '本机副本'])('旧%s正在读取时，新建表单及其中的输入仍保留', async delayed => {
+  const { root, drafts, read, findDraft } = delayedDraftSelection();
+  const copies = Promise.withResolvers<RecoveryRecord[]>();
+  findDraft.mockReturnValueOnce(copies.promise);
+  await settle();
+  find(root, 'first').click(); await settle();
+  if (delayed === '本机副本') {
+    read(0); await settle();
+    expect(findDraft).toHaveBeenCalledWith('owner', drafts[0].id);
+  }
+  find(root, '新文章').click(); await settle();
+  edit(input(root, 'title'), '新文章标题');
+  if (delayed === '云端草稿') read(0);
+  copies.resolve([{
+    key: 'owner/' + drafts[0].id + '/new', user: 'owner', draftId: drafts[0].id,
+    value: { ...drafts[0].value, body: '旧恢复副本' }, revision: 1, pending: null,
+    serial: 1, pendingSerial: 0, updatedAt: Date.now(),
+  }]);
+  await settle();
+  expect(input(root, 'title').value).toBe('新文章标题');
+  expect(input(root, 'key')).toBeDefined();
+  expect(root.textContent).not.toContain('发现本设备恢复副本');
+});
+
+it('清理账户时取消草稿读取，迟到结果不再读取旧账户的本机副本', async () => {
+  const { root, read, requested, findDraft, editor } = delayedDraftSelection();
+  await settle();
+  find(root, 'first').click(); await settle();
+  await editor.dispose();
+  read(0); await settle();
+
+  expect(findDraft).not.toHaveBeenCalled();
+  expect(requested[0].signal?.aborted).toBe(true);
+  expect(root.textContent).toBe('');
+});
+
 it('项目只改文案仍保存原模型、预览、未知字段与原正文，不写入文章日期',async()=>{
   const {root,saved}=await open('project',{title:'项目标题',summary:'旧摘要',tagline:'一句话',category:'TOOL',status:'持续打磨',order:2,tags:['工具'],visual:'desk',effect:'tilt',images:[],links:[],preview:{name:'原模型'},future:{keep:true}});
   expect(root.textContent).toContain('造物台项目');expect(input(root,'summary')).toBeDefined();expect(input(root,'date')).toBeUndefined();

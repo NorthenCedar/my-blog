@@ -194,6 +194,21 @@ describe('站主的全站消息提醒', () => {
     expect((await onRequestPost({ env: s.env, request: s.request('notices', {}) } as never)).status).toBe(401);
   });
 
+  it('已读请求拒绝非数组及超过信箱容量的列表，不转换其他类型为消息编号', async () => {
+    const s = setup();
+    await s.publish({});
+    const { id } = (await s.notices('owner')).items[0];
+    for (const ids of [null, id, Array(101).fill(id)]) {
+      const response = await onRequestPost({ env: s.env, request: s.request('notices', { ids }, 'owner') } as never);
+      expect(response.status).toBe(400);
+    }
+    const invalid = await onRequestPost({ env: s.env, request: s.request('notices', { ids: [String(id), true, [id]] }, 'owner') } as never);
+    expect(invalid.status).toBe(200);
+    expect((await invalid.json() as { unread: number }).unread).toBe(1);
+    const selected = await onRequestPost({ env: s.env, request: s.request('notices', { ids: [id] }, 'owner') } as never);
+    expect((await selected.json() as { unread: number }).unread).toBe(0);
+  });
+
   it('分页可读到第 21 条；已读当前页不会吞掉未显示和新到的提醒，游标不能串账户', async () => {
     const s = setup();
     for (let i = 0; i < 23; i++) await s.publish({ body: `留言 ${i}` });

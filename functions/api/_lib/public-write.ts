@@ -1,34 +1,68 @@
 import { fail } from './visitor-core';
 import type { VisitorEnv } from './visitor-store';
 
-/** 匿名 CLI 可省 Origin；浏览器显式跨站/不透明来源一律拒绝。 */
-export function guardPublicWrite(request: Request) {
+/** 匿名 CLI 可省 Origin。浏览器明确来自其他源的请求一律拒绝。 */
+export function guardSameOrigin(request: Request, requireOrigin = false) {
   const origin = request.headers.get('Origin');
-  if ((origin !== null && origin !== new URL(request.url).origin) || request.headers.get('Sec-Fetch-Site') === 'cross-site') fail(403, '请从本站页面操作');
+  const site = request.headers.get('Sec-Fetch-Site');
+  if ((origin === null ? requireOrigin : origin !== new URL(request.url).origin) || site === 'cross-site' || site === 'same-site') {
+    fail(403, '请从本站页面操作');
+  }
+}
+
+export function guardPublicWrite(request: Request, requireOrigin = false) {
+  guardSameOrigin(request, requireOrigin);
   if ((request.headers.get('Content-Type') ?? '').split(';', 1)[0].trim().toLowerCase() !== 'application/json') fail(415, '请求格式不对');
 }
 
-/** 在 JSON 解析之前按实际字节数限额，Content-Length 缺省或伪造也不能绕过。 */
-export async function readJsonBody(request: Request, maximum: number, sizeError = '请求太大') {
+/** 先用声明长度快速拒绝，读取时再以实际字节数为准。 */
+async function readBody(request: Request, maximum: number, sizeError: string) {
+  const length = request.headers.get('Content-Length');
+  if (length !== null && /^\d+$/.test(length) && Number(length) > maximum) fail(413, sizeError);
   const reader = request.body?.getReader();
-  if (!reader) return fail(400, '请求为空');
-  const chunks: Uint8Array[] = [];
+  if (!reader) return null;
+  let bytes = new Uint8Array(0);
   let size = 0;
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > maximum) { await reader.cancel(); fail(413, sizeError); }
-    chunks.push(value);
-  }
-  const all = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) { all.set(chunk, offset); offset += chunk.length; }
   try {
-    const payload = JSON.parse(new TextDecoder().decode(all));
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return fail(400, '请求格式不对');
-    return payload as Record<string, unknown>;
+    while (true) {
+      const { value, done } = await reader.read().catch(() => fail(400, '无法读取请求正文'));
+      if (done) return bytes.subarray(0, size);
+      const nextSize = size + value.byteLength;
+      if (nextSize > maximum) {
+        void reader.cancel().catch(() => {});
+        fail(413, sizeError);
+      }
+      if (nextSize > bytes.byteLength) {
+        const larger = new Uint8Array(Math.min(maximum, Math.max(nextSize, bytes.byteLength * 2)));
+        larger.set(bytes);
+        bytes = larger;
+      }
+      bytes.set(value, size);
+      size = nextSize;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+export async function guardEmptyBody(request: Request) {
+  await readBody(request, 0, '请求不应包含正文');
+}
+
+export async function readJsonBody(request: Request, maximum: number, sizeError = '请求太大') {
+  const { payload } = await readJsonBodyWithSize(request, maximum, sizeError);
+  return payload;
+}
+
+export async function readJsonBodyWithSize(request: Request, maximum: number, sizeError = '请求太大') {
+  const bytes = await readBody(request, maximum, sizeError);
+  if (!bytes) return fail(400, '请求为空');
+  let payload: unknown;
+  try {
+    payload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   } catch { return fail(400, '请求格式不对'); }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return fail(400, '请求格式不对');
+  return { payload: payload as Record<string, unknown>, byteLength: bytes.byteLength };
 }
 
 /** 同一 SQL 内核对最近 60 秒用量并占额；并发请求不能读到同一份剩余额度。 */

@@ -43,6 +43,17 @@ describe('相册总览 · 正式产物',()=>{
       expect(seg).toContain('data-album-title');
     });
   });
+  it('后续封面初始只提供缩略图，独立保存可按需加载的高清档', () => {
+    const images = [...html.matchAll(/<a\b[^>]*class="cover-link"[^>]*>\s*(<img\b[^>]+>)/g)];
+    expect(images).toHaveLength(covers.length);
+    images.forEach(([, image], index) => {
+      const cover = coverPresentation(manifest.albums[index], index)!;
+      expect(image).toMatch(/\ssrc="([^"]+)"/);
+      expect(image.match(/\ssrc="([^"]+)"/)?.[1]).toBe(cover.thumbnail);
+      expect(image).toContain('loading="lazy"');
+      if (cover.src !== cover.thumbnail) expect(image).toContain(`data-cover-src="${cover.src}"`);
+    });
+  });
   it('显影盘在弧形封面之前，从清单取横幅照片而不预载整册',()=>{
     const bath=html.indexOf('data-bath-frames=');
     expect(bath).toBeGreaterThan(-1);

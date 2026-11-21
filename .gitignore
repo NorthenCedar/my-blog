@@ -6,9 +6,18 @@ prototype/_shots/
 *.log
 # wrangler 的本地状态（含本地 D1 数据库文件）—— 绝不能提交
 .wrangler/
+# 本地环境配置留在工作区，根目录的示例文件可以提交。
+/.env
+/.env.*
+!/.env.example
+!/.env.*.example
 .dev.vars
+/.dev.vars.*
+!/.dev.vars.example
+!/.dev.vars.*.example
 # 由完整构建从公开 HTML 重生成；不纳入内容发布快照，Functions 打包时读取本地生成物。
 /functions/api/_generated/comment-targets.json
+/functions/api/_generated/document-csp.json
 # ★ 2026-10-10 开源时补：AI 助手的本地权限配置。
 #   它记录的是"这台机器上允许执行哪些命令"，对别人毫无价值，只会暴露本机路径。
 #   （此前靠 ~/.config/git/ignore 挡着 —— 那是**全局**配置，

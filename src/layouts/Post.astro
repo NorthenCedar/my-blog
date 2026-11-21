@@ -15,7 +15,7 @@ interface Props {
   adjacent: { prev?: PostMeta; next?: PostMeta };
 }
 const { entry, meta, adjacent } = Astro.props;
-// 标题树在渲染时才有（deferRender 的代价，也是它换来"草稿素材不产出"的原因）
+// 内容集合延迟渲染，标题树在此处随正文一起取得。
 const { Content, headings } = await render(entry);
 const toc = headingTree(headings);
 const related = selectRelatedPosts(meta, await getVisiblePosts());

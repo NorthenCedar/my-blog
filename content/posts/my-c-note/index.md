@@ -1408,7 +1408,8 @@ int main() {
 ### 标准格式
 
 ```c
-int main(int argc, char const *argv[])
+int main(int argc, char const *argv[])   // 两行是等价的
+int main(int argc, char const **argv)   // 在很多现代编译器里，默认main函数的定义是这一行
 ```
 
 ### 参数拆解
@@ -1419,15 +1420,19 @@ int main(int argc, char const *argv[])
 
 ### 运行机制（终端实例）
 
+第一步：编译代码
+
+gcc hello.c -o hello      # 用gcc编译器，吧hello.c编译成一个叫做hello.exe的可执行文件
+
 假设编译出的程序名为 hello，在终端输入：
 
-./hello apple 100
+.\\hello apple 100       # WSL和Linux用./  Windows用./也行，但推荐用.\\
 
 系统会将其解析为：
 
 - argc = 3 （共 3 个部分）
 
-- argv\[0\] = "./hello" （永远是程序名本身）
+- argv\[0\] = ".\\hello" （永远是程序名本身）
 
 - argv\[1\] = "apple" （第一个真实参数）
 
@@ -1455,7 +1460,7 @@ int main(int argc, char const *argv[]) {
 }
 ```
 
-(注：在命令行输入带空格的参数时，需加双引号，例如 ./a.out "I love C"，系统会将其视作一个整体传给 argv\[1\]。)
+(注：在命令行输入带空格的参数时，需加双引号，例如 .\\a.out "I love C"，系统会将其视作一个整体传给 argv\[1\]。)
 
 ## 单字符输入输出
 

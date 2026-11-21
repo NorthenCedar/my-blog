@@ -1,22 +1,26 @@
 import { requireWriter,writerProof,writerJson,writerError,type WriterEnv } from '../_lib/writer-auth';
-import { createJob,readJob,listJobs,cancelJob,setDispatchUnknown,jobRow,reconcileJob,closeUnconfirmedJob,requestDeploymentCheck } from '../_lib/writer-jobs';
-import { createWriterRepository } from '../_lib/writer-repository';
+import { createJob,readJob,readJobStatus,listJobs,cancelJob,setDispatchUnknown,closeUnconfirmedJob,requestDeploymentCheck } from '../_lib/writer-jobs';
+import { createWriterRepository,WriterRepositoryRateLimit } from '../_lib/writer-repository';
 import { readJsonBody } from '../_lib/public-write';
 import { writerFail } from '../../../src/lib/writer/model';
-export const onRequestGet:PagesFunction<WriterEnv>=async({request,env})=>{
+function publishError(error:unknown){
+  const response=writerError(error);
+  if(error instanceof WriterRepositoryRateLimit)response.headers.set('Retry-After',String(Math.max(0,Math.ceil((error.retryAt-Date.now())/1000))));
+  return response;
+}
+export const onRequestGet:PagesFunction<WriterEnv>=async(context)=>{
+  const {request,env}=context;
   try{
     const user=await requireWriter(request,env),query=new URL(request.url).searchParams;
-    let id=query.get('id');
-    if(!id&&query.has('requestId')){
-      const requestId=query.get('requestId')??'';if(!/^[a-f0-9]{32}$/.test(requestId))writerFail(400,'invalid_id','发布请求标识不对');
-      const row=await env.COMMENTS_DB.prepare('SELECT id FROM writer_jobs WHERE owner=? AND request_id=?').bind(user.id,requestId).first<{id:string}>();
-      if(!row)writerFail(404,'job_missing','尚未找到此发布请求，请检查后重新确认');id=row.id;
-    }
-    if(!id)return writerJson({jobs:await listJobs(env.COMMENTS_DB,user.id)});
-    let job=await readJob(env.COMMENTS_DB,user.id,id);
-    if(env.WRITER_GITHUB_TOKEN)job=await reconcileJob(env.COMMENTS_DB,id,createWriterRepository(env.WRITER_GITHUB_TOKEN));
-    return writerJson({job});
-  }catch(error){return writerError(error);}
+    const id=query.get('id'),requestId=query.get('requestId');
+    if(!id&&requestId===null)return writerJson({jobs:await listJobs(env.COMMENTS_DB,user.id)});
+    if(!id&&!/^[a-f0-9]{32}$/.test(requestId??''))writerFail(400,'invalid_id','发布请求标识不对');
+    const repo=env.WRITER_GITHUB_TOKEN&&query.get('statusOnly')!=='1'?createWriterRepository(env.WRITER_GITHUB_TOKEN):undefined;
+    const status=readJobStatus(env.COMMENTS_DB,user.id,id?{id}:{requestId:requestId!},repo);
+    // 浏览器离页时，已发出的核对仍可收尾并释放共享预约。
+    if(repo)context.waitUntil?.(status.catch(()=>{}));
+    return writerJson({job:await status});
+  }catch(error){return publishError(error);}
 };
 export const onRequestPost:PagesFunction<WriterEnv>=async({request,env})=>{
   try{
@@ -29,12 +33,12 @@ export const onRequestPost:PagesFunction<WriterEnv>=async({request,env})=>{
     }
     if(p.action!=='publish') writerFail(400,'invalid_action','未知发布操作');
     if(!env.WRITER_GITHUB_TOKEN||!env.WRITER_RUNNER_SECRET||new TextEncoder().encode(env.WRITER_RUNNER_SECRET).length<32) writerFail(503,'publish_unavailable','发布尚未配置，草稿仍可保存和导出');
-    const job=await createJob(env.COMMENTS_DB,proof,{draftId:String(p.draftId),revision:Number(p.revision),requestId:String(p.requestId)}),row=await jobRow(env.COMMENTS_DB,job.id);
+    const job=await createJob(env.COMMENTS_DB,proof,{draftId:String(p.draftId),revision:Number(p.revision),requestId:String(p.requestId)});
     // 先标记为结果待查；重复点击不能因上次 HTTP 应答丢失而重复派发。
-    if(row.state==='queued'){
+    if(job.state==='queued'){
       const changed=await env.COMMENTS_DB.prepare("UPDATE writer_jobs SET state='dispatch_unknown',version=version+1 WHERE id=? AND state='queued' RETURNING id").bind(job.id).first();
       if(changed) try{await createWriterRepository(env.WRITER_GITHUB_TOKEN).dispatch(job.id);}catch{await setDispatchUnknown(env.COMMENTS_DB,job.id);}
     }
     return writerJson({job:await readJob(env.COMMENTS_DB,user.id,job.id)},202);
-  }catch(error){return writerError(error);}
+  }catch(error){return publishError(error);}
 };

@@ -14,7 +14,11 @@ export function guardWriterOrigin(request: Request,env:WriterEnv,write=false) {
   const local=env.WRITER_LOCAL_DEV==='1' && url.protocol==='http:' && ['127.0.0.1','localhost','[::1]'].includes(url.hostname);
   if (url.origin!=='https://northcedar.top' && !local) writerFail(403,'invalid_origin','请从本站写作台操作');
   const origin=request.headers.get('Origin');
-  if (request.headers.get('Sec-Fetch-Site')==='cross-site' || (origin!==null && origin!==url.origin) || (write && (origin!==url.origin || request.headers.get('X-NC-Request')!=='1'))) writerFail(403,'invalid_origin','请从本站写作台操作');
+  const site=request.headers.get('Sec-Fetch-Site');
+  if (site==='cross-site'||site==='same-site'||(origin!==null&&origin!==url.origin)||
+    (write&&(origin!==url.origin||request.headers.get('X-NC-Request')!=='1'))) {
+    writerFail(403,'invalid_origin','请从本站写作台操作');
+  }
 }
 export async function requireWriter(request:Request,env:WriterEnv,write=false):Promise<Account> {
   guardWriterOrigin(request,env,write);

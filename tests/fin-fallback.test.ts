@@ -1,10 +1,10 @@
 /** 执行真实控制器，WebGL 场景是测试边界；覆盖手机初始化与断点切换。 */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), start: vi.fn(), stop: vi.fn() }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), start: vi.fn(), stop: vi.fn(), gate: vi.fn() }));
 vi.mock('../src/scripts/fin-scene', () => ({ createFinScene: mocks.create }));
 vi.mock('../src/scripts/rl-core', () => ({
-  createActivityGate: () => ({ onScreen: true, visible: true, dispose: vi.fn() }),
+  createActivityGate: mocks.gate,
   startLoop: mocks.start,
 }));
 
@@ -19,13 +19,20 @@ beforeEach(() => {
   mocks.start.mockReturnValue(mocks.stop);
 });
 
-function harness({ mobile = false, reduce = false, transitioning = false } = {}) {
+function harness({ mobile = false, reduce = false, transitioning = false, visible = true, software = false } = {}) {
   const media = (matches: boolean) => ({ matches, addEventListener: vi.fn(), removeEventListener: vi.fn() });
   const narrow = media(mobile), motion = media(reduce);
   const listeners = new Map<string, (event: unknown) => void>();
   const host = { dataset: {}, classList: { add: vi.fn(), remove: vi.fn() }, getBoundingClientRect: () => ({ width: 640, height: 400 }) };
   const view = { hidden: true };
+  const loseContext = vi.fn();
+  const context = {
+    getExtension: (name: string) => name === 'WEBGL_debug_renderer_info' ? { UNMASKED_RENDERER_WEBGL: 1 } : { loseContext },
+    getParameter: () => software ? 'ANGLE (SwiftShader)' : '硬件设备',
+  };
+  const getContext = vi.fn(() => context);
   const makeCanvas = (events = new Map<string, (event: unknown) => void>()): object => ({
+    getContext,
     addEventListener: (name: string, handler: (event: unknown) => void) => events.set(name, handler),
     cloneNode: vi.fn(() => makeCanvas()), replaceWith: vi.fn(),
   });
@@ -59,6 +66,14 @@ function harness({ mobile = false, reduce = false, transitioning = false } = {})
     }
   };
   const paintStartup = () => { paint(); paint(); };
+  const gate = { onScreen: true, visible, dispose: vi.fn() };
+  let gateEvents: { onTick: () => void; onHidden: () => void };
+  mocks.gate.mockImplementation((_host, options) => { gateEvents = options; return gate; });
+  const show = (visible: boolean) => {
+    gate.visible = visible;
+    if (visible) gateEvents.onTick();
+    else gateEvents.onHidden();
+  };
   vi.stubGlobal('addEventListener', vi.fn());
   vi.stubGlobal('removeEventListener', vi.fn());
   const start = () => {
@@ -74,7 +89,7 @@ function harness({ mobile = false, reduce = false, transitioning = false } = {})
     onMutation();
     paintStartup();
   };
-  return { start, change, paintStartup, finishTransition, view, canvas, listeners, scene, narrow, motion };
+  return { start, change, paintStartup, finishTransition, view, canvas, listeners, scene, narrow, motion, show, getContext, loseContext };
 }
 
 describe('关于页立体装置的加载与释放', () => {
@@ -142,6 +157,23 @@ describe('关于页立体装置的加载与释放', () => {
     expect(h.view.hidden).toBe(true);
   });
 
+  it('后台打开时不探测 GPU，前台才启动，切回后台停帧', async () => {
+    const h = harness({ visible: false });
+    h.start();
+    expect(h.getContext).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    h.show(true);
+    expect(h.getContext).not.toHaveBeenCalled();
+    h.paintStartup();
+    await vi.dynamicImportSettled();
+    expect(mocks.create).toHaveBeenCalledOnce();
+    h.show(false);
+    expect(mocks.stop).toHaveBeenCalledOnce();
+    h.show(true);
+    expect(mocks.start).toHaveBeenCalledTimes(2);
+    expect(mocks.create).toHaveBeenCalledOnce();
+  });
+
   it('异步场景尚未就绪就缩为手机，迟到结果只释放，不覆盖页面背景', async () => {
     const h = harness();
     let complete!: (value: typeof h.scene) => void;
@@ -174,5 +206,33 @@ describe('关于页立体装置的加载与释放', () => {
     expect(h.view.hidden).toBe(false);
     h.listeners.get('webglcontextlost')?.({ preventDefault() {} });
     expect(!h.view.hidden, '旧画布迟到的 lost 事件不能停用新场景').toBe(true);
+  });
+
+  it('上下文丢失后保留纸色与点阵，恢复事件到来后才重建', async () => {
+    const h = harness();
+    h.start();
+    await vi.dynamicImportSettled();
+    const preventDefault = vi.fn();
+    h.listeners.get('webglcontextlost')?.({ preventDefault });
+    h.finishTransition();
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(h.scene.dispose).toHaveBeenCalledOnce();
+    expect(h.view.hidden).toBe(true);
+    expect(mocks.create).toHaveBeenCalledOnce();
+    h.listeners.get('webglcontextrestored')?.({});
+    h.paintStartup();
+    await vi.dynamicImportSettled();
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+    expect(mocks.create.mock.calls[1][0]).not.toBe(h.canvas);
+  });
+
+  it('软件 WebGL 只做轻量探测，释放上下文并跳过场景构建', async () => {
+    const h = harness({ software: true });
+    h.start();
+    await vi.dynamicImportSettled();
+    expect(h.getContext).toHaveBeenCalledOnce();
+    expect(h.loseContext).toHaveBeenCalledOnce();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(h.view.hidden).toBe(true);
   });
 });

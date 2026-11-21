@@ -3,6 +3,7 @@ import { getEntry } from 'astro:content';
 import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import { getSite } from '../lib/site';
+import { requireContentLink } from '../lib/content-urls.mjs';
 import PageTitle from '../components/PageTitle.astro';
 import infInk from '../assets/links/inf-ink.png';
 
@@ -33,6 +34,12 @@ interface LinksData {
 const entry = await getEntry('pages', 'links');
 const d = (entry?.data ?? {}) as unknown as LinksData;
 const groups = d.groups ?? [];
+for (const [groupIndex, group] of groups.entries()) {
+  for (const [itemIndex, item] of group.items.entries()) {
+    requireContentLink(item.href, `content/pages/links.md 的 groups[${groupIndex}].items[${itemIndex}].href`);
+  }
+}
+if (d.mine) requireContentLink(d.mine.href, 'content/pages/links.md 的 mine.href');
 const { wordmark } = await getSite();
 const waveText = d.waveText?.trim() || wordmark;
 const isExternal = (h: string) => /^https?:/i.test(h);

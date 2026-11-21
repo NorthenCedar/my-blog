@@ -1,7 +1,7 @@
 import { fmtTime, groupReplies, parentIdsOf, postComment, replyLi, toggleReplyForm, type Reply } from './reply-common';
 import { authorNode, identityControls, type Authored } from './visitor-client';
 import { onPage } from './page-lifecycle';
-onPage(({document, window, addEventListener}) => {
+onPage(({document, window, keep}) => {
 // 评论：取列表 + 提交 + **回复**（2026-09-28 站主要求：像 QQ 动态那样能回复）。
 // 全站第二个客户端脚本（第一个是代码复制）。
 // 安全铁律：用户输入一律用 textContent 写进 DOM，**任何地方都不用 innerHTML**。
@@ -15,9 +15,13 @@ if (root) {
   const errorBox = root.querySelector<HTMLElement>('[data-error]')!;
   const form = root.querySelector<HTMLFormElement>('[data-form]')!;
   const submit = root.querySelector<HTMLButtonElement>('[data-submit]')!;
+  const load = new AbortController();
+  const isCurrent = () => !load.signal.aborted && root.isConnected;
+  keep(() => load.abort());
 
   type Comment = Authored & { body: string; createdAt: string };
-  identityControls(form);
+  let postedBeforeLoad: { comments: Comment[]; replies: Reply[] } | undefined = { comments: [], replies: [] };
+  keep(identityControls(form, isCurrent));
 
   const showError = (msg: string) => {
     errorBox.textContent = msg;
@@ -43,10 +47,21 @@ if (root) {
   const replyCtx = {
     slug,
     name: () => (form.elements.namedItem('name') as HTMLInputElement).value,
-    onAdded: setCount,
+    onAdded: (reply: Reply) => {
+      postedBeforeLoad?.replies.push(reply);
+      setCount();
+    },
+    isCurrent,
   };
 
   const render = (c: Comment, fresh = false) => {
+    const existing = list.querySelector<HTMLLIElement>(`:scope > li[data-id="${c.id}"]`);
+    if (existing) {
+      if (fresh) {
+        existing.querySelector('time')!.textContent = fmtTime(c.createdAt) + ' · 刚发表';
+      }
+      return false;
+    }
     const li = document.createElement('li');
     li.id = `comment-${c.id}`; // 提醒面板跳过来的锚点
     li.dataset.id = String(c.id);
@@ -78,6 +93,7 @@ if (root) {
     else list.append(li);
     empty.hidden = true;
     list.hidden = false;
+    return true;
   };
 
   const parent = new URLSearchParams(location.search).get('comment') ?? /^#comment-(\d+)$/.exec(location.hash)?.[1];
@@ -90,20 +106,25 @@ if (root) {
   document.addEventListener('notice:follow', focusComment);
 
   // 取列表及提醒指向的楼层。
-  fetch(`/api/comments?slug=${encodeURIComponent(slug)}${parent ? `&comment=${encodeURIComponent(parent)}` : ''}`)
+  fetch(`/api/comments?slug=${encodeURIComponent(slug)}${parent ? `&comment=${encodeURIComponent(parent)}` : ''}`, { signal: load.signal })
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
     .then((data: { comments: Comment[]; replies?: Reply[] }) => {
-      const items = data.comments ?? [];
+      if (!isCurrent()) return;
+      // 初次读取可能早于发表，也可能已包含这次发表，按编号合并后再同步声纹。
+      const items = [...new Map([...(postedBeforeLoad?.comments ?? []), ...(data.comments ?? [])].map(c => [c.id, c])).values()];
+      const replies = [...new Map([...(data.replies ?? []), ...(postedBeforeLoad?.replies ?? [])].map(r => [r.id, r])).values()];
+      postedBeforeLoad = undefined;
       for (const c of items) render(c);
 
       // 回复挂到各自顶层评论的下面（顺序由接口定：旧的在上）。
       // 孤儿回复（父评论掉出了 LIMIT 200）在 groupReplies 里被丢掉，这里拿不到 ⇒ 不会显示成孤儿。
-      const grouped = groupReplies(data.replies ?? [], parentIdsOf(items));
+      const grouped = groupReplies(replies, parentIdsOf(items));
       for (const c of items) {
         const li = list.querySelector<HTMLElement>(`li[data-id="${c.id}"]`)!;
         const box = li?.querySelector<HTMLElement>(':scope > .reply-list')!;
         for (const r of grouped.get(c.id) ?? []) {
-          box.append(replyLi(r, () => toggleReplyForm(list, li, { ...replyCtx, parentId: c.id, replyTo: r.name, target: { kind: 'reply', id: r.id } })));
+          const existing = box.querySelector(`:scope > li[data-reply-id="${r.id}"]`);
+          box.append(existing ?? replyLi(r, () => toggleReplyForm(list, li, { ...replyCtx, parentId: c.id, replyTo: r.name, target: { kind: 'reply', id: r.id } })));
         }
       }
       setCount();
@@ -129,11 +150,15 @@ if (root) {
         }),
       );
     })
-    .catch(() => showError('留言没能加载出来。刷新页面再试一次。'));
+    .catch(() => {
+      postedBeforeLoad = undefined;
+      if (isCurrent()) showError('留言没能加载出来。刷新页面再试一次。');
+    });
 
   // 提交
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (!isCurrent() || submit.disabled) return;
     clearError();
 
     const data = new FormData(form);
@@ -149,9 +174,11 @@ if (root) {
     submit.disabled = true;
     submit.setAttribute('aria-busy', 'true');
 
-    postComment(payload)
+    postComment(payload, isCurrent)
       .then((c) => {
-        render(c, true);
+        if (!isCurrent()) return;
+        const added = render(c, true);
+        postedBeforeLoad?.comments.unshift(c);
         setCount();
         // 只清空留言框，**不清空名字** —— 同一个人可能想连着说几句
         (form.elements.namedItem('body') as HTMLTextAreaElement).value = '';
@@ -159,15 +186,16 @@ if (root) {
         /* 2026-10-14：通知「留言页的声纹装置」新来了一条（装置换掉了墨滴，事件名随之换）。
            ★ 派发在**成功之后** —— 失败不该有波形（那等于给失败做庆祝）。
            ★ 继续派发在**成功之后** 这条规矩是墨滴那轮定的，一直沿用。 */
-        window.dispatchEvent(new CustomEvent('voiceprint:new', {
+        if (added) window.dispatchEvent(new CustomEvent('voiceprint:new', {
           detail: { note: { id: c.id, createdAt: c.createdAt, body: c.body, isReply: false } },
         }));
       })
       .catch((err: Error) => {
         // 失败时**保留用户已输入的内容**，绝不重置表单
-        showError(err.message || '留言没提交成功。可能是网络问题，请稍后再试。');
+        if (isCurrent()) showError(err.message || '留言没提交成功。可能是网络问题，请稍后再试。');
       })
       .finally(() => {
+        if (!isCurrent()) return;
         submit.disabled = false;
         submit.removeAttribute('aria-busy');
       });

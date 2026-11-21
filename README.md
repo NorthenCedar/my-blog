@@ -1,8 +1,8 @@
 # 北杉札记
 
-个人博客。静态站点（Astro）+ Cloudflare Pages Functions + D1（评论）。
+个人博客，使用 Astro 构建静态页面。评论、点赞、访客账户、访问统计和云端写作台由 Cloudflare Pages Functions 与 D1 提供。
 
-线上：<https://northcedar.top>
+[访问北杉札记](https://northcedar.top)
 
 配套的本地编辑器（写作台）在独立仓库 [blog-desk](https://github.com/NorthenCedar/blog-desk)，
 两边通过 `content/` 下的 Markdown 文件对接。
@@ -11,83 +11,68 @@
 
 | 层 | 选型 | 说明 |
 |---|---|---|
-| 站点 | Astro 7 | 静态输出，构建期跑完所有渲染 |
-| 样式 | 原生 CSS + 设计 token | 无 CSS 框架、无预处理器 |
-| 字体 | 自托管 WOFF2 | Archivo / Plex / Homemade Apple，零外部 CDN |
-| 评论 / 点赞 / 计数 | Cloudflare Pages Functions + D1 | 三个接口 + 一个中间件 |
-| 部署 | Cloudflare Pages | 推 `main` 即发布，1–3 分钟自动上线 |
+| 站点 | Astro 7 | 静态页面与按需加载的浏览器交互 |
+| 样式与字体 | 原生 CSS、设计 token、自托管 WOFF2 | 样式与字体随构建输出 |
+| 服务端 | Cloudflare Pages Functions + D1 | 访客功能、统计与云端写作 |
+| 部署 | Cloudflare Pages | 本站通过 `main` 分支触发生产构建 |
 
-**运行时依赖只有三个**：`astro`、`@astrojs/rss`、`@astrojs/sitemap`。
-字体、图标、代码高亮全部自建或构建期完成，页面上不加载任何第三方 JS/CSS。
+项目依赖及锁定版本见 [package.json](package.json) 和 [package-lock.json](package-lock.json)。播放器通过外部服务加载歌单。
 
-## 本地跑
+## 本地开发
+
+使用 [.node-version](.node-version) 指定的 Node.js 26.13.1。
 
 ```bash
-npm install
-npm run dev          # http://localhost:4321
+npm ci
+npm run dev
 ```
 
-需要 Node 20+。看构建产物用 `npm run preview` —— **不要直接双击 `dist/index.html`**，
-本站资源全走 `/` 开头的绝对路径，`file://` 下会解析到盘根目录，整站样式与素材全部 404。
+开发服务器会给出访问地址。静态产物用 `npm run preview` 查看。需要在本地使用评论等接口时，
+依次运行 `npm run db:init`、`npm run build` 和 `npm run dev:cf`。
 
 ## 命令
 
 | 命令 | 作用 |
 |---|---|
 | `npm run dev` | 开发服务器 |
-| `npm run build` | 生成图 webp → Astro 构建 → 清掉草稿用到的资源 |
-| `npm run preview` | 预览 `dist/` |
-| `npm run test` | vitest |
-| `npm run verify` | build + test，**提交前跑这个** |
-| `npm run db:init` | 初始化**本地** D1（依次跑 0001–0006，可重复执行） |
-| `npm run db:init:remote` | 迁移**线上** D1（跑 0002–0006，会真改数据，慎用） |
-| `npm run dev:cf` | 用 wrangler 本地跑 Pages Functions |
-
-> `npm run verify` 存在的理由：Cloudflare 只构建、不跑测试。测试留在本地，
-> 靠提交前手动跑一遍来补这个缺口。
+| `npm run build` | 生成相册素材、构建站点、导出公开音视频和留言目标，并生成浏览器防护规则 |
+| `npm run preview` | 预览 `dist/` 的静态页面 |
+| `npm test` | 运行 Vitest，部分检查依赖本次构建产物 |
+| `npm run verify` | 完整构建和测试，提交前运行 |
+| `npm run db:init` | 初始化或迁移本地 D1 |
+| `npm run db:init:remote` | 迁移配置中绑定的远端 D1 |
+| `npm run dev:cf` | 使用 Wrangler 本地运行静态产物和 Pages Functions |
 
 ## 部署
 
-1. fork 这个仓库。
-2. 在 Cloudflare Pages 里连 GitHub、选这个仓库。
-3. **改 `wrangler.toml` 里的 `database_id`** —— 那是原主的库，fork 的人必须换成
-   自己的（`npx wrangler d1 create beishan-comments` 拿 id）。
-4. 建 D1 库并迁移：`npm run db:init:remote`。
-5. 配环境变量 `ADMIN_TOKEN`（留言管理接口的密钥，见下）。
-6. 推 `main` ⇒ 自动部署。
+1. 在 Cloudflare Pages 连接自己的 GitHub 仓库，选择生产分支，构建命令填 `npm run build`，输出目录填 `dist`。
+2. 创建自己的 D1 库 `beishan-comments`，在 `wrangler.toml` 填写自己的 Pages 项目名和 `database_id`，沿用 `COMMENTS_DB` 绑定。使用自有域名时同步更新 `astro.config.mjs` 的 `site`。
+3. 核对远端 D1，已有数据先备份，再运行 `npm run db:init:remote`。推送生产分支即可触发 Pages 部署。
 
 ## 环境变量
 
-| 变量 | 用途 | 是否必需 |
-|---|---|---|
-| `ADMIN_TOKEN` | 留言管理接口的 Bearer 密钥 | 用到 `/api/admin/*` 才需要 |
-
-**通过 `npx wrangler pages secret put ADMIN_TOKEN` 写进 Cloudflare，不要写进任何文件。**
-仓库里没有任何密钥，包括占位符。
-
-> 环境变量只对**新的一次部署**生效 —— 改完 Secret 必须重新触发一次部署，
-> 否则线上仍按"没配"处理，表现为管理接口一律 500 而不是 401。
+使用留言管理接口时，在 Pages 项目里将 `ADMIN_TOKEN` 配为 Secret，并触发新部署。
+云端写作发布流程绑定本站域名、GitHub 仓库和 `main` 分支，独立部署需适配这些入口与密钥。[云端写作配置](docs/cloud-writer-setup.md)
 
 ## 内容模型
 
 - `content/posts/<slug>/index.md` —— 文章，正文图片放同目录
 - `content/pages/*.md` —— 页面（关于 / 留言 / 说说 / 更新日志 / 友链）
 - `content/gallery/<专辑>/` —— 相册
+- `content/projects/<slug>/` —— 造物台项目
 - `content/site.md` —— 站名、简介、联系方式等文案层
-- 标签注册表：`src/tag-registry.ts`
+- `src/tag-registry.ts` —— 标签注册表
 
-`draft: true` 的文章**不构建**，但 `.md` 文件本身在仓库里是可读的 ——
-**草稿的保密性 = 仓库的保密性**。
+生产构建只输出已发布的文章与相册。公开仓库中的草稿源码对读者可见。
 
-文档在 `docs/`：`content-model.md`（内容模型与标签表）、`architecture.md`、
-`design-spec.md`（设计规范）、`site-decisions.md`（决策台账）、
-`rhinelab-spec.md`（装置系列的完整规格与逐轮修正记录）。
+[内容模型](docs/content-model.md) · [架构](docs/architecture.md) · [设计规格](docs/design-spec.md) ·
+[设计决策](docs/site-decisions.md) · [装置规格](docs/rhinelab-spec.md)
 
 ## 隐私
 
-- 评论与访问统计**不存 IP、不存 UA、不存来源**。
-- 访客标识是 cookie 里一个随机 16 位串（`nc_vid`，一年有效），无随机数源依赖。
-- 访问计数走 Cloudflare 中间件，不加载客户端 JS。
+- 访问记录保存 UTC 日期、访问时间和随机访客号。浏览器通过一年有效的 `nc_vid` Cookie 保留该访客号，UV 按访客号去重。
+- 直达页面由中间件计数，浏览器脚本补记站内切页和页面恢复。计数用 IP 散列限流，每个来源最近 60 秒最多记 120 次。
+- 评论和点赞也使用 IP 散列限流或去重。
 
 ## 许可
 

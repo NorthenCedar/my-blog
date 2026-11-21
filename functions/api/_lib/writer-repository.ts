@@ -9,6 +9,17 @@ const revision=(sha:string)=>/^[a-f0-9]{40}$/.test(sha)?sha:writerFail(400,'inva
 const runNumber=(id:string)=>/^\d{1,20}$/.test(id)?id:writerFail(400,'invalid_run','运行标识不对');
 export type WriterRun={id:number|string;display_title:string;head_branch:string;event:string;path:string;status:string;conclusion:string|null;repository:{full_name:string};html_url?:string;head_sha?:string};
 export function matchesWriterRun(run:WriterRun,jobId?:string){return run.repository?.full_name===WRITER_REPOSITORY&&run.event==='workflow_dispatch'&&run.head_branch==='main'&&run.path===WRITER_WORKFLOW&&(!jobId||run.display_title===`云端写作 ${jobId}`);}
+export class WriterRepositoryRateLimit extends WriterError {
+  constructor(readonly retryAt:number){super(429,'repository_rate_limited','仓库查询暂时受限，将继续查询原任务');}
+}
+function rateLimitUntil(response:Response):number|null {
+  const retryAfter=response.headers.get('Retry-After'),exhausted=response.headers.get('X-RateLimit-Remaining')==='0';
+  if(response.status!==429&&!(response.status===403&&(retryAfter||exhausted)))return null;
+  const now=Date.now(),after=retryAfter&&/^\d+$/.test(retryAfter)?now+Number(retryAfter)*1000:Date.parse(retryAfter??'');
+  const reset=exhausted?Number(response.headers.get('X-RateLimit-Reset'))*1000:0;
+  const retryAt=Math.max(Number.isSafeInteger(after)?after:0,Number.isSafeInteger(reset)?reset:0);
+  return retryAt>now?retryAt:now+60000;
+}
 export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch){
   async function request(path:string,body?:unknown,missing=false):Promise<any>{
     if(!token) writerFail(503,'repository_unavailable','仓库读取和发布尚未配置，仍可保存私密草稿');
@@ -17,7 +28,11 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
       try{
         // workerd 只实现 follow/manual；manual 将 3xx 留给下方失败检查，不外传凭据。
         const response=await fetchImpl(root+path,{method:body===undefined?'GET':'POST',redirect:'manual',signal:controller.signal,headers:{Authorization:`Bearer ${token}`,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'northcedar-cloud-writer',...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});
-        if(body===undefined&&(response.status===429||response.status>=500)&&attempt<2){await response.body?.cancel();continue;}
+        if(body===undefined){
+          const retryAt=rateLimitUntil(response);
+          if(retryAt!==null){await response.body?.cancel();throw new WriterRepositoryRateLimit(retryAt);}
+          if(response.status>=500&&attempt<2){await response.body?.cancel();continue;}
+        }
         if(missing&&response.status===404){await response.body?.cancel();return null;}
         if(!response.ok){await response.body?.cancel();writerFail(502,'repository_http_'+response.status,'仓库服务暂时不可用，请检查配置或稍后重试');}
         if(response.status===204) return null;

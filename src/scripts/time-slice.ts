@@ -562,11 +562,14 @@ function init() {
   /* ---- three 场景（懒加载：判定可跑后才 import，three chunk 与 DNA 共享）；
      场景要等 /butterfly.glb 到货，所以是 async —— 期间被 disable 掉就丢弃。 ---- */
   let scene: import('./time-slice-scene').TslScene | null = null;
-  const bootScene = async () => {
+  let sceneGeneration = 0;
+  const bootScene = async (isCurrent: () => boolean) => {
     const mod = await import('./time-slice-scene');
-    const s = await mod.createTslScene(cvs, palette);
-    if (!stopLoop) {
-      s.dispose(); // 竞态：模型还没到货装置就被停掉了
+    if (!isCurrent()) return;
+    const s = await mod.createTslScene(cvs, palette, isCurrent);
+    if (!s) return;
+    if (!isCurrent()) {
+      s.dispose();
       return;
     }
     scene = s;
@@ -582,9 +585,12 @@ function init() {
     host.classList.add('tsl-on');
     view.hidden = false;
     resize();
+    const ticket = ++sceneGeneration;
+    const isCurrent = () => ticket === sceneGeneration;
     /* 场景启动失败（模型 404 / WebGL 上下文拿不到）⇒ 退回静态回退层，
        绝不留一块空画布 —— 视觉装置不该把内容挡掉。 */
-    void bootScene().catch((err) => {
+    void bootScene(isCurrent).catch((err) => {
+      if (!isCurrent()) return;
       console.warn('[tsl] 场景启动失败，退回静态层', err);
       disable();
     });
@@ -596,6 +602,7 @@ function init() {
   };
   const disable = () => {
     if (!stopLoop) return;
+    sceneGeneration++;
     stopLoop();
     stopLoop = null;
     gate?.dispose();

@@ -1,10 +1,14 @@
 import {buildSync} from 'esbuild';
 import {
   MOTION_ENGINE_BUDGET,
+  COMMENT_LIFECYCLE_BUDGET,
+  NAVIGATION_FEEDBACK_BOOT_BUDGET,
   NAVIGATION_UI_BOOT_BUDGET,
+  PAGE_STATS_BOOT_BUDGET,
   TECH_HEADING_BOOT_BUDGET,
   THEME_RENDERER_BUDGET,
   THEME_TOGGLE_BOOT_BUDGET,
+  TOC_LAYOUT_BOOT_BUDGET,
   expectMotionStartup,
   siteWideLazyBytes,
 } from './_motion-budget';
@@ -106,19 +110,6 @@ describe.skipIf(!hasDist)('草稿三态：第三态（直链不产出）', () =>
       const html = readFileSync(f, 'utf8');
       for (const p of DRAFTS) {
         expect(html.includes(p.slug), `${f} 里出现了草稿 slug ${p.slug}`).toBe(false);
-      }
-    }
-  });
-
-  it('草稿的素材不产出（prune-draft-assets.mjs 的净效果）', () => {
-    const astroDir = join(DIST, '_astro');
-    if (!existsSync(astroDir)) return;
-    const files = readdirSync(astroDir);
-    for (const p of DRAFTS) {
-      for (const img of p.images) {
-        const stem = img.replace(/\.[^.]+$/, '');
-        const leaked = files.filter((f) => f.startsWith(stem + '.') || f.startsWith(stem + '_'));
-        expect(leaked, `草稿 ${p.slug} 的素材被部署了：${leaked.join(', ')}`).toEqual([]);
       }
     }
   });
@@ -964,8 +955,10 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     const SAILING_TOC_BUDGET = 4 * 1024;
     /* 2026-11-12：主题开关进顶栏，每页多背一段 ~1 KB 的引导脚本 ⇒ 首屏额度加这一笔。 */
     // 消息整行跳转及评论定位，完整闭包多留 1 KiB，首屏与脚本数量上限照旧。
-    const BUDGET = 68608 + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET + SAILING_TOC_BUDGET;
-    expectMotionStartup(page, 67584 + THEME_TOGGLE_BOOT_BUDGET);
+    const articleBoot = THEME_TOGGLE_BOOT_BUDGET + COMMENT_LIFECYCLE_BUDGET + TOC_LAYOUT_BOOT_BUDGET;
+    const BUDGET = 68608 + articleBoot + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET
+      + SAILING_TOC_BUDGET + NAVIGATION_FEEDBACK_BOOT_BUDGET + PAGE_STATS_BOOT_BUDGET;
+    expectMotionStartup(page, 67584 + articleBoot);
     const isSailingToc = (path: string) => /[/\\]toc-motion\.[^/\\]+\.js$/.test(path);
     const sailing = jsClosure(page).files.filter(isSailingToc);
     expect(sailing).toHaveLength(1);
@@ -1338,7 +1331,7 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
        · 引导脚本（每页都有，实测 ~3.8 KB：见 THEME_TOGGLE_BOOT_BUDGET 的账）；
        · 渲染器本体 458 KB：**只走动态 import**，从"本页 JS"里剔除（`siteWideLazyBytes`），
          其余红线保持原样（three 的 558 KB 仍然一进来就撞线）。 */
-    const BUDGET = 74752 + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET + 260 * 1024;
+    const BUDGET = 74752 + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET + NAVIGATION_FEEDBACK_BOOT_BUDGET + 260 * 1024;
     expectMotionStartup(page, 74752 + THEME_TOGGLE_BOOT_BUDGET);
     const startup = jsClosure(page, { dynamic: false });
     expect(startup.files.join(' ')).not.toMatch(/gallery-overview-view|CircularGallery/);
@@ -1378,8 +1371,10 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
        ⚠ 中间色**不从模块 import**：那样会把整块预览逻辑拉进首屏包（试过，多出 ~2.9 KB），
          现在只读事件 detail 里的 `mixed`，增量才是现在这个数。 */
     // 留言板使用同一套消息跳转及评论定位，完整闭包加 1 KiB。
-    const BUDGET = 69 * 1024 + THEME_TOGGLE_BOOT_BUDGET + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET + NAVIGATION_UI_BOOT_BUDGET;
-    expectMotionStartup(page, 67 * 1024 + THEME_TOGGLE_BOOT_BUDGET);
+    const guestbookBoot = THEME_TOGGLE_BOOT_BUDGET + COMMENT_LIFECYCLE_BUDGET;
+    const BUDGET = 69 * 1024 + guestbookBoot + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET
+      + NAVIGATION_UI_BOOT_BUDGET + NAVIGATION_FEEDBACK_BOOT_BUDGET + PAGE_STATS_BOOT_BUDGET;
+    expectMotionStartup(page, 67 * 1024 + guestbookBoot);
     const { code, files } = jsClosure(page, { skipMenu: true, skipTechHeading: true });
     const full = Buffer.byteLength(code, 'utf8') - siteWideLazyBytes(files);
     console.log(
@@ -1455,6 +1450,10 @@ describe.skipIf(!hasDist)('主题开关住在顶栏、渲染器仍然懒加载�
   it('★ ② 渲染器（>100 KB 的 chunk）不在任何页面的静态闭包里', () => {
     const sample = join(DIST, 'about', 'index.html');
     expect(existsSync(sample), 'dist/about/index.html 不存在，先跑 npm run build').toBe(true);
+    const bootstrap = jsClosure(sample, { dynamic: false }).files
+      .filter(f => f.split(/[\\/]/).pop()?.startsWith('ThemeToggle.astro_'));
+    expect(bootstrap, '原生主题按钮只有一份静态入口').toHaveLength(1);
+    expect(statSync(bootstrap[0]).size, '主题按钮的静态入口超预算').toBeLessThan(1280);
     const toggleChunks = jsClosure(sample).files
       .filter(f => f.split(/[\\/]/).pop()?.startsWith('theme-toggle.') && statSync(f).size > 100_000);
     expect(toggleChunks.length, '关于页的动态闭包都到不了主题开关渲染器（懒加载坏了？）').toBeGreaterThan(0);

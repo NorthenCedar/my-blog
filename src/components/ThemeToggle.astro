@@ -13,9 +13,9 @@
  *       把中间那条软条裁出来（上下本来全是透明），按 0.8 缩放塞进 46px 高的顶栏；
  *     · 影子：ground 那一层不再输出不透明度（`src/vendor/jelly-slider/scene.ts`），
  *       软条下面那片软影没有了，裁切边界上也就不会留一条硬线。
- *   ⚠ 懒加载保留：那个 ~459 KB 的渲染器 chunk 仍然只在**空闲时**拉，且只拉一次。
- *
- * 无 WebGPU 的浏览器降级为普通文字开关（主题照样切）。
+ * 顶栏先用原生按钮显示静态软条，图像取自本站 Jelly Slider 的两个 WebGPU 稳态。
+ * 原版的透明凹槽、亮档暖橘和暗档墨绿在减少动效或无法增强时也会显示。
+ * 指针靠近或点按后才按需加载可拖动的果冻渲染器。
  * 无障碍：role=switch + aria-checked + 键盘可操作；canvas 纯装饰 aria-hidden。
  */
 interface Props {
@@ -24,8 +24,9 @@ interface Props {
 }
 const { variant = 'dock' } = Astro.props;
 ---
-<div
+<button
   class:list={['theme-toggle', variant === 'nav' && 'theme-toggle--nav']}
+  type="button"
   data-theme-toggle
   role="switch"
   aria-checked="false"
@@ -33,53 +34,59 @@ const { variant = 'dock' } = Astro.props;
   title="切换深色 / 浅色"
   tabindex="0"
 >
+  <span class="tt-soft-strip" aria-hidden="true"></span>
   <canvas aria-hidden="true" width="220" height="200"></canvas>
-</div>
+</button>
 <script>
-
 import { onPage } from '../scripts/page-lifecycle';
-onPage(({document, window, addEventListener, setTimeout}) => {
-
-  /* ★ 2026-10-17 懒加载（站主：「只在放按钮的那几页懒加载它」）。
-     渲染器是 ~460 KB 的 chunk（TypeGPU + 光追场景），不该挡关于页首屏。
-     `import()` 是**动态**的 ⇒ Astro/Vite 把它切成独立 chunk，只有真调到这一行才下载。
-     ⚠ 用 `requestIdleCallback` 而不是"第一次交互时再拉"：后者会让第一次摸到按钮时
-       画布还是空的，观感是"点不动"；空闲加载则通常在用户看清标题之前就位。
-       `timeout` 是上界：用户一直在滚也会在 2.5 s 内拉起来（Safari 没有 rIC ⇒ 退回 setTimeout）。 */
-  type IdleWindow = Window & {
-    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
-  };
+import { setTheme } from '../scripts/theme';
+onPage(({ document, addEventListener, matchMedia }) => {
+  const button = document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
+  if (!button) return;
+  const motion = matchMedia('(prefers-reduced-motion: reduce)');
+  const dark = () => document.documentElement.classList.contains('dark');
+  const sync = () => button.setAttribute('aria-checked', String(dark()));
+  let renderer: AbortController | undefined;
+  const stop = () => { renderer?.abort(); renderer = undefined; };
   const boot = () => {
-    const el = document.querySelector<HTMLElement>('[data-theme-toggle]');
-    if (!el || el.dataset.ttInit) return;
-    el.dataset.ttInit = '1';
+    if (renderer || motion.matches || !('gpu' in navigator)) return;
+    const current = new AbortController();
+    renderer = current;
     void import('../scripts/theme-toggle')
-      .then((m) => m.initJellyThemeToggle(el))
-      .catch(() => {
-        /* chunk 拉不下来（离线 / 被拦）⇒ 画布保持空白；
-           降级 pill 也由那个模块创建，所以这里不补 —— 别在控制台吓唬访客 */
-      });
+      .then(({ initJellyThemeToggle }) => initJellyThemeToggle(button, current.signal))
+      .catch(() => current.abort());
   };
-  const schedule = () => {
-    const w = window as IdleWindow;
-    if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(boot, { timeout: 2500 });
-    else setTimeout(boot, 1200);
-  };
-  if (document.readyState === 'complete') schedule();
-  else window.addEventListener('load', schedule, { once: true });
-
-},"[data-theme-toggle]");
+  button.addEventListener('pointerenter', event => { if (event.pointerType === 'mouse') boot(); });
+  button.addEventListener('click', event => {
+    // 画布收到的指针手势由果冻处理，原生按钮负责基础点按与键盘点击。
+    if (event.target instanceof HTMLCanvasElement) return;
+    setTheme(dark() ? 'light' : 'dark');
+    if (event.detail > 0) boot();
+  });
+  document.addEventListener('themechange', sync);
+  motion.addEventListener('change', stop);
+  addEventListener('pagehide', stop);
+  sync();
+  return stop;
+}, '[data-theme-toggle]');
 </script>
 <style>
   .theme-toggle {
     display: inline-flex;
     align-items: center;
     flex: none;
+    position: relative;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
     border-radius: 12px;
     outline-offset: 3px;
   }
   .theme-toggle canvas {
     display: block;
+    visibility: hidden;
     width: 220px;
     /* ★★ 2026-10-17 第四轮：76 → 104（站主：「亮的时候软条的影子被截断了，让影子也可以透到
        下面来」）。影子是从软条往下铺的一大片软影，76px 的画布把它在下边界**硬切成一条直线**。
@@ -139,19 +146,22 @@ onPage(({document, window, addEventListener, setTimeout}) => {
   @media (max-width: 767px) {
     .theme-toggle--nav { --tt-s: 0.58; }
   }
-  /* 无 WebGPU 降级开关：极简 pill，不伪装成果冻 */
-  .theme-toggle :global(.tt-fallback) {
-    min-width: 3.2rem;
-    padding: 0.3rem 0.6rem;
-    border-radius: 999px;
-    border: 1px solid var(--hair);
-    background: var(--panel);
-    color: var(--ink);
-    font: inherit;
-    cursor: pointer;
+  /* 双帧按画布 y=56…108 原样裁切。原尺寸下的窗口起点是 56 − 32。 */
+  .tt-soft-strip {
+    position: absolute;
+    left: 0;
+    top: 24px;
+    width: 220px;
+    height: 52px;
+    background: url('../assets/theme-soft-strip.webp') top / 100% 200% no-repeat;
+    pointer-events: none;
   }
+  .theme-toggle--nav .tt-soft-strip { inset: 0; width: auto; height: auto; }
+  :global(html.dark) .tt-soft-strip { background-position: bottom; }
+  .theme-toggle[data-tt-ready] canvas { visibility: inherit; }
+  .theme-toggle[data-tt-ready] .tt-soft-strip { visibility: hidden; }
   @media (prefers-reduced-motion: reduce) {
-    .theme-toggle canvas {
+    .theme-toggle {
       cursor: pointer;
     }
   }

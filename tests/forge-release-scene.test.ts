@@ -31,6 +31,12 @@ async function fixture(mobile=false,width=mobile?390:1440,height=900){
 }
 
 describe('真实场景接线与资源生命周期',()=>{
+  it('画布完成第一帧前保留静态无限环', async () => {
+    const f = await fixture();
+    expect(f.canvas.parentElement.dataset.ready).toBeUndefined();
+    f.tick();
+    expect(f.canvas.parentElement.dataset.ready).toBe('true');
+  });
   it('从页面底部快速返回时先完整收回碎链，再展开无限环，不让场景进度抢跑',async()=>{
     const f=await fixture();f.scene.setProgress(1);f.tick(3);f.scene.setProgress(0);
     const rows:number[][]=[];

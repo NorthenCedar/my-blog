@@ -19,8 +19,11 @@ export async function accountRequest(action: string, data: Record<string, unknow
   const response = await fetch('/api/account', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-NC-Request': '1' }, body: JSON.stringify({ action, ...data }) });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || '账户操作失败，请稍后重试');
-  // 跨标签页主动退出/注销/切换账户时，写作台清理原账户私密副本。
-  try{if(['login','register','logout','delete','recover'].includes(action))localStorage.setItem('nc-account-change',JSON.stringify([action,result.user?.id,Date.now()]));}catch{}
+  // 只有替换或清除登录会话的操作才通知当前标签页和其他标签页。
+  if (['login', 'register', 'logout', 'delete', 'recover', 'password', 'recovery'].includes(action)) {
+    window.dispatchEvent(new CustomEvent('visitor-session-change', { detail: Boolean(result.user) }));
+    try { localStorage.setItem('nc-account-change', JSON.stringify([action, result.user?.id, Date.now()])); } catch {}
+  }
   return result as { user?: Visitor; recoveryCode?: string; ok?: boolean };
 }
 export function setViewer(user: Visitor | null) {
@@ -68,7 +71,7 @@ export function authorNode(record: Authored, kind = 'comment') {
   if (author) group.append(node('span', 'visitor-badge', author.isOwner ? '站主' : '已登录'));
   return group;
 }
-export function identityControls(form: HTMLFormElement) {
+export function identityControls(form: HTMLFormElement, isCurrent = () => true) {
   const box = node('div', 'visitor-identity');
   const status = node('span', 'visitor-hint', '可直接匿名发表 · 登录后能收到回复提醒');
   const select = node('select'); select.name = 'identity'; select.setAttribute('aria-label', '发表身份');
@@ -78,8 +81,10 @@ export function identityControls(form: HTMLFormElement) {
   box.append(status, select, login, settings);
   form.prepend(box);
   const input = form.elements.namedItem('name') as HTMLInputElement;
-  let anonymousName = input.value, explicit = false, expired = false;
+  let anonymousName = input.value, explicit = false, expired = false, disposed = false;
+  const active = () => !disposed && isCurrent();
   const apply = (user: Visitor | null) => {
+    if (!active()) return;
     // 已经选择账户后，失效/恢复后的空身份也不能悄悄改成匿名。
     if (!explicit && user) select.value = 'account';
     select.hidden = !user && select.value !== 'account'; settings.hidden = !user; login.hidden = Boolean(user) && !expired;
@@ -93,14 +98,23 @@ export function identityControls(form: HTMLFormElement) {
   select.addEventListener('change', () => { explicit = true; apply(viewer); });
   login.addEventListener('click', () => {
     login.disabled = true;
-    void openLogin().catch(() => { status.textContent = '登录面板没能打开，匿名发表仍可使用'; }).finally(() => { login.disabled = false; });
+    void openLogin().catch(() => { if (active()) status.textContent = '登录面板没能打开，匿名发表仍可使用'; })
+      .finally(() => { if (active()) login.disabled = false; });
   });
   const update = (user: Visitor | null) => { expired = false; apply(user); };
   const onExpired = () => { expired = true; apply(viewer); };
   window.addEventListener('visitor-session-expired', onExpired);
   listeners.add(update);
   void loadViewer().then(apply);
-  const dispose = () => { listeners.delete(update); window.removeEventListener('visitor-session-expired', onExpired); window.removeEventListener('pagehide',dispose); };
-  window.addEventListener('pagehide',dispose,{once:true});
+  function dispose() {
+    disposed = true;
+    listeners.delete(update);
+    window.removeEventListener('visitor-session-expired', onExpired);
+    window.removeEventListener('pagehide', onPageHide);
+  }
+  function onPageHide(event: PageTransitionEvent) {
+    if (!event.persisted) dispose();
+  }
+  window.addEventListener('pagehide', onPageHide);
   return dispose;
 }

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Window } from 'happy-dom';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
@@ -28,6 +29,25 @@ describe('说说页视频封面（首帧 poster）', () => {
         readFileSync(join('public', poster)).byteLength,
         `${poster} 是空文件`,
       ).toBeGreaterThan(1024);
+    }
+  });
+});
+
+const talksPage = join('dist', 'talks', 'index.html');
+
+describe.skipIf(!existsSync(talksPage))('说说页视频的构建产物', () => {
+  it('弹窗等待点击才有视频源，封面链接保留原件并禁止预取', () => {
+    const window = new Window();
+    const document = new window.DOMParser().parseFromString(readFileSync(talksPage, 'utf8'), 'text/html');
+    const links = [...document.querySelectorAll<HTMLAnchorElement>('a[data-talk-video]')];
+    expect(links.length).toBe(referenced.length);
+    for (const link of links) {
+      const dialog = document.getElementById(link.dataset.talkVideo!);
+      const src = link.getAttribute('href');
+      expect(referenced).toContain(src);
+      expect(dialog?.querySelector('video')?.hasAttribute('src')).toBe(false);
+      expect(link.getAttribute('data-astro-prefetch')).toBe('false');
+      expect(dialog?.querySelector('figcaption a')?.getAttribute('href')).toBe(src);
     }
   });
 });

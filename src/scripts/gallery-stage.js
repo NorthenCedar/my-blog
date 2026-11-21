@@ -3,7 +3,7 @@ import './develop';
 import {finishGalleryEntry} from './gallery-entry';
 import {coverMotion} from './gallery-cover-motion.mjs';
 import { onPage } from './page-lifecycle';
-onPage(({document, keep, matchMedia, ResizeObserver}) => {
+onPage(({document, keep, matchMedia, ResizeObserver, requestAnimationFrame, addEventListener}) => {
 const root=document.documentElement,stage=document.querySelector('[data-stage]'),slides=[...document.querySelectorAll('[data-slide]')];
 if(!slides.length)return;
 const selection=createNavigator(slides.length),reduce=matchMedia('(prefers-reduced-motion:reduce)');
@@ -70,8 +70,17 @@ function show(index,direction=1,initial=false){
   if(!returning)Object.assign(target.style,motion.enter);
   animate(target,motion.visible,{duration:760});
   const image=target.querySelector('.cover-link img');
-  if(image){if(!returning){cancel(image);image.style.transform=`translateX(${direction*2}%) scale(1.055)`;}
-  animate(image,{transform:'translateX(0%) scale(1)'},{duration:1100});}
+  if(image){
+    if(!returning){cancel(image);image.style.transform=`translateX(${direction*2}%) scale(1.055)`;}
+    animate(image,{transform:'translateX(0%) scale(1)'},{duration:1100});
+    const source=image.dataset.coverSrc;
+    if(source)requestAnimationFrame(()=>{
+      if(revision!==generation)return;
+      const thumbnail=image.src;
+      image.addEventListener('error',()=>{image.src=thumbnail;},{once:true});
+      image.loading='eager';image.src=source;delete image.dataset.coverSrc;
+    });
+  }
   for(const el of target.querySelectorAll('[data-reveal]')){
     const order=Number(el.dataset.order);
     if(!returning){cancel(el);el.style.opacity=order<0?'0':'1';el.style.transform=order<0?'translateY(12px)':order<3?'translateY(120%) rotate(2deg)':'translateY(20px)';if(order>=3)el.style.opacity='0';}
@@ -96,6 +105,7 @@ const on=(el,event,fn)=>el&&el.addEventListener(event,fn);
 on(prev,'click',()=>go(selection.index-1));on(next,'click',()=>go(selection.index+1));
 const advance=document.querySelector('[data-advance]');
 on(advance,'click',()=>go(1));
+addEventListener('hashchange',()=>{if(location.hash==='#gallery-overview')go(1);});
 mountWheelNavigation(document,{
   scene:()=>slides[selection.index].dataset.kind,
   blocked:overlayOpen,

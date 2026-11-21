@@ -55,6 +55,23 @@ describe('公开写入的来源、格式和已发布目标', () => {
     expect(total(s)).toBe(1);
     expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM likes').get()?.n).toBe(0);
   });
+  it('Fetch Metadata 表明来自同站的其他来源时不接受公开写入', async () => {
+    const s = setup();
+    const headers = { 'Sec-Fetch-Site': 'same-site' };
+    expect((await commentPost({ request: request('comments', comment, headers), env: s.env } as never)).status).toBe(403);
+    expect((await likePost({ request: request('likes', { slug: talks[0] }, headers), env: s.env } as never)).status).toBe(403);
+    expect(total(s)).toBe(0);
+    expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM like_votes').get()?.n).toBe(0);
+  });
+  it('声明长度超过限额时直接返回 413，保留未读取的正文', async () => {
+    const s = setup();
+    const payload = { ...comment, padding: '好'.repeat(6000) };
+    const length = new TextEncoder().encode(JSON.stringify(payload)).length;
+    const req = request('comments', payload, { 'Content-Length': String(length) });
+    expect((await commentPost({ request: req, env: s.env } as never)).status).toBe(413);
+    expect(req.bodyUsed).toBe(false);
+    expect(total(s)).toBe(0);
+  });
   it.each(['comments', 'likes'])('%s 在无 Content-Length 的流式请求超限时停止读取并不写入', async path => {
     const s = setup(); let cancelled = false;
     const bytes = new TextEncoder().encode(JSON.stringify({ ...comment, slug: path === 'likes' ? talks[0] : 'guestbook', padding: '好'.repeat(10000) }));
@@ -71,6 +88,12 @@ describe('公开写入的来源、格式和已发布目标', () => {
     const s = setup();
     const response = await accountPost({ request: request('account', { action: 'logout', padding: 'a'.repeat(145 * 1024) }, { Origin: 'https://example.test', 'X-NC-Request': '1' }), env: s.env } as never);
     expect(response.status).toBe(413);
+    expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM visitor_rate_limits').get()?.n).toBe(0);
+  });
+  it('非头像账户请求按 16 KiB 实际正文限额校验，超限不占账户配额', async () => {
+    const s = setup();
+    const req = request('account', { action: 'logout', padding: '字'.repeat(6000) }, { Origin: 'https://example.test', 'X-NC-Request': '1' });
+    expect((await accountPost({ request: req, env: s.env } as never)).status).toBe(413);
     expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM visitor_rate_limits').get()?.n).toBe(0);
   });
   it('已发布文章和真实说说保持可留言；蜜罐假成功不占配额', async () => {

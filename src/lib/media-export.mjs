@@ -1,5 +1,6 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { readBuildHtmlIndex } from './build-html-index.mjs';
 
 export async function statIfPresent(path) {
   try {
@@ -7,59 +8,6 @@ export async function statIfPresent(path) {
   } catch (error) {
     if (error.code === 'ENOENT') return undefined;
     throw error;
-  }
-}
-
-function decodeAttribute(value) {
-  const named = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', sol: '/' };
-  return value.replace(/&(#x[\da-f]+|#\d+|amp|quot|apos|lt|gt|sol);/gi, (entity, code) => {
-    if (!code.startsWith('#')) return named[code.toLowerCase()];
-    const number = code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
-    return number > 0 && number <= 0x10ffff ? String.fromCodePoint(number) : entity;
-  });
-}
-
-
-/** 逐个读取 HTML 的标签，跳过注释与原始文本元素。 */
-function* mediaTags(html, mediaTag) {
-  const tags = /<!--[\s\S]*?(?:-->|$)|<![^>]*>|<\/?([a-z][a-z\d:-]*)\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi;
-  let depth = 0;
-  for (let match; (match = tags.exec(html));) {
-    if (!match[1]) continue;
-    const tag = match[1].toLowerCase();
-    const closing = match[0].startsWith('</');
-    if (!closing && /^(?:script|style|textarea|title|xmp|iframe|noembed|noframes)$/.test(tag)) {
-      const end = new RegExp(`</${tag}\\s*>`, 'gi');
-      end.lastIndex = tags.lastIndex;
-      if (!end.exec(html)) break;
-      tags.lastIndex = end.lastIndex;
-      continue;
-    }
-    if (closing) {
-      if (tag === mediaTag) depth = Math.max(0, depth - 1);
-      continue;
-    }
-    if (tag === mediaTag) depth++;
-    if (tag !== mediaTag && !(tag === 'source' && depth)) continue;
-    const attributes = match[0].slice(tag.length + 1, -1);
-    const attribute = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
-    for (let item; (item = attribute.exec(attributes));) {
-      if (item[1].toLowerCase() !== 'src') continue;
-      yield decodeAttribute(item[2] ?? item[3] ?? item[4] ?? '');
-      break;
-    }
-  }
-}
-
-async function collectPages(directory, names, mediaTag, getName) {
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) await collectPages(path, names, mediaTag, getName);
-    else if (entry.isFile() && entry.name.endsWith('.html')) {
-      for (const src of mediaTags(await readFile(path, 'utf8'), mediaTag)) {
-        if (!/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(src)) names.add(getName(src, path));
-      }
-    }
   }
 }
 
@@ -75,9 +23,10 @@ async function readManifest(path, pattern) {
 }
 
 /** 以 HTML 为清单。逐个校验并暂存，通过后才替换公开原件。 */
-export async function exportReferencedMedia({ rootDir, distDir, folder, tag, manifest, pattern, getName, read }) {
+export async function exportReferencedMedia({ rootDir, distDir, htmlIndex, folder, tag, manifest, pattern, getName, read }) {
+  const index = htmlIndex ?? await readBuildHtmlIndex(distDir);
   const names = new Set();
-  await collectPages(distDir, names, tag, getName);
+  for (const { src, file } of index[tag]) names.add(getName(src, file));
   const files = [...names].sort();
   const sourceDir = join(rootDir, 'content', folder);
   const outputDir = join(distDir, folder);

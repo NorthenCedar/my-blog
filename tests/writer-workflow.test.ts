@@ -2,7 +2,7 @@ import { afterEach,expect,it,vi } from 'vitest';
 import { writerFixture } from './_writer';
 import { writerProof } from '../functions/api/_lib/writer-auth';
 import { createDraft } from '../functions/api/_lib/writer-drafts';
-import { createJob,readJob,claimJob,authorizePush,recordJob,recordDeployment,requestDeploymentCheck,reconcileJob,setDispatchUnknown } from '../functions/api/_lib/writer-jobs';
+import { createJob,readJob,claimJob,authorizePush,recordJob,recordDeployment,requestDeploymentCheck,readJobStatus,setDispatchUnknown } from '../functions/api/_lib/writer-jobs';
 import { createWriterRepository } from '../functions/api/_lib/writer-repository';
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
@@ -18,12 +18,12 @@ it('细粒度令牌查询已推送任务时不调用它不支持的 Checks API',
   const s=await setup(),{lease}=await claimJob(s.db,s.job.id,'1001');await authorizePush(s.db,s.job.id,lease,'1001');
   await recordJob(s.db,s.job.id,lease,{state:'pushed',runId:'1001',commit,publishedBase:{commit,blobSha:'4'.repeat(40),text:'已发布'}});
   const requests:string[]=[],repo=createWriterRepository('细粒度令牌',async(url)=>{requests.push(String(url));return new Response('{}',{status:403});});
-  expect((await reconcileJob(s.db,s.job.id,repo)).state).toBe('pushed');expect(requests).toEqual([]);
+  expect((await readJobStatus(s.db,s.owner,{id:s.job.id},repo)).state).toBe('pushed');expect(requests).toEqual([]);
 });
 it('派发应答丢失后从固定工作流运行恢复，不再次派发',async()=>{
   const s=await setup();await setDispatchUnknown(s.db,s.job.id);const requests:string[]=[];
   const repo=createWriterRepository('测试凭据',async(url,init)=>{requests.push(String(url));expect(init?.method).toBe('GET');return String(url).includes('/runs?')?json({workflow_runs:[run(s.job.id)]}):json(run(s.job.id));});
-  await reconcileJob(s.db,s.job.id,repo);expect((await readJob(s.db,s.owner,s.job.id)).runId).toBe('1001');expect(requests.every(u=>!u.includes('dispatches'))).toBe(true);
+  await readJobStatus(s.db,s.owner,{id:s.job.id},repo);expect((await readJob(s.db,s.owner,s.job.id)).runId).toBe('1001');expect(requests.every(u=>!u.includes('dispatches'))).toBe(true);
 });
 it('准确提交的 Cloudflare 部署失败不能当作已经上线',async()=>{
   const s=await setup(),{lease}=await claimJob(s.db,s.job.id,'1001');await authorizePush(s.db,s.job.id,lease,'1001');
@@ -47,13 +47,13 @@ it('运行失败但准确任务提交已在 main 时恢复推送和基线，不�
     if(path.includes('/check-runs'))return json({check_runs:[]});
     return json({commit:{message:`内容\n\nWriter-Job: ${s.job.id}`}});
   });
-  const restored=await reconcileJob(s.db,s.job.id,repo);expect(restored.commit).toBe(commit);expect(restored.state).toBe('pushed');
+  const restored=await readJobStatus(s.db,s.owner,{id:s.job.id},repo);expect(restored.commit).toBe(commit);expect(restored.state).toBe('pushed');
   expect(s.sqlite.prepare('SELECT published_revision FROM writer_drafts').get()?.published_revision).toBe(1);
 });
 it('已许可运行结束后仅一次没找到提交，不能误判没推送并释放预留',async()=>{
   const s=await setup(),{lease}=await claimJob(s.db,s.job.id,'1001');await authorizePush(s.db,s.job.id,lease,'1001');
   const repo=createWriterRepository('测试凭据',async(url)=>String(url).includes('/actions/runs/')?json({...run(s.job.id),status:'completed',conclusion:'failure'}):json([]));
-  const result=await reconcileJob(s.db,s.job.id,repo);expect(result.state).toBe('ready');expect(result.code).toBe('push_unconfirmed');expect(s.sqlite.prepare('SELECT reserve_bytes FROM writer_jobs').get()?.reserve_bytes).toBe(262144);
+  const result=await readJobStatus(s.db,s.owner,{id:s.job.id},repo);expect(result.state).toBe('ready');expect(result.code).toBe('push_unconfirmed');expect(s.sqlite.prepare('SELECT reserve_bytes FROM writer_jobs').get()?.reserve_bytes).toBe(262144);
 });
 it('站主明确结束已停止运行的待确认任务后解除互斥，旧回调不能再改状态',async()=>{
   const s=await setup(),{lease}=await claimJob(s.db,s.job.id,'1001');await authorizePush(s.db,s.job.id,lease,'1001');
@@ -115,7 +115,7 @@ it('重新检查在领取前失败后恢复入口，触发应答未知时不重�
   });
   expect((await requestDeploymentCheck(s.db,s.proof,s.job.id,repo)).code).toBe('deployment_dispatch_unknown');
   await requestDeploymentCheck(s.db,s.proof,s.job.id,repo);expect(dispatches).toBe(1);
-  expect((await reconcileJob(s.db,s.job.id,repo)).code).toBe('deployment_pending');
+  expect((await readJobStatus(s.db,s.owner,{id:s.job.id},repo)).code).toBe('deployment_pending');
   await requestDeploymentCheck(s.db,s.proof,s.job.id,repo);expect(dispatches).toBe(2);
 });
 it('临时令牌等待准确部署，权限拒绝只请求一次且不泄露远端响应',async()=>{

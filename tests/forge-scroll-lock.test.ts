@@ -1,5 +1,12 @@
 import {existsSync} from 'node:fs';
 import {afterEach,describe,expect,it,vi} from 'vitest';
+import {Window} from 'happy-dom';
+
+const gpu = vi.hoisted(() => ({ load: vi.fn(), create: vi.fn() }));
+vi.mock('../src/scripts/forge-scene.js', () => {
+  gpu.load();
+  return { createForgeScene: gpu.create };
+});
 
 let dispose:(()=>void)|undefined;
 afterEach(()=>{dispose?.();dispose=undefined;vi.unstubAllGlobals();vi.useRealTimers();});
@@ -71,4 +78,83 @@ describe('断链演出只限制页面向下滚动',()=>{
     f.scroll(2000);expect(f.win.scrollY).toBe(2000);f.gate.frame(.2);expect(f.body.dataset.chainScrollLock).toBe('false');
     f.scroll(1300);f.gate.frame(0);f.scroll(1500);expect(f.send('wheel',{deltaY:500,deltaMode:0}).defaultPrevented).toBe(true);
   });
+});
+
+it('只有看得见且允许动效的舞台在静态首帧之后加载，失去上下文时释放并等待恢复', async () => {
+  const { initForge } = await import('../src/scripts/forge');
+  const win = new Window({ url: 'http://localhost/forge/#works' });
+  const doc = win.document;
+  Object.defineProperty(doc, 'readyState', { value: 'loading' });
+  doc.body.innerHTML = '<section class="hero"><div class="hero-stage"><div data-scene><canvas id="forge-scene"></canvas><svg class="scene-fallback"></svg></div></div></section><section id="works"></section>';
+  const stage = doc.querySelector<HTMLElement>('.hero-stage')!;
+  const canvas = doc.querySelector<HTMLCanvasElement>('canvas')!;
+  const rect = new win.DOMRect(0, -800, 1000, 600);
+  vi.spyOn(stage, 'getBoundingClientRect').mockReturnValue(rect);
+  const media = new win.EventTarget() as unknown as MediaQueryList;
+  Object.defineProperty(media, 'matches', { value: true, writable: true });
+  const reduce = (active: boolean) => {
+    Object.defineProperty(media, 'matches', { value: active });
+    media.dispatchEvent(Object.assign(new win.Event('change'), { matches: active }) as unknown as Event);
+  };
+  const frames = new Map<number, FrameRequestCallback>();
+  const idles = new Map<number, () => void>();
+  let id = 0;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.set(++id, callback); return id; });
+  vi.stubGlobal('cancelAnimationFrame', (key: number) => frames.delete(key));
+  vi.stubGlobal('requestIdleCallback', (callback: () => void) => { idles.set(++id, callback); return id; });
+  vi.stubGlobal('cancelIdleCallback', (key: number) => idles.delete(key));
+  vi.stubGlobal('window', win); vi.stubGlobal('document', doc);
+  vi.stubGlobal('AbortController', win.AbortController);
+  vi.stubGlobal('matchMedia', () => media);
+  vi.stubGlobal('innerHeight', 600); vi.stubGlobal('scrollY', 0);
+  let intersection!: IntersectionObserverCallback;
+  vi.stubGlobal('IntersectionObserver', class {
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+    observe(target: Element) { if (target === stage) intersection = this.callback; }
+    disconnect() {}
+  });
+  const show = (visible: boolean) => {
+    rect.y = visible ? 0 : -800;
+    intersection([{ intersectionRatio: Number(visible) } as IntersectionObserverEntry], {} as IntersectionObserver);
+  };
+  const paint = () => { for (const [key, callback] of [...frames]) if (frames.delete(key)) callback(0); };
+  const idle = () => { for (const [key, callback] of [...idles]) if (idles.delete(key)) callback(); };
+  const scene = { setTheme: vi.fn(), setProgress: vi.fn(), dispose: vi.fn() };
+  gpu.create.mockReturnValue(scene);
+  dispose = initForge(doc.body as unknown as HTMLElement);
+  show(true); reduce(false); paint(); paint(); idle();
+  expect(gpu.load).not.toHaveBeenCalled();
+  show(false); reduce(false); paint(); paint(); idle();
+  expect(gpu.load).not.toHaveBeenCalled();
+  reduce(true); show(true); paint(); paint(); idle();
+  expect(gpu.load).not.toHaveBeenCalled();
+
+  reduce(false);
+  paint();
+  expect(gpu.load).not.toHaveBeenCalled();
+  paint(); idle();
+  await vi.dynamicImportSettled();
+  expect(gpu.load).toHaveBeenCalledOnce();
+  expect(gpu.create).not.toHaveBeenCalled();
+  show(false); paint(); paint(); idle();
+  expect(gpu.create).not.toHaveBeenCalled();
+
+  show(true); paint(); paint(); idle();
+  await vi.dynamicImportSettled();
+  paint(); paint(); idle();
+  expect(gpu.create).toHaveBeenCalledOnce();
+  canvas.parentElement!.dataset.ready = 'true';
+  const loss = new win.Event('webglcontextlost', { cancelable: true });
+  canvas.dispatchEvent(loss);
+  expect(loss.defaultPrevented).toBe(true);
+  expect(scene.dispose).toHaveBeenCalledOnce();
+  expect(canvas.parentElement!.dataset.ready).toBeUndefined();
+  show(true); paint(); paint(); idle();
+  expect(gpu.create).toHaveBeenCalledOnce();
+  canvas.dispatchEvent(new win.Event('webglcontextrestored'));
+  paint(); paint(); idle();
+  await vi.dynamicImportSettled();
+  paint(); paint(); idle();
+  expect(gpu.create).toHaveBeenCalledTimes(2);
+  expect(gpu.create.mock.calls[1][0]).not.toBe(canvas);
 });

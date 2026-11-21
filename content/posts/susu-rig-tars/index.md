@@ -32,8 +32,8 @@ coverAlt: 银灰色 TARS 桌面机器人外观展示图
 合起来是一座小方碑，正面有一块屏幕。它没有轮子，靠三条腿轮流撑地，翻转着往前走，一颠一颠的。看文字很难想象，视频里走两步就明白了。
 
 <video controls playsinline preload="none" width="100%" aria-label="三条腿轮换撑地的走动演示">
-  <source src="/videos/2b9f3532d7213a4039c06aa5cb1671adcb970e93e623d8515dcd97be97faac51.mp4" type="video/mp4">
-  <a href="/videos/2b9f3532d7213a4039c06aa5cb1671adcb970e93e623d8515dcd97be97faac51.mp4">观看走动演示</a>
+  <source src="/videos/35061d19b64c3259e126d3f8ece49a17ede9cfb93c21963bec1fdbe4b05c9c8f.mp4" type="video/mp4">
+  <a href="/videos/35061d19b64c3259e126d3f8ece49a17ede9cfb93c21963bec1fdbe4b05c9c8f.mp4">观看走动演示</a>
 </video>
 
 ## 她还能帮我点一下

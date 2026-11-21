@@ -8,6 +8,7 @@ const initializer = home.match(/<script\b[^>]*data-home-stack-init\b[^>]*>([\s\S
 // 只替换浏览器边界；执行首页实际的同步初始化脚本，检查 open 的可观察状态。
 function openHome(width: number) {
   const details = { tagName: 'DETAILS', open: true };
+  const document = Object.assign(new EventTarget(), { currentScript: { previousElementSibling: details } });
   const queries: { media: EventTarget & { matches: boolean }; max: number; min: number }[] = [];
   const matchMedia = (query: string) => {
     const max = Number(query.match(/max-width\s*:\s*([\d.]+)px/)?.[1] ?? Infinity);
@@ -17,12 +18,13 @@ function openHome(width: number) {
     return media;
   };
   runInNewContext(initializer, {
-    document: { currentScript: { previousElementSibling: details } },
+    document,
     window: { matchMedia },
     matchMedia,
   });
   return {
     details,
+    leave() { document.dispatchEvent(new Event('astro:before-swap')); },
     resize(nextWidth: number) {
       for (const { media, max, min } of queries) {
         const matches = nextWidth >= min && nextWidth <= max;
@@ -57,6 +59,13 @@ describe('首页技术栈的手机折叠', () => {
     view.resize(768);
     expect(view.details.open).toBe(true);
     view.resize(767);
+    expect(view.details.open).toBe(false);
+  });
+
+  it('站内离开后，跨断点不再改变离页的折叠面板', () => {
+    const view = openHome(390);
+    view.leave();
+    view.resize(768);
     expect(view.details.open).toBe(false);
   });
 });

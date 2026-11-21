@@ -9,7 +9,7 @@
  * 回一个 200 + 空结果，前端的「未登录就藏起来」判断不用依赖错误码，也不会在控制台里
  * 刷一片红的 401 日志。
  */
-import { listReplyNotices, markReplyNoticesRead } from './_lib/notices';
+import { listReplyNotices, markReplyNoticesRead, NOTICE_LIMIT } from './_lib/notices';
 import { currentAccount, guardWrite } from './_lib/visitor-store';
 import { readJsonBody } from './_lib/public-write';
 import { AccountError } from './_lib/visitor-core';
@@ -42,16 +42,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     // 与其它写接口同一道门：同源 + X-NC-Request 头（防跨站表单顺手提交）
     guardWrite(request);
+    const { ids: raw } = await readJsonBody(request, 4096);
+    if (raw !== undefined && (!Array.isArray(raw) || raw.length > NOTICE_LIMIT)) {
+      return json({ error: '消息编号列表无效' }, 400);
+    }
     const user = await currentAccount(request, env);
     if (!user) return json({ error: '请先登录' }, 401);
 
-    const payload = (await readJsonBody(request, 4096)) as { ids?: unknown };
-    const raw = Array.isArray(payload.ids) ? payload.ids : null;
-    // 形状不对的 id 直接丢弃（不是 400：已读是幂等的顺手操作，不值得为此让人重试）
-    const ids = (raw ?? []).map((value) => Number(value)).filter((value) => Number.isSafeInteger(value) && value > 0);
-
-    // 带 ids ⇒ 只动这几条；不带 ⇒ 全部已读（铃铛里那个「全部标为已读」）
-    await markReplyNoticesRead(env, user.id, raw === null ? null : ids);
+    // 省略 ids 才标记全箱。列表中只使用实际的整数编号。
+    const ids = raw?.filter(value => typeof value === 'number' && Number.isSafeInteger(value) && value > 0);
+    await markReplyNoticesRead(env, user.id, ids ? [...new Set(ids)] : null);
     return json({ unread: (await listReplyNotices(env, user.id, 1)).unread });
   } catch (error) {
     if (error instanceof AccountError) return json({ error: error.message }, error.status);

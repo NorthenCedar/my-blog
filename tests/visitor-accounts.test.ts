@@ -181,5 +181,6 @@ describe('访客账密账户：真实数据库与 HTTP 边界', () => {
     await s.call('register', { username: 'reader-three', password: PASSWORD });
     expect((await s.call('register', { username: 'reader-four', password: PASSWORD })).response.status).toBe(429);
     expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM visitor_accounts').get()?.n).toBe(3);
+    expect(s.sqlite.prepare("SELECT hits FROM visitor_rate_limits WHERE scope='account:register:ip'").get()?.hits).toBe(3);
   });
 });

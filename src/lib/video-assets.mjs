@@ -49,9 +49,9 @@ async function readVideo(sourceDir, name) {
   return { name, bytes, contentType: mp4 ? 'video/mp4' : 'video/webm' };
 }
 
-export function exportVideoAssets({ rootDir = process.cwd(), distDir = join(rootDir, 'dist') } = {}) {
+export function exportVideoAssets({ rootDir = process.cwd(), distDir = join(rootDir, 'dist'), htmlIndex } = {}) {
   return exportReferencedMedia({
-    rootDir, distDir, folder: 'videos', tag: 'video', manifest: MANIFEST,
+    rootDir, distDir, htmlIndex, folder: 'videos', tag: 'video', manifest: MANIFEST,
     pattern: VIDEO_NAME, getName: videoName, read: readVideo,
   });
 }

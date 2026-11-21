@@ -1,15 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const state = vi.hoisted(() => ({ scene: null as any, theme: 'light', writes: [] as string[], document: null as any }));
+const state = vi.hoisted(() => ({ scene: null as any, device: null as any, destroy: vi.fn(),
+  writes: [] as string[], document: null as any }));
 vi.mock('../src/vendor/jelly-slider/scene.ts', () => ({ setupScene: async () => state.scene }));
 vi.mock('typegpu', async (original) => {
   const actual = await original<typeof import('typegpu')>();
-  return { ...actual, tgpu: { ...actual.tgpu, init: async () => ({ configureContext: () => ({}), destroy: vi.fn() }) } };
+  return { ...actual, tgpu: { ...actual.tgpu, init: async () => ({
+    configureContext: () => ({}), destroy: state.destroy, device: state.device,
+  }) } };
 });
 vi.mock('../src/scripts/theme.ts', () => ({
-  getTheme: () => state.theme,
   setTheme: (theme: string) => {
-    state.theme = theme; state.writes.push(theme);
+    state.writes.push(theme);
     state.document.documentElement.classList.toggle('dark', theme === 'dark');
     state.document.dispatchEvent(new CustomEvent('themechange', { detail: theme }));
   },
@@ -17,8 +19,13 @@ vi.mock('../src/scripts/theme.ts', () => ({
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
 
-async function run(theme = 'light', reduced = false) {
-  state.theme = theme; state.writes = [];
+async function run(theme = 'light', reduced = false, waitForFrame = () => Promise.resolve()) {
+  state.writes = [];
+  state.destroy.mockClear();
+  const device = state.device = Object.assign(new EventTarget(), {
+    queue: { onSubmittedWorkDone: waitForFrame }, lost: new Promise(() => {}),
+  });
+  const lifetime = new AbortController();
   const windowEvents = new Map<string, (e: any) => void>();
   const canvasEvents = new Map<string, (e: any) => void>();
   const documentEvents = new Map<string, (e: any) => void>();
@@ -36,6 +43,7 @@ async function run(theme = 'light', reduced = false) {
   const document = state.document = {
     documentElement: html,
     addEventListener: (n: string, fn: (e: any) => void) => documentEvents.set(n, fn),
+    removeEventListener: (n: string) => documentEvents.delete(n),
     dispatchEvent: (e: any) => documentEvents.get(e.type)?.(e),
   };
   const palette = (dark: boolean) => ({ '--paper': dark ? '#0b0b0c' : '#fafaf7',
@@ -53,17 +61,35 @@ async function run(theme = 'light', reduced = false) {
     cancelDrag: vi.fn(() => { events.isPointerDown = false; events.didGrab = false; pending = undefined; }),
   };
   state.scene = { onCleanup: vi.fn(), eventHandler: events, groundTint: null, jellyColor: null, onProgress: null };
-  const canvas = { width: 0, height: 0, addEventListener: (n: string, fn: (e: any) => void) => canvasEvents.set(n, fn) };
-  const root = { isConnected: true, querySelector: () => canvas, setAttribute() {}, addEventListener() {} };
+  const canvas = { width: 0, height: 0, cloneNode: () => canvas, replaceWith() {}, addEventListener: (n: string, fn: (e: any) => void) => canvasEvents.set(n, fn) };
+  const buttonAttrs = new Map<string, string>();
+  const root = Object.assign(new EventTarget(), { isConnected: true, querySelector: () => canvas,
+    setAttribute: (n: string, v: string) => buttonAttrs.set(n, v), removeAttribute: (n: string) => buttonAttrs.delete(n),
+  });
   vi.stubGlobal('document', document);
   vi.stubGlobal('window', { devicePixelRatio: 1, matchMedia: () => ({ matches: reduced }),
-    addEventListener: (n: string, fn: (e: any) => void) => windowEvents.set(n, fn) });
+    requestAnimationFrame: (fn: FrameRequestCallback) => { queueMicrotask(() => fn(0)); return 1; },
+    cancelAnimationFrame() {},
+    addEventListener: (n: string, fn: (e: any) => void) => windowEvents.set(n, fn),
+    removeEventListener: (n: string) => windowEvents.delete(n) });
   vi.stubGlobal('navigator', { gpu: {} });
   const { initJellyThemeToggle } = await import('../src/scripts/theme-toggle');
-  await initJellyThemeToggle(root as any);
+  await initJellyThemeToggle(root as any, lifetime.signal);
   const emit = (type: string, x: number) => ({ type, pointerId: 1, button: 0, isPrimary: true, clientX: x, clientY: 10 });
   return {
     styles, attrs, events, scene: state.scene,
+    ready: () => buttonAttrs.has('data-tt-ready'),
+    abort: () => lifetime.abort(),
+    gpuError: () => device.dispatchEvent(new Event('uncapturederror')),
+    applyTheme(theme: string) {
+      html.classList.toggle('dark', theme === 'dark');
+      document.dispatchEvent(new CustomEvent('themechange', { detail: theme }));
+    },
+    pressArrowRight() {
+      const event = Object.assign(new Event('keydown', { cancelable: true }), { key: 'ArrowRight' });
+      root.dispatchEvent(event);
+      return event.defaultPrevented;
+    },
     down(x: number, grabbed = true) { events.didGrab = grabbed; events.isPointerDown = grabbed; canvasEvents.get('pointerdown')?.(emit('pointerdown', x)); },
     move(x: number) { events.pointerTargetX = Math.max(0, Math.min(.9, x / 100 * .9)); windowEvents.get('pointermove')?.(emit('pointermove', x)); },
     frame(p: number) { events.currentMouseX = p * .9; state.scene.onProgress?.(p); },
@@ -72,6 +98,42 @@ async function run(theme = 'light', reduced = false) {
     cancel() { events.isPointerDown = false; windowEvents.get('pointercancel')?.(emit('pointercancel', 50)); },
   };
 }
+
+describe('主题开关 · 静态软条与画布交接', () => {
+  it('等待当前主题的渲染完成，拒绝迟到的旧主题帧', async () => {
+    const frames: (() => void)[] = [];
+    const r = await run('light', false, () => new Promise<void>(done => frames.push(done)));
+    expect(r.ready()).toBe(false);
+    expect(frames).toHaveLength(1);
+    r.applyTheme('dark');
+    frames.shift()!();
+    await Promise.resolve();
+    expect(r.ready()).toBe(false);
+
+    r.settle();
+    await Promise.resolve();
+    expect(frames).toHaveLength(1);
+    expect(r.ready()).toBe(false);
+    frames.shift()!();
+    await Promise.resolve();
+    expect(r.ready()).toBe(true);
+    r.abort();
+    expect(r.ready()).toBe(false);
+  });
+
+  it('GPU 出错后保持静态软条，晚到的帧不会恢复画布', async () => {
+    let finishFrame!: () => void;
+    const r = await run('light', false, () => new Promise<void>(done => { finishFrame = done; }));
+    r.gpuError();
+    finishFrame();
+    await Promise.resolve();
+    expect(r.ready()).toBe(false);
+    expect(r.scene.onCleanup).toHaveBeenCalledOnce();
+    expect(state.destroy).toHaveBeenCalledOnce();
+    expect(r.pressArrowRight()).toBe(false);
+    expect(r.events.snapTo).not.toHaveBeenCalled();
+  });
+});
 
 describe('主题开关 · 拖动连续预览，点按保持直接切换', () => {
   it('正向拖动跟随软条进度渐变，松手落定后才保存主题', async () => {

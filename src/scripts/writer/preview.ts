@@ -1,10 +1,11 @@
 import MarkdownIt from 'markdown-it';
+import { contentLinkUrl } from '../../lib/content-urls.mjs';
 import { withWriterStrike } from '../../lib/strike-markdown';
 import { preserveCodeSpaces } from './markdown-spaces';
 const inlineMarkdown=preserveCodeSpaces(withWriterStrike(new MarkdownIt({html:false,linkify:false})));
 
 export function safeWriterLink(value:string,origin:string):string|null{
-  try{const url=new URL(value,origin);return ['http:','https:','mailto:'].includes(url.protocol)?url.href:null;}catch{return null;}
+  return contentLinkUrl(value,origin)?.href??null;
 }
 export function safeWriterImage(value:string,origin:string):string|null{
   try{const url=new URL(value,origin);return url.protocol==='blob:'&&value.startsWith(`blob:${origin}/`)||url.origin===origin&&/^\/api\/writer\/(assets|content)$/.test(url.pathname)?url.href:null;}catch{return null;}

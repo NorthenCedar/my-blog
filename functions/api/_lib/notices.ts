@@ -28,7 +28,7 @@ export type ReplyNotice = {
 };
 
 const EXCERPT_MAX = 80;
-const NOTICE_LIMIT = 100;
+export const NOTICE_LIMIT = 100;
 
 /** 前端给的形状不可信：不是 {kind,id} 就当没给（老前端、手写请求、爬虫都走这条路） */
 export function parseNoticeTarget(input: unknown): NoticeTarget | null {

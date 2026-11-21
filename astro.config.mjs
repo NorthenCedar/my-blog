@@ -4,6 +4,8 @@ import sitemap from '@astrojs/sitemap';
 import typegpu from 'unplugin-typegpu/vite';
 import { createVideoDevPlugin } from './src/lib/video-assets.mjs';
 import { createAudioDevPlugin } from './src/lib/audio-assets.mjs';
+import { isolateDraftMarkdown } from './src/lib/markdown-drafts.mjs';
+import { markdownContentPolicy } from './src/lib/markdown-content-policy.mjs';
 import { withPreservedIndent } from './src/lib/markdown-preserve-indent.mjs';
 import { withAudioMarkup } from './src/lib/markdown-audio.mjs';
 import { satteri } from '@astrojs/markdown-satteri';
@@ -25,7 +27,10 @@ export default defineConfig({
   // 站点正式地址（2026-09-25 绑定自有域名 northcedar.top）。
   // 换域名时只改这一行 —— robots.txt、sitemap、canonical 全都从它派生。
   site: 'https://northcedar.top',
-  integrations: [sitemap({ filter: page => !['/account/', '/avatar-sources/', '/write/'].includes(new URL(page).pathname) })],
+  integrations: [
+    isolateDraftMarkdown(),
+    sitemap({ filter: page => !['/account/', '/avatar-sources/', '/write/'].includes(new URL(page).pathname) }),
+  ],
   markdown: {
     // 用 CSS 变量接管代码块配色（design-spec.md：黑底白字），
     // 这样 Shiki 输出的是变量引用，我们能在 prose.css 里覆盖，不必写自定义主题 JSON。
@@ -37,7 +42,10 @@ export default defineConfig({
     //   换成播放器骨架（理由同下一条：这层包装只拿得到源码字符串）。
     //   套在缩进处理器**外面** —— 它吐出来的 `<div …>` 以 `<` 开头，
     //   缩进处理器正会跳过这类行，两者不会互相踩。
-    processor: withAudioMarkup(withPreservedIndent(satteri())),
+    processor: withAudioMarkup(withPreservedIndent(satteri({
+      features: { rawHtml: true },
+      hastPlugins: [markdownContentPolicy],
+    }))),
   },
   image: {
     // 让正文里的图片自动带 srcset/sizes。不加这条，短文那三张 2133px 宽的原图
@@ -55,6 +63,8 @@ export default defineConfig({
       typegpu(),
     ],
     build: {
+      // 换页路由会为内联模块插入 data: 占位脚本。单独输出模块即可保持脚本来源受限。
+      assetsInlineLimit: (path) => path.endsWith('.js') ? false : undefined,
       // ★ 2026-09-30：修「玻璃层在产物里只剩 -webkit- 前缀」。
       //
       // 现象：源码里成对写的

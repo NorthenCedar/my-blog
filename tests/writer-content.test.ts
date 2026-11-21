@@ -35,6 +35,15 @@ it('修改说说时允许最新文件新增其他条目，视频和邻居原始�
   expect(text).toContain('# 原有说明');expect(text).toContain('id: talk-from-desktop');expect(text).toContain('videos:\r\n      - src: old.mp4\r\n        alt: 旧视频');
   expect(text).toContain('text: 邻居 # 邻居注释');expect(readTalks(text).find(t=>t.key===old.key)?.value.body).toBe('这次修改');
 });
+it('发布说说只接受网页、相对路径和邮箱链接，省略时照常保存',()=>{
+  const value={fields:{date:'2026-10-23',href:'urn:isbn:9780131103627'},body:'新说说',assets:[]};
+  const publish=()=>planChanges({kind:'talk',key:'talk-new',base:null,value},talks,new Map());
+  expect(publish).toThrow('说说链接');
+  for(const href of ['/archive/','http://example.test/','mailto:reader@example.test','']){
+    value.fields.href=href;
+    expect(readTalks(decode(publish(),'content/pages/talks.md')).find(row=>row.key==='talk-new')?.value.fields.href).toBe(href);
+  }
+});
 it('新说说先固定没有 ID 的旧说说，插入同日新内容不会改变旧评论归属',()=>{
   const text='---\nitems:\n  - date: 2026-10-23\n    text: 第一\n  - date: 2026-10-23\n    text: 第二\n---\n';
   const value={fields:{date:'2026-10-23'},body:'新说说',assets:[]};

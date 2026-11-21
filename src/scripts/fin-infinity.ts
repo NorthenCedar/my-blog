@@ -15,6 +15,7 @@ import { createActivityGate, startLoop } from './rl-core';
 import type { FinPalette, FinScene } from './fin-scene';
 import { mixThemeColor, type ThemePreviewFrame } from './theme-preview';
 import { chapterProgress } from './about-relay.mjs';
+import { scheduleSceneStartup } from './scene-startup';
 
 /** 装置只在支持 WebGL 的桌面环境启用。 */
 let unsupported = false;
@@ -33,16 +34,15 @@ export function initFinInfinity(root: HTMLElement): void {
   let canvasUsed = false;
 
   /* ── 取色：与站内其它装置同一套写法（6 位 hex + 独立 alpha）── */
-  const cs = getComputedStyle(host);
-  const hex = (name: string): string => {
-    let h = cs.getPropertyValue(name).trim();
-    if (h.startsWith('#')) h = h.slice(1);
-    if (h.length === 8) h = h.slice(0, 6); // three 不认8 位 alpha
-    if (h.length === 3) h = [...h].map((c) => c + c).join('');
-    return `#${h}`;
-  };
-
   const buildPalette = (): FinPalette => {
+    const cs = getComputedStyle(host);
+    const hex = (name: string): string => {
+      let h = cs.getPropertyValue(name).trim();
+      if (h.startsWith('#')) h = h.slice(1);
+      if (h.length === 8) h = h.slice(0, 6); // three 不认 8 位 alpha
+      if (h.length === 3) h = [...h].map((c) => c + c).join('');
+      return `#${h}`;
+    };
     const dark = document.documentElement.classList.contains('dark');
     /* ★ 亮暗各一套。亮色档的鳍片要比纸白**深一档**才看得出体积（原版是暖白
        0.935/0.895/0.830 配更暖的场景底，靠明度差撑出层次；本站同理）。
@@ -77,10 +77,12 @@ export function initFinInfinity(root: HTMLElement): void {
   let gate: ReturnType<typeof createActivityGate> | null = null;
   let disposed = false;
   let generation = 0;
-  let startupFrame = 0;
+  let contextLost = false;
+  let cancelStartup: (() => void) | undefined;
   const stops = Array.from(document.querySelectorAll?.<HTMLElement>('[data-motion-stop]') ?? []);
   let offsets: number[] = [];
   const measureStops = () => {
+    if (!scene) return;
     offsets = stops.map(el => el.getBoundingClientRect().top + scrollY);
     syncRelay();
   };
@@ -100,22 +102,48 @@ export function initFinInfinity(root: HTMLElement): void {
   addEventListener('scroll',syncRelay,{passive:true});
   addEventListener('resize', measureStops);
 
+  const eligible = () => !disposed && !contextLost && ok() && gate?.onScreen && gate.visible &&
+    !document.documentElement.classList.contains('pt-on');
+
+  function startRendering() {
+    stopLoop ??= startLoop(dt => {
+      if (gate?.onScreen && gate.visible) scene?.render(dt);
+    });
+  }
+
   const boot = async (ticket: number) => {
-    const mod = await import('./fin-scene');
-    if (disposed || ticket !== generation || !ok()) return;
+    function current() {
+      if (ticket !== generation) return false;
+      if (eligible()) return true;
+      disable();
+      return false;
+    }
+    if (!current()) return;
     const frameCanvas = canvas;
     canvasUsed = true;
-    const s = await mod.createFinScene(frameCanvas, themePreview ? previewPalette(themePreview) : buildPalette());
-    if (!s) {
+    const context = frameCanvas.getContext('webgl2', {
+      antialias: true, alpha: true, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: true,
+    });
+    const debug = context?.getExtension('WEBGL_debug_renderer_info');
+    const device = debug ? String(context!.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : '';
+    if (!context || /swiftshader|llvmpipe|softpipe|software|basic render driver/i.test(device)) {
+      // 软件渲染保留纸色与点阵，无需下载完整场景和 Three。
       unsupported = true;
-      if (ticket === generation && !disposed) disable();
+      context?.getExtension('WEBGL_lose_context')?.loseContext();
+      disable();
       return;
     }
-    if (disposed || ticket !== generation || frameCanvas !== canvas || !ok()) {
-      s.dispose();
+    const mod = await import('./fin-scene');
+    if (!current()) return;
+    const s = await mod.createFinScene(frameCanvas, themePreview ? previewPalette(themePreview) : buildPalette(), context);
+    if (!current()) {
+      s?.dispose();
       return;
     }
+    if (!s) { disable(); return; }
+    cancelStartup = undefined;
     scene = s;
+    view.hidden = false;
     measureStops();
     s.setPalette(themePreview ? previewPalette(themePreview) : buildPalette());
     s.setDenied(themePreview?.progress ?? (isDark() ? 1 : 0));
@@ -124,15 +152,11 @@ export function initFinInfinity(root: HTMLElement): void {
     s.render(0);
     // 场景画出第一帧后再淡入。
     host.classList.add('fin-on');
-    gate = createActivityGate(view, {});
-    stopLoop = startLoop(dt => {
-      if (gate?.onScreen && gate.visible) scene?.render(dt);
-    });
+    startRendering();
   };
 
   const enable = () => {
-    if (disposed || !view.hidden || document.documentElement.classList.contains('pt-on')) return;
-    if (!ok()) return;
+    if (scene || cancelStartup || !eligible()) return;
     if (canvasUsed) {
       // 保留作用域标记，用新画布重建因断点或上下文丢失而停止的场景。
       const next = canvas.cloneNode(false) as HTMLCanvasElement;
@@ -142,32 +166,36 @@ export function initFinInfinity(root: HTMLElement): void {
       bindContext(canvas);
     }
     const ticket = ++generation;
-    view.hidden = false;
-    startupFrame = requestAnimationFrame(() => {
-      startupFrame = requestAnimationFrame(() => {
-        startupFrame = 0;
-        boot(ticket).catch((err) => {
-          if (ticket !== generation || disposed) return;
-          console.warn('[fin] 场景启动失败', err);
-          disable();
-        });
+    cancelStartup = scheduleSceneStartup(() => {
+      boot(ticket).catch((err) => {
+        if (ticket !== generation || disposed) return;
+        console.warn('[fin] 场景启动失败', err);
+        disable();
       });
     });
   };
 
   const disable = () => {
     generation++;
-    cancelAnimationFrame(startupFrame);
-    startupFrame = 0;
+    cancelStartup?.();
+    cancelStartup = undefined;
     stopLoop?.();
     stopLoop = null;
-    gate?.dispose();
-    gate = null;
     view.hidden = true;
     host.classList.remove('fin-on');
     const previous = scene;
     scene = null;
     previous?.dispose();
+  };
+
+  const syncVisibility = () => {
+    if (gate?.onScreen && gate.visible) {
+      if (scene) startRendering();
+      else enable();
+    } else if (scene) {
+      stopLoop?.();
+      stopLoop = null;
+    } else if (cancelStartup) disable();
   };
 
   /* ── 尺寸：容器变了要跟着变（窄屏 / 旋转 / 侧栏开合）── */
@@ -245,6 +273,7 @@ export function initFinInfinity(root: HTMLElement): void {
   mq.addEventListener('change', onMq);
   motion.addEventListener('change', onMq);
   bindContext(canvas);
+  gate = createActivityGate(host, { rootMargin: '0px', onTick: syncVisibility, onHidden: syncVisibility });
   onMq();
 
 /* ── WebGL 上下文丢失（切GPU / 驱动重置 / 长时间隐藏）──
@@ -254,10 +283,12 @@ export function initFinInfinity(root: HTMLElement): void {
     target.addEventListener('webglcontextlost', (e) => {
       if (disposed || target !== canvas) return;
       e.preventDefault();
+      contextLost = true;
       disable();
     }, { passive: false });
     target.addEventListener('webglcontextrestored', () => {
       if (disposed || target !== canvas) return;
+      contextLost = false;
       onMq();
     });
   }
@@ -268,7 +299,8 @@ export function initFinInfinity(root: HTMLElement): void {
     if (event.persisted) return;
     removeEventListener('pagehide', teardown);
     disposed = true;
-    cancelAnimationFrame(startupFrame);
+    generation++;
+    cancelStartup?.();
     ro.disconnect();
     mo.disconnect();
     document.removeEventListener('themepreview', onThemePreview);

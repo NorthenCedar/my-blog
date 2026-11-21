@@ -26,6 +26,7 @@ import type { TransitionBeforePreparationEvent, TransitionBeforeSwapEvent } from
 
 const KEY = 'pt';
 const root = document.documentElement;
+const status = document.querySelector('.pt-status');
 // v3（2026-09-30 站主定案）：换成**原型 v10.6 的墨色浸染**，时间线总长 900ms
 // （--pt-sweep，值在 tokens.css / transition.css）。收尾多留 100ms ⇒ 1000ms 摘类，
 // 保证摘的时候动画已经结束 —— 摘早了会把最后一帧（墨层刚收成一条线）硬切掉。
@@ -52,11 +53,9 @@ let preparing: AbortSignal | undefined;
 let swapping: AbortSignal | undefined;
 function showWait(pending = false) {
   window.clearTimeout(waitTimer);
-  const status = document.querySelector('.pt-status');
   if (!status) return;
-  status.textContent = '';
-  // 快换页直接交给转场，避免提示一闪而过。
-  if (pending) waitTimer = window.setTimeout(() => { status.textContent = '正在打开页面…'; }, 180);
+  if (!pending) status.textContent = '';
+  else if (!status.textContent) waitTimer = window.setTimeout(() => { status.textContent = '正在打开页面…'; }, 180);
 }
 function clearOverlay() {
   window.clearTimeout(cleanupTimer);
@@ -67,7 +66,13 @@ function finishAfter(ms: number) {
   window.clearTimeout(cleanupTimer);
   cleanupTimer = window.setTimeout(clearOverlay, ms);
 }
-if (root.classList.contains('pt-play')) finishAfter(HANDOFF_MS);
+if (root.classList.contains('pt-play')) finishAfter(STALE_MS);
+document.addEventListener('animationstart', event => {
+  if (event.animationName !== 'pt-ink' || !root.classList.contains('pt-play')) return;
+  // 等墨色层开始绘制再接棒，收尾也从实际开播起算。
+  showWait();
+  finishAfter(HANDOFF_MS);
+});
 
 // 客户端路由接管的点击由 before-preparation 接手，其余站内导航走浏览器。
 window.addEventListener('click', event => {
@@ -96,8 +101,10 @@ document.addEventListener('astro:before-preparation', event => {
   navigation.loader = async () => {
     try {
       await loader();
-    } finally {
-      if (preparing === signal) showWait();
+      if (preparing === signal && navigation.defaultPrevented) finishAfter(STALE_MS);
+    } catch (error) {
+      if (preparing === signal) clearOverlay();
+      throw error;
     }
   };
   signal.addEventListener('abort', () => {
@@ -107,13 +114,18 @@ document.addEventListener('astro:before-preparation', event => {
   }, { once: true });
 });
 document.addEventListener('astro:after-swap', () => {
-  if (preparing !== swapping) return;
+  if (!preparing || preparing !== swapping) return;
+  const signal = preparing;
   preparing = undefined;
+  window.clearTimeout(waitTimer);
+  finishAfter(STALE_MS);
   if (!reducedMotion.matches) {
     root.classList.add('pt-on', 'pt-play');
-    finishAfter(HANDOFF_MS);
   } else {
-    clearOverlay();
+    // 减少动效仍让提示陪同目标页的第一帧。
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (swapping === signal && !preparing) clearOverlay();
+    }));
   }
 });
 
