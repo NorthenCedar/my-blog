@@ -1,8 +1,8 @@
 ---
 title: Python备忘录
 date: 2026-10-25
-updated: 2026-11-16
-summary: 本人写代码经常会忘，所以新建一篇文章专门用来记录代码，目前在更新c语言，本文暂更一段时间
+updated: 2026-11-23
+summary: 本人写代码经常会忘，所以新建一篇文章专门用来记录代码，目前在更新c语言，本文停更一段时间
 tags: [个人, 备忘]
 draft: false
 cover: ./cover.webp

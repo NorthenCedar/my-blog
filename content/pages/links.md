@@ -27,6 +27,10 @@ groups:
         href: https://blog.Ayeez.cn
         avatar: https://qiniu.ayeez.cn/avatar.jpg
         desc: 记录学习历程，记录美好生活
+      - name: woodfish
+        href: https://blog.woodfish.site/
+        avatar: https://pic1.imgdb.cn/item/682f3d1658cb8da5c807b704.jpg
+        desc: 我喜欢你
   - title: 本站入口
     note: 我自己的几个门
     items:
