@@ -10,7 +10,7 @@ tags:
   - AI
   - 固件
 visual: image
-effect: stack
+effect: develop
 images:
   - src: ./file_00000000c7bc81fdb05b072423706bf5.jpg
     alt: file 00000000c7bc81fdb05b072423706bf5

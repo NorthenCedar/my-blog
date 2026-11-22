@@ -15,10 +15,14 @@ groups:
   - title: 友情链接
     note: 欢迎在下方提交友链申请，收到后会尽快回访添加
     items:
-    -   name: WillowXI的小站
+      - name: WillowXI的小站
         href: http://willowxi.site
         avatar: /avatars/friends/willowxi.jpg
         desc: 这个博客很酷啊
+      - name: NNNullptr南
+        href: https://xnmoe.com
+        avatar: /avatars/friends/friend-58a09148d9fd.jpg
+        desc: 数学生的古早拼贴风格网站
   - title: 本站入口
     note: 我自己的几个门
     items:
