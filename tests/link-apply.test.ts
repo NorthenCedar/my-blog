@@ -215,7 +215,7 @@ describe('/my-avatar 公开头像直链与页面产物校验', () => {
     expect(linksHtml).toContain('/avatars/friends/willowxi.jpg');
     expect(linksHtml).toContain('莱茵生命风格的技术、摄影博客');
     expect(linksHtml).toContain('下载头像');
-    expect(linksHtml).toContain('https://northcedar.top/my-avatar');
+    expect(linksHtml).toContain('data-copy-avatar="https://northcedar.top/my-avatar.jpg"');
     expect(linksHtml).toContain('data-link-apply-form');
     expect(linksHtml).not.toContain('怎么换');
     expect(linksHtml).toMatch(/name="desc"[^>]*maxlength="15"/);
