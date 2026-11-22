@@ -17,6 +17,7 @@ const { posts, heading, covers } = Astro.props;
       data-year={p.date.slice(0, 4)}
       data-month={p.date.slice(5, 7)}
       data-q={`${p.title} ${p.summary} ${p.tags.join(' ')}`.toLowerCase()}
+      data-updated={p.updated ?? p.date}
     >
       <a href={p.url}>
         <span class="archive-art" aria-hidden={covers?.has(p.slug) ? undefined : 'true'}>

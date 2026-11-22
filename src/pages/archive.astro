@@ -77,6 +77,11 @@ for (let i = 0; i < tapeTicks.length - 1; i++) {
         <span class="f-label">排序</span>
         <span class="sort-options true-focus">
           <TrueFocusFrame />
+          <button type="button" data-order="date" aria-pressed="true" title="按发布日期排序">发布</button>
+          <button type="button" data-order="updated" aria-pressed="false" title="按更新时间排序">更新</button>
+        </span>
+        <span class="sort-options true-focus">
+          <TrueFocusFrame />
           <button type="button" data-sort="desc" aria-pressed="true">倒序</button>
           <button type="button" data-sort="asc" aria-pressed="false">正序</button>
         </span>
@@ -263,7 +268,7 @@ for (let i = 0; i < tapeTicks.length - 1; i++) {
   .f-sort button[aria-pressed='true'] { color: var(--accent-ink); }
   :is(.sort-options, .archive-views) > button { border-radius: var(--sp-1); }
   @media (prefers-reduced-motion: no-preference) {
-    .f-sort button:not([data-sort]) {
+    .f-sort button:not([data-sort]):not([data-order]) {
       transition:
         transform var(--dur-fast) var(--ease-interact),
         color var(--dur-hover) var(--ease-interact),
@@ -312,8 +317,9 @@ for (let i = 0; i < tapeTicks.length - 1; i++) {
     .archive-hero { min-block-size: 0; padding-block-start: var(--sp-5); }
     .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-inline: var(--sp-3); }
     .f-q { grid-column: 1 / -1; }
-    .f-sort { grid-column: 1; }
+    .f-sort { grid-column: 1 / -1; flex-wrap: wrap; }
     .f-sort .f-label { display: none; }
+    .archive-views { grid-column: 1 / -1; justify-self: start; }
     .f-sort button, .archive-views button { padding-inline: var(--sp-2); }
   }
 

@@ -50,6 +50,27 @@ describe('归档筛选的连续操作', () => {
     link.click();
     expect(clicked).toHaveBeenCalledOnce();
   });
+  it('支持切换按发布日期与更新时间排序，并同步更新日期标注与清空重置', () => {
+    const bar = document.querySelector('[data-filters]')!;
+    bar.insertAdjacentHTML('beforeend', '<button type="button" data-order="date">发布</button><button type="button" data-order="updated">更新</button>');
+    const rowB = document.querySelector<HTMLLIElement>('#b')!;
+    rowB.dataset.updated = '2026-03-10';
+    rowB.innerHTML = '<a href="#b"><span class="date"><time datetime="2026-01-01">2026-01-01</time></span>乙</a>';
+    dispose = initArchiveFilters(document);
+    const byDate = document.querySelector<HTMLButtonElement>('[data-order="date"]')!;
+    const byUpdated = document.querySelector<HTMLButtonElement>('[data-order="updated"]')!;
+    expect(byDate.getAttribute('aria-pressed')).toBe('true');
+    expect(byUpdated.getAttribute('aria-pressed')).toBe('false');
+    expect(visible()).toEqual(['a', 'b', 'c']);
+    byUpdated.click();
+    expect(byUpdated.getAttribute('aria-pressed')).toBe('true');
+    expect(visible()).toEqual(['b', 'a', 'c']);
+    expect(rowB.querySelector('time')!.textContent).toBe('2026-03-10 · 更新');
+    document.querySelector<HTMLButtonElement>('[data-clear]')!.click();
+    expect(byDate.getAttribute('aria-pressed')).toBe('true');
+    expect(visible()).toEqual(['a', 'b', 'c']);
+    expect(rowB.querySelector('time')!.textContent).toBe('2026-01-01');
+  });
   it('中文组词期间不筛选，结束后立即使用完整词', () => {
     dispose = initArchiveFilters(document);
     input().dispatchEvent(new CompositionEvent('compositionstart'));
