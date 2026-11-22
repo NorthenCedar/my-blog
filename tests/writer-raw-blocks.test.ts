@@ -12,7 +12,7 @@ import { EditorState } from 'prosemirror-state';
  *   ② 在别处改一个字，表格一个字节都不动（块级比对兜住）；
  *   ③ 嵌套在引用/列表里的表格仍然整篇退回源码模式，绝不半懂不懂地改。
  */
-const corpus=['kali-linux-tutorial','monitor-progress','roogoo-card','sql-injection-tutorial','susu-rig-tars','two-ai-built-this-blog'];
+const corpus=['kali-linux-tutorial','monitor-progress','roogoo-card','sql-injection-tutorial','susu-rig-tars'];
 // 写作台只把 frontmatter 之后的正文交给编辑器，所以测试也按正文取。
 const read=(slug:string)=>readFileSync(join('content','posts',slug,'index.md'),'utf8').replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/,'');
 

@@ -84,7 +84,7 @@ describe('validateComment', () => {
   });
 
   it('parseCommentSlugList 在超长冗余逗号串下安全截断且不去分配整组数组', () => {
-    const giant = 'guestbook,' + ','.repeat(20000) + 'two-ai-built-this-blog';
+    const giant = 'guestbook,' + ','.repeat(20000) + 'how-this-blog-was-built';
     expect(parseCommentSlugList(giant)).toEqual(['guestbook']);
   });
 });

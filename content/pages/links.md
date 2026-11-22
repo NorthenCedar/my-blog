@@ -23,6 +23,10 @@ groups:
         href: https://xnmoe.com
         avatar: /avatars/friends/friend-58a09148d9fd.jpg
         desc: 数学生的古早拼贴风格网站
+      - name: 阿叶Ayeez的小站
+        href: https://blog.Ayeez.cn
+        avatar: https://qiniu.ayeez.cn/avatar.jpg
+        desc: 记录学习历程，记录美好生活
   - title: 本站入口
     note: 我自己的几个门
     items:

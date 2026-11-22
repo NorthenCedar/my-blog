@@ -100,7 +100,7 @@ describe('公开写入的来源、格式和已发布目标', () => {
     const s = setup();
     expect((await commentPost({ request: request('comments', { ...comment, website: 'robot' }), env: s.env } as never)).status).toBe(201);
     expect(total(s)).toBe(0);
-    for (const slug of ['two-ai-built-this-blog', talks[0]]) {
+    for (const slug of ['how-this-blog-was-built', talks[0]]) {
       expect((await commentPost({ request: request('comments', { ...comment, slug }), env: s.env } as never)).status).toBe(201);
     }
     expect(total(s)).toBe(2);
