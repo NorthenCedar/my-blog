@@ -72,6 +72,8 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
     async readImage(commit:string,path:string){
       const gallery=/^content\/gallery\/([^/]+)\/([\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif))$/u.exec(path);
       if(gallery){validateTarget('gallery',gallery[1]);if(gallery[2].includes('..'))writerFail(400,'invalid_path','配图路径不在相册范围内');return file(commit,path);}
+      if(path==='public/my-avatar.jpg') return file(commit,path);
+      if(/^public\/avatars\/friends\/[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(path)&&!path.includes('..')) return file(commit,path);
       if(!/^(?:content\/(?:posts|projects)\/[a-z0-9]+(?:-[a-z0-9]+)*\/|src\/assets\/talks\/)[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(path)||path.includes('..')) writerFail(400,'invalid_path','配图路径不在内容范围内');
       return file(commit,path);
     },

@@ -167,6 +167,19 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     const edit=()=>{if(controller){if(bodyEditor)working.value.body=bodyEditor.getMarkdown();const restored=restoreImageAssets(working.value.body,working.value.assets,knownImages);if(restored.length!==working.value.assets.length){working.value.assets=restored;renderImages();}controller.edit(working.value);if(!preview.hidden)renderPreview();}};
     const resolveImage=(source:string)=>{
       if(source.startsWith('writer-asset:')){const sha=source.slice(13);return knownImages.has(sha)?imageUrl(sha):null;}
+      if(working.kind==='forge'&&working.key==='links'){
+        const raw=source.trim();
+        if(!raw) return null;
+        if(/^https?:\/\//i.test(raw)){
+          if(raw==='https://northcedar.top/my-avatar') return working.base?`/api/writer/content?commit=${working.base.commit}&image=${encodeURIComponent('public/my-avatar.jpg')}`:'/my-avatar.jpg';
+          return raw;
+        }
+        if(raw==='/my-avatar'||raw==='/my-avatar.jpg') return working.base?`/api/writer/content?commit=${working.base.commit}&image=${encodeURIComponent('public/my-avatar.jpg')}`:'/my-avatar.jpg';
+        if(/^\/avatars\/friends\/[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(raw)&&!raw.includes('..')){
+          return working.base?`/api/writer/content?commit=${working.base.commit}&image=${encodeURIComponent('public'+raw)}`:raw;
+        }
+        return null;
+      }
       if(!working.base)return null;let path:string;
       if(working.kind==='post'||working.kind==='project'||working.kind==='gallery'){
         const name=source.replace(/^\.\//,'');
@@ -265,10 +278,23 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
       fields.append(postCover);
       refreshCover();
     }
+    async function uploadLinkAvatar(file:File){
+      if(pending.length) throw Error('还有未处理的待上传图片');
+      const existing=publishedAssetHashes(working.base);
+      if(working.value.assets.filter(a=>!existing.has(a.sha256)).length>=writerImageLimit(working.kind,working.key)) throw Error('友链上传头像数量已达上限');
+      const prepared=await prepareWriterImage(file);
+      URL.revokeObjectURL(prepared.previewUrl);
+      if(ticket!==generation) throw Error('编辑会话已切换，请重新上传');
+      const result=await api<{sha256:string}>('/assets',{method:'POST',headers:{'Content-Type':'image/webp'},body:prepared.blob});
+      if(ticket!==generation) throw Error('编辑会话已切换，请重新上传');
+      if(!working.value.assets.some(a=>a.sha256===result.sha256)) working.value.assets.push({sha256:result.sha256,alt:file.name||'友链头像'});
+      knownImages.set(result.sha256,working.value.assets.find(a=>a.sha256===result.sha256)!);
+      return 'writer-asset:'+result.sha256;
+    }
     if(working.kind==='gallery'){galleryFields=mountGalleryFields(fields,{value:working.value,onChange:edit,resolveImage,index:working.base?.galleryIndex??0});galleryDestroy=()=>galleryFields?.destroy();}
     if(working.kind==='project')projectFields=mountProjectFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage});
     if(working.kind==='forge'){
-      if(working.key==='links')mountLinksFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage});
+      if(working.key==='links')mountLinksFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage,uploadAvatar:uploadLinkAvatar});
       else mountForgeFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage});
     }
     else bodyEditor=mountWriterBody(bodyLabel,working.value.body,{onChange:edit,resolveImage,onImageFiles:input=>void perform(()=>files(input)),onError:showError});

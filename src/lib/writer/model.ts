@@ -26,19 +26,19 @@ export function validateTarget(kind: unknown, key: unknown): { kind: WriterKind;
   return {kind,key};
 }
 export const writerKindLabel = (kind:WriterKind,key?:string) => kind==='forge'&&key==='links'?'友链':({post:'文章',talk:'说说',project:'造物台项目',forge:'造物台页面文案',gallery:'相册'})[kind];
-export const writerImageLimit = (kind:WriterKind) => kind==='forge'?0:kind==='gallery'?100:kind==='talk'?9:20;
+export const writerImageLimit = (kind:WriterKind,key?:string) => kind==='forge'?(key==='links'?60:0):kind==='gallery'?100:kind==='talk'?9:20;
 export function writerTargetPath(kind:WriterKind,key:string):string {
   validateTarget(kind,key);
   return kind==='gallery'?`content/gallery/${key}/index.md`:kind==='post'?`content/posts/${key}/index.md`:kind==='project'?`content/projects/${key}/index.md`:kind==='forge'?(key==='links'?'content/pages/links.md':'content/pages/forge.md'):'content/pages/talks.md';
 }
 export function writerAssetDirectory(kind:WriterKind,key:string):string|null {
   validateTarget(kind,key);
-  return kind==='gallery'?`content/gallery/${key}/`:kind==='forge'?null:kind==='post'?`content/posts/${key}/`:kind==='project'?`content/projects/${key}/`:'src/assets/talks/';
+  return kind==='gallery'?`content/gallery/${key}/`:kind==='forge'?(key==='links'?'public/avatars/friends/':null):kind==='post'?`content/posts/${key}/`:kind==='project'?`content/projects/${key}/`:'src/assets/talks/';
 }
 export const publishedAssetHashes=(base:WriterBase)=>new Set([...(base?.text??'').matchAll(/\bwriter-([a-f0-9]{64})\.webp\b/g)].map(m=>m[1]));
 /** 已发布的语音（`/audio/<sha>.<ext>`）：用于区分“新增”与“本来就在仓库里的那条”。 */
 export const existingAudios=(base:WriterBase)=>new Set([...(base?.text??'').matchAll(/\/audio\/([a-f0-9]{64})\.(?:mp3|wav)/g)].map(m=>m[1]));
-export function validateWriterValue(kind: WriterKind, input: unknown,base:WriterBase=null): WriterValue {
+export function validateWriterValue(kind: WriterKind, input: unknown,base:WriterBase=null,key?:string): WriterValue {
   if (!input || typeof input !== 'object' || Array.isArray(input)) writerFail(400,'invalid_value','草稿内容格式不对');
   const v = input as Record<string,unknown>;
   if (!v.fields || typeof v.fields !== 'object' || Array.isArray(v.fields) || typeof v.body !== 'string' || !Array.isArray(v.assets)) writerFail(400,'invalid_value','草稿内容格式不对');
@@ -52,8 +52,9 @@ export function validateWriterValue(kind: WriterKind, input: unknown,base:Writer
   });
   if(kind==='gallery'){try{validateAlbumFields(v.fields);}catch(error){writerFail(400,'invalid_content',String((error as Error).message));}}
   const existing=publishedAssetHashes(base);
-  if(kind==='forge'&&assets.length) writerFail(400,'invalid_asset','页面文案不使用上传图片');
-  if(assets.filter(a=>!existing.has(a.sha256)).length>writerImageLimit(kind)) writerFail(413,'too_many_images','这份草稿的新增配图过多');
+  const isLinks=kind==='forge'&&(key==='links'||Array.isArray((v.fields as Record<string,unknown>).groups));
+  if(kind==='forge'&&!isLinks&&assets.length) writerFail(400,'invalid_asset','页面文案不使用上传图片');
+  if(assets.filter(a=>!existing.has(a.sha256)).length>writerImageLimit(kind,isLinks?'links':key)) writerFail(413,'too_many_images','这份草稿的新增配图过多');
   // 语音（第三版新增）：老草稿里没有这个字段，缺省当空数组，不能让它们因为“少一个键”打不开。
   const rawAudios = v.audios ?? [];
   if(!Array.isArray(rawAudios)) writerFail(400,'invalid_audio','语音信息不对');

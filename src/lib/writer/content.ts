@@ -157,7 +157,7 @@ const projectMarkdown = new MarkdownIt({html:true});
 const linkItemSchema = z.object({
   name: z.string().trim().min(1).max(80),
   href: z.string().trim().min(1).max(500).refine(v=>{try{requireContentLink(v,'友链地址');return true;}catch{return false;}},'友链地址必须使用网页地址（http/https）、相对路径或邮箱地址'),
-  avatar: z.string().trim().max(400).refine(v=>{if(!v)return true;try{requireContentLink(v,'友链头像地址');return true;}catch{return false;}},'友链头像地址必须使用网页地址（http/https）或站内路径').optional(),
+  avatar: z.string().trim().max(400).refine(v=>{if(!v||/^writer-asset:[a-f0-9]{64}$/.test(v))return true;try{requireContentLink(v,'友链头像地址');return true;}catch{return false;}},'友链头像地址必须使用网页地址（http/https）、站内路径或已上传图片').optional(),
   desc: z.string().trim().max(240).optional(),
 }).passthrough();
 const linksPageSchema = z.object({
@@ -213,6 +213,9 @@ export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:
     if(Array.isArray(value.fields.groups)){
       const checked=linksPageSchema.safeParse(value.fields);
       if(!checked.success)bad('友链资料不完整：'+checked.error.issues[0].path.join('.')+'，'+checked.error.issues[0].message);
+      const uploaded=new Set(value.assets.map(a=>'writer-asset:'+a.sha256));
+      const refs=[checked.data.mine?.avatar,...checked.data.groups.flatMap(g=>g.items.map(it=>it.avatar))];
+      for(const src of refs)if(typeof src==='string'&&src.startsWith('writer-asset:')&&!uploaded.has(src))bad('友链头像引用了未上传的图片');
       return;
     }
     const checked=forgePageSchema.safeParse(value.fields);
@@ -253,7 +256,7 @@ export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:
   }
 }
 export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,currentText:string|null,assetBytes:Map<string,Uint8Array>):WriterChange[]{
-  const {kind,key}=validateTarget(draft.kind,draft.key),value=validateWriterValue(kind,draft.value,draft.base);validatePublish(kind,value,draft.base);
+  const {kind,key}=validateTarget(draft.kind,draft.key),value=validateWriterValue(kind,draft.value,draft.base,key);validatePublish(kind,value,draft.base);
   const changes:WriterChange[]=[],known=new Map(value.assets.map(a=>[a.sha256,a]));
   const clips=new Map(value.audios.map(a=>[a.sha256,a]));
   for(const clip of clips.values()){
@@ -264,13 +267,20 @@ export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,
   const resolveAudio=(sha:string)=>{const clip=clips.get(sha);if(!clip) return bad('正文引用了未保存的语音');return `/audio/${sha}.${clip.ext}`;};
   const directory=writerAssetDirectory(kind,key);
   const galleryReferences=kind==='gallery'?new Set((value.fields.images as {src:string}[]).map(image=>image.src)):null;
+  const linksReferences=kind==='forge'&&key==='links'
+    ?new Set([
+        (value.fields.mine as {avatar?:string}|undefined)?.avatar,
+        ...((value.fields.groups as Array<{items:Array<{avatar?:string}>}>)??[]).flatMap(g=>g.items.map(it=>it.avatar)),
+      ].filter((v):v is string=>typeof v==='string'&&v.startsWith('writer-asset:')))
+    :null;
+  const assetFilter=galleryReferences??linksReferences;
   for(const asset of value.assets){
-    if(galleryReferences&&!galleryReferences.has('writer-asset:'+asset.sha256))continue;
+    if(assetFilter&&!assetFilter.has('writer-asset:'+asset.sha256))continue;
     const bytes=assetBytes.get(asset.sha256);if(!bytes||writerHash(bytes)!==asset.sha256) bad('配图缺失或摘要不一致，请重新上传');
     if(!directory)bad('页面文案不能发布配图');
     changes.push({path:`${directory}writer-${asset.sha256}.webp`,bytes});
   }
-  const resolve=(sha:string)=>{if(!known.has(sha)) return bad('正文引用了未保存的图片');return `${kind==='talk'?'':'./'}writer-${sha}.webp`;};
+  const resolve=(sha:string)=>{if(!known.has(sha)) return bad('正文引用了未保存的图片');return `${kind==='talk'?'':kind==='forge'&&key==='links'?'/avatars/friends/':'./'}writer-${sha}.webp`;};
   let text:string;
   if(kind==='project'||kind==='forge'||kind==='gallery'){
     if(draft.base?currentText!==draft.base.text:currentText!==null)return conflict();
@@ -289,6 +299,22 @@ export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,
         for(const field of ['src','darkSrc'])if(typeof result[field]==='string'&&(result[field] as string).startsWith('writer-asset:'))result[field]=resolve((result[field] as string).slice(13));
         return result;
       });
+    }
+    if(kind==='forge'&&key==='links'){
+      const resolveAvatar=(v:unknown)=>typeof v==='string'&&v.startsWith('writer-asset:')?resolve(v.slice(13)):v;
+      if(fields.mine&&typeof fields.mine==='object'&&!Array.isArray(fields.mine)){
+        const mine={...(fields.mine as Record<string,unknown>)};
+        if('avatar' in mine)mine.avatar=resolveAvatar(mine.avatar);
+        fields.mine=mine;
+      }
+      if(Array.isArray(fields.groups)){
+        fields.groups=(fields.groups as Array<Record<string,unknown>>).map(g=>({
+          ...g,
+          items:Array.isArray(g.items)?(g.items as Array<Record<string,unknown>>).map(it=>
+            'avatar' in it?{...it,avatar:resolveAvatar(it.avatar)}:it
+          ):g.items,
+        }));
+      }
     }
     const body=kind==='project'?replaceImages(value.body,resolve,true):value.body;
     if(kind==='project')checkProjectBodyImages(body,value.assets,false);

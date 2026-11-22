@@ -2,7 +2,7 @@ import type { WriterValue } from '../../lib/writer/model';
 import { FORGE_TEXT_FIELDS } from '../../lib/forge-fields';
 import { el,button,field } from './ui';
 
-type Context={value:WriterValue;onChange:()=>void;onError:(error:unknown)=>void;resolveImage:(source:string)=>string|null};
+type Context={value:WriterValue;onChange:()=>void;onError:(error:unknown)=>void;resolveImage:(source:string)=>string|null;uploadAvatar?:(file:File)=>Promise<string>};
 type GalleryImage={src:string;alt:string;darkSrc?:string;[key:string]:unknown};
 const EFFECTS=[['auto','自动选择'],['lift','轻抬'],['tilt','倾斜'],['stack','叠片'],['zoom','放大'],['scan','掠光'],['develop','显影']];
 const gallery=(value:WriterValue)=>Array.isArray(value.fields.images)?value.fields.images as GalleryImage[]:[];
@@ -75,11 +75,11 @@ export function mountForgeFields(host:HTMLElement,{value,onChange}:Context){
 
 export type FriendItem={name:string;href:string;avatar?:string;desc?:string;[key:string]:unknown};
 export type FriendGroup={title:string;note?:string;items:FriendItem[];[key:string]:unknown};
-export function mountLinksFields(host:HTMLElement,{value,onChange}:Context){
+export function mountLinksFields(host:HTMLElement,{value,onChange,onError,resolveImage,uploadAvatar}:Context){
   const fields=value.fields;
   textField(host,'intro','页头引言',fields.intro,text=>{fields.intro=text;onChange();},{maxLength:320,multiline:true,wide:true});
   const section=el('section','','wide writer-forge-section'),list=el('div','','writer-repeat-list');
-  section.append(el('h3','友链分组与卡片'),el('p','可在各分组下添加友链（站点名称、链接地址 http/https、头像链接、一句话简介）。','writer-note'),list);
+  section.append(el('h3','友链分组与卡片'),el('p','可在各分组下添加友链，支持填写链接或直接上传头像图片。','writer-note'),list);
   host.append(section);
   const getGroups=()=>{if(!Array.isArray(fields.groups))fields.groups=[{title:'友情链接',note:'',items:[]}];return fields.groups as FriendGroup[];};
   function render(){
@@ -92,11 +92,59 @@ export function mountLinksFields(host:HTMLElement,{value,onChange}:Context){
       const itemsHost=el('div','','writer-repeat-list');
       group.items.forEach((item,ii)=>{
         const row=el('div','','writer-link-row');
+        const thumb=el('img','','writer-link-avatar');
+        const syncThumb=()=>{
+          const src=typeof item.avatar==='string'&&item.avatar.trim()?resolveImage(item.avatar):null;
+          if(src){thumb.src=src;thumb.alt=item.name||'友链头像';thumb.hidden=false;}
+          else{thumb.removeAttribute('src');thumb.alt='';thumb.hidden=true;}
+        };
+        syncThumb();
         textField(row,`group-${gi}-item-${ii}-name`,`友链 ${ii+1} · 名称`,item.name,text=>{item.name=text;onChange();},{maxLength:80});
         textField(row,`group-${gi}-item-${ii}-href`,'链接地址',item.href,text=>{item.href=text;onChange();},{maxLength:500});
-        textField(row,`group-${gi}-item-${ii}-avatar`,'头像链接（可选）',item.avatar??'',text=>{if(text.trim())item.avatar=text;else delete item.avatar;onChange();},{maxLength:400});
+        const avatarInput=textField(row,`group-${gi}-item-${ii}-avatar`,'头像链接或已上传图片（可选）',item.avatar??'',text=>{
+          if(text.trim())item.avatar=text.trim();
+          else delete item.avatar;
+          onChange();
+          syncThumb();
+          clearAvatar.disabled=!item.avatar;
+        },{maxLength:400});
+        const avatarTools=el('div','','writer-link-avatar-tools');
+        avatarTools.append(thumb);
+        const clearAvatar=button('清除头像',()=>{
+          delete item.avatar;
+          avatarInput.value='';
+          onChange();
+          render();
+        });
+        clearAvatar.disabled=!item.avatar;
+        if(uploadAvatar){
+          const fileInput=el('input');
+          fileInput.type='file';
+          fileInput.accept='image/jpeg,image/png,image/webp';
+          fileInput.name=`group-${gi}-item-${ii}-avatar-file`;
+          fileInput.hidden=true;
+          fileInput.setAttribute('aria-label',`上传 ${item.name||`友链 ${ii+1}`} 的头像`);
+          let uploadBtn!:HTMLButtonElement;
+          fileInput.addEventListener('change',()=>{
+            const picked=fileInput.files?.[0];
+            fileInput.value='';
+            if(!picked) return;
+            uploadBtn.disabled=true;
+            uploadAvatar(picked).then(ref=>{
+              item.avatar=ref;
+              onChange();
+              render();
+            }).catch(err=>{
+              uploadBtn.disabled=false;
+              onError(err);
+            });
+          });
+          uploadBtn=button('上传头像',()=>fileInput.click());
+          avatarTools.append(fileInput,uploadBtn);
+        }
+        avatarTools.append(clearAvatar);
         textField(row,`group-${gi}-item-${ii}-desc`,'一句话简介（可选）',item.desc??'',text=>{item.desc=text;onChange();},{maxLength:240,wide:true});
-        row.append(button('移除友链',()=>{group.items.splice(ii,1);onChange();render();}));
+        row.append(avatarTools,button('移除友链',()=>{group.items.splice(ii,1);onChange();render();}));
         itemsHost.append(row);
       });
       const addItem=button('＋ 添加友链',()=>{group.items.push({name:'',href:'https://',desc:''});onChange();render();},'primary');
@@ -121,7 +169,13 @@ export function renderForgePreview(kind:'project'|'forge',value:WriterValue,reso
     for(const g of (Array.isArray(fields.groups)?fields.groups as FriendGroup[]:[])){
       fragment.append(el('h3',String(g.title??'')));
       if(g.note)fragment.append(el('p',String(g.note),'writer-note'));
-      for(const it of (Array.isArray(g.items)?g.items:[]))fragment.append(el('p',`${it.name??''} · ${it.href??''}${it.desc?' — '+it.desc:''}`));
+      for(const it of (Array.isArray(g.items)?g.items:[])){
+        const row=el('p','','writer-link-preview');
+        const avatarUrl=typeof it.avatar==='string'&&it.avatar.trim()?resolveImage(it.avatar):null;
+        if(avatarUrl){const img=el('img','','writer-link-avatar');img.src=avatarUrl;img.alt='';row.append(img);}
+        row.append(el('span',`${it.name??''} · ${it.href??''}${it.desc?' — '+it.desc:''}`));
+        fragment.append(row);
+      }
     }
   }else{
     for(const item of FORGE_TEXT_FIELDS.filter(item=>item.key!=='title'))fragment.append(el('p',String(fields[item.key]??'')));

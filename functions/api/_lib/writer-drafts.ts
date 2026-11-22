@@ -49,7 +49,7 @@ async function assertDraftAudio(db: D1Database, owner: string, value: WriterValu
 }
 
 export async function createDraft(db:D1Database,proof:WriterProof,input:{kind:WriterKind;key:string;base:WriterBase;value:WriterValue}):Promise<WriterDraft> {
-  const {kind,key}=validateTarget(input.kind,input.key),value=validateWriterValue(kind,input.value,input.base);
+  const {kind,key}=validateTarget(input.kind,input.key),value=validateWriterValue(kind,input.value,input.base,key);
   const base=JSON.stringify(input.base);
   if (utf8Length(base)>256*1024) writerFail(413,'base_too_large','原文过大，暂不能在云端编辑');
   const content=JSON.stringify(value),id=randomToken(16),marker=randomToken(16),now=Date.now();
@@ -73,7 +73,7 @@ export async function createDraft(db:D1Database,proof:WriterProof,input:{kind:Wr
 }
 export async function saveDraft(db:D1Database,proof:WriterProof,input:WriterSave):Promise<WriterDraft> {
   writerId(input.requestId);
-  const before=await readDraft(db,proof.owner,input.id),value=validateWriterValue(before.kind,input.value,before.base);
+  const before=await readDraft(db,proof.owner,input.id),value=validateWriterValue(before.kind,input.value,before.base,before.key);
   if(!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<1) writerFail(400,'invalid_revision','草稿版本不对，请重新读取');
   const content=JSON.stringify(value),hash=await digest(JSON.stringify([input.id,input.expectedRevision,value]));
   await assertWriterProof(db,proof);

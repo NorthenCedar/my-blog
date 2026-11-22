@@ -129,5 +129,19 @@ describe('造物台单页文案发布',()=>{
     const badValue=structuredClone(value);
     (badValue.fields.groups as typeof groups)[0].items[0].href='javascript:alert(1)';
     expect(()=>planChanges({kind:'forge',key:'links',base:base(original),value:badValue},original,new Map())).toThrow();
+
+    // 上传友链头像：导出至 public/avatars/friends/writer-<sha>.webp 并替换为 /avatars/friends/writer-<sha>.webp，同时保留既有 willowxi 与本站头像
+    const bytes=new Uint8Array([1,2,3,4]),sha=createHash('sha256').update(bytes).digest('hex'),ref='writer-asset:'+sha;
+    const withAvatar=structuredClone(value);
+    const g2=withAvatar.fields.groups as Array<{title:string;note?:string;items:Array<{name:string;href:string;avatar?:string;desc?:string}>}>;
+    g2[0].items.at(-1)!.avatar=ref;
+    withAvatar.assets=[{sha256:sha,alt:'友链头像'}];
+    const avatarChanges=planChanges({kind:'forge',key:'links',base:base(original),value:withAvatar},original,new Map([[sha,bytes]]));
+    expect(avatarChanges.map(c=>c.path)).toEqual(['content/pages/links.md',`public/avatars/friends/writer-${sha}.webp`]);
+    const parsedAvatar=readPost(textOf(avatarChanges));
+    expect((parsedAvatar.fields.mine as {avatar?:string}).avatar).toBe('https://northcedar.top/my-avatar');
+    const firstGroup=(parsedAvatar.fields.groups as typeof g2)[0];
+    expect(firstGroup.items[0].avatar).toBe('/avatars/friends/willowxi.jpg');
+    expect(firstGroup.items.at(-1)!.avatar).toBe(`/avatars/friends/writer-${sha}.webp`);
   });
 });
