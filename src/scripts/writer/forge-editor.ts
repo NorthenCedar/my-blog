@@ -73,11 +73,55 @@ export function mountForgeFields(host:HTMLElement,{value,onChange}:Context){
   function render(){list.replaceChildren();getNotes().forEach((note,index)=>{const row=el('section','','writer-note-card');textField(row,`note-${index}-title`,`手记 ${index+1} · 标题`,note.title,text=>{note.title=text;onChange();},{maxLength:120});textField(row,`note-${index}-text`,'手记正文',note.text,text=>{note.text=text;onChange();},{multiline:true,maxLength:4000});row.append(button('移除工作手记',()=>{getNotes().splice(index,1);onChange();render();}));list.append(row);});const add=button('添加工作手记',()=>{fields.notes=[...getNotes(),{title:'',text:''}];onChange();render();});add.disabled=getNotes().length>=12;list.append(add);}render();
 }
 
-export function renderForgePreview(kind:'project'|'forge',value:WriterValue,resolveImage:Context['resolveImage']){
-  const fragment=document.createDocumentFragment(),fields=value.fields;fragment.append(el('h2',String(fields.title??'')));
+export type FriendItem={name:string;href:string;desc?:string;[key:string]:unknown};
+export type FriendGroup={title:string;note?:string;items:FriendItem[];[key:string]:unknown};
+export function mountLinksFields(host:HTMLElement,{value,onChange}:Context){
+  const fields=value.fields;
+  textField(host,'intro','页头引言',fields.intro,text=>{fields.intro=text;onChange();},{maxLength:320,multiline:true,wide:true});
+  const section=el('section','','wide writer-forge-section'),list=el('div','','writer-repeat-list');
+  section.append(el('h3','友链分组与卡片'),el('p','可在各分组下添加友链（站点名称、链接地址 http/https、一句话简介）。','writer-note'),list);
+  host.append(section);
+  const getGroups=()=>{if(!Array.isArray(fields.groups))fields.groups=[{title:'友情链接',note:'',items:[]}];return fields.groups as FriendGroup[];};
+  function render(){
+    list.replaceChildren();
+    getGroups().forEach((group,gi)=>{
+      if(!Array.isArray(group.items))group.items=[];
+      const card=el('section','','writer-note-card');
+      textField(card,`group-${gi}-title`,`分组 ${gi+1} · 标题`,group.title,text=>{group.title=text;onChange();},{maxLength:80});
+      textField(card,`group-${gi}-note`,'分组说明（可选）',group.note??'',text=>{group.note=text;onChange();},{maxLength:240});
+      const itemsHost=el('div','','writer-repeat-list');
+      group.items.forEach((item,ii)=>{
+        const row=el('div','','writer-link-row');
+        textField(row,`group-${gi}-item-${ii}-name`,`友链 ${ii+1} · 名称`,item.name,text=>{item.name=text;onChange();},{maxLength:80});
+        textField(row,`group-${gi}-item-${ii}-href`,'链接地址',item.href,text=>{item.href=text;onChange();},{maxLength:500});
+        textField(row,`group-${gi}-item-${ii}-desc`,'一句话简介（可选）',item.desc??'',text=>{item.desc=text;onChange();},{maxLength:240,wide:true});
+        row.append(button('移除友链',()=>{group.items.splice(ii,1);onChange();render();}));
+        itemsHost.append(row);
+      });
+      const addItem=button('＋ 添加友链',()=>{group.items.push({name:'',href:'https://',desc:''});onChange();render();},'primary');
+      const removeGroup=button('移除此分组',()=>{getGroups().splice(gi,1);onChange();render();});
+      removeGroup.disabled=getGroups().length<=1;
+      card.append(itemsHost,addItem,removeGroup);
+      list.append(card);
+    });
+    const addGroup=button('＋ 添加分组',()=>{getGroups().push({title:'新分组',note:'',items:[{name:'',href:'https://',desc:''}]});onChange();render();});
+    list.append(addGroup);
+  }
+  render();
+}
+
+export function renderForgePreview(kind:'project'|'forge',value:WriterValue,resolveImage:Context['resolveImage'],key?:string){
+  const fragment=document.createDocumentFragment(),fields=value.fields;fragment.append(el('h2',String(fields.title??(key==='links'?'友链':''))));
   if(kind==='project'){
     fragment.append(el('p',String(fields.summary??'')),el('p',String(fields.tagline??''),'writer-note'));
     const images=el('div','','writer-gallery');for(const image of gallery(value)){const card=el('section','','writer-image');thumbnail(card,image.src,image.alt,resolveImage,'主图');if(image.darkSrc)thumbnail(card,image.darkSrc,image.alt,resolveImage,'暗色替图');images.append(card);}fragment.append(images);
+  }else if(key==='links'||Array.isArray(fields.groups)){
+    if(fields.intro)fragment.append(el('p',String(fields.intro)));
+    for(const g of (Array.isArray(fields.groups)?fields.groups as FriendGroup[]:[])){
+      fragment.append(el('h3',String(g.title??'')));
+      if(g.note)fragment.append(el('p',String(g.note),'writer-note'));
+      for(const it of (Array.isArray(g.items)?g.items:[]))fragment.append(el('p',`${it.name??''} · ${it.href??''}${it.desc?' — '+it.desc:''}`));
+    }
   }else{
     for(const item of FORGE_TEXT_FIELDS.filter(item=>item.key!=='title'))fragment.append(el('p',String(fields[item.key]??'')));
     if(Array.isArray(fields.stages))for(const stage of fields.stages)fragment.append(el('p',String(stage),'writer-note'));

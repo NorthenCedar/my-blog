@@ -11,7 +11,7 @@ import { JOB_LABELS } from './publish';
 import { showWriterStorage } from './storage';
 import { mountWriterBody } from './body-editor';
 import { restoreImageAssets, writerBodyImages } from './markdown';
-import { mountProjectFields,mountForgeFields,renderForgePreview,projectImageReferences } from './forge-editor';
+import { mountProjectFields,mountForgeFields,mountLinksFields,renderForgePreview,projectImageReferences } from './forge-editor';
 type Api=typeof writerApi;
 type Store=ReturnType<typeof createRecoveryStore>;
 type PendingImage={id:string;blob:Blob;alt:string;url:string;cover?:boolean;width?:number;height?:number;originalSize?:number};
@@ -71,12 +71,12 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
           if(mode==='jobs'){await options.onJob?.(item.id);return;}
           const result=mode==='drafts'
             ?await api('/drafts?id='+item.id,{signal:selection})
-            :await api('/drafts',{method:'POST',body:JSON.stringify({action:'import',kind:mode,key:item.key})});
+            :await api('/drafts',{method:'POST',body:JSON.stringify({action:'import',kind:mode==='links'?'forge':mode,key:item.key})});
           await openDraft(result.draft,selection,true);
           if(!selection.aborted)catalog.open=matchMedia('(min-width:768px)').matches;
         },selection);
       });
-      b.append(el('small',mode==='drafts'?`${writerKindLabel(item.kind)} · ${item.revision===item.publishedRevision?'已发布':'未发布修改'}`:item.date??''));
+      b.append(el('small',mode==='drafts'?`${writerKindLabel(item.kind,item.key)} · ${item.revision===item.publishedRevision?'已发布':'未发布修改'}`:item.date??''));
       row.append(b);list.append(row);
     }
     if(!items.length)list.append(el('li','这里还没有内容。'));
@@ -157,7 +157,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
   }
   function renderDraft(draft:WriterDraft,restore?:RecoveryRecord){
     active=structuredClone(draft);if(restore){active.value=structuredClone(restore.value);active.revision=restore.revision;pending=(restore.pendingImages??[]).map(p=>{const url=URL.createObjectURL(p.blob);urls.add(url);return {...p,url};});}
-    const ticket=++generation,working=active;pane.replaceChildren(el('h2',`${writerKindLabel(working.kind)} · ${working.key}`));
+    const ticket=++generation,working=active;pane.replaceChildren(el('h2',`${writerKindLabel(working.kind,working.key)} · ${working.key}`));
     let galleryFields:ReturnType<typeof mountGalleryFields>|undefined;
     let projectFields:ReturnType<typeof mountProjectFields>|undefined;
     const knownImages=new Map(working.value.assets.map(asset=>[asset.sha256,asset]));
@@ -176,7 +176,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
       else if(working.kind==='talk')path='src/assets/talks/'+source;else return null;
       return `/api/writer/content?commit=${working.base.commit}&image=${encodeURIComponent(path)}`;
     };
-    const renderPreview=()=>{preview.replaceChildren();if(working.kind==='project'||working.kind==='forge')preview.append(renderForgePreview(working.kind,working.value,resolveImage));if(working.kind!=='forge')preview.append(renderWriterMarkdown(bodyEditor!.getMarkdown(),resolveImage));};
+    const renderPreview=()=>{preview.replaceChildren();if(working.kind==='project'||working.kind==='forge')preview.append(renderForgePreview(working.kind,working.value,resolveImage,working.key));if(working.kind!=='forge')preview.append(renderWriterMarkdown(bodyEditor!.getMarkdown(),resolveImage));};
     async function showConflict(){
       try{const result=await api('/drafts?id='+working.id);if(ticket!==generation)return;conflict.hidden=false;conflict.replaceChildren(el('h3','对照版本'));const comparison=el('div','','writer-compare');
         for(const [name,text]of [['当前输入',JSON.stringify(controller!.current().value.fields,null,2)+'\n\n'+working.value.body],['云端版本',JSON.stringify(result.draft.value.fields,null,2)+'\n\n'+result.draft.value.body]]){const label=el('label',name,'writer-field'),area=el('textarea');area.value=text;area.readOnly=true;label.append(area);comparison.append(label);}
@@ -267,7 +267,10 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     }
     if(working.kind==='gallery'){galleryFields=mountGalleryFields(fields,{value:working.value,onChange:edit,resolveImage,index:working.base?.galleryIndex??0});galleryDestroy=()=>galleryFields?.destroy();}
     if(working.kind==='project')projectFields=mountProjectFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage});
-    if(working.kind==='forge')mountForgeFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage});
+    if(working.kind==='forge'){
+      if(working.key==='links')mountLinksFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage});
+      else mountForgeFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage});
+    }
     else bodyEditor=mountWriterBody(bodyLabel,working.value.body,{onChange:edit,resolveImage,onImageFiles:input=>void perform(()=>files(input)),onError:showError});
     const move=(from:number,to:number)=>{if(to<0||to>=working.value.assets.length)return;const [item]=working.value.assets.splice(from,1);working.value.assets.splice(to,0,item);edit();renderImages();};
     async function upload(image:PendingImage){
@@ -337,7 +340,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     const deleteDraft=button('删除这份云端草稿',()=>perform(async()=>{if(!confirm(`删除「${working.value.fields.title??working.key}」草稿及其已结束任务？网站上已发布的内容会保留。建议先导出。`))return;await api('/drafts',{method:'POST',body:JSON.stringify({action:'delete',id:working.id,revision:controller!.current().revision})});await controller!.dispose();controller=null;active=null;generation++;releaseUrls();pane.replaceChildren(el('p','草稿已删除，已发布内容仍在网站上。'));await loadList('drafts');}));
     pane.append(tools,status,backup,fields);if(working.kind!=='forge')pane.append(bodyLabel);pane.append(preview);if(working.kind!=='forge')pane.append(imageSection);if(working.kind==='post'||working.kind==='talk')pane.append(audioSection);pane.append(metadata,conflict,publishing,el('p',options.publish?'保存不会发布，点击发布后还需确认本次内容。':'发布尚未配置；私密草稿仍可保存和导出。','writer-note'),deleteDraft);renderImages();renderAudio();void controller.ready;
   }
-  navigation.setAttribute('aria-label','内容分类');for(const [mode,label]of [['drafts','草稿'],['post','文章'],['talk','说说'],['project','造物台项目'],['gallery','相册'],['forge','页面文案'],['jobs','发布记录']])navigation.append(button(label,()=>perform(()=>loadList(mode))));
+  navigation.setAttribute('aria-label','内容分类');for(const [mode,label]of [['drafts','草稿'],['post','文章'],['talk','说说'],['links','友链'],['project','造物台项目'],['gallery','相册'],['forge','页面文案'],['jobs','发布记录']])navigation.append(button(label,()=>perform(()=>loadList(mode))));
   const newButtons=el('div','','writer-toolbar');newButtons.append(button('新文章',()=>start('post'),'primary'),button('新说说',()=>start('talk')),button('新项目',()=>start('project')),button('新相册',()=>start('gallery')));sidebar.prepend(newButtons);
   const storage=el('div','','writer-storage');storage.append(button('配图占用与清理',()=>perform(async()=>{await flush();await showWriterStorage(pane,api);})));sidebar.append(storage);
   pane.append(el('h2',`你好，${options.user.nickname}`),el('p','选择一份草稿，或写下新的文章、说说与造物台项目。造物台页面文案可从左侧导入编辑。保存只会留在你的私密空间里。'));

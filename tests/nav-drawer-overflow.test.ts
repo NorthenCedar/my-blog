@@ -189,6 +189,14 @@ describe('内页顶栏 · 不得建立 fixed 的包含块（手机端抽屉点�
     expect(TCODE, '抬升规则必须排除 .navshell').toContain(':not(.navshell)');
     expect(TCODE, '抬升规则必须排除 .navtog').toContain(':not(.navtog)');
   });
+
+  it('★ 手机端常规内页顶栏采用 position: fixed + 等高 body 顶距，避免快速上滑被合成层带走', () => {
+    expect(TCODE).toMatch(/body\.chrome-page:not\(\.gallery-story,\s*\.forge-page\)\s*\{\s*padding-block-start:\s*var\(--topbar-mobile-h\)/);
+    const mobileFixed = TCODE.match(/body\.chrome-page:not\(\.gallery-story,\s*\.forge-page\)\s*>\s*\[data-scroll-topbar\]\s*\{([^}]*)\}/);
+    expect(mobileFixed, '手机端常规内页顶栏缺少 fixed 定位规则').toBeTruthy();
+    expect(mobileFixed![1]).toMatch(/position:\s*fixed/);
+    expect(mobileFixed![1]).toMatch(/inset-inline:\s*0/);
+  });
 });
 
 /* ★★ 2026-10-08：手机端「**暗色模式**看不到主页导航菜单的按钮」的**根因**契约。

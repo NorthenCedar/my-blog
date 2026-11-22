@@ -84,6 +84,9 @@ const scrolls = Astro.url.pathname !== '/gallery/';
        不做跨组件覆盖。深色带外壳不设这两个变量，于是 Meta 落回它自己的默认值。 */
     --meta-color: var(--muted);
     --meta-sub: var(--muted);
+    /* 顶栏在 >767px 用 sticky 占位；≤767px 改 fixed 并在此留出等高顶部内边距，
+       防止手机说说页快速上滑时合成线程的 sticky 先随图层滚上去再追回。 */
+    --topbar-mobile-h: calc(2 * var(--topbar-pad-block) + 1.885rem + 1px);
   }
 
   /* 正文与页脚必须显式抬到装饰层之上。
@@ -545,6 +548,15 @@ const scrolls = Astro.url.pathname !== '/gallery/';
     body > .home-topbar[data-topbar-scrolled][data-topbar-over-hero] { color: var(--ink); }
   }
   @media (max-width: 767px) {
+    body.chrome-page:not(.gallery-story, .forge-page) {
+      padding-block-start: var(--topbar-mobile-h);
+    }
+    body.chrome-page:not(.gallery-story, .forge-page) > [data-scroll-topbar] {
+      position: fixed;
+      inset-inline: 0;
+      top: 0;
+      margin-block-end: 0;
+    }
     body > [data-scroll-topbar][data-topbar-scrolled] {
       top: var(--sp-2);
       max-width: calc(100vw - 2 * var(--sp-2));

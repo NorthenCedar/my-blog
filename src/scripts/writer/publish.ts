@@ -127,8 +127,8 @@ export function mountPublish(root:HTMLElement,api:typeof writerApi,options:{owne
     async open(draft:WriterDraft){
       if(disposed)return;
       select(null);
-      const summary=String((draft.kind==='project'?draft.value.fields.summary:draft.kind==='forge'?draft.value.fields.description:undefined)??draft.value.body);
-      root.hidden=false;root.replaceChildren(el('h2','确认发布'),el('p',`${writerKindLabel(draft.kind)} · ${String(draft.value.fields.title??draft.key)}`),el('p',`${summary.slice(0,160)}${summary.length>160?'…':''}`),el('p',`${draft.value.assets.length} 张已上传配图 · 本次只发布当前已保存版本`,'writer-note'),status,message,actions);
+      const summary=String((draft.kind==='project'?draft.value.fields.summary:draft.kind==='forge'?(draft.key==='links'?draft.value.fields.intro:draft.value.fields.description):undefined)??draft.value.body);
+      root.hidden=false;root.replaceChildren(el('h2','确认发布'),el('p',`${writerKindLabel(draft.kind,draft.key)} · ${String(draft.value.fields.title??draft.key)}`),el('p',`${summary.slice(0,160)}${summary.length>160?'…':''}`),el('p',`${draft.value.assets.length} 张已上传配图 · 本次只发布当前已保存版本`,'writer-note'),status,message,actions);
       status.textContent='请确认本次内容';message.textContent='发布后会在云端完整构建与测试，通过后推送到网站。';
       const requestId=crypto.randomUUID().replaceAll('-',''),record={requestId,draftId:draft.id,revision:draft.revision};
       const next:JobTarget={record,pollIndex:0};

@@ -67,6 +67,7 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
     async listGalleries(commit:string){revision(commit);const data=await request(`/contents/content/gallery?ref=${commit}`);if(!Array.isArray(data))writerFail(502,'repository_error','相册列表读取失败');return data.filter(d=>{if(d.type!=='dir')return false;try{validateTarget('gallery',d.name);return true;}catch{return false;}}).map(d=>({key:d.name as string}));},
     async readGallery(commit:string,key:string){validateTarget('gallery',key);return textFile(commit,`content/gallery/${key}/index.md`);},
     async readForge(commit:string){return textFile(commit,'content/pages/forge.md');},
+    async readLinks(commit:string){return textFile(commit,'content/pages/links.md');},
     async readTalks(commit:string){return textFile(commit,'content/pages/talks.md');},
     async readImage(commit:string,path:string){
       const gallery=/^content\/gallery\/([^/]+)\/([\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif))$/u.exec(path);
@@ -98,7 +99,7 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
 export type WriterRepository=ReturnType<typeof createWriterRepository>;
 export function readPublishedSource(repo:WriterRepository,commit:string,kind:WriterKind,key:string){
   validateTarget(kind,key);
-  return kind==='gallery'?repo.readGallery(commit,key):kind==='post'?repo.readPost(commit,key):kind==='project'?repo.readProject(commit,key):kind==='forge'?repo.readForge(commit):repo.readTalks(commit);
+  return kind==='gallery'?repo.readGallery(commit,key):kind==='post'?repo.readPost(commit,key):kind==='project'?repo.readProject(commit,key):kind==='forge'?(key==='links'?repo.readLinks(commit):repo.readForge(commit)):repo.readTalks(commit);
 }
 export async function importPublished(repo:WriterRepository,db:D1Database,proof:WriterProof,target:{kind:WriterKind;key:string}){
   const {kind,key}=validateTarget(target.kind,target.key),commit=await repo.head(),source=await readPublishedSource(repo,commit,kind,key);

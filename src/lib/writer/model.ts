@@ -22,14 +22,14 @@ export const writerId = (id: unknown): string => typeof id === 'string' && /^[a-
 export function validateTarget(kind: unknown, key: unknown): { kind: WriterKind; key:string } {
   if (kind !== 'post' && kind !== 'talk' && kind !== 'project' && kind !== 'forge' && kind !== 'gallery') writerFail(400,'invalid_kind','请选择要编辑的内容类型');
   if(kind==='gallery'){try{validateAlbumKey(key);}catch{writerFail(400,'invalid_key','相册标识格式不对');}return {kind,key:key as string};}
-  if (typeof key !== 'string' || !(kind === 'forge' ? key==='forge' : kind === 'talk' ? /^talk-[a-z0-9-]{1,120}$/.test(key) : /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) && key.length <= 60)) writerFail(400,'invalid_key','内容网址或标识格式不对');
+  if (typeof key !== 'string' || !(kind === 'forge' ? (key==='forge' || key==='links') : kind === 'talk' ? /^talk-[a-z0-9-]{1,120}$/.test(key) : /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) && key.length <= 60)) writerFail(400,'invalid_key','内容网址或标识格式不对');
   return {kind,key};
 }
-export const writerKindLabel = (kind:WriterKind) => ({post:'文章',talk:'说说',project:'造物台项目',forge:'造物台页面文案',gallery:'相册'})[kind];
+export const writerKindLabel = (kind:WriterKind,key?:string) => kind==='forge'&&key==='links'?'友链':({post:'文章',talk:'说说',project:'造物台项目',forge:'造物台页面文案',gallery:'相册'})[kind];
 export const writerImageLimit = (kind:WriterKind) => kind==='forge'?0:kind==='gallery'?100:kind==='talk'?9:20;
 export function writerTargetPath(kind:WriterKind,key:string):string {
   validateTarget(kind,key);
-  return kind==='gallery'?`content/gallery/${key}/index.md`:kind==='post'?`content/posts/${key}/index.md`:kind==='project'?`content/projects/${key}/index.md`:kind==='forge'?'content/pages/forge.md':'content/pages/talks.md';
+  return kind==='gallery'?`content/gallery/${key}/index.md`:kind==='post'?`content/posts/${key}/index.md`:kind==='project'?`content/projects/${key}/index.md`:kind==='forge'?(key==='links'?'content/pages/links.md':'content/pages/forge.md'):'content/pages/talks.md';
 }
 export function writerAssetDirectory(kind:WriterKind,key:string):string|null {
   validateTarget(kind,key);

@@ -154,6 +154,23 @@ function replaceAudio(body:string,resolve:(sha:string)=>string){
 const projectImage = z.string().refine(src=>/^writer-asset:[a-f0-9]{64}$/.test(src)||/^(?:\.\/)?[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(src)&&!src.includes('..'),'项目配图必须来自当前项目目录或已上传图片');
 const publishedProject = projectSchema(()=>projectImage);
 const projectMarkdown = new MarkdownIt({html:true});
+const linkItemSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  href: z.string().trim().min(1).max(500).refine(v=>{try{requireContentLink(v,'友链地址');return true;}catch{return false;}},'友链地址必须使用网页地址（http/https）、相对路径或邮箱地址'),
+  desc: z.string().trim().max(240).optional(),
+}).passthrough();
+const linksPageSchema = z.object({
+  title: z.string().trim().min(1).max(60).optional(),
+  waveText: z.string().trim().max(80).optional(),
+  intro: z.string().trim().max(320).optional(),
+  mine: linkItemSchema.optional(),
+  apply: z.array(z.string().trim().min(1).max(240)).max(12).optional(),
+  groups: z.array(z.object({
+    title: z.string().trim().min(1).max(80),
+    note: z.string().trim().max(240).optional(),
+    items: z.array(linkItemSchema).max(60),
+  }).passthrough()).min(1).max(12),
+}).passthrough();
 function checkProjectBodyImages(body:string,assets:WriterValue['assets'],allowPrivate=true){
   const known=new Set(assets.map(asset=>'writer-asset:'+asset.sha256));
   const visit=(tokens:ReturnType<MarkdownIt['parse']>)=>{
@@ -192,6 +209,11 @@ export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:
     return;
   }
   if(kind==='forge'){
+    if(Array.isArray(value.fields.groups)){
+      const checked=linksPageSchema.safeParse(value.fields);
+      if(!checked.success)bad('友链资料不完整：'+checked.error.issues[0].path.join('.')+'，'+checked.error.issues[0].message);
+      return;
+    }
     const checked=forgePageSchema.safeParse(value.fields);
     if(!checked.success)bad('页面文案不完整：'+checked.error.issues[0].path.join('.')+'，请检查必填文字、三条滚动提示和工作手记');
     return;

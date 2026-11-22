@@ -195,6 +195,36 @@ it('造物台页面入口导入固定单页，不能另建任意页面',async()=
   mounted=mountWriterEditor(root as any,api as any,{findDraft:async()=>[],put:async()=>{},remove:async()=>{}} as any,{user:{id:'owner',nickname:'站主'},publish:true});await settle();find(root,'页面文案').click();await settle();find(root,'造物台页头和手记').click();await settle();
   expect(paths).toContain('/content?kind=forge&page=1');expect(imports).toEqual([{action:'import',kind:'forge',key:'forge'}]);expect(input(root,'title')).toBeDefined();expect(find(root,'新页面')).toBeUndefined();
 });
+it('友链分类支持导入友链页并新增、保存友链条目',async()=>{
+  const root=dom(),imports:any[]=[],saved:any[]=[],draft={id:'b'.repeat(32),kind:'forge',key:'links',revision:1,base:{commit:'1'.repeat(40),blobSha:'2'.repeat(40),text:'原文'},publishedRevision:0,value:{fields:{title:'友链',intro:'一些常去的角落',groups:[{title:'友情链接',note:'互相惦记的邻居',items:[{name:'北杉札记',href:'https://northcedar.top/',desc:'旧友'}]}]},body:'正文\n',assets:[]}};
+  const api=async(path:string,init?:RequestInit)=>{
+    if(init){
+      const body=JSON.parse(String(init.body));
+      if(body.action==='import'){imports.push(body);return {draft};}
+      if(body.action==='save'){saved.push(body);return {draft:{...draft,revision:body.expectedRevision+1,value:body.value}};}
+    }
+    if(path==='/content?mode=tags')return {tags:[]};
+    if(path==='/drafts')return {drafts:[]};
+    if(path==='/content?kind=links&page=1')return {commit:'1'.repeat(40),items:[{key:'links',title:'友链'}],more:false};
+    throw Error(path);
+  };
+  mounted=mountWriterEditor(root as any,api as any,{findDraft:async()=>[],put:async()=>{},remove:async()=>{}} as any,{user:{id:'owner',nickname:'站主'},publish:true});
+  await settle();
+  find(root,'友链').click();await settle();
+  find(root,'友链').click();await settle();
+  const listBtn=root.all().filter(n=>n.tagName==='BUTTON'&&n.own==='友链').at(-1)!;
+  listBtn.click();await settle();
+  expect(imports).toEqual([{action:'import',kind:'forge',key:'links'}]);
+  find(root,'＋ 添加友链').click();
+  edit(input(root,'group-0-item-1-name'),'新朋友');
+  edit(input(root,'group-0-item-1-href'),'https://friend.example.com/');
+  edit(input(root,'group-0-item-1-desc'),'新站点介绍');
+  find(root,'保存草稿').click();await settle();
+  expect(saved.at(-1).value.fields.groups[0].items).toEqual([
+    {name:'北杉札记',href:'https://northcedar.top/',desc:'旧友'},
+    {name:'新朋友',href:'https://friend.example.com/',desc:'新站点介绍'},
+  ]);
+});
 it('图库最多六项、链接和标签最多四项，移除图库不误删已上传资产',async()=>{
   const images=Array.from({length:6},(_,i)=>({src:`./photo-${i}.webp`,alt:`照片${i}`})),{root,saved}=await open('project',{title:'项目',images,links:[{label:'一',href:'/one/'},{label:'二',href:'/two/'},{label:'三',href:'/three/'},{label:'四',href:'/four/'}],tags:['一','二','三','四']},[{sha256:'a'.repeat(64),alt:'待使用'}]);
   expect(find(root,'添加图库图片').disabled).toBe(true);expect(find(root,'添加项目链接').disabled).toBe(true);expect(find(root,'添加标签').disabled).toBe(true);

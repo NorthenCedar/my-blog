@@ -111,4 +111,23 @@ describe('造物台单页文案发布',()=>{
     expect(()=>validateWriterValue('forge',value)).toThrow();
     expect(validateWriterValue('project',{...value,assets:Array.from({length:12},(_,i)=>({sha256:i.toString(16).padStart(64,'0'),alt:'项目图'}))}).assets).toHaveLength(12);
   });
+  it('友链页支持导入编辑与新增友链，校验链接合法性并保留头部注释与未编辑字段',()=>{
+    expect(validateTarget('forge','links')).toEqual({kind:'forge',key:'links'});
+    const original=readFileSync('content/pages/links.md','utf8');
+    const value=readPost(original);
+    const groups=structuredClone(value.fields.groups as Array<{title:string;note?:string;items:Array<{name:string;href:string;desc?:string}>}>);
+    groups[0].items.push({name:'新邻居',href:'https://friend.example.com/',desc:'常来串门'});
+    value.fields.groups=groups;
+    const changes=planChanges({kind:'forge',key:'links',base:base(original),value},original,new Map());
+    expect(changes.map(c=>c.path)).toEqual(['content/pages/links.md']);
+    const output=textOf(changes);
+    expect(output).toContain('# 友链页内容');
+    const parsed=readPost(output);
+    expect(parsed.fields.mine).toEqual(value.fields.mine);
+    expect(parsed.fields.apply).toEqual(value.fields.apply);
+    expect((parsed.fields.groups as typeof groups)[0].items.at(-1)).toEqual({name:'新邻居',href:'https://friend.example.com/',desc:'常来串门'});
+    const badValue=structuredClone(value);
+    (badValue.fields.groups as typeof groups)[0].items[0].href='javascript:alert(1)';
+    expect(()=>planChanges({kind:'forge',key:'links',base:base(original),value:badValue},original,new Map())).toThrow();
+  });
 });
