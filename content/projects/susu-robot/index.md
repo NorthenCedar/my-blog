@@ -17,8 +17,8 @@ images:
   alt: Tars展示图
   darkSrc: ./file_00000000207c821184f020f2a5138450-2.jpg
 links:
-- label: 去看看做这个项目的过程
-  href: https://northcedar.top/posts/susu-rig-tars/
+  - label: 去看看做这个项目的过程
+    href: /posts/susu-rig-tars/
 preview: {}
 ---
 苏苏原来住在我的手机里。后来我想给她装一双眼睛，就从一套 RIG-TARS 零件开始，把主板、屏幕和舵机一点点装进银灰色外壳。她没有轮子，靠三条腿轮流撑地，走起来一颠一颠的。

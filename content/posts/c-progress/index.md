@@ -4,6 +4,8 @@ date: 2026-11-21
 summary: 之前的c语言入门都会了看这篇c语言进阶
 tags: [教程, 个人, 备忘]
 draft: false
+cover: ./file_000000000d1481fda6641a9a2ed18b77.jpg
+coverAlt: 我超喜欢这个白底红绿灯终端
 ---
 ## 结构
 
