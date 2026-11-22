@@ -1,8 +1,10 @@
 import { AccountError, digest, DUMMY_PASSWORD_HASH, fail, hashPassword, passwordOf, profileOf, randomToken, recoveryMatches, text, usernameOf, verifyPassword } from './_lib/visitor-core';
+import { hasOnlyQueryParams } from './_lib/public-write';
 import { ACCOUNT_FIELDS, LIVE_ACCOUNT_SQL, accountJson, cleanupAccounts, consumeLimit, createSession, currentAccount, guardWrite, privateUser, readAccountBody, requireAccount, sessionCookie, sessionToken, writeProof, type Account, type VisitorEnv } from './_lib/visitor-store';
 import { cleanAvatarPng } from './_lib/visitor-avatars';
 
 export const onRequestGet: PagesFunction<VisitorEnv> = async ({ request, env }) => {
+  if (!hasOnlyQueryParams(new URL(request.url), [])) return accountJson({ error: '查询参数不合法' }, 400);
   try { const user = await currentAccount(request, env); return accountJson({ user: user ? privateUser(user, env) : null }); }
   catch { return accountJson({ error: '账户服务暂时不可用，请稍后再试' }, 503); }
 };

@@ -1,6 +1,7 @@
 /** 凭据只在服务端运算；浏览器不导入此模块。 */
 import { scrypt } from 'node:crypto';
 import { DEFAULT_AVATARS } from '../../../src/lib/visitor-avatars';
+import { BODY_CONTROL_OR_BIDI_RE, CONTROL_OR_BIDI_RE, UNSAFE_NAME_RE } from './comments-core';
 export const AVATARS = [...DEFAULT_AVATARS.map(avatar => avatar.id), 'silence'] as const;
 const encoder = new TextEncoder();
 export class AccountError extends Error {
@@ -25,12 +26,13 @@ export function passwordOf(value: unknown) {
 export function profileOf(value: Record<string, unknown>, isOwner: boolean) {
   const nickname = text(value.nickname).trim();
   const bio = text(value.bio).trim();
-  if (!nickname || nickname.length > 40 || /[\u0000-\u001f\u007f]/.test(nickname)) fail(400, '昵称需为 1–40 个字符且不含控制字符');
+  if (!nickname || nickname.length > 40 || CONTROL_OR_BIDI_RE.test(nickname)) fail(400, '昵称需为 1–40 个字符且不含控制字符');
+  if (UNSAFE_NAME_RE.test(nickname)) fail(400, '昵称不能包含尖括号或脚本片段');
   const normalized = nickname.normalize('NFKC').toLowerCase().replace(/[\s\p{Cf}\p{P}]/gu, '');
   if (!isOwner && ['北杉', '站主', '管理员', 'admin', 'administrator', 'owner', 'northencedar', 'northcedar'].includes(normalized)) {
     fail(400, '这个昵称为站主保留，请换一个昵称');
   }
-  if (bio.length > 160 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(bio)) fail(400, '签名不能超过 160 个字符或包含控制字符');
+  if (bio.length > 160 || BODY_CONTROL_OR_BIDI_RE.test(bio)) fail(400, '签名不能超过 160 个字符或包含控制字符');
   const avatar = text(value.avatar);
   if (avatar && !AVATARS.includes(avatar as typeof AVATARS[number])) fail(400, '请选择提供的默认头像，或上传图片');
   return { nickname, bio, avatar };

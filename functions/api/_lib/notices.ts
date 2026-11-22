@@ -19,7 +19,7 @@ export type ReplyNotice = {
   slug: string;
   parentId: number;
   replyId: number | null;
-  kind: 'comment' | 'reply';
+  kind: 'comment' | 'reply' | 'link-apply';
   href: string;
   label: string;
   actorName: string;
@@ -108,6 +108,33 @@ export async function recordCommentNotice(env: VisitorEnv, notice: Omit<NoticeCo
   }
 }
 
+/** 友链申请只投递给站主；parent_id 存负数避免与 comments.id 碰撞且不被评论删除触发器误删。 */
+export async function recordLinkApplyNotice(
+  env: VisitorEnv,
+  options: { applicationId: number; name: string; href: string; desc: string; createdAt?: string },
+): Promise<void> {
+  if (!env.OWNER_USER_ID || options.applicationId <= 0) return;
+  const excerpt = `${options.href} · ${options.desc}`.slice(0, EXCERPT_MAX);
+  try {
+    await env.COMMENTS_DB.batch([
+      env.COMMENTS_DB.prepare(
+        'INSERT OR IGNORE INTO reply_notices ' +
+          '(user_id,slug,parent_id,reply_id,actor_name,actor_user_id,excerpt,created_at) ' +
+          "SELECT id,'link-apply',?,NULL,?,NULL,?,? FROM visitor_accounts WHERE id = ?"
+      ).bind(
+        -options.applicationId,
+        options.name.slice(0, 60),
+        excerpt,
+        options.createdAt ?? new Date().toISOString(),
+        env.OWNER_USER_ID,
+      ),
+      pruneNotices(env, env.OWNER_USER_ID),
+    ]);
+  } catch (error) {
+    if (!forgiveMissingTable(error)) console.error('link apply notice failed', error);
+  }
+}
+
 /**
  * 记一条「某人回复了你」。
  * 调用点只有 comments.ts 一处（发表回复之后）；失败一律吞掉，绝不连累发表。
@@ -191,10 +218,14 @@ export async function listReplyNotices(
         slug: r.slug,
         parentId: r.parent_id,
         replyId: r.reply_id,
-        kind: r.reply_id === null ? 'comment' : 'reply',
+        kind: r.slug === 'link-apply' ? 'link-apply' : r.reply_id === null ? 'comment' : 'reply',
         href: noticeHref(r.slug, r.parent_id, r.reply_id),
-        label: (r.slug === 'guestbook' ? '留言板' : r.slug.startsWith('talk-') ? '说说评论' : '文章评论')
-          + ' · ' + (r.reply_id !== null ? '新回复' : r.slug === 'guestbook' ? '新留言' : '新评论'),
+        label:
+          r.slug === 'link-apply'
+            ? '友链申请 · 新申请'
+            : (r.slug === 'guestbook' ? '留言板' : r.slug.startsWith('talk-') ? '说说评论' : '文章评论') +
+              ' · ' +
+              (r.reply_id !== null ? '新回复' : r.slug === 'guestbook' ? '新留言' : '新评论'),
         actorName: r.actor_name,
         excerpt: r.excerpt,
         createdAt: r.created_at,
@@ -208,6 +239,7 @@ export async function listReplyNotices(
 }
 
 function noticeHref(slug: string, parentId: number, replyId: number | null): string {
+  if (slug === 'link-apply') return `/links/?application=${Math.abs(parentId)}#link-apply`;
   if (slug.startsWith('talk-')) {
     const reply = replyId === null ? '' : `&reply=${replyId}`;
     return `/talks/?comment=${parentId}${reply}#c-${encodeURIComponent(slug)}`;

@@ -5,6 +5,8 @@
  * 但不允许任意字符串 —— 否则接口就能被拿来凭空造键（灌一堆没意义的行）。
  */
 
+import { scanCommaList } from './comments-core';
+
 /** 与评论同族的 slug 形态：小写字母/数字，段间用连字符。 */
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 /** 说说点赞的 slug 前缀：必须是我们自己生成的 `talk-…`，不接受别的。 */
@@ -24,14 +26,10 @@ export function validateLikeSlug(input: unknown): LikeValidation {
 
 /** 批量查询用：把 slugs 参数切成合法清单（非法项**静默丢弃**，不因为一个脏值整批失败）。 */
 export function parseSlugList(input: string | null, max = 100): string[] {
-  if (!input) return [];
-  const out: string[] = [];
-  for (const raw of input.split(',')) {
+  return scanCommaList(input, max, (raw) => {
     const r = validateLikeSlug(raw);
-    if (r.ok && !out.includes(r.slug)) out.push(r.slug);
-    if (out.length >= max) break;
-  }
-  return out;
+    return r.ok ? r.slug : null;
+  });
 }
 
 /** 只存 IP 的哈希 —— 与 functions/api/comments.ts 里那条同源（那边为了不动既有代码没抽出来）。 */

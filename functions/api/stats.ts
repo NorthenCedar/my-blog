@@ -1,3 +1,5 @@
+import { hasOnlyQueryParams } from './_lib/public-write';
+
 interface Env {
   COMMENTS_DB: D1Database;
 }
@@ -5,7 +7,13 @@ interface Env {
 type Stats = { pv: number; uv: number; days: number };
 
 /** 汇总与 pageviews 同步更新。迁移前仍可从原始行读出相同的数值。 */
-export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  if (request && !hasOnlyQueryParams(new URL(request.url), [])) {
+    return new Response(JSON.stringify({ error: '查询参数不合法' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+  }
   let row: Stats | null;
   try {
     row = await env.COMMENTS_DB.prepare('SELECT pv, uv, days FROM pageview_totals WHERE id = 1').first<Stats>();

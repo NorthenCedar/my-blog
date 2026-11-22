@@ -1,15 +1,6 @@
 
 import { onPage } from './page-lifecycle';
-onPage(({document, window}) => {
-/**
- * 顶栏消息铃铛：访客收回复，站主收全站新留言与回复。
- * 打开即读仅作用于当前展示的消息；可翻到更早消息，失败不清未读。
- *
- * ⚠ 预算：本文件随 Base 的共享 <script> 进**每一页**，各页剩余预算很紧，
- * 见 tests/build-output.test.ts 与 tests/gallery-spiral.test.ts。所以：
- *   · 通过会话事件同步账户变化，避免引入访客账户界面及其依赖；
- *   · DOM 一律用 createElement/textContent，按文本显示消息内容。
- */
+
 type Notice = {
   id: number;
   href: string;
@@ -20,6 +11,14 @@ type Notice = {
   readAt: number | null;
 };
 type NoticePage = { unread: number; items: Notice[]; signedIn: boolean; title: string; emptyMessage: string; nextBefore: number | null; nextCursor?: string | null };
+
+let cached: NoticePage | undefined;
+
+onPage(({document, window}) => {
+/**
+ * 顶栏消息铃铛：访客收回复，站主收全站新留言与回复。
+ * 铃铛始终显示在顶栏，并保留跨页缓存以避免换页加载延迟导致的闪烁或缺失。
+ */
 
 /** 本地的 node 助手（≈80 字节），不 import visitor-client 的那一个 —— 理由见文件头。 */
 const node = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text = '') => {
@@ -52,7 +51,7 @@ if (bell && panel) {
   const empty = panel.querySelector<HTMLElement>('.notices-empty')!;
   const more = panel.querySelector<HTMLButtonElement>('.notices-more')!;
 
-  let page: NoticePage | undefined;
+  let page = cached;
   // 翻页后已发出的已读提交可以完成，界面只接受当前这一页的响应。
   let version = 0;
   let requests = new AbortController();
@@ -62,15 +61,24 @@ if (bell && panel) {
       badge.textContent = count > 9 ? '9+' : String(count);
       badge.hidden = count === 0;
     }
-    /* 匿名访客不显示；**登录了就一直留着**——包括全部读完的时候：
-       那时它是「打开历史回复列表」的唯一入口，收起来等于把人锁在外面。 */
-    bell.hidden = !page;
+    /* 铃铛始终常驻顶栏；未登录或尚未拉取数据时打开面板提示去登录。 */
+    bell.hidden = false;
     const title = page?.title ?? defaultTitle;
     bell.setAttribute('aria-label', count > 0 ? `${title}，${count} 条未读` : title);
   };
 
   const render = () => {
-    const items = page?.items ?? [];
+    if (!page) {
+      list.replaceChildren();
+      empty.textContent = '';
+      const login = node('a', 'notices-more', '登录后查看消息与提醒');
+      login.href = '/account/';
+      empty.append(login);
+      empty.hidden = false;
+      more.hidden = true;
+      return;
+    }
+    const items = page.items ?? [];
     list.replaceChildren(
       ...items.map((n) => {
         const li = node('li', n.readAt ? 'notice' : 'notice is-new');
@@ -90,9 +98,9 @@ if (bell && panel) {
         return li;
       })
     );
-    empty.textContent = page?.emptyMessage ?? '';
+    empty.textContent = page.emptyMessage ?? '';
     empty.hidden = items.length > 0;
-    more.hidden = !(page?.nextCursor ?? page?.nextBefore);
+    more.hidden = !(page.nextCursor ?? page.nextBefore);
   };
 
   const pull = async (before?: string | number, markRead = false) => {
@@ -105,7 +113,7 @@ if (bell && panel) {
       const data = (await response.json()) as NoticePage;
       if (!current()) return;
       if (!data.signedIn) return reset();
-      page = data;
+      page = cached = data;
       render();
       scroll.scrollTop = 0;
       paint(data.unread);
@@ -126,6 +134,8 @@ if (bell && panel) {
       const { unread } = await marked.json();
       if (!current()) return;
       for (const row of list.children) row.className = 'notice';
+      page.unread = unread;
+      for (const n of page.items) n.readAt ||= 1;
       paint(unread);
     } catch {
       /* 请求失败时保留已展示内容与未读状态。 */
@@ -139,7 +149,7 @@ if (bell && panel) {
 
   const reset = (refresh = false) => {
     requests.abort();
-    page = undefined;
+    page = cached = undefined;
     close();
     render();
     paint();
@@ -150,11 +160,10 @@ if (bell && panel) {
   };
 
   bell.addEventListener('click', () => {
-    if (!page) return;
     if (!panel.hidden) return close();
     panel.hidden = false;
     bell.setAttribute('aria-expanded', 'true');
-    void pull(undefined, true);
+    void pull(undefined, Boolean(page));
   });
   more.addEventListener('click', () => {
     const before = page?.nextCursor ?? page?.nextBefore;
@@ -181,6 +190,8 @@ if (bell && panel) {
   window.addEventListener('pageshow', (event) => {
     if (event.persisted) reset(true);
   });
+  render();
+  paint(page?.unread ?? 0);
   void pull();
   return () => requests.abort();
 }

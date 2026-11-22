@@ -96,7 +96,8 @@ if (root) {
     return true;
   };
 
-  const parent = new URLSearchParams(location.search).get('comment') ?? /^#comment-(\d+)$/.exec(location.hash)?.[1];
+  const rawParent = new URLSearchParams(location.search).get('comment') ?? /^#comment-(\d+)$/.exec(location.hash)?.[1];
+  const parent = rawParent && /^[1-9]\d{0,15}$/.test(rawParent) ? rawParent : null;
   const focusComment = () => {
     if (!/^#(?:comment|reply)-\d+$/.test(location.hash)) return;
     const target = document.getElementById(location.hash.slice(1)) ?? document.getElementById(`comment-${parent}`);

@@ -4,7 +4,9 @@ import {
   toRecord,
   toReplyRecord,
   parseCommentSlugList,
+  isValidCommentSlug,
   RATE_MAX,
+  REPLIES_LIMIT,
   type CommentRecord,
   type ReplyRecord,
 } from './_lib/comments-core';
@@ -12,7 +14,7 @@ import { commentIdentity, attachCommentAuthors, saveAuthoredComment, missingRepl
 import { parseNoticeTarget, recordCommentNotice, recordReplyNotice, validNoticeTarget, type NoticeTarget } from './_lib/notices';
 import { AccountError } from './_lib/visitor-core';
 import { currentAccount, publicUser } from './_lib/visitor-store';
-import { guardPublicWrite, readJsonBody, writeLimitStatements } from './_lib/public-write';
+import { guardPublicWrite, hasOnlyQueryParams, readJsonBody, SLUG_LIST_RAW_MAX, writeLimitStatements } from './_lib/public-write';
 import targets from './_generated/comment-targets.json';
 
 const publishedTargets = new Set(targets.comments);
@@ -74,10 +76,24 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const url = new URL(request.url);
   // 批量形态优先：`?slugs=` 存在就走批量（两个参数同时给也以批量为准，避免一次意外出两份语义）
   if (url.searchParams.has('slugs')) {
-    return json({ counts: await countAll(url.searchParams.get('slugs'), env) });
+    if (!hasOnlyQueryParams(url, ['slugs'])) return json({ error: '查询参数不合法' }, 400);
+    const rawSlugs = url.searchParams.get('slugs');
+    if (rawSlugs !== null && rawSlugs.length > SLUG_LIST_RAW_MAX) return json({ error: '查询参数太长' }, 400);
+    return json({ counts: await countAll(rawSlugs, env) });
   }
+  if (!hasOnlyQueryParams(url, ['slug', 'comment'])) return json({ error: '查询参数不合法' }, 400);
   const slug = url.searchParams.get('slug') ?? '';
-  const requested = Number(url.searchParams.get('comment'));
+  if (!isValidCommentSlug(slug)) return json({ error: '页面标识不合法' }, 400);
+  let requested = 0;
+  if (url.searchParams.has('comment')) {
+    const rawComment = url.searchParams.get('comment') ?? '';
+    const parsed = Number(rawComment);
+    if (!/^[1-9]\d{0,15}$/.test(rawComment) || !Number.isSafeInteger(parsed)) {
+      return json({ error: '评论编号不合法' }, 400);
+    }
+    requested = parsed;
+  }
+  if (!publishedTargets.has(slug)) return json({ comments: [], replies: [] });
   // 2026-09-27 站主："把新评论放上面，其他的评论留言也一样" ⇒ 新的在前。
   // 这里是**唯一**决定顺序的地方（留言板 / 文章评论 / 说说评论三条路径共用这个接口）。
   // `id DESC` 是稳定的决胜键：同一秒内的两条也有确定顺序。
@@ -105,13 +121,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   // 孤儿回复（父不在这 200 条里）在前端 groupRepliesByParent 处丢弃。
   let replies: ReplyRecord[] = [];
   for (let start = 0; start < ids.length; start += 99) {
+    const remaining = REPLIES_LIMIT - replies.length;
+    if (remaining <= 0) break;
     const slice = ids.slice(start, start + 99);
     const marks = slice.map(() => '?').join(',');
     const { results: rrows } = await env.COMMENTS_DB.prepare(
       `SELECT id, parent_id, reply_to, name, body, created_at
          FROM replies
         WHERE slug = ? AND parent_id IN (${marks})
-        ORDER BY created_at ASC, id ASC`
+        ORDER BY created_at ASC, id ASC
+        LIMIT ${remaining}`
     )
       .bind(slug, ...slice)
       .all<{

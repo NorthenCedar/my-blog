@@ -3,6 +3,7 @@ import {
   validateComment,
   honeypotTripped,
   rateLimited,
+  parseCommentSlugList,
   toRecord,
   toReplyRecord,
   NAME_MAX,
@@ -69,6 +70,22 @@ describe('validateComment', () => {
     const r = validateComment({ ...good, body: '<script>alert(1)</script>' });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value.body).toBe('<script>alert(1)</script>');
+  });
+
+  it('名字或回复对象含脚本碎片、尖括号、控制字符或双向覆写字符 → 400', () => {
+    for (const bad of ['<script>x</script>', 'a<img src=x>', 'javascript:alert(1)', 'vbscript:msgbox', 'data:text/html,<x>', '甲\u0007乙', '甲\u202e乙']) {
+      expect(validateComment({ ...good, name: bad }).ok, `name=${bad}`).toBe(false);
+      expect(validateComment({ ...good, parentId: 1, replyTo: bad }).ok, `replyTo=${bad}`).toBe(false);
+    }
+    expect(validateComment({ ...good, body: '第一行\n\t第二行' }).ok).toBe(true);
+    for (const badBody of ['正\u0000文', '正\u202e文']) {
+      expect(validateComment({ ...good, body: badBody }).ok).toBe(false);
+    }
+  });
+
+  it('parseCommentSlugList 在超长冗余逗号串下安全截断且不去分配整组数组', () => {
+    const giant = 'guestbook,' + ','.repeat(20000) + 'two-ai-built-this-blog';
+    expect(parseCommentSlugList(giant)).toEqual(['guestbook']);
   });
 });
 

@@ -1,5 +1,6 @@
 import {
   ADMIN_LIST_LIMIT,
+  ADMIN_REPLIES_LIMIT,
   buildCommentTree,
   parseDeleteInput,
   toAdminComment,
@@ -8,6 +9,8 @@ import {
   type CommentRow,
   type ReplyRow,
 } from '../_lib/admin-core';
+import { hasOnlyQueryParams, readJsonBody } from '../_lib/public-write';
+import { AccountError } from '../_lib/visitor-core';
 
 interface Env {
   COMMENTS_DB: D1Database;
@@ -67,6 +70,7 @@ async function gate(request: Request, env: Env): Promise<Response | null> {
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const denied = await gate(request, env);
   if (denied) return denied;
+  if (!hasOnlyQueryParams(new URL(request.url), [])) return json({ error: '查询参数不合法' }, 400);
 
   const { results: crows } = await env.COMMENTS_DB.prepare(
     `SELECT id, slug, name, body, created_at
@@ -82,13 +86,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   // 顺序 `ASC`：回复**旧的在上**（一段对话要顺着读）—— 与公开接口同一条口径，理由见 comments.ts。
   let replies: ReplyRow[] = [];
   for (let start = 0; start < ids.length; start += 100) {
+    const remaining = ADMIN_REPLIES_LIMIT - replies.length;
+    if (remaining <= 0) break;
     const slice = ids.slice(start, start + 100);
     const marks = slice.map(() => '?').join(',');
     const { results: rrows } = await env.COMMENTS_DB.prepare(
       `SELECT id, parent_id, reply_to, name, body, created_at
          FROM replies
         WHERE parent_id IN (${marks})
-        ORDER BY created_at ASC, id ASC`
+        ORDER BY created_at ASC, id ASC
+        LIMIT ${remaining}`
     )
       .bind(...slice)
       .all<ReplyRow>();
@@ -121,15 +128,19 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   const denied = await gate(request, env);
   if (denied) return denied;
+  const u = new URL(request.url);
+  if (!hasOnlyQueryParams(u, ['id', 'kind'])) return json({ error: '查询参数不合法' }, 400);
 
   let payload: unknown = null;
   try {
-    payload = await request.json();
-  } catch {
+    payload = await readJsonBody(request, 4 * 1024);
+  } catch (error) {
+    if (error instanceof AccountError && error.status === 413) {
+      return json({ error: error.message }, 413);
+    }
     payload = null; // 没有 body / body 不是 JSON ⇒ 落到下面的 query 通路，不算错
   }
   if (typeof payload !== 'object' || payload === null || !('id' in (payload as object))) {
-    const u = new URL(request.url);
     const raw = u.searchParams.get('id');
     payload = {
       id: raw === null ? undefined : Number(raw),

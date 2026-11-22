@@ -32,3 +32,12 @@
 
 /*.webp
   Cache-Control: public, max-age=31536000, immutable
+
+/my-avatar
+  Content-Type: image/jpeg
+  Cross-Origin-Resource-Policy: cross-origin
+  Access-Control-Allow-Origin: *
+
+/my-avatar.jpg
+  Cross-Origin-Resource-Policy: cross-origin
+  Access-Control-Allow-Origin: *

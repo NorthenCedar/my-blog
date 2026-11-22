@@ -3,8 +3,18 @@ export const BODY_MAX = 1000;
 export const RATE_WINDOW_MS = 60_000;
 export const RATE_MAX = 2;
 export const COMMENT_SLUG_MAX = 160;
+export const REPLIES_LIMIT = 1000;
 
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+/** 禁止名字/签名里混入控制字符或 Unicode 双向覆写字符。 */
+export const CONTROL_OR_BIDI_RE = /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/;
+/** 正文允许常见空白换行/制表符（\n \r \t），拒绝其余控制字符与 BiDi 覆写符。 */
+export const BODY_CONTROL_OR_BIDI_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/;
+/** 昵称与回复对象禁止携带尖括号或脚本伪协议特征，防止存储型 XSS 试探垃圾数据入库。 */
+export const UNSAFE_NAME_RE = /[<>]|(?:javascript|vbscript)\s*:|data\s*:\s*text\/html/i;
+
+export const isValidCommentSlug = (slug: string): boolean =>
+  slug.length > 0 && slug.length <= COMMENT_SLUG_MAX && SLUG_RE.test(slug);
 
 export type CommentRecord = { id: number; name: string; body: string; createdAt: string };
 /** replies 表的一行（camelCase）。parentId 指向**顶层**评论，replyTo 是被回复者的名字。 */
@@ -56,11 +66,14 @@ export function validateComment(input: unknown): Validation {
   const name = str(o.name).trim();
   const body = str(o.body).trim();
 
-  if (slug.length > COMMENT_SLUG_MAX || !SLUG_RE.test(slug)) return { ok: false, error: '页面标识不合法' };
+  if (!isValidCommentSlug(slug)) return { ok: false, error: '页面标识不合法' };
   if (name.length === 0) return { ok: false, error: '名字没写' };
   if (name.length > NAME_MAX) return { ok: false, error: `名字不能超过 ${NAME_MAX} 字` };
+  if (CONTROL_OR_BIDI_RE.test(name)) return { ok: false, error: '名字不能包含控制字符' };
+  if (UNSAFE_NAME_RE.test(name)) return { ok: false, error: '名字不能包含尖括号或脚本片段' };
   if (body.length === 0) return { ok: false, error: '留言为空' };
   if (body.length > BODY_MAX) return { ok: false, error: `留言不能超过 ${BODY_MAX} 字` };
+  if (BODY_CONTROL_OR_BIDI_RE.test(body)) return { ok: false, error: '留言不能包含控制字符' };
 
   // 回复：parentId > 0 时才是回复。不传 → 0（顶层）。
   const parentId = parseParentId(o.parentId);
@@ -71,6 +84,10 @@ export function validateComment(input: unknown): Validation {
   if (replyTo.length > NAME_MAX) return { ok: false, error: `回复对象不能超过 ${NAME_MAX} 字` };
   // parentId=0 时 replyTo 没有意义，一律归一成空串（也避免脏数据落库）
   const replyToFinal = parentId > 0 ? replyTo : '';
+  if (replyToFinal.length > 0) {
+    if (CONTROL_OR_BIDI_RE.test(replyToFinal)) return { ok: false, error: '回复对象不能包含控制字符' };
+    if (UNSAFE_NAME_RE.test(replyToFinal)) return { ok: false, error: '回复对象不能包含尖括号或脚本片段' };
+  }
 
   return { ok: true, value: { slug, name, body, parentId, replyTo: replyToFinal } };
 }
@@ -118,6 +135,33 @@ export function toReplyRecord(row: {
   };
 }
 
+/** 按逗号游标切片并去重：避免对超长恶意查询串先 `split(',')` 分配大数组。 */
+export function scanCommaList(
+  raw: string | null,
+  max: number,
+  parse: (piece: string) => string | null,
+): string[] {
+  if (typeof raw !== 'string' || raw.length === 0 || max <= 0) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  let start = 0;
+  let scanned = 0;
+  const maxPieces = max * 5;
+  while (start <= raw.length && out.length < max && scanned < maxPieces) {
+    const comma = raw.indexOf(',', start);
+    const end = comma === -1 ? raw.length : comma;
+    const item = parse(raw.slice(start, end));
+    scanned += 1;
+    if (item !== null && !seen.has(item)) {
+      seen.add(item);
+      out.push(item);
+    }
+    if (comma === -1) break;
+    start = comma + 1;
+  }
+  return out;
+}
+
 /**
  * 批量查询用（2026-09-28 站主要求）：把 `slugs=a,b,c` 切成合法清单，非法项**静默丢弃**
  * （不因为一个脏值就让整批失败）。
@@ -125,14 +169,10 @@ export function toReplyRecord(row: {
  * 评论挂在文章 slug / 留言板 / 说说上，不是一个族，这里只对 slug 形态本身做校验。
  */
 export function parseCommentSlugList(raw: string | null, max = 100): string[] {
-  if (typeof raw !== 'string' || raw.length === 0) return [];
-  const out: string[] = [];
-  for (const piece of raw.split(',')) {
+  return scanCommaList(raw, max, (piece) => {
     const s = piece.trim();
-    if (s.length <= COMMENT_SLUG_MAX && SLUG_RE.test(s) && !out.includes(s)) out.push(s);
-    if (out.length >= max) break;
-  }
-  return out;
+    return isValidCommentSlug(s) ? s : null;
+  });
 }
 
 // ⚠️ 分组函数（groupRepliesByParent）**不放在这里**：那是前端渲染的事（后端只返回两个数组），

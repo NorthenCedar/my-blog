@@ -16,6 +16,7 @@ import infInk from '../assets/links/inf-ink.png';
 interface Item {
   name: string;
   href: string;
+  avatar?: string;
   desc?: string;
 }
 interface Group {
@@ -28,21 +29,34 @@ interface LinksData {
   intro?: string;
   waveText?: string;
   mine?: Item;
-  apply?: string[];
   groups?: Group[];
 }
+const DEFAULT_AVATAR = '/avatars/helix.svg';
 const entry = await getEntry('pages', 'links');
 const d = (entry?.data ?? {}) as unknown as LinksData;
 const groups = d.groups ?? [];
 for (const [groupIndex, group] of groups.entries()) {
   for (const [itemIndex, item] of group.items.entries()) {
     requireContentLink(item.href, `content/pages/links.md 的 groups[${groupIndex}].items[${itemIndex}].href`);
+    if (item.avatar) {
+      requireContentLink(item.avatar, `content/pages/links.md 的 groups[${groupIndex}].items[${itemIndex}].avatar`);
+    }
   }
 }
-if (d.mine) requireContentLink(d.mine.href, 'content/pages/links.md 的 mine.href');
+if (d.mine) {
+  requireContentLink(d.mine.href, 'content/pages/links.md 的 mine.href');
+  if (d.mine.avatar) requireContentLink(d.mine.avatar, 'content/pages/links.md 的 mine.avatar');
+}
+const avatarSrc = (raw?: string) => {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (!s) return DEFAULT_AVATAR;
+  return s === 'https://northcedar.top/my-avatar' ? '/my-avatar.jpg' : s;
+};
 const { wordmark } = await getSite();
 const waveText = d.waveText?.trim() || wordmark;
 const isExternal = (h: string) => /^https?:/i.test(h);
+const isPortalGroup = (g: Group) => g.title === '本站入口';
+const linkAttrs = (h: string) => (isExternal(h) ? { target: '_blank', rel: 'noopener noreferrer' } : {});
 ---
 
 <Base title="友链" current="links" chrome="page" bodyClass="links-plate">
@@ -103,47 +117,123 @@ const isExternal = (h: string) => /^https?:/i.test(h);
         {g.note && <p class="note">{g.note}</p>}
         {g.items.length > 0 ? (
           <ul class="cards">
-            {g.items.map((it) => (
-              <li>
-                <a class="card" href={it.href} {...(isExternal(it.href) ? { rel: 'noopener' } : {})}>
-                  <span class="name">{it.name}</span>
-                  {it.desc && <span class="desc">{it.desc}</span>}
-                  <span class="url">{it.href.replace(/^https?:\/\//, '')}</span>
-                </a>
-              </li>
-            ))}
+            {g.items.map((it) => {
+              const portal = isPortalGroup(g);
+              return (
+                <li>
+                  <a class={portal ? 'card' : 'card card-friend'} href={it.href} {...linkAttrs(it.href)}>
+                    {!portal && <span class="card-glass music-glass" aria-hidden="true"></span>}
+                    {!portal && (
+                      <span class="avatar-ring" aria-hidden="true">
+                        <img
+                          class="card-avatar"
+                          src={avatarSrc(it.avatar)}
+                          alt=""
+                          width="56"
+                          height="56"
+                          loading="lazy"
+                          decoding="async"
+                          data-avatar-fallback={DEFAULT_AVATAR}
+                        />
+                      </span>
+                    )}
+                    {portal ? (
+                      <>
+                        <span class="name">{it.name}</span>
+                        {it.desc && <span class="desc">{it.desc}</span>}
+                        <span class="url">{it.href.replace(/^https?:\/\//, '')}</span>
+                      </>
+                    ) : (
+                      <span class="card-body">
+                        <span class="name">{it.name}</span>
+                        {it.desc && <span class="desc">{it.desc}</span>}
+                        <span class="url">{it.href.replace(/^https?:\/\//, '')}</span>
+                      </span>
+                    )}
+                  </a>
+                </li>
+              );
+            })}
           </ul>
         ) : (
-          <p class="empty" data-group={gi}>这一组还空着 —— 想换友链的去<a href="/guestbook/">留言</a>。</p>
+          <p class="empty" data-group={gi}>这一组还空着 —— 想换友链的在下方提交申请。</p>
         )}
       </section>
     ))}
     <div class="links-waves" data-links-waves={waveText} aria-hidden="true"></div>
   </div>
 
-  <div class="links-info">
-    {d.mine && (
+  {d.mine && (
+    <div class="links-info">
       <section class="mine">
         <h2 class="sec">本站</h2>
-        <a class="card card-mine" href={d.mine.href} {...(isExternal(d.mine.href) ? { rel: 'noopener' } : {})}>
-          <span class="name">{d.mine.name}</span>
-          {d.mine.desc && <span class="desc">{d.mine.desc}</span>}
-          <span class="url">{d.mine.href.replace(/^https?:\/\//, '')}</span>
-        </a>
+        <div class="mine-row">
+          <a class="card card-friend card-mine" href={d.mine.href} {...linkAttrs(d.mine.href)}>
+            <span class="card-glass music-glass" aria-hidden="true"></span>
+            <span class="avatar-ring" aria-hidden="true">
+              <img
+                class="card-avatar"
+                src={avatarSrc(d.mine.avatar || '/my-avatar.jpg')}
+                alt=""
+                width="56"
+                height="56"
+                decoding="async"
+                data-avatar-fallback="/my-avatar.jpg"
+              />
+            </span>
+            <span class="card-body">
+              <span class="name">{d.mine.name}</span>
+              {d.mine.desc && <span class="desc">{d.mine.desc}</span>}
+              <span class="url">{d.mine.href.replace(/^https?:\/\//, '')} · 头像 /my-avatar</span>
+            </span>
+          </a>
+          <div class="mine-actions">
+            <a class="mine-btn" href="/my-avatar.jpg" download="northcedar-avatar.jpg">下载头像</a>
+            <button type="button" class="mine-btn mine-btn-ghost" data-copy-avatar="https://northcedar.top/my-avatar">复制头像链接</button>
+          </div>
+        </div>
       </section>
-    )}
+    </div>
+  )}
 
-    {d.apply && d.apply.length > 0 && (
-      <section class="apply">
-        <h2 class="sec">怎么换</h2>
-        <ol>
-          {d.apply.map((t) => (
-            <li>{t}</li>
-          ))}
-        </ol>
-      </section>
-    )}
-  </div>
+  <section class="apply-section" id="link-apply">
+    <h2 class="sec">友链申请</h2>
+    <div class="apply-inbox" data-link-inbox hidden></div>
+    <form class="apply-form" data-link-apply-form novalidate>
+      <label class="apply-field">
+        <span class="apply-label">站点名称 <span class="apply-req" aria-hidden="true">*</span></span>
+        <input name="name" type="text" maxlength="60" placeholder="你的站点叫什么？" required />
+      </label>
+
+      <label class="apply-field">
+        <span class="apply-label">网站链接 <span class="apply-req" aria-hidden="true">*</span></span>
+        <input name="href" type="url" maxlength="300" placeholder="https://northcedar.top" required />
+      </label>
+
+      <label class="apply-field">
+        <span class="apply-label">一句话描述 <span class="apply-req" aria-hidden="true">*</span></span>
+        <input name="desc" type="text" maxlength="15" placeholder="用 15 个字介绍一下" required />
+        <span class="apply-hint">最多 15 个字</span>
+      </label>
+
+      <label class="apply-field">
+        <span class="apply-label">头像链接</span>
+        <input name="avatar" type="url" maxlength="400" placeholder="https://northcedar.top/my-avatar（选填）" />
+        <span class="apply-hint">填写图片直链，留空则使用默认头像</span>
+      </label>
+
+      {/* 蜜罐：真人不可见 */}
+      <div class="apply-hp" aria-hidden="true">
+        <label for="link-apply-website">网站（请留空）</label>
+        <input id="link-apply-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+      </div>
+
+      <div class="apply-foot">
+        <button class="apply-submit" type="submit" data-link-apply-submit>提交申请</button>
+        <p class="apply-status" data-link-apply-status role="status" hidden></p>
+      </div>
+    </form>
+  </section>
 
 </Base>
 
@@ -181,19 +271,61 @@ const isExternal = (h: string) => /^https?:/i.test(h);
 
   .links-info {
     display: grid;
-    gap: var(--sp-5);
-    margin-block: var(--sp-6);
+    gap: var(--sp-4);
+    margin-block: var(--sp-6) var(--sp-5);
   }
   .links-info .sec { margin-top: 0; }
-  @media (min-width: 768px) {
-    .links-info:has(.mine):has(.apply) {
-      grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-      gap: var(--sp-6);
-    }
-    .links-info:has(.mine) .apply {
-      padding-inline-start: var(--sp-5);
-      border-inline-start: 1px solid var(--hair);
-    }
+  .mine-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+  .card-mine {
+    flex: 0 1 22.5rem;
+    width: min(100%, 22.5rem);
+  }
+  .mine-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .mine-btn,
+  :global(.mine-btn) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-2) var(--sp-4);
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    font: inherit;
+    font-size: var(--fs-sm);
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .mine-btn:hover,
+  .mine-btn:focus-visible,
+  :global(.mine-btn:hover),
+  :global(.mine-btn:focus-visible) {
+    background: var(--accent-ink);
+    border-color: var(--accent-ink);
+  }
+  .mine-btn-ghost,
+  :global(.mine-btn-ghost) {
+    background: var(--panel);
+    color: var(--ink);
+    border-color: var(--hair);
+  }
+  .mine-btn-ghost:hover,
+  .mine-btn-ghost:focus-visible,
+  :global(.mine-btn-ghost:hover),
+  :global(.mine-btn-ghost:focus-visible) {
+    background: var(--accent-wash);
+    border-color: var(--accent);
+    color: var(--ink);
   }
 
   /* ===================================================================
@@ -293,7 +425,7 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   }
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
     gap: var(--sp-3);
     margin: 0;
     padding: 0;
@@ -326,6 +458,7 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     position: absolute;
     top: -5px;
     right: -5px;
+    z-index: 2;
     width: 10px;
     height: 10px;
     border-radius: 50%;
@@ -338,12 +471,79 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     border-color: var(--accent);
     background: var(--accent-wash);
   }
+  /* 友链卡片与「本站」卡片：播放器同款玻璃材质圆角方框；
+     独立底片 .card-glass 承载 .music-glass，避免覆盖星座节点 .card::before。 */
+  .card.card-friend {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    border: 0;
+    border-radius: 20px;
+    background: transparent;
+  }
+  .card.card-friend:hover {
+    border-color: transparent;
+    background: transparent;
+  }
+  .card.card-friend:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px;
+  }
+  .card-glass {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    transition:
+      border-color var(--dur-fast) var(--ease-interact),
+      background-color var(--dur-fast) var(--ease-interact);
+  }
+  .card.card-friend:hover .card-glass,
+  .card.card-friend:focus-visible .card-glass {
+    border-color: var(--accent);
+    background-color: var(--music-glass-hover);
+  }
+  .avatar-ring {
+    position: relative;
+    z-index: 1;
+    width: 3.5rem;
+    height: 3.5rem;
+    flex: none;
+    border-radius: 50%;
+    padding: 2px;
+    border: 1.5px solid var(--accent-ink);
+    background: var(--paper);
+    transition: border-color var(--dur-fast) var(--ease-interact);
+  }
+  .card:hover .avatar-ring,
+  .card:focus-visible .avatar-ring {
+    border-color: var(--accent);
+  }
+  .card-avatar {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--panel);
+  }
+  .card-body {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+  }
   .name {
     font-weight: 700;
   }
   .desc {
     font-size: var(--fs-sm);
     color: var(--muted);
+    overflow-wrap: anywhere;
   }
   .url {
     font-size: var(--fs-xs);
@@ -358,19 +558,225 @@ const isExternal = (h: string) => /^https?:/i.test(h);
     color: var(--muted);
     font-size: var(--fs-sm);
   }
-  .apply ol {
+
+  /* 友链申请区块（莱茵生命纸面卡片） */
+  .apply-section {
+    margin-block: var(--sp-6) var(--sp-8);
+  }
+  .apply-section .sec {
+    margin-top: 0;
+  }
+  .apply-inbox {
+    margin-bottom: var(--sp-4);
+    padding: var(--sp-4);
+    border: 1px solid var(--accent);
+    background: var(--panel);
+  }
+  :global(.apply-inbox-title) {
+    margin: 0 0 var(--sp-3);
+    font-size: var(--fs-xs);
+    color: var(--accent-ink);
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  :global(.apply-inbox-list) {
+    display: grid;
+    gap: var(--sp-2);
     margin: 0;
-    padding-left: 1.2em;
-    max-width: var(--measure);
+    padding: 0;
+    list-style: none;
+  }
+  :global(.apply-inbox-item) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    width: 100%;
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--hair);
+    background: var(--paper);
+    color: var(--ink);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+  :global(.apply-inbox-item:hover),
+  :global(.apply-inbox-item:focus-visible) {
+    border-color: var(--accent);
+    background: var(--accent-wash);
+  }
+  :global(.apply-inbox-desc) {
+    flex: 1 1 16rem;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+  :global(.apply-inbox-time) {
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+
+  .apply-form {
+    display: grid;
+    gap: var(--sp-4);
+    padding: var(--sp-5);
+    border: 1px solid var(--hair);
+    background: var(--panel);
+  }
+  .apply-field {
+    display: grid;
+    gap: var(--sp-2);
+  }
+  .apply-label {
+    font-size: var(--fs-sm);
+    font-weight: 600;
     color: var(--ink);
   }
-  .apply li {
-    overflow-wrap: anywhere;
-    margin-bottom: 0.4em;
+  .apply-req {
+    color: var(--accent-ink);
   }
+  .apply-field input {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--hair);
+    border-radius: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: inherit;
+    font-size: var(--fs-sm);
+  }
+  .apply-field input:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px;
+  }
+  .apply-hint {
+    font-size: var(--fs-xs);
+    color: var(--muted);
+  }
+  .apply-hp {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+  .apply-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+  .apply-submit {
+    padding: var(--sp-2) var(--sp-5);
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    font: inherit;
+    font-size: var(--fs-sm);
+    cursor: pointer;
+  }
+  .apply-submit:hover:not(:disabled),
+  .apply-submit:focus-visible {
+    background: var(--accent-ink);
+    border-color: var(--accent-ink);
+  }
+  .apply-submit:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  .apply-status,
+  :global(.apply-status) {
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: var(--accent-ink);
+  }
+  .apply-status[hidden],
+  :global(.apply-status[hidden]) {
+    display: none;
+  }
+
+  :global(.apply-dialog) {
+    width: min(30rem, calc(100vw - var(--sp-6)));
+    max-height: calc(100dvh - var(--sp-6));
+    overflow: auto;
+    padding: var(--sp-5);
+    border: 1px solid var(--ink-2);
+    background: var(--paper);
+    color: var(--ink);
+  }
+  :global(.apply-dialog::backdrop) {
+    background: var(--visitor-backdrop);
+    opacity: 0.65;
+  }
+  :global(.apply-dialog h3) {
+    margin: 0 var(--sp-7) var(--sp-4) 0;
+    font-size: var(--fs-lg);
+  }
+  :global(.apply-dialog-close) {
+    position: absolute;
+    top: var(--sp-4);
+    right: var(--sp-4);
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: var(--fs-xs);
+    cursor: pointer;
+  }
+  :global(.apply-dialog-head) {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-4);
+  }
+  :global(.apply-dialog-avatar) {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1.5px solid var(--accent-ink);
+    background: var(--panel);
+  }
+  :global(.apply-dialog-time) {
+    margin: 0.2rem 0 0;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+  }
+  :global(.apply-dialog-meta) {
+    display: grid;
+    gap: var(--sp-2);
+    margin: 0 0 var(--sp-4);
+    padding: var(--sp-3);
+    border: 1px solid var(--hair);
+    background: var(--panel);
+  }
+  :global(.apply-dialog-meta dt) {
+    font-size: var(--fs-xs);
+    color: var(--muted);
+  }
+  :global(.apply-dialog-meta dd) {
+    margin: 0 0 var(--sp-2);
+    overflow-wrap: anywhere;
+  }
+  :global(.apply-dialog-actions) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    margin-top: var(--sp-3);
+  }
+  :global(.apply-danger) {
+    border-color: var(--ink-2);
+  }
+
   @media (max-width: 767px) {
     .sec {
       margin-top: var(--sp-6);
+    }
+    .apply-form {
+      padding: var(--sp-4);
     }
     /* ★ 墨笔 ∞ 在窄屏上降档：9% 是按"桌面视口下 1400px 宽"定的，
        390px 宽时笔锋在屏幕上占的比例大三倍，9% 会糊成一片灰绿、把卡片压住。
@@ -392,4 +798,5 @@ const isExternal = (h: string) => /^https?:/i.test(h);
   // 与说说页同样放进这一个 <script> ⇒ Astro 并进同一产物，不新增标签。
   import '../scripts/constellation';
   import '../scripts/links-waves';
+  import '../scripts/link-apply';
 </script>

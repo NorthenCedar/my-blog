@@ -1,6 +1,6 @@
 import { validateLikeSlug, parseSlugList, hashIp } from './_lib/reactions-core';
 import { AccountError } from './_lib/visitor-core';
-import { guardPublicWrite, readJsonBody, writeLimitStatements } from './_lib/public-write';
+import { guardPublicWrite, hasOnlyQueryParams, readJsonBody, SLUG_LIST_RAW_MAX, writeLimitStatements } from './_lib/public-write';
 import targets from './_generated/comment-targets.json';
 
 const publishedTalks = new Set(targets.talks);
@@ -28,7 +28,10 @@ const json = (data: unknown, status = 200) =>
  */
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const url = new URL(request.url);
-  const slugs = parseSlugList(url.searchParams.get('slugs'));
+  if (!hasOnlyQueryParams(url, ['slugs'])) return json({ error: '查询参数不合法' }, 400);
+  const rawSlugs = url.searchParams.get('slugs');
+  if (rawSlugs !== null && rawSlugs.length > SLUG_LIST_RAW_MAX) return json({ error: '查询参数太长' }, 400);
+  const slugs = parseSlugList(rawSlugs);
   const likes: Record<string, number> = {};
   for (const s of slugs) likes[s] = 0;
   if (slugs.length === 0) return json({ likes });

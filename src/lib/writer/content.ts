@@ -157,6 +157,7 @@ const projectMarkdown = new MarkdownIt({html:true});
 const linkItemSchema = z.object({
   name: z.string().trim().min(1).max(80),
   href: z.string().trim().min(1).max(500).refine(v=>{try{requireContentLink(v,'友链地址');return true;}catch{return false;}},'友链地址必须使用网页地址（http/https）、相对路径或邮箱地址'),
+  avatar: z.string().trim().max(400).refine(v=>{if(!v)return true;try{requireContentLink(v,'友链头像地址');return true;}catch{return false;}},'友链头像地址必须使用网页地址（http/https）或站内路径').optional(),
   desc: z.string().trim().max(240).optional(),
 }).passthrough();
 const linksPageSchema = z.object({

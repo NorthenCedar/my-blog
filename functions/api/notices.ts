@@ -11,7 +11,7 @@
  */
 import { listReplyNotices, markReplyNoticesRead, NOTICE_LIMIT, type NoticePosition } from './_lib/notices';
 import { currentAccount, guardWrite } from './_lib/visitor-store';
-import { readJsonBody } from './_lib/public-write';
+import { hasOnlyQueryParams, readJsonBody } from './_lib/public-write';
 import { AccountError } from './_lib/visitor-core';
 
 interface Env {
@@ -36,13 +36,15 @@ function parseBefore(raw: string): number | NoticePosition | null {
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const url = new URL(request.url);
+  if (!hasOnlyQueryParams(url, ['before'])) return json({ error: '查询参数不合法' }, 400);
   const user = await currentAccount(request, env);
   // signedIn 是给铃铛用的：未读为 0 时它还得分得清「登录了但没人回」与「压根没登录」——
   // 前者要留着铃铛（它是打开历史列表的唯一入口），后者顶栏上不该多出一格。
   const isOwner = Boolean(user && env.OWNER_USER_ID && env.OWNER_USER_ID === user.id);
   const labels = { title: isOwner ? '全站消息' : '回复提醒', emptyMessage: isOwner ? '还没有新的全站消息。' : '还没有人回复你。' };
   if (!user) return json({ unread: 0, items: [], signedIn: false, isOwner: false, nextBefore: null, nextCursor: null, ...labels });
-  const raw = new URL(request.url).searchParams.get('before');
+  const raw = url.searchParams.get('before');
   const before = raw === null ? undefined : parseBefore(raw);
   if (before === null) return json({ error: '消息位置无效' }, 400);
   return json({ ...(await listReplyNotices(env, user.id, 20, before)), signedIn: true, isOwner, ...labels });

@@ -17,6 +17,7 @@ import { toRecord, toReplyRecord, type CommentRecord, type ReplyRecord } from '.
  * 与公开接口 `comments.ts` 的 `LIMIT 200` 同档：**取的是最新的 200 条**。
  */
 export const ADMIN_LIST_LIMIT = 200;
+export const ADMIN_REPLIES_LIMIT = 2000;
 
 export type { CommentRecord, ReplyRecord };
 

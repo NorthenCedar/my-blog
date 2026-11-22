@@ -5,21 +5,19 @@
 # 但**没有**照搬他的友链条目 —— 那是别人的朋友，不是站主的。
 title: 友链
 waveText: North Cedar
-intro: 这里是北杉札记的友链角落。想互换友链，去「留言」说一声就行。
+intro: 这里是北杉札记的友链角落。欢迎互相串门，下方可直接提交友链申请。
 mine:
   name: 北杉札记
   href: https://northcedar.top
-  desc: 记录技术、摄影与生活的个人博客。AI 搭的站，人来写。
-apply:
-  - 先把本站挂到你的友链页：名称「北杉札记」、链接 https://northcedar.top，简介随意。
-  - 再到「留言」留一条：你的站点名 / 链接 / 一句话简介。
-  - 我看到就会加，加好回访。
+  avatar: https://northcedar.top/my-avatar
+  desc: 莱茵生命风格的技术、摄影博客
 groups:
   - title: 友情链接
-    note: 想换友链的去留言，我看到就加
+    note: 欢迎在下方提交友链申请，收到后会尽快回访添加
     items:
     -   name: WillowXI的小站
         href: http://willowxi.site
+        avatar: /avatars/friends/willowxi.jpg
         desc: 这个博客很酷啊
   - title: 本站入口
     note: 我自己的几个门
@@ -34,4 +32,4 @@ groups:
         href: /guestbook/
         desc: 想说什么都行
 ---
-友链是博客之间互相串门的门牌。本站的友链按「分组」放，想换的话见上面的申请步骤。
+友链是博客之间互相串门的门牌。本站的友链按「分组」放，欢迎在下方提交申请。

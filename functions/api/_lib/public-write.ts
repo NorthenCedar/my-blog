@@ -1,6 +1,18 @@
 import { fail } from './visitor-core';
 import type { VisitorEnv } from './visitor-store';
 
+export const SLUG_LIST_RAW_MAX = 16 * 1024;
+
+/** 拒绝公开接口上的未知或重复查询参数，避免随机参数穿透缓存或探测结构。 */
+export function hasOnlyQueryParams(url: URL, allowed: readonly string[]): boolean {
+  const seen = new Set<string>();
+  for (const key of url.searchParams.keys()) {
+    if (!allowed.includes(key) || seen.has(key)) return false;
+    seen.add(key);
+  }
+  return true;
+}
+
 /** 匿名 CLI 可省 Origin。浏览器明确来自其他源的请求一律拒绝。 */
 export function guardSameOrigin(request: Request, requireOrigin = false) {
   const origin = request.headers.get('Origin');

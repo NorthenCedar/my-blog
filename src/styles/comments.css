@@ -87,6 +87,11 @@
   opacity: 0.6;
   cursor: default;
 }
+.comments-form-first .comment-form {
+  margin-bottom: var(--sp-7);
+  padding-bottom: var(--sp-6);
+  border-bottom: 1px solid var(--hair);
+}
 .comment-error {
   color: var(--accent-ink);
   font-size: var(--fs-sm);

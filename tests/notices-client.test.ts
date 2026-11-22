@@ -132,11 +132,12 @@ it('退出立即清空已打开的提醒，迟到的已读响应无法恢复角�
   s.state.user = null;
   await client.accountRequest('logout');
   client.setViewer(null);
-  expect(s.bell.hidden).toBe(true);
+  expect(s.bell.hidden).toBe(false);
   expect(s.bell.getAttribute('aria-expanded')).toBe('false');
   expect(s.badge.hidden).toBe(true);
   expect(s.rows()).toHaveLength(0);
   expect(s.more().hidden).toBe(true);
+  expect(s.root.textContent).toContain('登录后查看消息与提醒');
   expect(read?.signal?.aborted).toBe(true);
 
   lateRead.resolve(Response.json({ unread: 2 }));
@@ -163,7 +164,8 @@ it('切换账户时中止旧分页请求，迟到的旧列表无法覆盖新账�
   s.state.data.nextBefore = null;
   const login = await client.accountRequest('login');
   client.setViewer(login.user!);
-  expect(s.bell.hidden).toBe(true);
+  expect(s.bell.hidden).toBe(false);
+  expect(s.badge.hidden).toBe(true);
   expect(s.rows()).toHaveLength(0);
   expect(older?.signal?.aborted).toBe(true);
 
@@ -244,7 +246,7 @@ it('标记失败不伪装已读、拉取失败不拿旧列表清空提醒', asyn
   expect(s.calls.filter(call => call.data)).toHaveLength(1);
 });
 
-it('普通访客保留回复提醒，未登录隐藏铃铛，Escape 关闭后还焦', async () => {
+it('普通访客保留回复提醒，未登录铃铛仍常驻并提示登录，Escape 关闭后还焦', async () => {
   const s = await open({ owner: false });
   expect(s.bell.hidden).toBe(false); expect(s.bell.getAttribute('aria-label')).toBe('回复提醒');
   expect(s.root.textContent).toContain('还没有人回复你');
@@ -253,5 +255,7 @@ it('普通访客保留回复提醒，未登录隐藏铃铛，Escape 关闭后还
   expect(s.bell.getAttribute('aria-expanded')).toBe('false'); expect(s.bell.focused).toBe(true);
   s.state.data.signedIn = false;
   s.bell.click(); await settle();
-  expect(s.bell.hidden).toBe(true);
+  expect(s.bell.hidden).toBe(false);
+  expect(s.badge.hidden).toBe(true);
+  expect(s.root.textContent).toContain('登录后查看消息与提醒');
 });

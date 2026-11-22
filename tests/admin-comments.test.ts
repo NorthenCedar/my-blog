@@ -235,7 +235,7 @@ class StubStatement {
 const SELECT_COMMENTS =
   /^SELECT id, slug, name, body, created_at FROM comments ORDER BY created_at DESC, id DESC LIMIT (\d+)$/;
 const SELECT_REPLIES =
-  /^SELECT id, parent_id, reply_to, name, body, created_at FROM replies WHERE parent_id IN \(\?(?:,\?)*\) ORDER BY created_at ASC, id ASC$/;
+  /^SELECT id, parent_id, reply_to, name, body, created_at FROM replies WHERE parent_id IN \(\?(?:,\?)*\) ORDER BY created_at ASC, id ASC LIMIT (\d+)$/;
 const PROBE_COMMENT =
   /^SELECT \(SELECT COUNT\(\*\) FROM comments WHERE id = \?\) AS n, \(SELECT COUNT\(\*\) FROM replies WHERE parent_id = \?\) AS r$/;
 const PROBE_REPLY = /^SELECT \(SELECT COUNT\(\*\) FROM replies WHERE id = \?\) AS n$/;
@@ -277,14 +277,17 @@ class StubD1 {
         .slice(0, limit);
     }
 
-    if (SELECT_REPLIES.test(s)) {
+    const rmatch = SELECT_REPLIES.exec(s);
+    if (rmatch) {
       const want = new Set(args.map(Number));
+      const limit = Number(rmatch[1]);
       return [...this.replies]
         .filter((r) => want.has(Number(r.parent_id)))
         .sort(
           (a, b) =>
             String(a.created_at).localeCompare(String(b.created_at)) || Number(a.id) - Number(b.id)
-        );
+        )
+        .slice(0, limit);
     }
 
     // 删之前那一趟探针：一次查询同时给出"在不在"和"有几条回复"。
@@ -419,6 +422,13 @@ describe('GET /api/admin/comments', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ items: [], limit: ADMIN_LIST_LIMIT });
   });
+
+  it('带未知或冗余查询参数 ⇒ 400，且不碰数据库', async () => {
+    const db = seed();
+    const res = await onRequestGet(ctx(db, { headers: auth }, SECRET, 'https://x/api/admin/comments?rnd=1'));
+    expect(res.status).toBe(400);
+    expect(db.log).toEqual([]);
+  });
 });
 
 describe('DELETE /api/admin/comments', () => {
@@ -552,6 +562,24 @@ describe('DELETE /api/admin/comments', () => {
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, kind: 'reply', id: 20, deletedReplies: 0 });
+    expect(db.comments).toHaveLength(3);
+  });
+
+  it('带未知查询参数 ⇒ 400，超过 4 KiB 请求正文 ⇒ 413，且均不碰数据库', async () => {
+    const db = seed();
+    const badQuery = await onRequestDelete(
+      ctx(db, { method: 'DELETE', headers: auth }, SECRET, 'https://x/api/admin/comments?id=1&rnd=1')
+    );
+    expect(badQuery.status).toBe(400);
+    const oversized = await onRequestDelete(
+      ctx(db, {
+        method: 'DELETE',
+        body: JSON.stringify({ id: 1, padding: 'a'.repeat(5000) }),
+        headers: jsonAuth,
+      })
+    );
+    expect(oversized.status).toBe(413);
+    expect(db.log).toEqual([]);
     expect(db.comments).toHaveLength(3);
   });
 });

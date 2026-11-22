@@ -107,7 +107,8 @@ onPage(({ document, window }) => {
       errorBox.hidden = true;
       retry.hidden = true;
       pulled.add(slug); // 自己会给 setCount 数一遍，别让批量回来的旧结果覆盖它
-      const parent = matchesNotice() ? new URLSearchParams(location.search).get('comment') : null;
+      const rawParent = matchesNotice() ? new URLSearchParams(location.search).get('comment') : null;
+      const parent = rawParent && /^[1-9]\d{0,15}$/.test(rawParent) ? rawParent : null;
       fetch(`/api/comments?slug=${encodeURIComponent(slug)}${parent ? `&comment=${encodeURIComponent(parent)}` : ''}`)
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('取评论失败'))))
         .then((data: { comments?: Comment[]; replies?: Reply[] }) => {

@@ -73,13 +73,13 @@ export function mountForgeFields(host:HTMLElement,{value,onChange}:Context){
   function render(){list.replaceChildren();getNotes().forEach((note,index)=>{const row=el('section','','writer-note-card');textField(row,`note-${index}-title`,`手记 ${index+1} · 标题`,note.title,text=>{note.title=text;onChange();},{maxLength:120});textField(row,`note-${index}-text`,'手记正文',note.text,text=>{note.text=text;onChange();},{multiline:true,maxLength:4000});row.append(button('移除工作手记',()=>{getNotes().splice(index,1);onChange();render();}));list.append(row);});const add=button('添加工作手记',()=>{fields.notes=[...getNotes(),{title:'',text:''}];onChange();render();});add.disabled=getNotes().length>=12;list.append(add);}render();
 }
 
-export type FriendItem={name:string;href:string;desc?:string;[key:string]:unknown};
+export type FriendItem={name:string;href:string;avatar?:string;desc?:string;[key:string]:unknown};
 export type FriendGroup={title:string;note?:string;items:FriendItem[];[key:string]:unknown};
 export function mountLinksFields(host:HTMLElement,{value,onChange}:Context){
   const fields=value.fields;
   textField(host,'intro','页头引言',fields.intro,text=>{fields.intro=text;onChange();},{maxLength:320,multiline:true,wide:true});
   const section=el('section','','wide writer-forge-section'),list=el('div','','writer-repeat-list');
-  section.append(el('h3','友链分组与卡片'),el('p','可在各分组下添加友链（站点名称、链接地址 http/https、一句话简介）。','writer-note'),list);
+  section.append(el('h3','友链分组与卡片'),el('p','可在各分组下添加友链（站点名称、链接地址 http/https、头像链接、一句话简介）。','writer-note'),list);
   host.append(section);
   const getGroups=()=>{if(!Array.isArray(fields.groups))fields.groups=[{title:'友情链接',note:'',items:[]}];return fields.groups as FriendGroup[];};
   function render(){
@@ -94,6 +94,7 @@ export function mountLinksFields(host:HTMLElement,{value,onChange}:Context){
         const row=el('div','','writer-link-row');
         textField(row,`group-${gi}-item-${ii}-name`,`友链 ${ii+1} · 名称`,item.name,text=>{item.name=text;onChange();},{maxLength:80});
         textField(row,`group-${gi}-item-${ii}-href`,'链接地址',item.href,text=>{item.href=text;onChange();},{maxLength:500});
+        textField(row,`group-${gi}-item-${ii}-avatar`,'头像链接（可选）',item.avatar??'',text=>{if(text.trim())item.avatar=text;else delete item.avatar;onChange();},{maxLength:400});
         textField(row,`group-${gi}-item-${ii}-desc`,'一句话简介（可选）',item.desc??'',text=>{item.desc=text;onChange();},{maxLength:240,wide:true});
         row.append(button('移除友链',()=>{group.items.splice(ii,1);onChange();render();}));
         itemsHost.append(row);
