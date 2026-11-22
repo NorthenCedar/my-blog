@@ -229,23 +229,54 @@ html.pt-play .shell {
   }
 }
 
-/* ================= 5. SPA 两段式换页：先覆盖（pt-cover），加载完即揭幕（pt-reveal） =================
-   避免点击后干等网络返回才起播动画；进场与退场各走独立时间线，中间等待期内扫描线持续走动给反馈。 */
+/* ================= 5. SPA 两段式换页：覆盖（pt-cover）→ 稳幕待命（pt-hold）→ 揭幕（pt-reveal） =================
+   避免点击后干等网络返回才起播动画；只在 html.pt-on 期间提升合成层，全程仅对 transform / opacity 做关键帧动画，
+   并用 pt-hold 隔开 DOM swap 与 astro:page-load 的主线程峰值，保证揭幕阶段顺滑不掉帧。 */
+html.pt-on .pt-word,
+html.pt-on .pt-scan,
+html.pt-on .shell {
+  will-change: transform, opacity;
+}
+
+html.pt-cover .pt-ink,
+html.pt-hold .pt-ink,
+html.pt-reveal .pt-ink {
+  left: -14vw;
+  right: 0;
+  clip-path: polygon(14vw 0, 100% 0, 100% 100%, 0 100%);
+}
+
 html.pt-cover .pt-ink {
-  animation: pt-ink-in 240ms cubic-bezier(0.62, 0.01, 0.28, 1) both;
+  animation: pt-ink-in 220ms cubic-bezier(0.62, 0.01, 0.28, 1) both;
 }
 html.pt-cover .pt-word {
-  animation: pt-word-in 240ms var(--ease-glass) 110ms both;
+  animation: pt-word-in 170ms var(--ease-glass) 50ms both;
 }
 html.pt-cover .pt-scan {
-  animation: pt-scan-in 540ms linear 160ms infinite;
+  animation: pt-scan-in 540ms linear 260ms infinite;
 }
 html.pt-cover .shell {
   animation: pt-shell-in 200ms var(--ease-glass) both;
 }
 
+html.pt-hold .pt-ink {
+  transform: translate3d(0, 0, 0);
+}
+html.pt-hold .pt-word {
+  opacity: 1;
+  transform: translate3d(-50%, -50%, 0);
+}
+html.pt-hold .pt-scan {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+html.pt-hold .shell {
+  opacity: 0.32;
+  transform: scale3d(0.99, 0.99, 1);
+}
+
 html.pt-reveal .pt-ink {
-  animation: pt-ink-out 380ms cubic-bezier(0.62, 0.01, 0.28, 1) both;
+  animation: pt-ink-out 360ms cubic-bezier(0.62, 0.01, 0.28, 1) both;
 }
 html.pt-reveal .pt-word {
   animation: pt-word-out 220ms var(--ease-glass) both;
@@ -254,57 +285,49 @@ html.pt-reveal .pt-scan {
   opacity: 0;
 }
 html.pt-reveal .shell {
-  animation: pt-shell-out 380ms var(--ease-glass) both;
+  animation: pt-shell-out 360ms var(--ease-glass) both;
 }
 
 @keyframes pt-ink-in {
   0% {
-    transform: translate3d(-101%, 0, 0);
-    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+    transform: translate3d(-101vw, 0, 0);
   }
   100% {
     transform: translate3d(0, 0, 0);
-    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
   }
 }
 @keyframes pt-ink-out {
   0% {
     transform: translate3d(0, 0, 0);
-    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
-  }
-  12% {
-    transform: translate3d(0, 0, 0);
-    clip-path: polygon(12% 0, 100% 0, 100% 100%, 0 100%);
   }
   100% {
-    transform: translate3d(0, 0, 0);
-    clip-path: polygon(100% 0, 100% 0, 100% 100%, 100% 100%);
+    transform: translate3d(115vw, 0, 0);
   }
 }
 @keyframes pt-word-in {
   0% {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 1.1rem));
+    transform: translate3d(-50%, calc(-50% + 1.1rem), 0);
   }
   100% {
     opacity: 1;
-    transform: translate(-50%, -50%);
+    transform: translate3d(-50%, -50%, 0);
   }
 }
 @keyframes pt-word-out {
   0% {
     opacity: 1;
-    transform: translate(-50%, -50%);
+    transform: translate3d(-50%, -50%, 0);
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, calc(-50% - 0.9rem));
+    transform: translate3d(-50%, calc(-50% - 0.9rem), 0);
   }
 }
 @keyframes pt-scan-in {
   0% {
     opacity: 0;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
   20%,
   80% {
@@ -312,7 +335,7 @@ html.pt-reveal .shell {
   }
   100% {
     opacity: 0;
-    transform: translateY(100vh);
+    transform: translate3d(0, 100vh, 0);
   }
 }
 @keyframes pt-shell-in {
@@ -322,13 +345,13 @@ html.pt-reveal .shell {
   }
   100% {
     opacity: 0.32;
-    transform: scale(0.99);
+    transform: scale3d(0.99, 0.99, 1);
   }
 }
 @keyframes pt-shell-out {
   0% {
     opacity: 0.32;
-    transform: scale(0.99);
+    transform: scale3d(0.99, 0.99, 1);
   }
   100% {
     opacity: 1;
@@ -336,11 +359,12 @@ html.pt-reveal .shell {
   }
 }
 
-/* 系统开了「减少动态效果」：整套不出现（连蒙版都不显示） */
+/* 系统开了「减少动态效果」：整套不出现（连蒙版本身都不显示） */
 @media (prefers-reduced-motion: reduce) {
   html.pt-on .pt,
   html.pt-play .pt,
   html.pt-cover .pt,
+  html.pt-hold .pt,
   html.pt-reveal .pt {
     display: none !important;
   }
@@ -352,6 +376,10 @@ html.pt-reveal .shell {
   html.pt-cover .pt-word,
   html.pt-cover .pt-scan,
   html.pt-cover .shell,
+  html.pt-hold .pt-ink,
+  html.pt-hold .pt-word,
+  html.pt-hold .pt-scan,
+  html.pt-hold .shell,
   html.pt-reveal .pt-ink,
   html.pt-reveal .pt-word,
   html.pt-reveal .pt-scan,

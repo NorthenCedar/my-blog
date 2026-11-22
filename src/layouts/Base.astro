@@ -226,7 +226,7 @@ const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('
         v3 只剩三个元素：墨色层（darken 斜切扫过）+ 描边关键词 + 一道读数线；
         内容自己模糊微缩后退，不是被盖住。时间线全在 src/styles/transition.css 里。
         标记由 JS 加（见 <head> 与 src/scripts/transition），没 JS 时 `.pt` 是 display:none —— 完全不存在，导航照旧。 */}
-    <div class="pt" data-transition aria-hidden="true">
+    <div class="pt" data-transition transition:persist="site-pt" aria-hidden="true">
       <div class="pt-ink"></div>
       <div class="pt-word">{site.name}<em>RHINE LAB</em>NOTES</div>
       <div class="pt-scan"></div>

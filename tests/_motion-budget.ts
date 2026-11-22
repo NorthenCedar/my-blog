@@ -8,7 +8,11 @@ export const NAVIGATION_UI_BOOT_BUDGET = 1024;
 // 换页过渡改走两段式即时覆盖 + 同源内存预取与样式预热，同时关闭 Astro 内置 link prefetch：
 // 实测 ClientRouter.astro_*.js 4084 → 1571 B（-2513 B），Base.astro_*.js 22229 → 26858 B（+4629 B），净增 +2116 B；
 // 由原 384 B 按实测净增上调至 2560 B（留约 +60 B~2 KiB 余量，螺旋盘/留言/文章三处红线齐平且仍拦住大型按需依赖）。
-export const NAVIGATION_FEEDBACK_BOOT_BUDGET = 2560;
+// 加入 pt-hold 稳幕隔离 swap/astro:page-load 主线程峰值、pt-ink-in animationstart/animationend 同步与双 rAF 揭幕调度后，
+// Base 共享 chunk 实测再增约 520 B（螺旋盘首屏闭包 63956 B、留言首屏 79954 B、文章全量 183158 B），由 2560 B 上调至 3072 B（+512 B），仍严控首屏不引入大型按需依赖。
+// 补齐方案 A（菜单展开/闲时/视口 IntersectionObserver 限流预取 + modulepreload 预热独享脚本）与方案 B 轻量版（10 分钟 LRU 会话缓存 + readyStyles 快路径 + 空闲预解析 DOM）后，
+// Base 共享 chunk 实测由 27567 B 增至 30400 B（+2833 B，零新增外部依赖）；螺旋盘首屏闭包 66789 B，按实测上调至 6144 B（留约 283 B 余量，所有按需引擎隔离门闩照旧）。
+export const NAVIGATION_FEEDBACK_BOOT_BUDGET = 6144;
 // 访问事件和页脚可见性控制的编译增量使用独立预算。
 export const PAGE_STATS_BOOT_BUDGET = 1024;
 // 只给评论和文章各自的并发归并、目录缓存计入新增开销。
