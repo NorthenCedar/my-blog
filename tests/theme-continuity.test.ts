@@ -271,3 +271,40 @@ describe('亮暗过渡 · 图片底纹改交叉淡入', () => {
     expect(src, '两个 image-dark 类不应再有 display 切换').not.toMatch(/(has-dark|image-dark|photo-dark)\s*\{\s*display:/);
   });
 });
+
+describe('亮暗过渡 · 暗色代码块关键词橙色与连续插值', () => {
+  it(':root 与 html.dark 均以纯 hex 声明 --code-keyword，暗档为高对比度橙色且 prose.css 动态继承', () => {
+    const css = strip(TOKENS);
+    const darkStart = css.indexOf('html.dark {');
+    const darkEnd = css.indexOf('}', darkStart);
+    expect(darkStart).toBeGreaterThan(-1);
+    const rootBlock = css.slice(0, darkStart);
+    const darkBlock = css.slice(darkStart, darkEnd);
+
+    const lightHex = rootBlock.match(/--code-keyword\s*:\s*(#[0-9a-f]{6})\s*;/i)?.[1]?.toLowerCase();
+    const darkHex = darkBlock.match(/--code-keyword\s*:\s*(#[0-9a-f]{6})\s*;/i)?.[1]?.toLowerCase();
+    const codeBg = rootBlock.match(/--code-bg\s*:\s*(#[0-9a-f]{6})\s*;/i)?.[1]?.toLowerCase();
+    expect(lightHex, ':root 缺少纯 6 位 hex --code-keyword').toMatch(/^#[0-9a-f]{6}$/);
+    expect(darkHex, 'html.dark 缺少纯 6 位 hex --code-keyword').toMatch(/^#[0-9a-f]{6}$/);
+    expect(codeBg, ':root 缺少 --code-bg').toMatch(/^#[0-9a-f]{6}$/);
+    expect(darkHex).not.toBe(lightHex);
+
+    const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const [r, g, b] = rgb(darkHex!);
+    expect(r, '暗色关键词必须偏橙（R > G + 40）').toBeGreaterThan(g + 40);
+    expect(g, '暗色关键词必须偏橙（G > B + 40）').toBeGreaterThan(b + 40);
+
+    const lum = (hex: string) => {
+      const lin = rgb(hex).map((c) => {
+        const s = c / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+    };
+    const [l1, l2] = [lum(darkHex!), lum(codeBg!)].sort((x, y) => y - x);
+    expect((l1 + 0.05) / (l2 + 0.05), '暗色关键词在 --code-bg 上对比度必须 ≥ 4.5').toBeGreaterThanOrEqual(4.5);
+
+    const prose = strip(read('src/styles/prose.css'));
+    expect(prose).toMatch(/\.astro-code\s*\{[^}]*--astro-code-token-keyword\s*:\s*var\(--code-keyword\)/);
+  });
+});

@@ -97,6 +97,12 @@ describe('全站导航抽屉 · 横向溢出', () => {
     expect(SRC).toMatch(/\.navtog:checked\s*~\s*\.navshell\s*\{\s*visibility:\s*visible/);
     expect(SRC).toMatch(/\.site-menu-dialog:modal\s*\{\s*pointer-events:\s*auto/);
   });
+
+  it('打开菜单时不显示左上角的小无限符号标', () => {
+    const code = SRC.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/<!--[\s\S]*?-->/g, ' ');
+    expect(code).toMatch(/\.site-staggered\s+\.sm-logo\s*\{\s*display:\s*none\s*;\s*\}/);
+    expect(code).not.toMatch(/\.site-staggered\[data-open\]\s+\.sm-logo/);
+  });
 });
 
 describe.skipIf(!hasDist)('产物里的抽屉', () => {

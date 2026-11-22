@@ -7,7 +7,6 @@ import type { TransitionBeforePreparationEvent, TransitionBeforeSwapEvent } from
 
 const KEY = 'pt';
 const root = document.documentElement;
-const status = document.querySelector('.pt-status');
 // 保留原整页过渡时长（--pt-sweep = 900ms）与兜底清理上限，供整页导航及测试契约共用。
 const HANDOFF_MS = 1000;
 const STALE_MS = 1500;
@@ -173,21 +172,12 @@ async function loadFromCache(nav: TransitionBeforePreparationEvent): Promise<boo
 // ---- 收尾：目标页播完就把标记摘掉 ----
 // **必须摘**：结束帧带着 transform，留在类上会给 .shell 留下多余层叠上下文。
 let cleanupTimer: number | undefined;
-let waitTimer: number | undefined;
 let hoverTimer: number | undefined;
 let preparing: AbortSignal | undefined;
 let swapping: AbortSignal | undefined;
 
-function showWait(pending = false, delayMs = 180) {
-  window.clearTimeout(waitTimer);
-  if (!status) return;
-  if (!pending) status.textContent = '';
-  else if (!status.textContent) waitTimer = window.setTimeout(() => { status.textContent = '正在打开页面…'; }, delayMs);
-}
-
 function clearOverlay() {
   window.clearTimeout(cleanupTimer);
-  showWait();
   root.classList.remove('pt-on', 'pt-play');
   root.classList.remove('pt-cover', 'pt-reveal');
 }
@@ -201,10 +191,8 @@ if (root.classList.contains('pt-play')) finishAfter(STALE_MS);
 
 document.addEventListener('animationstart', (event) => {
   if (event.animationName === 'pt-ink' && root.classList.contains('pt-play')) {
-    showWait();
     finishAfter(HANDOFF_MS);
   } else if (event.animationName === 'pt-ink-out' && root.classList.contains('pt-reveal')) {
-    showWait();
     finishAfter(REVEAL_MS);
   }
 });
@@ -246,9 +234,8 @@ window.addEventListener('click', (event) => {
     try {
       sessionStorage.setItem(KEY, '1');
       root.classList.add('pt-on');
-    } catch { /* 存储不可用时仍然显示等待状态。 */ }
+    } catch { /* 存储不可用时直接跳过过渡记录。 */ }
   }
-  showWait(true);
   finishAfter(STALE_MS);
 });
 
@@ -266,7 +253,6 @@ document.addEventListener('astro:before-preparation', (event) => {
   preparing = signal;
   root.classList.remove('pt-play', 'pt-reveal');
   if (!reducedMotion.matches) root.classList.add('pt-on', 'pt-cover');
-  showWait(true, reducedMotion.matches ? 180 : 420);
 
   navigation.loader = async () => {
     try {
@@ -302,16 +288,12 @@ document.addEventListener('astro:after-swap', () => {
   if (!preparing || preparing !== swapping) return;
   const signal = preparing;
   preparing = undefined;
-  showWait();
   if (!reducedMotion.matches) {
     root.classList.remove('pt-cover', 'pt-play');
     root.classList.add('pt-on', 'pt-reveal');
     finishAfter(STALE_MS);
   } else {
-    // 减少动效仍让状态提示陪同目标页的第一帧。
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (swapping === signal && !preparing) clearOverlay();
-    }));
+    if (swapping === signal && !preparing) clearOverlay();
   }
 });
 

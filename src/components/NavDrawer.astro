@@ -185,8 +185,7 @@ const socialLinks = [
 
   .site-staggered { line-height: 1.5; }
   .site-staggered .staggered-menu-header { padding: var(--sp-4) var(--gutter); }
-  .site-staggered .sm-logo { visibility: hidden; }
-  .site-staggered .sm-logo-img { background: var(--accent); }
+  .site-staggered .sm-logo { display: none; }
   .site-staggered .sm-toggle {
     position: absolute;
     top: 0;
@@ -225,18 +224,5 @@ const socialLinks = [
   @media (max-width: 767px) {
     .navshell[open] [data-nav-close] { top: calc(var(--topbar-pad-block) + .4425rem); }
     [data-topbar-scrolled] .navshell[open] [data-nav-close] { top: calc(var(--sp-2) + var(--sp-1) + .4425rem); }
-  }
-  @media (max-width: 1024px) {
-    .site-staggered .sm-logo {
-      visibility: hidden;
-      opacity: 0;
-      transition: opacity 240ms ease, visibility 0s linear 240ms;
-    }
-    .site-staggered[data-open] .sm-logo {
-      visibility: visible;
-      opacity: 1;
-      transition: opacity 240ms ease, visibility 0s;
-    }
-    .site-staggered.staggered-menu-wrapper[data-open] .sm-logo-img { filter: none; }
   }
 </style>

@@ -245,7 +245,7 @@ body.forge-page .arrival-note-left{left:28px;top:25%}
 body.forge-page .arrival-note-left p{font-size:26px;margin:12px 0 13px}
 body.forge-page .arrival-note-left .eyebrow{font-size:10px}
 body.forge-page .arrival-note-left a{font-size:10px}
-body.forge-page .arrival-note-right{right:27px;top:68%}
+body.forge-page .arrival-note-right{right:27px;top:auto;bottom:max(212px,26%)}
 body.forge-page .arrival-note-right p{font-size:14px;margin:6px 0}
 body.forge-page .arrival-note-right .mono{font-size:8px}
 body.forge-page .arrival-note-right .small-mark{display:none}
@@ -309,7 +309,7 @@ body.forge-page .section-wrap{width:calc(100% - 40px)}
 body.forge-page .editor-paper{padding:10px 13px}
 body.forge-page .editor-save{display:none}
 body.forge-page .hero-stage{min-height:580px}
-body.forge-page .arrival-note-right{top:66%}
+body.forge-page .arrival-note-left{top:21%}
 }
 @media(prefers-reduced-motion:reduce){
 html:has(body.forge-page){scroll-behavior:auto}

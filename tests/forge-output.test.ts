@@ -36,4 +36,20 @@ describe('造物台的真实构建产物', () => {
     expect(scene).toBeDefined();
     for(const path of ['dist/index.html',...projects.map(project=>`dist/forge/${project.id}/index.html`)]) expect(jsClosure(path).files).not.toContain(scene);
   });
+  it('手机端成形阶段右侧文案由底边避让滚动提示，极窄屏不回写百分比 top', () => {
+    const css=readFileSync('src/styles/forge.css','utf8').replace(/\/\*[\s\S]*?\*\//g,'');
+    const mobileStart=css.indexOf('@media(max-width:760px){', css.indexOf('@media(max-width:1000px){'));
+    const narrowStart=css.indexOf('@media(max-width:370px){');
+    const reduceStart=css.indexOf('@media(prefers-reduced-motion:reduce){');
+    expect(mobileStart).toBeGreaterThan(-1);
+    expect(narrowStart).toBeGreaterThan(mobileStart);
+    expect(reduceStart).toBeGreaterThan(narrowStart);
+    const mobileBlock=css.slice(mobileStart,narrowStart);
+    const rightRule=mobileBlock.match(/body\.forge-page\s+\.arrival-note-right\{([^}]*)\}/)?.[1] ?? '';
+    expect(rightRule).toMatch(/top\s*:\s*auto/);
+    const bottomMin=Number(rightRule.match(/bottom\s*:\s*max\((\d+)px/)?.[1] ?? 0);
+    expect(bottomMin).toBeGreaterThanOrEqual(200);
+    const narrowBlock=css.slice(narrowStart,reduceStart);
+    expect(narrowBlock).not.toMatch(/\.arrival-note-right\s*\{[^}]*top\s*:/);
+  });
 });

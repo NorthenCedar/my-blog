@@ -1,4 +1,5 @@
 // 即时两段式换页动画、同源内存预取与长文章代码块分片渲染回归测试
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Window } from 'happy-dom';
 
@@ -31,7 +32,6 @@ describe('换页过渡 · 即时覆盖、内存预取与长文分片', () => {
     doc.documentElement.className = 'dark';
     doc.head.innerHTML = '<link rel="stylesheet" href="/_astro/shared.css">';
     doc.body.innerHTML = `
-      <div class="pt-status" role="status"></div>
       <main><a id="post-link" href="/posts/my-c-note/">C 语言笔记</a>
       <a id="skip-link" href="/talks/" data-astro-prefetch="false">跳过预取</a>
       <a id="ext-link" href="https://example.com/">外链</a>
@@ -119,9 +119,10 @@ describe('换页过渡 · 即时覆盖、内存预取与长文分片', () => {
       expect(htmlFetches()).toHaveLength(1);
       expect(origLoader).not.toHaveBeenCalled();
 
-      // 超过 420ms 未完成时，等待状态文案出现
+      // 慢加载期间也不会渲染顶部「正在打开页面」提示条
       vi.advanceTimersByTime(450);
-      expect(doc.querySelector('.pt-status')?.textContent).toContain('正在打开页面');
+      expect(doc.querySelector('.pt-status')).toBeNull();
+      expect(doc.body.textContent).not.toContain('正在打开页面');
 
       // 返回 HTML 响应并让异步 DOM 解析、waitStyles 创建 preload 节点就位
       resolveHtml(new Response(targetHtml, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }));
@@ -157,9 +158,8 @@ describe('换页过渡 · 即时覆盖、内存预取与长文分片', () => {
       expect(prepEvent.newDocument.documentElement.classList.contains('pt-on')).toBe(true);
       expect(prepEvent.newDocument.documentElement.classList.contains('pt-reveal')).toBe(true);
 
-      // 6. astro:after-swap 清空提示并挂 pt-reveal；仅在揭幕动画实际开播后按 REVEAL_MS 收尾（防慢机主线程卡顿跳过动画）
+      // 6. astro:after-swap 挂 pt-reveal；仅在揭幕动画实际开播后按 REVEAL_MS 收尾（防慢机主线程卡顿跳过动画）
       doc.dispatchEvent(new win.Event('astro:after-swap'));
-      expect(doc.querySelector('.pt-status')?.textContent).toBe('');
       expect(doc.documentElement.classList.contains('pt-reveal')).toBe(true);
       expect(doc.documentElement.classList.contains('pt-cover')).toBe(false);
 
@@ -182,7 +182,7 @@ describe('换页过渡 · 即时覆盖、内存预取与长文分片', () => {
 
     const win = new Window({ url: 'https://northcedar.top/archive/' });
     const doc = win.document;
-    doc.body.innerHTML = '<div class="pt-status"></div><main><a id="a" href="/talks/">说说</a></main>';
+    doc.body.innerHTML = '<main><a id="a" href="/talks/">说说</a></main>';
 
     bindWindowTimersAndDom(win);
     vi.stubGlobal('location', win.location);
@@ -266,6 +266,15 @@ describe('换页过渡 · 即时覆盖、内存预取与长文分片', () => {
       expect(doc.querySelectorAll('.code-holder')).toHaveLength(6);
     } finally {
       await win.happyDOM.close();
+    }
+  });
+
+  it('已彻底移除顶部「正在打开页面」提示条模板、样式与脚本逻辑', () => {
+    for (const file of ['src/layouts/Base.astro', 'src/styles/transition.css', 'src/scripts/transition.ts']) {
+      const src = readFileSync(file, 'utf8');
+      expect(src, `${file} 仍残留 pt-status`).not.toContain('pt-status');
+      expect(src, `${file} 仍残留 site-navigation-status`).not.toContain('site-navigation-status');
+      expect(src, `${file} 仍残留 正在打开页面`).not.toContain('正在打开页面');
     }
   });
 });
