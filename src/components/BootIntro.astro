@@ -128,36 +128,52 @@ const MARK = 'M12 6c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2-2.67 4-4 6-4a
 
     const events = new AbortController();
     const options = { signal: events.signal };
-    const close = (skipped = false) => {
+    let revealTimer = 0;
+    const finishReveal = () => {
+      clearTimeout(revealTimer);
+      html.classList.remove('boot-reveal');
+      window.removeEventListener('pagehide', finishReveal);
+      document.removeEventListener('astro:before-swap', finishReveal);
+    };
+    const close = (skipped = false, handoff = true) => {
       events.abort();
       clearTimeout(fallback);
       html.classList.remove('boot-on', 'boot-mini');
+      if (handoff && !reduce.matches) {
+        finishReveal();
+        html.classList.add('boot-reveal');
+        revealTimer = setTimeout(finishReveal, 660);
+        window.addEventListener('pagehide', finishReveal, { once: true });
+        document.addEventListener('astro:before-swap', finishReveal, { once: true });
+      } else {
+        finishReveal();
+      }
       if (overlay.open) overlay.close();
       overlay.remove();
       if (skipped) document.querySelector('.band-copy h1')?.focus({ preventScroll: true });
     };
-    const fallback = setTimeout(close, 8000);
-    overlay.querySelector('.bi-skip').addEventListener('click', () => close(true), options);
-    overlay.querySelector('.bi-clock').addEventListener('animationend', () => close(), options);
+    const fallback = setTimeout(() => close(false, true), 8000);
+    overlay.querySelector('.bi-skip').addEventListener('click', () => close(true, true), options);
+    overlay.querySelector('.bi-clock').addEventListener('animationend', () => close(false, true), options);
     overlay.addEventListener('cancel', event => {
       event.preventDefault();
-      close(true);
+      close(true, true);
     }, options);
     document.addEventListener('keydown', event => {
       if (event.key !== ' ' && event.key !== 'Spacebar') return;
       event.preventDefault();
-      close(true);
+      close(true, true);
     }, options);
-    reduce.addEventListener('change', event => { if (event.matches) close(); }, options);
-    window.addEventListener('pagehide', () => close(), options);
-    document.addEventListener('astro:before-swap', () => close(), options);
+    reduce.addEventListener('change', event => { if (event.matches) close(false, false); }, options);
+    window.addEventListener('pagehide', () => close(false, false), options);
+    document.addEventListener('astro:before-swap', () => close(false, false), options);
 
     if (innerWidth < 768) html.classList.add('boot-mini');
     html.classList.add('boot-on');
     try {
       overlay.showModal();
     } catch {
-      close();
+      close(false, false);
     }
   })();
 </script>
@@ -271,9 +287,27 @@ const MARK = 'M12 6c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4c2-2.67 4-4 6-4a
     background: none;
     border: 0;
     opacity: 0.5;
+    transition: opacity 200ms ease;
   }
   .bi-skip:hover,
   .bi-skip:focus-visible { opacity: 1; }
+  .bi-skip:focus,
+  .bi-skip:focus-visible { outline: none; }
+  @media (forced-colors: active) {
+    .bi-skip:focus-visible {
+      outline: 2px solid ButtonText;
+      outline-offset: 3px;
+    }
+  }
+  :global(html.boot-on) .bi-skip {
+    animation: bi-skip-out 360ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--bi-total) - 380ms) forwards;
+  }
+  @keyframes bi-skip-out {
+    to {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
   /* 视觉隐藏但留在无障碍树里：屏幕阅读器用户也要知道"有个遮罩、能跳过" */
   .bi-hint {
     position: absolute;

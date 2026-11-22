@@ -78,6 +78,7 @@ if (musicOrder.playlist !== MUSIC_PLAYLIST) throw new Error('音乐顺序配置�
   .music[data-music-open] .music-bar{background:var(--music-glass);}
   .music .music-bar.liquid-glass{border:0;}
   .music[data-dock-hidden],.music[data-modal-hidden],.music[data-modal-hidden] *{visibility:hidden!important;pointer-events:none!important;}
+  :global(html.boot-reveal) .music:not([data-dock-yielding]) .music-bar{animation:music-boot-in 480ms var(--ease-glass) 60ms both}
   .music[data-dock-yielding] .music-bar{opacity:0;visibility:hidden;transition:opacity .14s,visibility 0s .14s;}
   .music[data-dock-yielding] .music-bar *{pointer-events:none;}
   .music[data-dock-yielding] .music-morph{visibility:hidden!important;}
@@ -116,8 +117,9 @@ if (musicOrder.playlist !== MUSIC_PLAYLIST) throw new Error('音乐顺序配置�
   @media(hover:hover){.music button:hover{background:var(--music-glass-hover)}.music button:active{transform:scale(.96)}.music .music-expand:hover{background:transparent}.music-list :global(button:hover){background:var(--music-glass-hover)}.music-footer a:hover{color:var(--music-glass-accent)}}
   @keyframes music-pulse{to{transform:scaleY(.35)}}
   @keyframes music-open{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+  @keyframes music-boot-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   @media(max-width:600px){.music-panel{max-height:calc(100dvh - 108px)}}
   @media(max-height:540px){.music-panel{display:block;overflow:auto;overscroll-behavior:contain;padding:var(--sp-3);border-radius:22px}.music .music-status{margin:var(--sp-1) 0}.music-controls{margin-bottom:var(--sp-1)}.music-list{margin:var(--sp-1) 0}.music-footer{padding:0}}
   @media(prefers-reduced-transparency:reduce){.music-bar,.music[data-music-open] .music-bar{background:var(--music-glass-fallback)}}
-  @media(prefers-reduced-motion:reduce){.music.is-playing .music-signal i,.music-panel{animation:none}.music button,.music-bar,.music[data-dock-yielding] .music-bar,.music-list :global(button){transition:none}}
+  @media(prefers-reduced-motion:reduce){.music.is-playing .music-signal i,.music-panel,:global(html.boot-reveal) .music:not([data-dock-yielding]) .music-bar{animation:none}.music button,.music-bar,.music[data-dock-yielding] .music-bar,.music-list :global(button){transition:none}}
 </style>

@@ -280,4 +280,23 @@ describe.skipIf(!hasDist)('开场动画：产物契约', () => {
       '时钟动画没有走 --bi-total / var(--dur-boot) ⇒ 改 token 时它不会跟着变',
     ).toContain('animation:bi-clockvar(--bi-total)');
   });
+
+  it('跳过按钮隐藏聚焦绿框、结束前淡出，并与菜单和播放器通过 boot-reveal 淡入衔接', () => {
+    const bootCode = SRC.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const topbarSrc = readFileSync('src/components/Topbar.astro', 'utf8').replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const musicSrc = readFileSync('src/components/MusicPlayer.astro', 'utf8').replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+    expect(bootCode).toMatch(/<button class="bi-skip"[^>]*autofocus/);
+    expect(bootCode).toMatch(/\.bi-skip:focus,\s*\.bi-skip:focus-visible\s*\{\s*outline:\s*none;\s*\}/);
+    expect(bootCode).toMatch(/@media\s*\(forced-colors:\s*active\)[\s\S]*?\.bi-skip:focus-visible/);
+    expect(bootCode).toMatch(/:global\(html\.boot-on\)\s+\.bi-skip[\s\S]*?bi-skip-out/);
+    expect(bootCode).toContain("html.classList.add('boot-reveal')");
+    expect(bootCode).toContain("html.classList.remove('boot-reveal')");
+
+    expect(topbarSrc).toMatch(/html\.boot-reveal\s+\.home-topbar\s*>\s*:is\(\.navbtn,\s*\.nav-trigger\)[^}]*animation:\s*boot-ui-in/);
+    expect(topbarSrc).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?html\.boot-reveal\s+\.home-topbar[\s\S]*?animation:\s*none/);
+
+    expect(musicSrc).toMatch(/:global\(html\.boot-reveal\)\s*\.music:not\(\[data-dock-yielding\]\)\s*\.music-bar\s*\{[^}]*animation:\s*music-boot-in/);
+    expect(musicSrc).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?html\.boot-reveal[\s\S]*?animation:\s*none/);
+  });
 });

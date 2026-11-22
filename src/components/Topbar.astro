@@ -483,6 +483,13 @@ const scrolls = Astro.url.pathname !== '/gallery/';
      抬到 z-index:1 即可，和 `.navshell`(40) 的层级关系不变。 */
   .home-topbar > :is(.site, .navbtn, .nav-trigger) { position: relative; z-index: 1; }
   html.boot-on .home-topbar { visibility: hidden; }
+  html.boot-reveal .home-topbar > :is(.navbtn, .nav-trigger) {
+    animation: boot-ui-in 480ms var(--ease-glass) 40ms both;
+  }
+  @keyframes boot-ui-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
   /* 滚动态只改几何（top / max-width / padding）：胶片的材质改由 `::after` 那层淡入，
      两边都不再逐帧插值模糊、描边与阴影 —— 详见上面 `::after` 那段注释。 */
   body > [data-scroll-topbar][data-topbar-scrolled] {
@@ -549,6 +556,7 @@ const scrolls = Astro.url.pathname !== '/gallery/';
   }
   @media (prefers-reduced-motion: reduce) {
     [data-scroll-topbar], [data-scroll-topbar]::before, [data-scroll-topbar]::after, .home-topbar .site, body > .home-topbar[data-scroll-topbar]::after { transition: none; }
+    html.boot-reveal .home-topbar > :is(.navbtn, .nav-trigger) { animation: none; }
   }
 
   /* ---------- 内页页头（外壳提供，各页复用） ----------
