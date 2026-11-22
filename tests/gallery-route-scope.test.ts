@@ -54,6 +54,39 @@ async function gallery(hash = '', saved = {}) {
   return { by, paint, dispose, next: () => by('[data-next]').click(), prev: () => by('[data-prev]').click() };
 }
 
+it('轻触显影幕按钮只翻到封面，同一次触摸的补发点击不会打开相册', async () => {
+  const { by } = await gallery();
+  const advance = by('[data-advance]');
+  const album = by('[data-album-link]');
+  const open = vi.fn((event: Event) => event.preventDefault());
+  album.addEventListener('click', open);
+  const hit = vi.spyOn(document, 'elementFromPoint').mockReturnValue(advance);
+  const touch = (target: HTMLElement, type: string) => target.dispatchEvent(new PointerEvent(type, {
+    bubbles: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: 40, clientY: 550,
+  }));
+
+  const turnToCovers = () => {
+    hit.mockReturnValue(advance);
+    touch(advance, 'pointerdown');
+    touch(advance, 'pointerup');
+    expect(by('[data-stage]').dataset.active).toBe('1');
+    hit.mockReturnValue(album);
+  };
+
+  const click = (detail: number) => album.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail }));
+  turnToCovers();
+  expect(click(1)).toBe(false);
+  expect(open).not.toHaveBeenCalled();
+
+  by('[data-prev]').click();
+  turnToCovers();
+  click(0);
+  touch(album, 'pointerdown');
+  touch(album, 'pointerup');
+  click(1);
+  expect(open).toHaveBeenCalledTimes(2);
+});
+
 it('显影首幕与快速翻到最后一幕时只升级真正停留的封面', async () => {
   const f = await gallery();
   const source = (index: number) => f.by<HTMLImageElement>(`[data-slide="${index}"] .cover-link img`).getAttribute('src');

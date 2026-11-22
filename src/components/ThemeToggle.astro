@@ -38,33 +38,103 @@ const { variant = 'dock' } = Astro.props;
   <canvas aria-hidden="true" width="220" height="200"></canvas>
 </button>
 <script>
+import type { PendingThemePointer } from '../scripts/theme-toggle';
 import { onPage } from '../scripts/page-lifecycle';
 import { setTheme } from '../scripts/theme';
-onPage(({ document, addEventListener, matchMedia }) => {
+onPage(({ document, addEventListener, matchMedia, requestIdleCallback, setTimeout }) => {
   const button = document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
   if (!button) return;
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const dark = () => document.documentElement.classList.contains('dark');
   const sync = () => button.setAttribute('aria-checked', String(dark()));
   let renderer: AbortController | undefined;
-  const stop = () => { renderer?.abort(); renderer = undefined; };
+  let pending: PendingThemePointer | undefined;
+  let pendingListeners: AbortController | undefined;
+  let suppressClickUntil = 0;
+  const clearPending = () => {
+    pendingListeners?.abort();
+    pendingListeners = undefined;
+    if (pending) pending.ended = true;
+    pending = undefined;
+  };
+  const stop = () => { clearPending(); renderer?.abort(); renderer = undefined; };
   const boot = () => {
     if (renderer || motion.matches || !('gpu' in navigator)) return;
     const current = new AbortController();
     renderer = current;
     void import('../scripts/theme-toggle')
-      .then(({ initJellyThemeToggle }) => initJellyThemeToggle(button, current.signal))
+      .then(({ initJellyThemeToggle }) => initJellyThemeToggle(button, current.signal, () => pending))
       .catch(() => current.abort());
   };
-  button.addEventListener('pointerenter', event => { if (event.pointerType === 'mouse') boot(); });
+  // 页面空窗或站内换页后预热 WebGPU 场景，使手机触屏与桌面直拖开页即用。
+  const warm = () => {
+    if (motion.matches || !('gpu' in navigator)) return;
+    if (requestIdleCallback) requestIdleCallback(boot, { timeout: 1200 });
+    else setTimeout(boot, 250);
+  };
+  if (document.readyState === 'complete') warm();
+  else addEventListener('load', warm, { once: true });
+  button.addEventListener('pointerenter', boot);
+  button.addEventListener('pointerdown', event => {
+    suppressClickUntil = 0;
+    if (event.button !== 0 || event.isPrimary === false || event.target instanceof HTMLCanvasElement) return;
+    boot();
+    if (motion.matches || !('gpu' in navigator)) return;
+    clearPending();
+    const active: PendingThemePointer = {
+      id: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: event.clientX,
+      y: event.clientY,
+      t: performance.now(),
+      moved: false,
+      ended: false,
+      adopted: false,
+    };
+    pending = active;
+    const events = new AbortController();
+    pendingListeners = events;
+    const finish = (e: PointerEvent, cancel = false) => {
+      if (e.pointerId !== active.id) return;
+      active.ended = true;
+      events.abort();
+      if (pending === active) pending = undefined;
+      if (cancel) return;
+      if (active.adopted) {
+        suppressClickUntil = performance.now() + 400;
+        return;
+      }
+      if (!active.moved) return;
+      suppressClickUntil = performance.now() + 400;
+      const dx = e.clientX - active.startX;
+      const dy = e.clientY - active.startY;
+      if (Math.abs(dx) >= 12 && Math.abs(dx) > Math.abs(dy)) {
+        const next = dx > 0 ? 'dark' : 'light';
+        if ((next === 'dark') !== dark()) setTheme(next);
+      }
+    };
+    addEventListener('pointermove', e => {
+      if (e.pointerId !== active.id) return;
+      active.x = e.clientX;
+      active.y = e.clientY;
+      if (Math.hypot(active.x - active.startX, active.y - active.startY) >= 6) active.moved = true;
+    }, { signal: events.signal });
+    addEventListener('pointerup', e => finish(e), { signal: events.signal });
+    addEventListener('pointercancel', e => finish(e, true), { signal: events.signal });
+  });
   button.addEventListener('click', event => {
     // 画布收到的指针手势由果冻处理，原生按钮负责基础点按与键盘点击。
     if (event.target instanceof HTMLCanvasElement) return;
+    if (event.detail > 0 && performance.now() < suppressClickUntil) {
+      suppressClickUntil = 0;
+      return;
+    }
     setTheme(dark() ? 'light' : 'dark');
     if (event.detail > 0) boot();
   });
   document.addEventListener('themechange', sync);
-  motion.addEventListener('change', stop);
+  motion.addEventListener('change', () => { if (motion.matches) stop(); else warm(); });
   addEventListener('pagehide', stop);
   sync();
   return stop;
@@ -83,6 +153,9 @@ onPage(({ document, addEventListener, matchMedia }) => {
     font: inherit;
     border-radius: 12px;
     outline-offset: 3px;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
   .theme-toggle canvas {
     display: block;
@@ -163,6 +236,7 @@ onPage(({ document, addEventListener, matchMedia }) => {
   @media (prefers-reduced-motion: reduce) {
     .theme-toggle {
       cursor: pointer;
+      touch-action: manipulation;
     }
   }
 </style>

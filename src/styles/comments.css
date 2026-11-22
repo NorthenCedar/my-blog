@@ -31,6 +31,7 @@
 }
 .comment-name {
   font-weight: 700;
+  overflow-wrap: break-word;
 }
 .comment-time {
   display: block;
@@ -43,6 +44,7 @@
   margin: 0;
   max-width: var(--measure);
   white-space: pre-wrap; /* 保留换行，但不解析 HTML */
+  overflow-wrap: break-word;
 }
 .comment-empty {
   color: var(--muted);

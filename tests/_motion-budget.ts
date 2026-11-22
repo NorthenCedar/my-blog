@@ -5,8 +5,10 @@ import { isSiteMenuEntry, isTechHeadingEntry, jsClosure } from './_writer-output
 export const MOTION_ENGINE_BUDGET = 96 * 1024;
 // 换页状态和局部滑块的公共引导合计净增约 1 KiB，首屏静态上限照旧检查。
 export const NAVIGATION_UI_BOOT_BUDGET = 1024;
-// 本地同源构建中，等待交接与停靠过滤令公共入口增加 319 B。
-export const NAVIGATION_FEEDBACK_BOOT_BUDGET = 384;
+// 换页过渡改走两段式即时覆盖 + 同源内存预取与样式预热，同时关闭 Astro 内置 link prefetch：
+// 实测 ClientRouter.astro_*.js 4084 → 1571 B（-2513 B），Base.astro_*.js 22229 → 26858 B（+4629 B），净增 +2116 B；
+// 由原 384 B 按实测净增上调至 2560 B（留约 +60 B~2 KiB 余量，螺旋盘/留言/文章三处红线齐平且仍拦住大型按需依赖）。
+export const NAVIGATION_FEEDBACK_BOOT_BUDGET = 2560;
 // 访问事件和页脚可见性控制的编译增量使用独立预算。
 export const PAGE_STATS_BOOT_BUDGET = 1024;
 // 只给评论和文章各自的并发归并、目录缓存计入新增开销。
@@ -23,13 +25,13 @@ const TECH_HEADING_BUDGET = 240 * 1024;
  * ★ 2026-11-12：主题开关从关于页搬进顶栏后，`ThemeToggle.astro` 的引导脚本
  * （原生按钮和按需加载入口）会出现在**每一个**内页上。
  * 实测代价（同一份源码，只摘掉 Topbar 里那一行重跑构建，差出来的就是这笔）：
- *   · `ThemeToggle.astro_*.js` 825 B（原引导），加入即时主题切换后为 1245 B；
+ *   · `ThemeToggle.astro_*.js` 825 B（原引导）→ 1245 B（加入即时切换）→ 2412 B（新增空闲预热与未就绪前指针交接，+1167 B）；
  *   · `page-lifecycle.*.js` 2794 B —— 引导脚本 import 了它，于是它从"只有部分页面
  *     静态引用"变成"所有内页都静态引用"（对全站只多付一次，对文章页是本轮才开始付）；
  *   · 页内内联 ~236 B。
- * 基础开关的增量为 420 B，计入额外 512 B；渲染器继续独立计量。
+ * 按实测新增约 1.15 KiB，将原 4608 上调 +1280 B 至 5888；渲染器继续独立计量。
  */
-export const THEME_TOGGLE_BOOT_BUDGET = 4608;
+export const THEME_TOGGLE_BOOT_BUDGET = 5888;
 
 /**
  * jelly-slider 主题开关的**渲染器本体**（vendored TypeGPU 光追场景，单 chunk ≈458 KB）。

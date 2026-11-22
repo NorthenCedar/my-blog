@@ -48,6 +48,7 @@ body:not(.chrome-console) {
 
 body:not(.chrome-console) > main {
   flex: 1 0 auto;
+  min-width: 0;
 }
 
 body:not(.chrome-console) > footer {

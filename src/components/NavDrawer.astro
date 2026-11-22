@@ -123,7 +123,7 @@ const socialLinks = [
   .navshell .navpanel {
     position: absolute;
     pointer-events: none;
-    /* 静态面板打开后直接可见，动画面板的初始透明度留给动画控制。 */
+    /* 原生面板入场只移动位置，增强面板的透明度由其时间轴控制。 */
     opacity: 1;
     --sm-num-opacity: 1;
   }
@@ -145,6 +145,15 @@ const socialLinks = [
   .navtog:checked ~ .navshell .navpanel { pointer-events: auto; }
   .navshell[open] { visibility: visible; pointer-events: auto; }
   .navshell[open] .navpanel { pointer-events: auto; }
+  @media (prefers-reduced-motion: no-preference) {
+    .navtog:checked ~ .navshell .navpanel,
+    .navshell[open] .navpanel {
+      animation: nav-panel-in .65s var(--ease-glass);
+    }
+    @keyframes nav-panel-in {
+      from { transform: translateX(100%); }
+    }
+  }
   .navshell [data-nav-close], .navshell[open] label { display: none; }
   .navshell[open] [data-nav-close] {
     display: inline-flex;

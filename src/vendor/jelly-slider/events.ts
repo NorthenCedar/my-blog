@@ -219,4 +219,25 @@ export class EventHandler {
     this.snapGoal = null;
     this.snapDone = null;
   }
+
+  /** 在画布首帧就绪前就开始的按压/拖拽，待首帧落位后无缝接管同一根指针。 */
+  adoptPointer(pointerId: number, startX: number, startY: number, currentX: number): boolean {
+    if (this.activePointerId !== null) return false;
+    const hit = this.hitTest ? this.hitTest(startX, startY) : true;
+    if (!hit) {
+      this.grabbed = false;
+      return false;
+    }
+    this.grabbed = true;
+    this.activePointerId = pointerId;
+    this.isMouseDown = true;
+    this.updateTargetMouseX(currentX);
+    this.wake?.();
+    try {
+      this.canvas.setPointerCapture(pointerId);
+    } catch {
+      /* 合成事件或已离手时由 window 监听兜底 */
+    }
+    return true;
+  }
 }

@@ -2,12 +2,23 @@ import { onPage } from './page-lifecycle';
 
 const BLOCKS = '.post-body .prose pre.astro-code';
 const PREVIEW_LINES = 6;
+const SYNC_BLOCKS = 6;
+const BATCH_SIZE = 8;
 
-onPage(({ document, matchMedia, setTimeout, keep }) => {
+onPage(({ document, window, matchMedia, setTimeout, keep }) => {
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let nextId = 0;
-  for (const pre of document.querySelectorAll<HTMLPreElement>(BLOCKS)) {
-    if (pre.parentElement?.classList.contains('code-holder')) continue;
+  let live = true;
+  keep(() => { live = false; });
+
+  const yieldToMain = (): Promise<void> => {
+    const win = window as Window & { scheduler?: { yield?: () => Promise<void> } };
+    if (typeof win.scheduler?.yield === 'function') return win.scheduler.yield();
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
+  const enhance = (pre: HTMLPreElement) => {
+    if (!pre.isConnected || pre.parentElement?.classList.contains('code-holder')) return;
 
     const holder = document.createElement('div');
     holder.className = 'code-holder';
@@ -94,5 +105,22 @@ onPage(({ document, matchMedia, setTimeout, keep }) => {
     bar.append(lang, actions);
     pre.replaceWith(holder);
     holder.append(bar, pre);
+  };
+
+  const pres = [...document.querySelectorAll<HTMLPreElement>(BLOCKS)];
+  const syncCount = Math.min(SYNC_BLOCKS, pres.length);
+  for (let i = 0; i < syncCount; i++) enhance(pres[i]);
+
+  if (pres.length > syncCount) {
+    // 长文章首屏外代码块分批处理，避免切页瞬间连续改写几十段代码把主线程卡住。
+    void (async () => {
+      for (let i = syncCount; i < pres.length && live; i++) {
+        if ((i - syncCount) % BATCH_SIZE === 0) {
+          await yieldToMain();
+          if (!live) return;
+        }
+        enhance(pres[i]);
+      }
+    })();
   }
 }, BLOCKS);

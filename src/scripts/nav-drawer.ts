@@ -35,7 +35,7 @@ onPage(({ document, keep, addEventListener }) => {
   trigger.addEventListener('pointerenter', preload, options);
   trigger.addEventListener('click', () => {
     if (drawer.open) return;
-    // 冷启动直接打开现有链接。动画加载完成后，从下一次开启开始使用。
+    // 冷启动由原生面板立即滑入，增强模块就绪后再使用它的分层动画。
     if (mount) {
       keep(mount(trigger, drawer));
       events.abort();

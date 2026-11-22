@@ -256,16 +256,133 @@ html.pt-play .shell {
   }
 }
 
+/* ================= 5. SPA 两段式换页：先覆盖（pt-cover），加载完即揭幕（pt-reveal） =================
+   避免点击后干等网络返回才起播动画；进场与退场各走独立时间线，中间等待期内扫描线持续走动给反馈。 */
+html.pt-cover .pt-ink {
+  animation: pt-ink-in 240ms cubic-bezier(0.62, 0.01, 0.28, 1) both;
+}
+html.pt-cover .pt-word {
+  animation: pt-word-in 240ms var(--ease-glass) 110ms both;
+}
+html.pt-cover .pt-scan {
+  animation: pt-scan-in 540ms linear 160ms infinite;
+}
+html.pt-cover .shell {
+  animation: pt-shell-in 200ms var(--ease-glass) both;
+}
+
+html.pt-reveal .pt-ink {
+  animation: pt-ink-out 380ms cubic-bezier(0.62, 0.01, 0.28, 1) both;
+}
+html.pt-reveal .pt-word {
+  animation: pt-word-out 220ms var(--ease-glass) both;
+}
+html.pt-reveal .pt-scan {
+  opacity: 0;
+}
+html.pt-reveal .shell {
+  animation: pt-shell-out 380ms var(--ease-glass) both;
+}
+
+@keyframes pt-ink-in {
+  0% {
+    transform: translate3d(-101%, 0, 0);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  }
+}
+@keyframes pt-ink-out {
+  0% {
+    transform: translate3d(0, 0, 0);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  }
+  12% {
+    transform: translate3d(0, 0, 0);
+    clip-path: polygon(12% 0, 100% 0, 100% 100%, 0 100%);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+    clip-path: polygon(100% 0, 100% 0, 100% 100%, 100% 100%);
+  }
+}
+@keyframes pt-word-in {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 1.1rem));
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+@keyframes pt-word-out {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% - 0.9rem));
+  }
+}
+@keyframes pt-scan-in {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  20%,
+  80% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(100vh);
+  }
+}
+@keyframes pt-shell-in {
+  0% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0.32;
+    transform: scale(0.99);
+  }
+}
+@keyframes pt-shell-out {
+  0% {
+    opacity: 0.32;
+    transform: scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* 系统开了「减少动态效果」：整套不出现（连蒙版都不显示） */
 @media (prefers-reduced-motion: reduce) {
   html.pt-on .pt,
-  html.pt-play .pt {
+  html.pt-play .pt,
+  html.pt-cover .pt,
+  html.pt-reveal .pt {
     display: none !important;
   }
   html.pt-play .pt-ink,
   html.pt-play .pt-word,
   html.pt-play .pt-scan,
-  html.pt-play .shell {
+  html.pt-play .shell,
+  html.pt-cover .pt-ink,
+  html.pt-cover .pt-word,
+  html.pt-cover .pt-scan,
+  html.pt-cover .shell,
+  html.pt-reveal .pt-ink,
+  html.pt-reveal .pt-word,
+  html.pt-reveal .pt-scan,
+  html.pt-reveal .shell {
     animation: none !important;
   }
 }

@@ -1,81 +1,245 @@
-// 页面过渡（2026-09-30 站主定案换成 v3）：点击站内链接时**先盖不播**，到目标页再播 900ms 的墨色浸染。
-// v2 那套 2200ms 四段（无菌纸柔雾 / 坐标锁定 / 无菌舱门 / 内容落地）已整体作废，
-// 换成了原型 v10.6 的过渡；本文件的**分工与两个 bug 的修法没变**，只有时长变了。
-//
-// 分工：
-//   · 本脚本（每一页都加载）：拦截站内链接 → 打 handoff 标记 + 盖上蒙版（静止态）；到目标页后收尾。
-//   · <head> 里的 inline 同步脚本（见 Base.astro）：目标页**首次绘制前**把蒙版补上并加 pt-play；
-//   · src/styles/transition.css：四阶段时间线全在 CSS 里（transform / opacity）。
-//
-// 为什么上一页只盖不播：两页的静止态长得一样 ⇒ 换页过程无缝、不闪。动画只在目标页播一次。
-//
-// 2026-09-27 两个 bug 的修法都记在这（都真踩过）：
-//   ① 相册点照片会触发过渡、且蒙版盖住灯箱 ⇒
-//      灯箱是页面内 JS 拦下点击（preventDefault）自己开图，**不会真的跳转**。
-//      而我原来在**捕获阶段当场**判断，那时别的处理器还没跑、`defaultPrevented` 还是 false ⇒ 误判成"要跳转"。
-//      现在：捕获阶段只做初筛，真正的判断放进**微任务**（本轮事件的所有同步处理器都跑完之后），
-//      只要 `defaultPrevented` 为真就什么都不做。另外蒙版 z-index 也降到灯箱（50）之下，双保险。
-//   ② 手机端抽屉在非首页点不到、被内容盖住 ⇒
-//      上一页点击时置了 handoff 标记、但那次跳转被拦下（没真发生）⇒ 下一个页面照样挂上 pt-play、
-//      播了一遍"没人要的"过渡；而 `pt-content` 是 `fill: both`，结束帧的 `transform: scale(1)`
-//      **会一直留在 .shell 上** ⇒ 一个非 none 的 transform 会造出**层叠上下文** ⇒
-//      后面的 <main> 就盖住了顶栏里的抽屉（首页没事纯属侥幸：console 外壳只做淡入、不做缩放）。
-//      现在：动画跑完（950ms）由本脚本把 `pt-on pt-play` 摘掉 ⇒ 那个 transform 随之消失。
+// 页面过渡（2026-09-30 站主定案换成 v3；2026-11-22 改为即时两段式 + 内存预取）：
+// SPA 换页时点击当帧立刻起播墨色覆盖（pt-cover），同时后台并行拉取页面与样式，
+// DOM 替换后立刻平滑斜切揭幕（pt-reveal），避免点完干等加载再播动画。
+// 非 SPA 整页刷新仍走 Base.astro 首帧同步标记 + pt-play 完整兜底。
 
 import type { TransitionBeforePreparationEvent, TransitionBeforeSwapEvent } from 'astro:transitions/client';
 
 const KEY = 'pt';
 const root = document.documentElement;
 const status = document.querySelector('.pt-status');
-// v3（2026-09-30 站主定案）：换成**原型 v10.6 的墨色浸染**，时间线总长 900ms
-// （--pt-sweep，值在 tokens.css / transition.css）。收尾多留 100ms ⇒ 1000ms 摘类，
-// 保证摘的时候动画已经结束 —— 摘早了会把最后一帧（墨层刚收成一条线）硬切掉。
+// 保留原整页过渡时长（--pt-sweep = 900ms）与兜底清理上限，供整页导航及测试契约共用。
 const HANDOFF_MS = 1000;
-// 万一跳转没真的发生（被别的东西拦下、或用户中途取消），自己收掉。
-// v2 是 3000ms（对应 2200ms 的时间线）；v3 只有 900ms，1.5s 足够。
 const STALE_MS = 1500;
+const COVER_MS = 230;
+const REVEAL_MS = 520;
+const CACHE_TTL = 45_000;
+const CACHE_MAX = 12;
+const NO_PT = '[target="_blank"],[download],[data-no-transition]';
+const SKIP_EXT = /\.(?:xml|json|webp|png|jpe?g|gif|svg|ico|pdf|mp3|mp4|m4a|zip|glb|hdr|woff2?)$/i;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+type PageDoc = { html: string; redirected?: string; mediaType: 'text/html' | 'application/xhtml+xml' };
+type CacheEntry = { at: number; promise: Promise<PageDoc | null> };
+
+const pageCache = new Map<string, CacheEntry>();
+const warmedStyles = new Set<string>();
+let parser: DOMParser | undefined;
 
 /** 站内、可整页跳转的普通左键点击才值得盖（其余一律放行，别影响正常浏览）。 */
 function precheck(e: MouseEvent, a: HTMLAnchorElement): boolean {
   if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
-  if (a.matches('[target="_blank"],[download],[data-no-transition]')) return false;
-  if (a.origin !== location.origin) return false;
-  // 同页锚点由页面自己处理。
+  if (a.matches(NO_PT) || a.origin !== location.origin) return false;
   return !(a.pathname === location.pathname && a.search === location.search);
 }
 
+function normalizeUrl(raw: string): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw, location.href);
+    if (u.origin !== location.origin || (u.pathname === location.pathname && u.search === location.search)) return null;
+    if (u.pathname.startsWith('/api/') || u.pathname.startsWith('/write') || SKIP_EXT.test(u.pathname)) return null;
+    u.hash = '';
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
+function canPrefetch(el: Element | null): string | null {
+  if (!el || el.tagName !== 'A' || !navigator.onLine) return null;
+  const conn = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  if (conn && (conn.saveData || /2g/.test(conn.effectiveType ?? ''))) return null;
+  if (el.matches(`${NO_PT},[data-astro-reload],[data-astro-prefetch="false"]`)) return null;
+  return normalizeUrl((el as HTMLAnchorElement).href || el.getAttribute('href') || '');
+}
+
+const headStyles = () =>
+  new Set([...document.head.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.getAttribute('href')).filter(Boolean) as string[]);
+
+function preloadStylesFromHtml(html: string) {
+  const end = html.search(/<\/head>/i);
+  if (end < 0) return;
+  const loaded = headStyles();
+  for (const [tag] of html.slice(0, end).matchAll(/<link\b[^>]*rel=["']?stylesheet["']?[^>]*>/gi)) {
+    const m = tag.match(/\bhref=(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
+    const raw = m?.[1] ?? m?.[2] ?? m?.[3];
+    if (!raw || loaded.has(raw)) continue;
+    try {
+      const abs = new URL(raw, location.href);
+      if (abs.origin !== location.origin || warmedStyles.has(abs.href)) continue;
+      warmedStyles.add(abs.href);
+      void fetch(abs.href, { priority: 'low' } as RequestInit).catch(() => {});
+    } catch { /* 忽略异常样式地址。 */ }
+  }
+}
+
+function fetchPage(url: string, prefetch: boolean): Promise<PageDoc | null> {
+  const cached = pageCache.get(url);
+  if (cached && Date.now() - cached.at < CACHE_TTL) return cached.promise;
+  if (cached) pageCache.delete(url);
+
+  const init: RequestInit & { priority?: string } = {
+    headers: prefetch ? { Accept: 'text/html', Purpose: 'prefetch' } : { Accept: 'text/html' },
+  };
+  if (prefetch) init.priority = 'low';
+
+  const promise = fetch(url, init)
+    .then(async (res) => {
+      if (!res.ok) return null;
+      const mediaType = (res.headers.get('content-type') ?? '').split(';', 1)[0].trim();
+      if (mediaType !== 'text/html' && mediaType !== 'application/xhtml+xml') return null;
+      const html = await res.text();
+      if (prefetch) preloadStylesFromHtml(html);
+      return { html, redirected: res.redirected ? res.url : undefined, mediaType: mediaType as PageDoc['mediaType'] };
+    })
+    .catch(() => null)
+    .then((doc) => {
+      if (!doc) pageCache.delete(url);
+      return doc;
+    });
+
+  if (pageCache.size >= CACHE_MAX) {
+    const oldest = pageCache.keys().next().value;
+    if (oldest) pageCache.delete(oldest);
+  }
+  pageCache.set(url, { at: Date.now(), promise });
+  return promise;
+}
+
+function withAbort<T>(signal: AbortSignal, start: (done: (val: T | null) => void) => () => void): Promise<T | null> {
+  if (signal.aborted) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let stop = () => {};
+    const done = (val: T | null) => {
+      signal.removeEventListener('abort', onAbort);
+      stop();
+      resolve(val);
+    };
+    const onAbort = () => done(null);
+    signal.addEventListener('abort', onAbort, { once: true });
+    stop = start(done);
+  });
+}
+
+function waitStyles(doc: Document, signal: AbortSignal): Promise<void> {
+  const loaded = headStyles();
+  const pending: Promise<void>[] = [];
+  for (const link of doc.querySelectorAll('head link[rel="stylesheet"]')) {
+    const href = link.getAttribute('href');
+    if (!href || loaded.has(href)) continue;
+    const persist = link.getAttribute('data-astro-transition-persist');
+    if (persist && document.querySelector(`[data-astro-transition-persist="${persist}"]`)) continue;
+    const el = document.createElement('link');
+    el.rel = 'preload';
+    el.as = 'style';
+    el.href = href;
+    pending.push(withAbort<void>(signal, (done) => {
+      const fin = () => done();
+      el.addEventListener('load', fin, { once: true });
+      el.addEventListener('error', fin, { once: true });
+      document.head.append(el);
+      return () => { el.removeEventListener('load', fin); el.removeEventListener('error', fin); };
+    }).then(() => {}));
+  }
+  return pending.length ? Promise.all(pending).then(() => {}) : Promise.resolve();
+}
+
+async function loadFromCache(nav: TransitionBeforePreparationEvent): Promise<boolean> {
+  const url = normalizeUrl(nav.to.href);
+  if (!url || nav.formData) return false;
+  const page = await withAbort(nav.signal, (done) => {
+    let active = true;
+    void fetchPage(url, false).then((v) => { if (active) done(v); });
+    return () => { active = false; };
+  });
+  if (nav.signal.aborted) return true;
+  if (!page) return nav.preventDefault(), true;
+  if (page.redirected) {
+    const target = new URL(page.redirected);
+    if (target.origin !== nav.to.origin) return nav.preventDefault(), true;
+    const hash = nav.to.hash;
+    nav.to = target;
+    nav.to.hash = hash;
+  }
+  parser ??= new DOMParser();
+  nav.newDocument = parser.parseFromString(page.html, page.mediaType);
+  nav.newDocument.querySelectorAll('noscript').forEach((el) => el.remove());
+  if (!nav.newDocument.querySelector('[name="astro-view-transitions-enabled"]')) return nav.preventDefault(), true;
+  await waitStyles(nav.newDocument, nav.signal);
+  return true;
+}
+
 // ---- 收尾：目标页播完就把标记摘掉 ----
-// **必须摘**：`pt-content` 的结束帧带着 transform，留在类上就等于给 .shell 永久加了一个层叠上下文。
+// **必须摘**：结束帧带着 transform，留在类上会给 .shell 留下多余层叠上下文。
 let cleanupTimer: number | undefined;
 let waitTimer: number | undefined;
+let hoverTimer: number | undefined;
 let preparing: AbortSignal | undefined;
 let swapping: AbortSignal | undefined;
-function showWait(pending = false) {
+
+function showWait(pending = false, delayMs = 180) {
   window.clearTimeout(waitTimer);
   if (!status) return;
   if (!pending) status.textContent = '';
-  else if (!status.textContent) waitTimer = window.setTimeout(() => { status.textContent = '正在打开页面…'; }, 180);
+  else if (!status.textContent) waitTimer = window.setTimeout(() => { status.textContent = '正在打开页面…'; }, delayMs);
 }
+
 function clearOverlay() {
   window.clearTimeout(cleanupTimer);
   showWait();
   root.classList.remove('pt-on', 'pt-play');
+  root.classList.remove('pt-cover', 'pt-reveal');
 }
+
 function finishAfter(ms: number) {
   window.clearTimeout(cleanupTimer);
   cleanupTimer = window.setTimeout(clearOverlay, ms);
 }
+
 if (root.classList.contains('pt-play')) finishAfter(STALE_MS);
-document.addEventListener('animationstart', event => {
-  if (event.animationName !== 'pt-ink' || !root.classList.contains('pt-play')) return;
-  // 等墨色层开始绘制再接棒，收尾也从实际开播起算。
-  showWait();
-  finishAfter(HANDOFF_MS);
+
+document.addEventListener('animationstart', (event) => {
+  if (event.animationName === 'pt-ink' && root.classList.contains('pt-play')) {
+    showWait();
+    finishAfter(HANDOFF_MS);
+  } else if (event.animationName === 'pt-ink-out' && root.classList.contains('pt-reveal')) {
+    showWait();
+    finishAfter(REVEAL_MS);
+  }
 });
 
-// 客户端路由接管的点击由 before-preparation 接手，其余站内导航走浏览器。
-window.addEventListener('click', event => {
+document.addEventListener('animationend', (event) => {
+  if (event.animationName === 'pt-ink-out' && root.classList.contains('pt-reveal')) {
+    clearOverlay();
+  }
+});
+
+// 三路委托预取：悬停（65ms 防抖）/ 键盘聚焦 / 触屏与鼠标按下（0ms 立即抢跑）。
+const schedulePrefetch = (target: EventTarget | null, immediate = false) => {
+  const url = canPrefetch(target instanceof Element ? target.closest('a') : null);
+  if (!url) return;
+  window.clearTimeout(hoverTimer);
+  if (immediate) void fetchPage(url, true);
+  else hoverTimer = window.setTimeout(() => { void fetchPage(url, true); }, 65);
+};
+const cancelHover = (e: Event) => {
+  if (e instanceof MouseEvent) {
+    const link = (e.target as Element | null)?.closest?.('a');
+    if (link && e.relatedTarget instanceof Node && link.contains(e.relatedTarget)) return;
+  }
+  window.clearTimeout(hoverTimer);
+};
+
+document.addEventListener('mouseover', (e) => schedulePrefetch(e.target), { passive: true });
+document.addEventListener('mouseout', cancelHover, { passive: true });
+document.addEventListener('focusin', (e) => schedulePrefetch(e.target), { passive: true });
+document.addEventListener('focusout', cancelHover, { passive: true });
+document.addEventListener('pointerdown', (e) => schedulePrefetch(e.target, true), { passive: true });
+document.addEventListener('touchstart', (e) => schedulePrefetch(e.target, true), { passive: true });
+
+// 兜底未被客户端路由接管的站内整页跳转（如 [data-astro-reload]）。
+window.addEventListener('click', (event) => {
   const link = (event.target as Element | null)?.closest?.('a');
   if (!link || !precheck(event, link)) return;
   if (!reducedMotion.matches) {
@@ -87,52 +251,82 @@ window.addEventListener('click', event => {
   showWait(true);
   finishAfter(STALE_MS);
 });
-window.addEventListener('pageshow', event => { if (event.persisted) clearOverlay(); });
 
-// 客户端换页沿用原来的墨色过渡，不替换持久播放器。
-document.addEventListener('astro:before-preparation', event => {
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) clearOverlay();
+});
+
+// 客户端换页：点击即刻覆盖，并行等待内容与最小覆盖时长后立刻揭幕。
+document.addEventListener('astro:before-preparation', (event) => {
   const navigation = event as TransitionBeforePreparationEvent;
   const { signal, loader } = navigation;
+  const started = performance.now();
   window.clearTimeout(cleanupTimer);
+  try { sessionStorage.removeItem(KEY); } catch { /* 忽略无权限场景。 */ }
   preparing = signal;
-  root.classList.remove('pt-play');
-  if (!reducedMotion.matches) root.classList.add('pt-on');
-  showWait(true);
+  root.classList.remove('pt-play', 'pt-reveal');
+  if (!reducedMotion.matches) root.classList.add('pt-on', 'pt-cover');
+  showWait(true, reducedMotion.matches ? 180 : 420);
+
   navigation.loader = async () => {
     try {
-      await loader();
-      if (preparing === signal && navigation.defaultPrevented) finishAfter(STALE_MS);
+      let handled = false;
+      try { handled = await loadFromCache(navigation); } catch { handled = false; }
+      if (!handled && !signal.aborted) await loader();
+      if (preparing !== signal || signal.aborted) return;
+      if (navigation.defaultPrevented) {
+        finishAfter(STALE_MS);
+        return;
+      }
+      const left = COVER_MS - (performance.now() - started);
+      if (!reducedMotion.matches && left > 8) {
+        await withAbort(signal, (done) => {
+          const id = window.setTimeout(() => done(null), left);
+          return () => window.clearTimeout(id);
+        });
+      }
     } catch (error) {
       if (preparing === signal) clearOverlay();
       throw error;
     }
   };
+
   signal.addEventListener('abort', () => {
     if (preparing !== signal) return;
     preparing = undefined;
     clearOverlay();
   }, { once: true });
 });
+
 document.addEventListener('astro:after-swap', () => {
   if (!preparing || preparing !== swapping) return;
   const signal = preparing;
   preparing = undefined;
-  window.clearTimeout(waitTimer);
-  finishAfter(STALE_MS);
+  showWait();
   if (!reducedMotion.matches) {
-    root.classList.add('pt-on', 'pt-play');
+    root.classList.remove('pt-cover', 'pt-play');
+    root.classList.add('pt-on', 'pt-reveal');
+    finishAfter(STALE_MS);
   } else {
-    // 减少动效仍让提示陪同目标页的第一帧。
+    // 减少动效仍让状态提示陪同目标页的第一帧。
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (swapping === signal && !preparing) clearOverlay();
     }));
   }
 });
 
-// 单册返回按钮只回到已经确认的站内来源。
-document.addEventListener('astro:before-swap', event => {
+// 换页前把揭幕态和当前亮暗主题写进新文档根元素，避免 swap 瞬间白闪。
+document.addEventListener('astro:before-swap', (event) => {
   const { from, to, navigationType, newDocument, signal } = event as TransitionBeforeSwapEvent;
   swapping = signal;
+  if (preparing === signal) {
+    const nextRoot = newDocument.documentElement;
+    if (root.classList.contains('dark')) nextRoot.classList.add('dark');
+    if (!reducedMotion.matches) {
+      nextRoot.classList.remove('pt-cover', 'pt-play');
+      nextRoot.classList.add('pt-on', 'pt-reveal');
+    }
+  }
   if (navigationType !== 'push' || from.origin !== to.origin || from.pathname === to.pathname) return;
   if (!newDocument.querySelector('[data-album-return]')) return;
 

@@ -59,6 +59,13 @@ describe('全站导航抽屉 · 横向溢出', () => {
     expect(original).toMatch(/const all: HTMLElement\[\] = \[\.\.\.layers, panel\];\s*[^]*?gsap\.to\(all, \{\s*xPercent: offscreen,\s*duration: 0\.32/);
   });
 
+  it('原生抽屉在增强模块就绪前也播放入场，并遵循减少动态效果设置', () => {
+    const entry = SRC.match(/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{\s*([^{}]+)\{([^{}]+)\}/);
+    expect(entry?.[1]).toContain('.navtog:checked ~ .navshell .navpanel');
+    expect(entry?.[1]).toContain('.navshell[open] .navpanel');
+    expect(entry?.[2]).toMatch(/animation:\s*nav-panel-in\b/);
+  });
+
   it('打开态选择器跨了壳 —— 用后代而非同级兄弟', () => {
     /* ★ 加了壳之后 mask/panel 变成壳的**子**元素，原来的 `.navtog:checked ~ .navmask`
        （同级兄弟）不再匹配 ⇒ 抽屉会打不开。这是同一次改动里连带的第二个坑。

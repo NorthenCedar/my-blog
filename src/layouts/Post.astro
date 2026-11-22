@@ -127,6 +127,7 @@ const shareCover = !entry.data.draft && entry.data.cover ? `/post-covers/${meta.
   .post-layout {
     max-width: var(--measure);
     margin-inline: auto;
+    overflow-wrap: break-word;
   }
   .post-tools,
   .post-related { display: none; }
@@ -298,8 +299,6 @@ const shareCover = !entry.data.draft && entry.data.cover ? `/post-covers/${meta.
   }
   .adj .next {
     margin-left: auto;
-  }
-
   }
 </style>
 

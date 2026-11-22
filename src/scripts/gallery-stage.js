@@ -101,7 +101,7 @@ function show(index,direction=1,initial=false){
 }
 function go(index){const current=selection.index;const clamped=Math.max(0,Math.min(slides.length-1,index));if(clamped!==current)show(clamped,Math.sign(clamped-current))}
 /* ★ 绑定一律经 on()：控件缺了就跳过（装置降级），不许在首幕揭开前炸掉。 */
-const on=(el,event,fn)=>el&&el.addEventListener(event,fn);
+const on=(el,event,fn,options)=>el&&el.addEventListener(event,fn,options);
 on(prev,'click',()=>go(selection.index-1));on(next,'click',()=>go(selection.index+1));
 const advance=document.querySelector('[data-advance]');
 on(advance,'click',()=>go(1));
@@ -141,24 +141,30 @@ document.addEventListener('keydown',event=>{
   if(key===' '&&!event.target.closest('a,button'))index=selection.index+1;
   if(index!==null){event.preventDefault();go(index)}
 });
-let touch=null;
+let touch=null,suppressClickUntil=0;
 on(stage,'pointerdown',event=>{
+  suppressClickUntil=0;
   if(event.pointerType==='touch'&&event.isPrimary)touch={id:event.pointerId,x:event.clientX,y:event.clientY,target:event.target};
-});
+},true);
 on(stage,'pointerup',event=>{
   if(event.pointerId!==touch?.id)return;
   const {clientX,clientY}=event,dx=clientX-touch.x,dy=clientY-touch.y,target=touch.target;
   touch=null;
   // 紧接显影涂抹的轻触可能被浏览器抑制 click，按钮在确认抬手位置后直接翻页。
-  if(Math.hypot(dx,dy)<12&&advance?.contains(target)&&advance.contains(document.elementFromPoint(clientX,clientY))){
-    go(1);return;
-  }
+  const advanceTap=Math.hypot(dx,dy)<12&&advance?.contains(target)&&advance.contains(document.elementFromPoint(clientX,clientY));
   const direction=swipeIntent(dx,dy);
-  if(direction){go(selection.index+direction);suppressClickUntil=performance.now()+400;}
+  if(!advanceTap&&!direction)return;
+  // 抬手翻页后，浏览器仍可能把同一次触摸的点击派发到刚显示的封面。
+  suppressClickUntil=performance.now()+400;
+  go(advanceTap?1:selection.index+direction);
 });
 on(stage,'pointercancel',()=>{touch=null});
-let suppressClickUntil=0;
-on(stage,'click',event=>{if(performance.now()<suppressClickUntil){event.preventDefault();event.stopPropagation()}},true);
+on(stage,'click',event=>{
+  if(event.detail===0||performance.now()>=suppressClickUntil)return;
+  suppressClickUntil=0;
+  event.preventDefault();
+  event.stopPropagation();
+},true);
 on(catalogButton,'click',()=>dialog.showModal());on(document.querySelector('[data-close-catalog]'),'click',()=>dialog.close());
 on(dialog,'click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close()}});
 for(const button of dialog?.querySelectorAll('[data-pick]')??[])on(button,'click',()=>{go(Number(button.dataset.pick));dialog.close()});

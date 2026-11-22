@@ -19,7 +19,12 @@ vi.mock('../src/scripts/theme.ts', () => ({
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
 
-async function run(theme = 'light', reduced = false, waitForFrame = () => Promise.resolve()) {
+async function run(
+  theme = 'light',
+  reduced = false,
+  waitForFrame = () => Promise.resolve(),
+  opts: { getPending?: () => any; adoptHit?: boolean } = {},
+) {
   state.writes = [];
   state.destroy.mockClear();
   const device = state.device = Object.assign(new EventTarget(), {
@@ -59,6 +64,14 @@ async function run(theme = 'light', reduced = false, waitForFrame = () => Promis
     setInitial: vi.fn((x: number) => { events.currentMouseX = x; events.pointerTargetX = x; }),
     snapTo: vi.fn((_x: number, done: () => void) => { pending = done; }),
     cancelDrag: vi.fn(() => { events.isPointerDown = false; events.didGrab = false; pending = undefined; }),
+    adoptPointer: vi.fn((_id: number, _sx: number, _sy: number, currentX: number) => {
+      const hit = opts.adoptHit ?? true;
+      events.didGrab = hit;
+      if (!hit) return false;
+      events.isPointerDown = true;
+      events.pointerTargetX = Math.max(0, Math.min(.9, currentX / 100 * .9));
+      return true;
+    }),
   };
   state.scene = { onCleanup: vi.fn(), eventHandler: events, groundTint: null, jellyColor: null, onProgress: null };
   const canvas = { width: 0, height: 0, cloneNode: () => canvas, replaceWith() {}, addEventListener: (n: string, fn: (e: any) => void) => canvasEvents.set(n, fn) };
@@ -74,7 +87,7 @@ async function run(theme = 'light', reduced = false, waitForFrame = () => Promis
     removeEventListener: (n: string) => windowEvents.delete(n) });
   vi.stubGlobal('navigator', { gpu: {} });
   const { initJellyThemeToggle } = await import('../src/scripts/theme-toggle');
-  await initJellyThemeToggle(root as any, lifetime.signal);
+  await initJellyThemeToggle(root as any, lifetime.signal, opts.getPending);
   const emit = (type: string, x: number) => ({ type, pointerId: 1, button: 0, isPrimary: true, clientX: x, clientY: 10 });
   return {
     styles, attrs, events, scene: state.scene,
@@ -205,5 +218,70 @@ describe('主题开关 · 拖动连续预览，点按保持直接切换', () => 
     r.down(0); r.move(70); r.frame(.7); r.up(70);
     expect(r.styles.size).toBe(0);
     expect(state.writes).toEqual(['dark']);
+  });
+
+  it('画布首帧就绪前开始拖动，就绪后无缝接管同一根指针并连续预览', async () => {
+    let finishFrame!: () => void;
+    const pending = {
+      id: 1, startX: 0, startY: 10, x: 70, y: 10, t: 0,
+      moved: true, ended: false, adopted: false,
+    };
+    const r = await run('light', false, () => new Promise<void>(done => { finishFrame = done; }), {
+      getPending: () => pending,
+      adoptHit: true,
+    });
+    expect(r.ready()).toBe(false);
+    expect(pending.adopted).toBe(false);
+
+    finishFrame();
+    await Promise.resolve();
+    expect(r.ready()).toBe(true);
+    expect(pending.adopted).toBe(true);
+    expect(r.events.adoptPointer).toHaveBeenCalledWith(1, 0, 10, 70);
+
+    r.frame(.5);
+    expect(r.styles.get('--theme-preview-weight')).toBe('50%');
+    expect(r.scene.groundTint.w).toBe(.5);
+    r.up(70);
+    r.settle();
+    expect(state.writes).toEqual(['dark']);
+  });
+
+  it('未就绪时按在空白处并挪动，接管后松手不切主题', async () => {
+    let finishFrame!: () => void;
+    const pending = {
+      id: 1, startX: 50, startY: 10, x: 80, y: 10, t: 0,
+      moved: true, ended: false, adopted: false,
+    };
+    const r = await run('light', false, () => new Promise<void>(done => { finishFrame = done; }), {
+      getPending: () => pending,
+      adoptHit: false,
+    });
+    finishFrame();
+    await Promise.resolve();
+    expect(pending.adopted).toBe(true);
+    expect(r.events.adoptPointer).toHaveBeenCalledWith(1, 50, 10, 80);
+
+    r.frame(.7);
+    expect(r.styles.size).toBe(0);
+    r.up(80);
+    expect(state.writes).toEqual([]);
+  });
+
+  it('未就绪前已经结束的手势不会在首帧就绪后被接管', async () => {
+    let finishFrame!: () => void;
+    const pending = {
+      id: 1, startX: 0, startY: 10, x: 70, y: 10, t: 0,
+      moved: true, ended: true, adopted: false,
+    };
+    const r = await run('light', false, () => new Promise<void>(done => { finishFrame = done; }), {
+      getPending: () => pending,
+      adoptHit: true,
+    });
+    finishFrame();
+    await Promise.resolve();
+    expect(r.ready()).toBe(true);
+    expect(pending.adopted).toBe(false);
+    expect(r.events.adoptPointer).not.toHaveBeenCalled();
   });
 });

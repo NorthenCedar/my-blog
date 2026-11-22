@@ -62,6 +62,11 @@ type Seg = {
   on: number;
   /** 行高（caret 用），首次施工时缓存。 */
   lh: number;
+  /** caret 相对基准矩形的缓存（按字索引 `ci` 失效，避免每帧整段遍历读布局）。 */
+  ci: number;
+  cox: number;
+  cot: number;
+  coh: number;
   /** rect：拖拽的缩略图来源 + 文件名胶囊 + 圆角。 */
   src: CanvasImageSource | null;
   label: string;
@@ -179,6 +184,10 @@ export function initTalksBuild(): void {
       units: null,
       on: -1,
       lh: 0,
+      ci: -2,
+      cox: 2,
+      cot: 2,
+      coh: 18,
       src: null,
       label: '',
       radius: '',
@@ -188,6 +197,7 @@ export function initTalksBuild(): void {
 
   const read = (g: Seg) => {
     const r = g.el.getBoundingClientRect();
+    if (Math.abs(r.width - g.bw) > 0.5 || Math.abs(r.height - g.bh) > 0.5) g.ci = -2;
     g.bx = r.left;
     g.by = r.top;
     g.bw = r.width;
@@ -217,6 +227,7 @@ export function initTalksBuild(): void {
       for (const u of g.units ?? []) u.style.opacity = '0';
       g.last = -1;
       g.on = -1;
+      g.ci = -2;
     }
   }
 
@@ -253,6 +264,7 @@ export function initTalksBuild(): void {
     el.style.willChange = '';
     for (const u of g.units ?? []) u.style.opacity = '';
     if (g.units) g.last = g.units.length;
+    g.ci = -2;
   }
 
   const measure = () => {
@@ -379,9 +391,11 @@ export function initTalksBuild(): void {
       }
       if (t < 0.59) {
         const e = ease((t - 0.45) / 0.14);
-        return { x: lerp(x + w, x + 1, e), y: lerp(y + h, y + 10, e), tool: 'ibeam', down: false, grab: 0 };
+        const p = caret(g, 0.59);
+        return { x: lerp(x + w, p.x, e), y: lerp(y + h, p.y, e), tool: 'ibeam', down: false, grab: 0 };
       }
-      return { x: caretX(g), y: y + Math.min(g.lh || 18, h) * 0.55, tool: 'ibeam', down: false, grab: 0 };
+      const p = caret(g, t);
+      return { x: p.x, y: p.y, tool: 'ibeam', down: false, grab: 0 };
     }
 
     if (g.k === 'rect') {
@@ -423,10 +437,49 @@ export function initTalksBuild(): void {
     return { x: lerp(gg, a, u), y: hz - Math.sin(Math.PI * u) * 14, tool: 'grab', down: true, grab: 1 };
   }
 
-  /** 打字位置：最后一个已显示的字的右缘。 */
-  function caretX(g: Seg): number {
+  /** 按当前进度计算已显字数，保证光标落点与 DOM 显字共用同一份进度映射。 */
+  const typedCount = (g: Seg, t = g.s) =>
+    g.units?.length ? Math.round(clamp((t - 0.59) / Math.max(0.01, g.D - 0.59)) * g.units.length) : 0;
+
+  /** 读取单个字符单元的首/尾行片段矩形（跨行长词只取起/止那一段）。 */
+  function unitRect(el: HTMLElement, tail: boolean): DOMRect | null {
+    const rects = typeof el.getClientRects === 'function' ? el.getClientRects() : null;
+    if (rects && rects.length) {
+      for (let i = tail ? rects.length - 1 : 0; tail ? i >= 0 : i < rects.length; i += tail ? -1 : 1) {
+        const r = rects[i];
+        if (r.width > 0 || r.height > 0) return r;
+      }
+    }
+    const r = el.getBoundingClientRect();
+    return r.width > 0 || r.height > 0 ? r : null;
+  }
+
+  /** 打字光标位置：按字索引缓存相对基准框偏移，每换一个字最多读一次单字矩形（O(1)）。 */
+  function caret(g: Seg, t = g.s): { x: number; y: number; top: number; h: number } {
     const u = g.units;
-    return u && g.last > 0 ? u[g.last - 1].getBoundingClientRect().right + 1 : g.bx + 2;
+    const n = typedCount(g, t);
+    if (g.ci !== n) {
+      const fh = Math.max(12, Math.min(g.lh || 18, g.bh > 4 ? g.bh - 4 : g.lh || 18));
+      let ox = 2;
+      let ot = 2;
+      let ch = fh;
+      if (u && u.length) {
+        const tail = n > 0;
+        const r = unitRect(u[tail ? Math.min(n, u.length) - 1 : 0], tail);
+        if (r) {
+          const rh = r.height > 0 ? r.height : fh;
+          ox = (tail ? r.right : r.left) + 1 - g.bx;
+          ot = r.top - g.by;
+          ch = Math.max(12, Math.min(rh, 48, g.bh > 4 ? g.bh : rh));
+        }
+      }
+      g.ci = n;
+      g.cox = ox;
+      g.cot = ot;
+      g.coh = ch;
+    }
+    const top = g.by + g.cot;
+    return { x: g.bx + g.cox, top, h: g.coh, y: top + g.coh * 0.5 };
   }
 
   /* ---------- 把进度落到 DOM ---------- */
@@ -439,7 +492,7 @@ export function initTalksBuild(): void {
         el.style.opacity = '';
         return;
       }
-      const n = Math.round(clamp((t - 0.59) / Math.max(0.01, g.D - 0.59)) * g.units.length);
+      const n = typedCount(g, t);
       const on = t > 0.45 ? 1 : 0;
       if (on !== g.on) {
         g.on = on;
@@ -490,6 +543,7 @@ export function initTalksBuild(): void {
   function prepare(g: Seg): void {
     if (g.k === 'text') {
       if (!g.units) g.units = explode(g.el);
+      g.ci = -2;
       const cs = getComputedStyle(g.el);
       g.lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.6 || 20;
       return;
@@ -864,9 +918,10 @@ export function initTalksBuild(): void {
         );
         /* 打字光标：一根竖线，每 0.5 秒闪一次。 */
         if (g.cur && g.att && t > 0.59 && t < g.D - 0.03 && Math.floor(now / 500) % 2 === 0) {
+          const p = caret(g, t);
           ctx.globalAlpha = 0.85 * a;
           ctx.fillStyle = '#111';
-          ctx.fillRect(caretX(g), g.by + 2, 1.5, Math.min(g.lh || 18, g.bh - 4));
+          ctx.fillRect(p.x, p.top, 1.5, p.h);
           ctx.globalAlpha = 1;
         }
         continue;
@@ -972,6 +1027,7 @@ export function initTalksBuild(): void {
 
   /* resize：overlay 位置全变，重测。 */
   addEventListener('resize', () => {
+    for (const g of segs) g.ci = -2;
     resize();
     measure();
     kick();

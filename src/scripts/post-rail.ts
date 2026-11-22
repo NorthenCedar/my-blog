@@ -54,7 +54,10 @@ export function initPostRail(doc: Document, onActive?: (link: HTMLAnchorElement,
       return box && offset != null ? box.top + offset : pairs[index].heading.getBoundingClientRect().top;
     };
     let next = 0;
-    pairs.forEach((_, i) => { if (topOf(i) <= threshold) next = i; });
+    for (let i = 0; i < pairs.length; i++) {
+      if (topOf(i) <= threshold) next = i;
+      else if (geometry === null && i > Math.max(current, 0)) break;
+    }
 
     // 跳到紧邻小标题的章节时，船先停在链接指向的标题。
     const hash = win.location?.hash;

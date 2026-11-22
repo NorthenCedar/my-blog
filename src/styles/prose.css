@@ -1,6 +1,14 @@
 /* 正文排版。代码块的配色接管在 Task 10 里以 Shiki 的真实输出为准。 */
 .prose {
   max-width: var(--measure);
+  overflow-wrap: break-word;
+}
+
+/* 仅在换页揭幕期（html.pt-reveal）跳过首屏下方长文区块（第 9 块起）布局与绘制，把揭幕首帧阻塞压低数倍；
+   揭幕完成摘掉 pt-reveal 后整篇立即恢复真实排版高度，确保桌面长/短目录跳转（>7 屏传送与平滑滚动）零漂移。 */
+html.pt-reveal .prose > :nth-child(n + 9) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto none auto 6em;
 }
 
 .prose p {
@@ -68,6 +76,7 @@
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 0.18em;
+  overflow-wrap: anywhere;
 }
 .prose a:hover {
   color: var(--accent-ink);
@@ -79,6 +88,7 @@
   font-size: 0.88em;
   background: var(--code-inline-bg);
   padding: 0.12em 0.38em;
+  overflow-wrap: anywhere;
 }
 
 .prose img {
@@ -150,11 +160,13 @@
   font-size: var(--fs-mono);
   line-height: 1.72;
   border-radius: 0;
+  overflow-wrap: normal;
 }
 .astro-code code {
   font-family: "IBM Plex Mono", Consolas, "Courier New", monospace;
   background: none;
   padding: 0;
+  overflow-wrap: normal;
 }
 .astro-code .line {
   display: block;

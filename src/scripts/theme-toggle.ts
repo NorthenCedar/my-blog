@@ -48,7 +48,23 @@ function applyGround(
   scene.groundTint = theme === 'dark' ? GROUND_TINT_DARK : GROUND_TINT_LIGHT;
 }
 
-export async function initJellyThemeToggle(root: HTMLElement, signal: AbortSignal): Promise<void> {
+export type PendingThemePointer = {
+  id: number;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+  t: number;
+  moved: boolean;
+  ended: boolean;
+  adopted: boolean;
+};
+
+export async function initJellyThemeToggle(
+  root: HTMLElement,
+  signal: AbortSignal,
+  getPending?: () => PendingThemePointer | undefined,
+): Promise<void> {
   const previous = root.querySelector('canvas');
   if (!previous || signal.aborted || !root.isConnected) return;
   const tgRoot = await tgpu.init();
@@ -117,7 +133,27 @@ export async function initJellyThemeToggle(root: HTMLElement, signal: AbortSigna
   };
   scene.onProgress = progress => { if (dragPreview) paintProgress(progress); };
 
-  // 场景先排帧；等 GPU 完成同一主题的绘制，才移开静态软条。
+  let downX = 0;
+  let downY = 0;
+  let downT = 0;
+  let downOnCanvas = false;
+  let gestureMoved = false;
+  let pointerId: number | null = null;
+  const adoptPending = () => {
+    const active = getPending?.();
+    if (!active || active.ended || active.adopted || pointerId !== null) return;
+    active.adopted = true;
+    events.adoptPointer(active.id, active.startX, active.startY, active.x);
+    pointerId = active.id;
+    downOnCanvas = true;
+    downX = active.startX;
+    downY = active.startY;
+    downT = active.t;
+    gestureMoved = active.moved;
+    if (events.didGrab && gestureMoved && !reduceMotion) dragPreview = true;
+  };
+
+  // 场景先排帧；等 GPU 完成同一主题的绘制，才移开静态软条并接管按住中的指针。
   const reveal = () => {
     const revision = ++frameRevision;
     scopedWindow.requestAnimationFrame(() => {
@@ -125,6 +161,7 @@ export async function initJellyThemeToggle(root: HTMLElement, signal: AbortSigna
         if (revision !== frameRevision || !root.isConnected) return;
         ready = true;
         root.setAttribute('data-tt-ready', '');
+        adoptPending();
       }, scope.dispose);
     });
   };
@@ -162,12 +199,6 @@ export async function initJellyThemeToggle(root: HTMLElement, signal: AbortSigna
   };
 
   // 点按 vs 拖拽：原版 EventHandler 只认 mouse/touch，这里用 pointer 事件配对
-  let downX = 0;
-  let downY = 0;
-  let downT = 0;
-  let downOnCanvas = false;
-  let gestureMoved = false;
-  let pointerId: number | null = null;
   canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || e.isPrimary === false || pointerId !== null) return;
     pointerId = e.pointerId;

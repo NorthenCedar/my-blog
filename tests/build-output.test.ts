@@ -1453,7 +1453,8 @@ describe.skipIf(!hasDist)('主题开关住在顶栏、渲染器仍然懒加载�
     const bootstrap = jsClosure(sample, { dynamic: false }).files
       .filter(f => f.split(/[\\/]/).pop()?.startsWith('ThemeToggle.astro_'));
     expect(bootstrap, '原生主题按钮只有一份静态入口').toHaveLength(1);
-    expect(statSync(bootstrap[0]).size, '主题按钮的静态入口超预算').toBeLessThan(1280);
+    // 实测 2412 B，包含空闲预热与未就绪前按压交接。
+    expect(statSync(bootstrap[0]).size, '主题按钮的静态入口超预算').toBeLessThan(2560);
     const toggleChunks = jsClosure(sample).files
       .filter(f => f.split(/[\\/]/).pop()?.startsWith('theme-toggle.') && statSync(f).size > 100_000);
     expect(toggleChunks.length, '关于页的动态闭包都到不了主题开关渲染器（懒加载坏了？）').toBeGreaterThan(0);

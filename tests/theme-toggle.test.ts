@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
@@ -804,6 +804,67 @@ describe('链条关在槽内（2026-10-18 第十一轮）', () => {
         /__ttscene|TEMP-DEBUG|debugTargetX/.test(code),
         `${name} 还留着临时调试出口 —— 交付前必须清掉`,
       ).toBe(false);
+    }
+  });
+});
+
+describe('软条开页即拖与跨端指针接管（2026-11-22）', () => {
+  const read = (rel: string) =>
+    readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+  const component = read('../src/components/ThemeToggle.astro');
+
+  it('静态按钮阻止触摸滚动和选字，减少动态效果保留正常点击滚动', () => {
+    const style = component.slice(component.indexOf('<style>'), component.indexOf('</style>'));
+    const baseRule = style.match(/\.theme-toggle\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(baseRule).toMatch(/touch-action:\s*none;/);
+    const webkitSel = baseRule.indexOf('-webkit-user-select: none;');
+    const stdSel = baseRule.indexOf('user-select: none;', webkitSel + 1);
+    expect(webkitSel, 'Safari 拖动需先声明 -webkit-user-select: none').toBeGreaterThan(-1);
+    expect(stdSel, '-webkit-user-select: none 必须排在 user-select: none 之前').toBeGreaterThan(webkitSel);
+    const reducedRule = style.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{([\s\S]*?)\n\s*\}/)?.[1] ?? '';
+    expect(reducedRule).toMatch(/touch-action:\s*manipulation;/);
+  });
+
+  it('空闲时预热渲染器，且按下立即可启动并交接指针（不再只等 mouse 悬停）', () => {
+    const script = component.slice(component.indexOf('<script>'), component.indexOf('</script>'));
+    expect(script).toContain('requestIdleCallback');
+    expect(script).toContain('setTimeout');
+    expect(script).toContain("addEventListener('pointerdown'");
+    expect(script).toMatch(/initJellyThemeToggle\(button,\s*current\.signal,\s*\(\)\s*=>\s*pending\)/);
+    expect(script).not.toMatch(/pointerType\s*===\s*['"]mouse['"]/);
+  });
+
+  it('EventHandler.adoptPointer 在命中端头时接管拖拽并唤醒渲染，未命中时不接管', async () => {
+    vi.stubGlobal('window', new EventTarget());
+    try {
+      const { EventHandler } = await import('../src/vendor/jelly-slider/events.ts');
+      const setPointerCapture = vi.fn();
+      const canvas = Object.assign(new EventTarget(), {
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 40 }),
+        setPointerCapture,
+        releasePointerCapture: vi.fn(),
+      }) as unknown as HTMLCanvasElement;
+      const handler = new EventHandler(canvas);
+      const wake = vi.fn();
+      handler.wake = wake;
+
+      handler.hitTest = () => false;
+      expect(handler.adoptPointer(4, 10, 20, 80)).toBe(false);
+      expect(handler.didGrab).toBe(false);
+      expect(handler.isPointerDown).toBe(false);
+      expect(wake).not.toHaveBeenCalled();
+
+      handler.hitTest = () => true;
+      expect(handler.adoptPointer(3, 45, 20, 80)).toBe(true);
+      expect(handler.didGrab).toBe(true);
+      expect(handler.isPointerDown).toBe(true);
+      expect(handler.pointerTargetX).toBeGreaterThan(LIGHT_END);
+      expect(wake).toHaveBeenCalledOnce();
+      expect(setPointerCapture).toHaveBeenCalledWith(3);
+
+      handler.dispose();
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 });

@@ -27,6 +27,8 @@ export default defineConfig({
   // 站点正式地址（2026-09-25 绑定自有域名 northcedar.top）。
   // 换域名时只改这一行 —— robots.txt、sitemap、canonical 全都从它派生。
   site: 'https://northcedar.top',
+  // HTML 带 max-age=0, must-revalidate 且触屏无 hover：改由 transition.ts 的同源内存预取 + 样式预热统一接管，省掉无效 link prefetch 并减小公共路由脚本。
+  prefetch: false,
   integrations: [
     isolateDraftMarkdown(),
     sitemap({ filter: page => !['/account/', '/avatar-sources/', '/write/'].includes(new URL(page).pathname) }),
