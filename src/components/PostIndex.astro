@@ -18,6 +18,7 @@ const { posts, heading, covers } = Astro.props;
       data-month={p.date.slice(5, 7)}
       data-q={`${p.title} ${p.summary} ${p.tags.join(' ')}`.toLowerCase()}
       data-updated={p.updated ?? p.date}
+      data-pinned={p.pinned ? 'true' : undefined}
     >
       <a href={p.url}>
         <span class="archive-art" aria-hidden={covers?.has(p.slug) ? undefined : 'true'}>
@@ -29,6 +30,7 @@ const { posts, heading, covers } = Astro.props;
         </span>
         <span class="date">
           <time datetime={p.date}>{p.date}</time>
+          {p.pinned && <> <span class="pin-badge">置顶</span></>}
           {p.draft && <> <DraftBadge /></>}
         </span>
         <span class="title">{p.title}</span>
@@ -86,6 +88,14 @@ const { posts, heading, covers } = Astro.props;
     font-size: var(--fs-xs);
     color: var(--muted);
     font-variant-numeric: tabular-nums;
+  }
+  .pin-badge {
+    display: inline-block;
+    font-size: var(--fs-xs);
+    line-height: 1.5;
+    border: 1px solid var(--accent-ink);
+    color: var(--accent-ink);
+    padding: 0 var(--sp-2);
   }
   .title {
     display: block;

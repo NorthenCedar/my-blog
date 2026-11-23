@@ -8,7 +8,7 @@ import { toPostMeta, type RawEntry } from '../src/lib/post-meta';
  * 补的是规格轴点出的缺口 —— 「草稿三态的第二态（dev 可见并标「草稿」）」之前只测了
  * filterVisible 这个纯函数，没有任何断言说那个徽标真的出现在 HTML 里。
  */
-const entry = (draft: boolean): RawEntry => ({
+const entry = (draft: boolean, pinned = false): RawEntry => ({
   id: 'a-post',
   data: {
     // 注意：标题里不能出现「草稿」二字 —— 否则断言 not.toContain('草稿') 会被标题本身命中
@@ -17,6 +17,7 @@ const entry = (draft: boolean): RawEntry => ({
     summary: '摘要',
     tags: ['成长'],
     draft,
+    ...(pinned ? { pinned: true } : {}),
   },
   body: '正文',
 });
@@ -37,6 +38,17 @@ describe('PostIndex 渲染', () => {
       props: { posts: [toPostMeta(entry(false))] },
     });
     expect(html).not.toContain('class="badge"');
+    expect(html).not.toContain('pin-badge');
+  });
+
+  it('置顶文章带「置顶」徽标和 data-pinned 属性', async () => {
+    const container = await AstroContainer.create();
+    const html = await container.renderToString(PostIndex, {
+      props: { posts: [toPostMeta(entry(false, true))] },
+    });
+    expect(html).toContain('pin-badge');
+    expect(html).toContain('置顶');
+    expect(html).toContain('data-pinned="true"');
   });
 
   it('列表项是链接，且标题与摘要都渲染出来', async () => {

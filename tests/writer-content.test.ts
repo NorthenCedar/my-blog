@@ -140,3 +140,14 @@ it('说说正文含换行、引号、制表符与反斜杠时仍是无损的合�
   expect(out).toContain('\\n');expect(out).toContain('\\t');
   expect(readTalks(out).find(t=>t.key==='talk-new')!.value.body).toBe(body);
 });
+it('文章置顶可启用、省略 false 并在取消置顶时写回 false',()=>{
+  const value=readPost(post);value.fields.pinned=true;
+  const pinnedText=decode(planChanges({kind:'post',key:'example',base:base(post),value},post,new Map()),'content/posts/example/index.md');
+  expect(readPost(pinnedText).fields.pinned).toBe(true);
+  const unpinned=readPost(pinnedText);delete unpinned.fields.pinned;
+  const unpinnedText=decode(planChanges({kind:'post',key:'example',base:base(pinnedText),value:unpinned},pinnedText,new Map()),'content/posts/example/index.md');
+  expect(readPost(unpinnedText).fields.pinned).toBe(false);
+  const clean=readPost(post);clean.fields.pinned=false;
+  const cleanText=decode(planChanges({kind:'post',key:'example',base:base(post),value:clean},post,new Map()),'content/posts/example/index.md');
+  expect(readPost(cleanText).fields.pinned).toBeUndefined();
+});

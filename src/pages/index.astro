@@ -250,7 +250,7 @@ const titleLines: { ch: string; i: number }[][] = (() => {
             {/* 原型版式：date / 大标题 / 标签 / 摘要。摘要用 p.summary（真实字段）。 */}
             <a href={p.url}>
               <time datetime={p.date}>{p.date}</time>
-              <span class="t">{p.title}</span>
+              <span class="t">{p.pinned && <span class="pin-badge">置顶</span>}{p.title}</span>
               <span class="tags">{p.tags.join(' / ')}</span>
               {p.summary && <span class="s">{p.summary}</span>}
             </a>
@@ -1493,6 +1493,19 @@ onPage(({document, addEventListener}) => {
     letter-spacing: -0.032em;
     font-weight: 600;
     transition: color var(--dur-hover) var(--ease-interact);
+  }
+  .entry .pin-badge {
+    display: inline-block;
+    vertical-align: middle;
+    margin-inline-end: var(--sp-2);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: var(--fs-xs);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    line-height: 1.5;
+    border: 1px solid var(--accent-ink);
+    color: var(--accent-ink);
+    padding: 0 var(--sp-2);
   }
   .entry .s {
     grid-column: 2;

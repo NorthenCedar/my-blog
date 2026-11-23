@@ -255,7 +255,17 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     if(working.kind==='post'){setField('title','标题','text',true);const summary=setField('summary','摘要（80 字以内）','text',true);summary.maxLength=80;}
     if(working.kind==='post'||working.kind==='talk')setField('date','日期','date');
     if(working.kind==='post'){
-      setField('updated','更新日期（可选）','date');const tagLabel=el('label','标签（按住 Ctrl 或在手机列表中选择，最多 3 个）','writer-field wide'),select=el('select');select.multiple=true;select.size=4;for(const tag of tags){const option=el('option',tag);option.value=tag;option.selected=Array.isArray(working.value.fields.tags)&&working.value.fields.tags.includes(tag);select.append(option);}select.addEventListener('change',()=>{if(select.selectedOptions.length>3){showError(Error('标签最多选择 3 个'));return;}working.value.fields.tags=Array.from(select.selectedOptions,o=>o.value);edit();});tagLabel.append(select);fields.append(tagLabel);
+      setField('updated','更新日期（可选）','date');
+      const pinLabel=el('label','置顶','writer-field'),pinSelect=el('select');pinSelect.name='pinned';
+      for(const [val,txt] of [['false','不置顶'],['true','置顶']] as const){const o=el('option',txt);o.value=val;pinSelect.append(o);}
+      pinSelect.value=working.value.fields.pinned?'true':'false';
+      pinSelect.addEventListener('change',()=>{
+        if(pinSelect.value==='true')working.value.fields.pinned=true;
+        else delete working.value.fields.pinned;
+        edit();
+      });
+      pinLabel.append(pinSelect);fields.append(pinLabel);
+      const tagLabel=el('label','标签（按住 Ctrl 或在手机列表中选择，最多 3 个）','writer-field wide'),select=el('select');select.multiple=true;select.size=4;for(const tag of tags){const option=el('option',tag);option.value=tag;option.selected=Array.isArray(working.value.fields.tags)&&working.value.fields.tags.includes(tag);select.append(option);}select.addEventListener('change',()=>{if(select.selectedOptions.length>3){showError(Error('标签最多选择 3 个'));return;}working.value.fields.tags=Array.from(select.selectedOptions,o=>o.value);edit();});tagLabel.append(select);fields.append(tagLabel);
       const coverUpload = el('input');
       coverUpload.type = 'file';
       coverUpload.accept = 'image/jpeg,image/png,image/webp';

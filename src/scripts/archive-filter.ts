@@ -67,6 +67,9 @@ export function initArchiveFilters(doc: Document): () => void {
         const ul = group.querySelector('.index')!;
         [...ul.children].sort((a,b) => {
           const ha = a as HTMLElement, hb = b as HTMLElement;
+          const pa = ha.dataset.pinned === 'true' ? 1 : 0;
+          const pb = hb.dataset.pinned === 'true' ? 1 : 0;
+          if (pa !== pb) return pb - pa;
           return (dateOf(ha).localeCompare(dateOf(hb)) || String(ha.dataset.date).localeCompare(String(hb.dataset.date))) * dir;
         }).forEach(row => ul.append(row));
       }

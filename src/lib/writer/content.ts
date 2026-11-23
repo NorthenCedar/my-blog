@@ -330,6 +330,7 @@ export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,
   }else if(kind==='post'){
     if(draft.base?currentText!==draft.base.text:currentText!==null) return conflict();
     const fields={...value.fields,draft:false},original=draft.base?readPost(draft.base.text):null;
+    if(!fields.pinned){if(original?.fields.pinned)fields.pinned=false;else delete fields.pinned;}
     if(original){if(fields.slug!==original.fields.slug) bad('旧文章网址标识不能修改');}
     else if(fields.slug!==undefined&&fields.slug!==key) bad('文章网址标识与目录不一致');
     if(typeof fields.cover==='string'&&fields.cover.startsWith('writer-asset:')) fields.cover=resolve(fields.cover.slice(13));

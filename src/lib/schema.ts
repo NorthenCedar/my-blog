@@ -41,6 +41,7 @@ export const postSchema = z
         }
       }),
     draft: z.boolean(),
+    pinned: z.boolean().optional(),
     cover: z.string().optional(),
     coverAlt: z.string().optional(),
     slug: z
@@ -63,7 +64,7 @@ export const postSchema = z
 
 export type PostFrontmatter = z.infer<typeof postSchema>;
 
-/** 契约登记的 9 个字段。用来实现规则 6 的"未登记字段 → 警告"。 */
+/** 契约登记的 10 个字段。用来实现规则 6 的"未登记字段 → 警告"。 */
 export const KNOWN_FIELDS = [
   'title',
   'date',
@@ -71,6 +72,7 @@ export const KNOWN_FIELDS = [
   'summary',
   'tags',
   'draft',
+  'pinned',
   'cover',
   'coverAlt',
   'slug',

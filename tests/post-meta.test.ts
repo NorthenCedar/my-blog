@@ -73,6 +73,11 @@ describe('toPostMeta', () => {
     const m = toPostMeta(raw({ data: { ...baseData, updated: '2026-09-20' } }));
     expect(m.updated).toBe('2026-09-20');
   });
+
+  it('pinned 默认为 false，传 true 时透传到 PostMeta', () => {
+    expect(toPostMeta(raw()).pinned).toBe(false);
+    expect(toPostMeta(raw({ data: { ...baseData, pinned: true } })).pinned).toBe(true);
+  });
 });
 
 describe('filterVisible —— 草稿三态里的两态', () => {
@@ -94,9 +99,14 @@ describe('排序 / 分组 / 标签 / 相邻 / 标题树', () => {
   const dated = (id: string, date: string, tags: string[] = ['成长']) =>
     toPostMeta(raw({ id, data: { ...baseData, date, tags } }));
 
-  it('按日期倒序', () => {
+  it('按日期倒序，置顶文章排在最前且多篇置顶按日期倒序', () => {
     const ps = [dated('a', '2026-01-01'), dated('b', '2026-09-01'), dated('c', '2025-12-31')];
     expect(sortByDateDesc(ps).map((p) => p.date)).toEqual(['2026-09-01', '2026-01-01', '2025-12-31']);
+
+    const pOld = toPostMeta(raw({ id: 'p-old', data: { ...baseData, date: '2025-01-01', pinned: true } }));
+    const pMid = toPostMeta(raw({ id: 'p-mid', data: { ...baseData, date: '2026-05-01', pinned: true } }));
+    const nNew = dated('n-new', '2026-10-01');
+    expect(sortByDateDesc([nNew, pOld, pMid]).map((p) => p.slug)).toEqual(['p-mid', 'p-old', 'n-new']);
   });
 
   it('按年分组，年内保持倒序', () => {

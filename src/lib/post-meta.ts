@@ -22,6 +22,7 @@ export type PostMeta = {
   summary: string;
   tags: Tag[];
   draft: boolean;
+  pinned: boolean;
   url: string;
   charCount: number;
   readingMinutes: number;
@@ -65,6 +66,7 @@ export function toPostMeta(entry: RawEntry): PostMeta {
     summary: data.summary,
     tags: data.tags as Tag[],
     draft: data.draft,
+    pinned: Boolean(data.pinned),
     url: `/posts/${slug}/`,
     charCount,
     readingMinutes: readingMinutes(charCount),
@@ -72,7 +74,10 @@ export function toPostMeta(entry: RawEntry): PostMeta {
 }
 
 export function sortByDateDesc(posts: PostMeta[]): PostMeta[] {
-  return [...posts].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return [...posts].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+  });
 }
 
 /** 草稿可见性：开发环境全部可见，生产只留已发布 */

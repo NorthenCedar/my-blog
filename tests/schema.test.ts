@@ -91,4 +91,12 @@ describe('postSchema 的 6 条规则', () => {
       }).success
     ).toBe(true);
   });
+
+  it('9. pinned 是已登记的可选布尔字段，且不触发未登记字段警告', () => {
+    const r = postSchema.safeParse({ ...valid, pinned: true });
+    expect(r.success).toBe(true);
+    expect(r.data?.pinned).toBe(true);
+    expect(unknownFields(r.data as Record<string, unknown>)).toEqual([]);
+    expect(KNOWN_FIELDS).toContain('pinned');
+  });
 });

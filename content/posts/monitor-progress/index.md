@@ -4,6 +4,7 @@ date: 2026-11-09
 summary: 一个红蓝对抗中的监看程序，超叼的好吧！研究怎么不触发杀毒软件耗了我好几天
 tags: [工具, 项目]
 draft: false
+pinned: true
 cover: ./shot-161148.jpg
 coverAlt: 桌面上打开的程序界面与记录列表
 ---
