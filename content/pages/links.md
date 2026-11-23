@@ -31,6 +31,10 @@ groups:
         href: https://blog.woodfish.site/
         avatar: https://pic1.imgdb.cn/item/682f3d1658cb8da5c807b704.jpg
         desc: 我喜欢你
+      - name: UpXuu
+        href: https://upxuu.com/
+        avatar: https://upxuu.com/images/me.jpg
+        desc: UpXuu 的个人博客
   - title: 本站入口
     note: 我自己的几个门
     items:

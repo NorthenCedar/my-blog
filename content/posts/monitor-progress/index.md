@@ -1,7 +1,7 @@
 ---
-title: 远程监控程序
+title: 不触发杀毒的隐秘监控程序
 date: 2026-11-09
-summary: 一个红蓝对抗中的监看程序
+summary: 一个红蓝对抗中的监看程序，超叼的好吧！研究怎么不触发杀毒软件耗了我好几天
 tags: [工具, 项目]
 draft: false
 cover: ./shot-161148.jpg
