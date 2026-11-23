@@ -93,6 +93,9 @@
 .reply-form textarea:focus-visible {
   border-color: var(--ink);
 }
+.reply-form textarea {
+  resize: vertical;
+}
 @supports (backdrop-filter: blur(1px)) {
   .reply-form input,
   .reply-form textarea {

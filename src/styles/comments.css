@@ -52,6 +52,10 @@
 }
 .comment-form {
   position: relative;
+  box-sizing: border-box;
+  width: fit-content;
+  min-width: 100%;
+  max-width: min(var(--wrap), calc(100vw - 2 * var(--gutter)));
   border-radius: 20px;
   padding: var(--sp-5);
 }
@@ -93,6 +97,10 @@
   padding: var(--sp-2) var(--sp-3);
   margin-bottom: var(--sp-4);
 }
+.comment-form textarea {
+  display: block;
+  max-width: calc(min(var(--wrap), calc(100vw - 2 * var(--gutter))) - 2 * var(--sp-5));
+}
 .comment-form input:focus-visible,
 .comment-form textarea:focus-visible {
   border-color: var(--ink);
@@ -114,6 +122,7 @@
   }
 }
 .comment-form > button {
+  display: block;
   background: var(--ink);
   color: var(--paper);
   border: 1px solid var(--ink);

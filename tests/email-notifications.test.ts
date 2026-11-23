@@ -22,7 +22,7 @@ function setup() {
     sqlite.exec(readFileSync(`migrations/${file}`, 'utf8'));
   }
 
-  const sent: Array<{ from: string; to: string[]; subject: string; html: string; text: string }> = [];
+  const sent: Array<{ from: string; reply_to?: string; to: string[]; subject: string; html: string; text: string }> = [];
   const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
     sent.push(JSON.parse(String(init?.body ?? '{}')));
     return new Response(JSON.stringify({ id: `mail-${sent.length}` }), {
@@ -195,6 +195,7 @@ describe('回复与站主邮件通知（Resend + 旁表 + 保留邮箱校验）'
     expect(s.sent).toHaveLength(1);
     expect(s.sent[0]).toMatchObject({
       from: '北杉札记 <bluehour@northcedar.top>',
+      reply_to: 'bluehour@northcedar.top',
       to: ['a13655515876@163.com'],
     });
     expect(s.sent[0].text).toContain('山海');

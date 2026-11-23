@@ -108,6 +108,8 @@ export async function sendEmail(
 ): Promise<boolean> {
   const apiKey = env.RESEND_API_KEY?.trim();
   if (!apiKey || !mail.to) return false;
+  const from = env.MAIL_FROM || DEFAULT_MAIL_FROM;
+  const replyTo = /<([^<>]+)>/.exec(from)?.[1]?.trim() || from.trim();
   const { text, html } = renderMail(mail);
   try {
     const response = await fetchImpl(RESEND_ENDPOINT, {
@@ -117,7 +119,8 @@ export async function sendEmail(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: env.MAIL_FROM || DEFAULT_MAIL_FROM,
+        from,
+        reply_to: replyTo,
         to: [mail.to],
         subject: mail.subject,
         html,
