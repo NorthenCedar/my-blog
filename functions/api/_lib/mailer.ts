@@ -45,8 +45,12 @@ function placeLabel(slug: string): string {
   return '文章评论';
 }
 
+function siteOriginOf(env: VisitorEnv): string {
+  return (env.SITE_ORIGIN || DEFAULT_SITE_ORIGIN).replace(/\/+$/, '');
+}
+
 function fullUrl(env: VisitorEnv, href: string): string {
-  const origin = (env.SITE_ORIGIN || DEFAULT_SITE_ORIGIN).replace(/\/+$/, '');
+  const origin = siteOriginOf(env);
   return `${origin}${href.startsWith('/') ? href : `/${href}`}`;
 }
 
@@ -59,8 +63,12 @@ function clip(text: string, max = QUOTE_MAX): string {
   return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
 }
 
-/** 构造纯文本 + HTML 双版本邮件正文（所有用户输入均严格转义）。 */
-function renderMail(mail: MailPayload): { text: string; html: string } {
+/** 构造纯文本 + HTML 双版本邮件正文（所有用户输入均严格转义，底部附站点名片）。 */
+function renderMail(mail: MailPayload, meta: { origin: string; replyTo: string }): { text: string; html: string } {
+  const originAttr = escapeHtml(meta.origin);
+  const originHost = escapeHtml(meta.origin.replace(/^https?:\/\//i, ''));
+  const avatarUrl = escapeHtml(`${meta.origin}/my-avatar`);
+  const replyToAttr = escapeHtml(meta.replyTo);
   const textParts = [
     mail.heading,
     '',
@@ -71,7 +79,9 @@ function renderMail(mail: MailPayload): { text: string; html: string } {
     '',
     `${mail.ctaLabel}：${mail.url}`,
     '',
-    '—— 北杉札记 (northcedar.top)',
+    '—— 北杉札记 · North_Cedar\'s notes',
+    meta.origin,
+    `回信邮箱：${meta.replyTo}`,
   ];
   const quoteBlock = mail.quote
     ? `<div style="margin:14px 0;padding:10px 12px;border-left:3px solid #2d7d46;background:#f4f7f4;color:#4a554c;font-size:13px;line-height:1.6;">
@@ -79,6 +89,33 @@ function renderMail(mail: MailPayload): { text: string; html: string } {
         <div style="white-space:pre-wrap;word-break:break-word;">${escapeHtml(mail.quote)}</div>
       </div>`
     : '';
+  const signatureCard = `<div style="margin:22px 0 0;padding-top:18px;border-top:1px solid #e6ebe4;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#f7f9f6;border:1px solid #e0e7df;border-radius:12px;">
+          <tr>
+            <td style="padding:14px 0 14px 16px;width:48px;vertical-align:middle;">
+              <a href="${originAttr}" style="text-decoration:none;display:block;width:48px;height:48px;">
+                <img src="${avatarUrl}" width="48" height="48" alt="北杉札记" style="display:block;width:48px;height:48px;border-radius:50%;border:1px solid #d4dfd3;object-fit:cover;background:#edf3ec;">
+              </a>
+            </td>
+            <td style="padding:14px 16px;vertical-align:middle;">
+              <div style="font-size:15px;font-weight:700;color:#18211a;line-height:1.3;">
+                <a href="${originAttr}" style="color:#18211a;text-decoration:none;">北杉札记</a>
+                <span style="font-size:12px;font-weight:400;color:#627064;margin-left:6px;">North_Cedar&#39;s notes</span>
+              </div>
+              <div style="margin-top:4px;font-size:12px;line-height:1.5;color:#4a554c;">合肥 · 安徽大学本科在读 · 存放留下来的东西</div>
+              <div style="margin-top:6px;font-size:12px;line-height:1.5;">
+                <a href="${originAttr}" style="color:#2d7d46;text-decoration:none;font-weight:600;">${originHost}</a>
+                <span style="color:#b8c2b7;margin:0 6px;">·</span>
+                <a href="${originAttr}/archive/" style="color:#2d7d46;text-decoration:none;">归档</a>
+                <span style="color:#b8c2b7;margin:0 6px;">·</span>
+                <a href="${originAttr}/guestbook/" style="color:#2d7d46;text-decoration:none;">留言板</a>
+                <span style="color:#b8c2b7;margin:0 6px;">·</span>
+                <a href="mailto:${replyToAttr}" style="color:#5f6b61;text-decoration:none;">${replyToAttr}</a>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </div>`;
   const html = `<!doctype html>
 <html lang="zh-CN">
   <body style="margin:0;padding:24px;background:#f6f7f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;color:#1f2721;">
@@ -95,6 +132,7 @@ function renderMail(mail: MailPayload): { text: string; html: string } {
         <a href="${escapeHtml(mail.url)}" style="display:inline-block;padding:9px 16px;border-radius:8px;background:#2d7d46;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;">${escapeHtml(mail.ctaLabel)}</a>
       </p>
       <p style="margin:16px 0 0;font-size:12px;color:#748076;word-break:break-all;">直达链接：${escapeHtml(mail.url)}</p>
+      ${signatureCard}
     </div>
   </body>
 </html>`;
@@ -110,7 +148,7 @@ export async function sendEmail(
   if (!apiKey || !mail.to) return false;
   const from = env.MAIL_FROM || DEFAULT_MAIL_FROM;
   const replyTo = /<([^<>]+)>/.exec(from)?.[1]?.trim() || from.trim();
-  const { text, html } = renderMail(mail);
+  const { text, html } = renderMail(mail, { origin: siteOriginOf(env), replyTo });
   try {
     const response = await fetchImpl(RESEND_ENDPOINT, {
       method: 'POST',

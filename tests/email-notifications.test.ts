@@ -200,7 +200,13 @@ describe('回复与站主邮件通知（Resend + 旁表 + 保留邮箱校验）'
     });
     expect(s.sent[0].text).toContain('山海');
     expect(s.sent[0].text).toContain('https://northcedar.top/talks/?comment=1#c-talk-20260926');
+    expect(s.sent[0].text).toContain('回信邮箱：bluehour@northcedar.top');
     expect(s.sent[0].html).not.toContain('<script>');
+    expect(s.sent[0].html).toContain('https://northcedar.top/my-avatar');
+    expect(s.sent[0].html).toContain('North_Cedar&#39;s notes');
+    expect(s.sent[0].html).toContain('https://northcedar.top/archive/');
+    expect(s.sent[0].html).toContain('https://northcedar.top/guestbook/');
+    expect(s.sent[0].html).toContain('mailto:bluehour@northcedar.top');
 
     // GET /api/comments 绝不返回邮箱
     const listRes = await commentsGet({ request: s.req('comments?slug=talk-20260926'), env: s.env } as never);
