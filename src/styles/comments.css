@@ -50,6 +50,30 @@
   color: var(--muted);
   margin: 0 0 var(--sp-5);
 }
+.comment-form {
+  position: relative;
+  border-radius: 20px;
+  padding: var(--sp-5);
+}
+.comment-author-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  gap: 0 var(--sp-3);
+}
+.comment-author-row:has([data-email-field][hidden]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.comment-field {
+  min-width: 0;
+}
+.comment-field[hidden] {
+  display: none !important;
+}
+@media (max-width: 560px) {
+  .comment-author-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .comment-form label {
   display: block;
   font-size: var(--fs-xs);
@@ -58,12 +82,14 @@
 }
 .comment-form input,
 .comment-form textarea {
+  box-sizing: border-box;
   width: 100%;
   font: inherit;
   color: var(--ink);
-  background: var(--paper);
+  background-color: var(--paper);
   border: 1px solid var(--hair);
-  border-radius: 0;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 1px var(--music-glass-glint), inset 0 -1px 1px var(--music-glass-inner);
   padding: var(--sp-2) var(--sp-3);
   margin-bottom: var(--sp-4);
 }
@@ -71,26 +97,40 @@
 .comment-form textarea:focus-visible {
   border-color: var(--ink);
 }
-.comment-form button {
+@supports (backdrop-filter: blur(1px)) {
+  .comment-form input,
+  .comment-form textarea {
+    background-color: color-mix(in srgb, var(--paper) 58%, transparent);
+    -webkit-backdrop-filter: blur(5px) saturate(1.12);
+    backdrop-filter: blur(5px) saturate(1.12);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .comment-form input,
+  .comment-form textarea {
+    background-color: var(--paper);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+.comment-form > button {
   background: var(--ink);
   color: var(--paper);
   border: 1px solid var(--ink);
-  border-radius: 0;
+  border-radius: var(--sp-2);
   padding: var(--sp-2) var(--sp-5);
 }
 /* hover 用 --accent-ink（5.18:1 达标）；--accent 只有 3.68:1，按钮文字是小字，刻意不用 */
-.comment-form button:hover:not(:disabled) {
+.comment-form > button:hover:not(:disabled) {
   background: var(--accent-ink);
   border-color: var(--accent-ink);
 }
-.comment-form button:disabled {
+.comment-form > button:disabled {
   opacity: 0.6;
   cursor: default;
 }
 .comments-form-first .comment-form {
   margin-bottom: var(--sp-7);
-  padding-bottom: var(--sp-6);
-  border-bottom: 1px solid var(--hair);
 }
 .comment-error {
   color: var(--accent-ink);

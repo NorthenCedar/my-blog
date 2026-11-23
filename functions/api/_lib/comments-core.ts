@@ -1,5 +1,8 @@
 export const NAME_MAX = 40;
 export const BODY_MAX = 1000;
+export const EMAIL_MAX = 254;
+export const RESERVED_SENDER_EMAIL = 'bluehour@northcedar.top';
+export const RESERVED_OWNER_EMAIL = 'a13655515876@163.com';
 export const RATE_WINDOW_MS = 60_000;
 export const RATE_MAX = 2;
 export const COMMENT_SLUG_MAX = 160;
@@ -29,6 +32,7 @@ export type ReplyRecord = {
 export type CommentInput = {
   slug: string;
   name: string;
+  email: string;
   body: string;
   /** 0 = 顶层评论；>0 = 回复（指向被回复的**顶层**评论 id） */
   parentId: number;
@@ -37,8 +41,53 @@ export type CommentInput = {
 };
 
 export type Validation = { ok: true; value: CommentInput } | { ok: false; error: string };
+export type EmailValidation = { ok: true; value: string } | { ok: false; error: string };
+export type ReservedEmailOptions = { isOwner?: boolean; mailFrom?: string; ownerNotifyEmail?: string };
 
+const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/;
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+function extractEmailAddress(raw?: string): string {
+  if (!raw) return '';
+  const match = /<([^<>]+)>/.exec(raw);
+  return (match ? match[1] : raw).trim().toLowerCase();
+}
+
+/** 拦截站点发信邮箱与非站主冒用站主收信邮箱。 */
+export function isReservedEmail(email: string, options?: ReservedEmailOptions): boolean {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return false;
+  const sender = extractEmailAddress(options?.mailFrom) || RESERVED_SENDER_EMAIL;
+  if (normalized === RESERVED_SENDER_EMAIL || normalized === sender) return true;
+  if (!options?.isOwner) {
+    const owner = extractEmailAddress(options?.ownerNotifyEmail) || RESERVED_OWNER_EMAIL;
+    if (normalized === RESERVED_OWNER_EMAIL || normalized === owner) return true;
+  }
+  return false;
+}
+
+/** 校验并归一化邮箱；空串表示未填（选填场景放行）。 */
+export function parseOptionalEmail(v: unknown, options?: ReservedEmailOptions): EmailValidation {
+  const raw = str(v);
+  const email = raw.trim().toLowerCase();
+  if (!email) return { ok: true, value: '' };
+  if (
+    email.length > EMAIL_MAX ||
+    CONTROL_OR_BIDI_RE.test(raw) ||
+    email.includes('..') ||
+    !EMAIL_RE.test(email)
+  ) {
+    return { ok: false, error: '邮箱格式不太对，请检查后重试' };
+  }
+  const [local, domain] = email.split('@');
+  if (!local || !domain || local.startsWith('.') || local.endsWith('.') || domain.startsWith('.') || domain.endsWith('.')) {
+    return { ok: false, error: '邮箱格式不太对，请检查后重试' };
+  }
+  if (isReservedEmail(email, options)) {
+    return { ok: false, error: '该邮箱为站点或站主保留邮箱，请填写你自己的邮箱' };
+  }
+  return { ok: true, value: email };
+}
 
 /**
  * 回复目标（parentId）的校验。**只接受安全非负整数** ——
@@ -65,6 +114,8 @@ export function validateComment(input: unknown): Validation {
   const slug = str(o.slug).trim();
   const name = str(o.name).trim();
   const body = str(o.body).trim();
+  const email = parseOptionalEmail(o.email);
+  if (!email.ok) return email;
 
   if (!isValidCommentSlug(slug)) return { ok: false, error: '页面标识不合法' };
   if (name.length === 0) return { ok: false, error: '名字没写' };
@@ -89,7 +140,7 @@ export function validateComment(input: unknown): Validation {
     if (UNSAFE_NAME_RE.test(replyToFinal)) return { ok: false, error: '回复对象不能包含尖括号或脚本片段' };
   }
 
-  return { ok: true, value: { slug, name, body, parentId, replyTo: replyToFinal } };
+  return { ok: true, value: { slug, name, email: email.value, body, parentId, replyTo: replyToFinal } };
 }
 
 /**

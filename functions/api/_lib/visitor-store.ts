@@ -2,7 +2,14 @@ import { digest, fail, randomToken } from './visitor-core';
 import { defaultAvatarUrl } from '../../../src/lib/visitor-avatars';
 import { guardPublicWrite, readJsonBodyWithSize } from './public-write';
 
-export interface VisitorEnv { COMMENTS_DB: D1Database; OWNER_USER_ID?: string }
+export interface VisitorEnv {
+  COMMENTS_DB: D1Database;
+  OWNER_USER_ID?: string;
+  RESEND_API_KEY?: string;
+  MAIL_FROM?: string;
+  OWNER_NOTIFY_EMAIL?: string;
+  SITE_ORIGIN?: string;
+}
 export type Account = {
   id: string; username: string; nickname: string; bio: string; avatar: string; avatar_version: string;
   password_hash: string; recovery_hash: string; auth_version: number; created_at: string;
@@ -25,7 +32,26 @@ export const publicUser = (user: Account, env: VisitorEnv) => ({
   avatarUrl: user.avatar_version ? `/api/avatars?id=${user.id}&v=${user.avatar_version}` : defaultAvatarUrl(user.avatar),
   isOwner: Boolean(env.OWNER_USER_ID && env.OWNER_USER_ID === user.id),
 });
-export const privateUser = (user: Account, env: VisitorEnv) => ({ ...publicUser(user, env), username: user.username });
+export const privateUser = (user: Account, env: VisitorEnv, email = '') => ({ ...publicUser(user, env), username: user.username, email });
+export async function accountEmail(env: VisitorEnv, userId: string): Promise<string> {
+  try {
+    const row = await env.COMMENTS_DB.prepare('SELECT email FROM visitor_emails WHERE user_id = ? LIMIT 1')
+      .bind(userId)
+      .first<{ email: string }>();
+    return row?.email ?? '';
+  } catch (error) {
+    if (/no such table:\s*visitor_emails/i.test(String(error))) return '';
+    throw error;
+  }
+}
+export async function saveAccountEmail(env: VisitorEnv, userId: string, email: string): Promise<void> {
+  await env.COMMENTS_DB.prepare(
+    'INSERT INTO visitor_emails (user_id, email, updated_at) VALUES (?, ?, ?) ' +
+      'ON CONFLICT(user_id) DO UPDATE SET email = excluded.email, updated_at = excluded.updated_at'
+  )
+    .bind(userId, email, new Date().toISOString())
+    .run();
+}
 export async function currentAccount(request: Request, env: VisitorEnv): Promise<Account | null> {
   const token = sessionToken(request);
   if (!token) return null;

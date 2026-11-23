@@ -14,7 +14,7 @@ function setup() {
 describe('评论的账户身份与匿名兼容', () => {
   it('鉴权后会话撤销，评论事务不得留下匿名记录或错误的作者关联', async () => {
     const s = setup();
-    const reg = await accountPost({ request: s.request('account', { action: 'register', username: 'reader', password: 'a-long-password-for-this-account' }), env: s.env } as never);
+    const reg = await accountPost({ request: s.request('account', { action: 'register', username: 'reader', email: 'reader@example.com', password: 'a-long-password-for-this-account' }), env: s.env } as never);
     const cookie = reg.headers.get('Set-Cookie')!.split(';')[0];
     const original = s.env.COMMENTS_DB.prepare;
     s.env.COMMENTS_DB.prepare = ((sql: string) => {
@@ -33,7 +33,7 @@ describe('评论的账户身份与匿名兼容', () => {
   it.each(['anonymous', 'account'])('父评论在写入前被删除时拒绝 %s 回复', async identity => {
     const s = setup();
     const registration = identity === 'account' ? await accountPost({
-      request: s.request('account', { action: 'register', username: 'reader', password: 'a-long-password-for-this-account' }),
+      request: s.request('account', { action: 'register', username: 'reader', email: 'reader@example.com', password: 'a-long-password-for-this-account' }),
       env: s.env,
     } as never) : null;
     const cookie = registration?.headers.get('Set-Cookie')?.split(';')[0];
@@ -72,7 +72,7 @@ describe('评论的账户身份与匿名兼容', () => {
   it('登录评论和回复从会话取名字与作者，改资料后历史关联更新，同名匿名不被认领', async () => {
     const s = setup();
     s.sqlite.prepare("INSERT INTO comments (slug,name,body,created_at,ip_hash) VALUES ('guestbook','访客','旧匿名','2026-10-19','old')").run();
-    const reg = await accountPost({ request: s.request('account', { action: 'register', username: 'reader', password: 'a-long-password-for-this-account' }), env: s.env } as never);
+    const reg = await accountPost({ request: s.request('account', { action: 'register', username: 'reader', email: 'reader@example.com', password: 'a-long-password-for-this-account' }), env: s.env } as never);
     const user = (await reg.json() as any).user;
     const cookie = reg.headers.get('Set-Cookie')!.split(';')[0];
     const post = await onRequestPost({ request: s.request('comments', { slug: 'guestbook', name: '伪造名', body: '账户原文', identity: 'account' }, cookie), env: s.env } as never);
@@ -92,7 +92,7 @@ describe('评论的账户身份与匿名兼容', () => {
     const expired = await onRequestPost({ request: s.request('comments', { slug: 'guestbook', name: '访客', body: '草稿', identity: 'account' }), env: s.env } as never);
     expect(expired.status).toBe(401);
     expect(s.sqlite.prepare('SELECT COUNT(*) AS n FROM comments').get()?.n).toBe(0);
-    const reg = await accountPost({ request: s.request('account', { action: 'register', username: 'reader', password: 'a-long-password-for-this-account' }), env: s.env } as never);
+    const reg = await accountPost({ request: s.request('account', { action: 'register', username: 'reader', email: 'reader@example.com', password: 'a-long-password-for-this-account' }), env: s.env } as never);
     const cookie = reg.headers.get('Set-Cookie')!.split(';')[0];
     const r = await onRequestPost({ request: s.request('comments', { slug: 'guestbook', name: '只想匿名', body: '匿名原文', identity: 'anonymous' }, cookie), env: s.env } as never);
     expect(r.status).toBe(201);

@@ -53,29 +53,63 @@
 
 /* 回复表单：贴着父评论的下方，视觉重量比主表单轻 */
 .reply-form {
+  position: relative;
   margin: var(--sp-3) 0 0;
   padding: var(--sp-3);
-  background: var(--panel);
-  border: 1px solid var(--hair);
+  border-radius: 16px;
   display: grid;
   gap: var(--sp-2);
 }
+.reply-author-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  gap: var(--sp-2);
+}
+.reply-author-row:has([data-email-field][hidden]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.reply-author-row [hidden] {
+  display: none !important;
+}
+@media (max-width: 520px) {
+  .reply-author-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .reply-form input,
 .reply-form textarea {
+  box-sizing: border-box;
   width: 100%;
   font: inherit;
   font-size: var(--fs-sm);
   color: var(--ink);
-  background: var(--paper);
+  background-color: var(--paper);
   border: 1px solid var(--hair);
-  border-radius: 0;
+  border-radius: 10px;
+  box-shadow: inset 0 1px 1px var(--music-glass-glint), inset 0 -1px 1px var(--music-glass-inner);
   padding: var(--sp-2);
 }
 .reply-form input:focus-visible,
 .reply-form textarea:focus-visible {
   border-color: var(--ink);
 }
-.reply-form button {
+@supports (backdrop-filter: blur(1px)) {
+  .reply-form input,
+  .reply-form textarea {
+    background-color: color-mix(in srgb, var(--paper) 58%, transparent);
+    -webkit-backdrop-filter: blur(5px) saturate(1.12);
+    backdrop-filter: blur(5px) saturate(1.12);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .reply-form input,
+  .reply-form textarea {
+    background-color: var(--paper);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+.reply-form > button {
   justify-self: start;
   font: inherit;
   font-size: var(--fs-xs);
@@ -83,24 +117,25 @@
   color: var(--ink);
   background: transparent;
   border: 1px solid var(--hair);
+  border-radius: var(--sp-2);
   cursor: pointer;
 }
-.reply-form button:hover:not(:disabled) {
+.reply-form > button:hover:not(:disabled) {
   border-color: var(--accent-ink);
   color: var(--accent-ink);
 }
 /* 发表用实心（与主表单的按钮同一套语言）；取消是描边 —— 两个按钮不能长得一样重 */
-.reply-send {
+.reply-form > .reply-send {
   background: var(--ink);
   color: var(--paper);
   border-color: var(--ink);
 }
-.reply-send:hover:not(:disabled) {
+.reply-form > .reply-send:hover:not(:disabled) {
   background: var(--accent-ink);
   border-color: var(--accent-ink);
   color: var(--paper);
 }
-.reply-form button:disabled {
+.reply-form > button:disabled {
   opacity: 0.6;
   cursor: default;
 }

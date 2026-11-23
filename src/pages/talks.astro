@@ -289,9 +289,24 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
                     <p class="cempty" data-empty hidden>还没有评论，你可以是第一个。</p>
                   </div>
                 </div>
-                <form class="cform" data-form novalidate>
-                  <label for={`n-${slug}`}>名字</label>
-                  <input id={`n-${slug}`} name="name" type="text" maxlength="40" autocomplete="nickname" required />
+                <form class="cform music-glass" data-form novalidate>
+                  <div class="cform-author-row">
+                    <div class="cform-field">
+                      <label for={`n-${slug}`}>名字</label>
+                      <input id={`n-${slug}`} name="name" type="text" maxlength="40" autocomplete="nickname" required />
+                    </div>
+                    <div class="cform-field" data-email-field>
+                      <label for={`e-${slug}`}>邮箱（选填）</label>
+                      <input
+                        id={`e-${slug}`}
+                        name="email"
+                        type="email"
+                        maxlength="254"
+                        autocomplete="email"
+                        placeholder="检查是否填对，否则收不到回复"
+                      />
+                    </div>
+                  </div>
                   <label for={`b-${slug}`}>评论</label>
                   <textarea id={`b-${slug}`} name="body" rows="3" maxlength="1000" required></textarea>
                   <div class="hp" aria-hidden="true">
@@ -627,10 +642,35 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     color: #a33;
   }
   .cform {
+    position: relative;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: 0.4em var(--sp-3);
+    border-radius: 16px;
+    padding: var(--sp-4);
+  }
+  .cform-author-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+    gap: 0.4em var(--sp-3);
+  }
+  .cform-author-row:has([data-email-field][hidden]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cform-field {
+    display: grid;
+    gap: 0.25em;
+    min-width: 0;
+  }
+  .cform-field[hidden] {
+    display: none !important;
+  }
+  @media (max-width: 560px) {
+    .cform-author-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
   .cform label {
     font-size: var(--fs-xs);
@@ -638,20 +678,44 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
   }
   .cform input,
   .cform textarea {
+    box-sizing: border-box;
+    width: 100%;
     font: inherit;
     font-size: var(--fs-sm);
     color: var(--ink);
-    background: var(--panel);
+    background-color: var(--paper);
     border: 1px solid var(--hair);
+    border-radius: 10px;
+    box-shadow: inset 0 1px 1px var(--music-glass-glint), inset 0 -1px 1px var(--music-glass-inner);
     padding: 0.35em 0.5em;
+  }
+  .cform input:focus-visible,
+  .cform textarea:focus-visible {
+    border-color: var(--ink);
+  }
+  @supports (backdrop-filter: blur(1px)) {
+    .cform input,
+    .cform textarea {
+      background-color: color-mix(in srgb, var(--paper) 58%, transparent);
+      -webkit-backdrop-filter: blur(5px) saturate(1.12);
+      backdrop-filter: blur(5px) saturate(1.12);
+    }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .cform input,
+    .cform textarea {
+      background-color: var(--paper);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
   }
   .cform textarea { inline-size: 100%; resize: vertical; }
   .cform textarea,
   .cform .hp,
-  .cform button {
+  .cform > button {
     grid-column: 1 / -1;
   }
-  .cform button {
+  .cform > button {
     justify-self: start;
     margin-top: 0.3em;
     padding: 0.35em 0.9em;
@@ -660,8 +724,9 @@ const plate = PLATES['/src/assets/talks/plates/drift-main.webp']?.default;
     color: var(--ink);
     background: transparent;
     border: 1px solid var(--hair);
+    border-radius: var(--sp-2);
   }
-  .cform button:hover {
+  .cform > button:hover {
     border-color: var(--accent);
     color: var(--accent-ink);
   }

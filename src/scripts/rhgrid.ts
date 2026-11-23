@@ -1,6 +1,6 @@
 
 import { onPage } from './page-lifecycle';
-onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, cancelAnimationFrame, setTimeout, clearTimeout, IntersectionObserver}) => {
+onPage(({document, window, addEventListener, matchMedia, requestAnimationFrame, cancelAnimationFrame, setTimeout, clearTimeout, IntersectionObserver, ResizeObserver}) => {
 // 弹性流场线（2026-09-30，随 v10.6 原型一起搬进本站）
 //
 // 逐字移植自视觉原型 nc-rhine-v7 v10 的 initRhGrid()，原型那版又是逐字移植自
@@ -222,16 +222,26 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
   let raf = 0, T = 0, lastNow = 0;
   let onScreen = true;
 
-  const setSize = () => {
+  const measureHost = () => {
     const r = host.getBoundingClientRect();
-    W = r.width; H = r.height;
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    return {
+      w: host.clientWidth || r.width,
+      h: host.clientHeight || r.height,
+    };
+  };
+
+  const setSize = () => {
+    const { w, h } = measureHost();
+    W = w; H = h;
+    if (W > 0 && H > 0) svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   };
 
   const build = () => {
     cols = [];
     paths.forEach((p) => p.remove());
     paths = [];
+    svg.replaceChildren();
+    if (W < 1 || H < 1) return;
     const w = W + PAD_X * 2, h = H + PAD_Y * 2;
     const nc = Math.ceil(w / GAP_X), nr = Math.ceil(h / GAP_Y);
     const offX = (W - GAP_X * nc) / 2, offY = (H - GAP_Y * nr) / 2;
@@ -372,12 +382,49 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
     raf = requestAnimationFrame(tick);
   };
 
+  let rt = 0;
+  const rebuild = () => {
+    clearTimeout(rt);
+    rt = 0;
+    setSize();
+    build();
+    if (cols.length > 0) {
+      move(T, 0);
+      draw();
+      if (!reduce && onScreen && !raf) raf = requestAnimationFrame(tick);
+    }
+  };
+
+  const syncSize = (immediate = false) => {
+    const { w: nextW, h: nextH } = measureHost();
+    if (nextW < 1 || nextH < 1) return;
+    if (cols.length > 0 && Math.abs(nextW - W) < 1 && Math.abs(nextH - H) < 1) return;
+    if (immediate || cols.length === 0 || Math.abs(nextW - W) > 20 || Math.abs(nextH - H) > 20) {
+      rebuild();
+    } else {
+      clearTimeout(rt);
+      rt = window.setTimeout(rebuild, 160);
+    }
+  };
+
   const onMove = (e: MouseEvent | TouchEvent) => {
-    if (!onScreen) return;
     const r = host.getBoundingClientRect();
+    if (!onScreen) {
+      if (r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight) {
+        onScreen = true;
+      } else {
+        return;
+      }
+    }
+    const { w, h } = measureHost();
+    if (cols.length === 0 || Math.abs(w - W) > 20 || Math.abs(h - H) > 20) {
+      syncSize(true);
+    }
+    if (r.width <= 0 || r.height <= 0 || W <= 0 || H <= 0) return;
     const t = 'touches' in e ? e.touches[0] : e;
-    mouse.x = t.clientX - r.left;
-    mouse.y = t.clientY - r.top;
+    if (!t) return;
+    mouse.x = ((t.clientX - r.left) / r.width) * W;
+    mouse.y = ((t.clientY - r.top) / r.height) * H;
     if (!mouse.set) {
       mouse.sx = mouse.x; mouse.sy = mouse.y;
       mouse.lx = mouse.x; mouse.ly = mouse.y;
@@ -387,23 +434,24 @@ function initRhGrid(host: HTMLElement, svg: SVGSVGElement) {
   };
 
   setSize(); build();
-  mouse.sx = mouse.sy = mouse.lx = mouse.ly = W / 2;
+  mouse.sx = mouse.lx = W / 2;
+  mouse.sy = mouse.ly = H / 2;
+
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => syncSize(false)).observe(host);
+  }
+  addEventListener('resize', () => syncSize(false));
 
   if (reduce) { move(0, 0); draw(); return; } // 降级：只画一帧静态
 
   addEventListener('mousemove', onMove, { passive: true });
   addEventListener('touchmove', onMove, { passive: true });
 
-  let rt = 0;
-  addEventListener('resize', () => {
-    clearTimeout(rt);
-    rt = window.setTimeout(() => { setSize(); build(); move(T, 0); draw(); }, 160);
-  });
-
   if ('IntersectionObserver' in window) {
     new IntersectionObserver((es) => {
       onScreen = es[es.length - 1].isIntersecting;
       if (onScreen) {
+        if (cols.length === 0) syncSize(true);
         if (!raf) raf = requestAnimationFrame(tick);
       } else if (raf) {
         cancelAnimationFrame(raf);

@@ -47,6 +47,7 @@ if (root) {
   const replyCtx = {
     slug,
     name: () => (form.elements.namedItem('name') as HTMLInputElement).value,
+    email: () => (form.elements.namedItem('email') as HTMLInputElement | null)?.value ?? '',
     onAdded: (reply: Reply) => {
       postedBeforeLoad?.replies.push(reply);
       setCount();
@@ -166,6 +167,7 @@ if (root) {
     const payload = {
       slug,
       name: String(data.get('name') ?? ''),
+      email: String(data.get('email') ?? ''),
       identity: String(data.get('identity') ?? 'anonymous'),
       body: String(data.get('body') ?? ''),
       website: String(data.get('website') ?? ''), // 蜜罐

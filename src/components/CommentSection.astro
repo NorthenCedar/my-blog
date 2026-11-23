@@ -16,16 +16,31 @@ const { slug, formFirst = false } = Astro.props;
     part === 'form' ? (
       <>
         <h2 id="comment-form-title">留个言</h2>
-        <form class="comment-form" data-form aria-labelledby="comment-form-title" novalidate>
-          <label for="comment-name">名字</label>
-          <input
-            id="comment-name"
-            name="name"
-            type="text"
-            maxlength="40"
-            autocomplete="nickname"
-            required
-          />
+        <form class="comment-form music-glass" data-form aria-labelledby="comment-form-title" novalidate>
+          <div class="comment-author-row">
+            <div class="comment-field">
+              <label for="comment-name">名字</label>
+              <input
+                id="comment-name"
+                name="name"
+                type="text"
+                maxlength="40"
+                autocomplete="nickname"
+                required
+              />
+            </div>
+            <div class="comment-field" data-email-field>
+              <label for="comment-email">邮箱（选填）</label>
+              <input
+                id="comment-email"
+                name="email"
+                type="email"
+                maxlength="254"
+                autocomplete="email"
+                placeholder="检查是否填对，否则收不到回复"
+              />
+            </div>
+          </div>
 
           <label for="comment-body">留言</label>
           <textarea id="comment-body" name="body" rows="4" maxlength="1000" required></textarea>

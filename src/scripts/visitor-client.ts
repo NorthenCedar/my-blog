@@ -1,6 +1,7 @@
 /** 登录表单和名片按点击创建 DOM，不自动打扰匿名访客。 */
 import { openCard, openLogin } from './visitor-dialog';
-export type Visitor = { id: string; nickname: string; bio: string; avatarUrl: string; isOwner: boolean; username?: string };
+import type { IdentityDropdown } from './visitor-mode-dropdown';
+export type Visitor = { id: string; nickname: string; bio: string; avatarUrl: string; isOwner: boolean; username?: string; email?: string };
 export type Authored = { id: number; name: string; author?: Visitor | null };
 let viewer: Visitor | null = null;
 let loading: Promise<Visitor | null> | undefined;
@@ -74,23 +75,49 @@ export function authorNode(record: Authored, kind = 'comment') {
 export function identityControls(form: HTMLFormElement, isCurrent = () => true) {
   const box = node('div', 'visitor-identity');
   const status = node('span', 'visitor-hint', '可直接匿名发表 · 登录后能收到回复提醒');
+  const control = node('div', 'visitor-mode-control');
+  control.hidden = true;
   const select = node('select'); select.name = 'identity'; select.setAttribute('aria-label', '发表身份');
-  select.append(new Option('匿名发表', 'anonymous'), new Option('以账户发表', 'account')); select.hidden = true;
+  select.append(new Option('匿名发表', 'anonymous'), new Option('以账户发表', 'account'));
+  control.append(select);
   const login = node('button', 'visitor-link', '登录 / 注册'); login.type = 'button';
   const settings = node('a', 'visitor-link', '资料设置'); settings.href = '/account/'; settings.hidden = true;
-  box.append(status, select, login, settings);
+  box.append(status, control, login, settings);
   form.prepend(box);
   const input = form.elements.namedItem('name') as HTMLInputElement;
+  const emailInput = form.elements.namedItem('email') as HTMLInputElement | null;
+  const emailWrap = form.querySelector<HTMLElement>('[data-email-field]') ?? emailInput;
   let anonymousName = input.value, explicit = false, expired = false, disposed = false;
+  let dropdown: IdentityDropdown | null = null, loadingDropdown = false;
   const active = () => !disposed && isCurrent();
+  const ensureDropdown = () => {
+    if (dropdown || loadingDropdown || !active()) return;
+    loadingDropdown = true;
+    void import('./visitor-mode-dropdown')
+      .then(({ mountIdentityDropdown }) => {
+        if (!active()) return;
+        dropdown = mountIdentityDropdown(control, select);
+        if (control.hidden) dropdown.close();
+        else dropdown.sync();
+      })
+      .catch(() => { /* 原生选择框保底可用 */ })
+      .finally(() => { loadingDropdown = false; });
+  };
   const apply = (user: Visitor | null) => {
     if (!active()) return;
     // 已经选择账户后，失效/恢复后的空身份也不能悄悄改成匿名。
     if (!explicit && user) select.value = 'account';
-    select.hidden = !user && select.value !== 'account'; settings.hidden = !user; login.hidden = Boolean(user) && !expired;
+    control.hidden = !user && select.value !== 'account';
+    if (control.hidden) dropdown?.close();
+    else if (dropdown) dropdown.sync();
+    else ensureDropdown();
+    settings.hidden = !user; login.hidden = Boolean(user) && !expired;
     login.textContent = expired || (!user && select.value === 'account') ? '重新登录' : '登录 / 注册';
     status.textContent = expired || (!user && select.value === 'account') ? '登录已过期，请重新登录或选择匿名' : user ? `已登录 · ${user.nickname}` : '可直接匿名发表 · 登录后能收到回复提醒';
-    input.readOnly = select.value === 'account';
+    const accountMode = select.value === 'account';
+    input.readOnly = accountMode;
+    if (emailWrap) emailWrap.hidden = accountMode;
+    if (emailInput) emailInput.disabled = accountMode;
     if (input.readOnly && user) input.value = user.nickname;
     else if (!input.readOnly) input.value = anonymousName;
   };
@@ -108,6 +135,8 @@ export function identityControls(form: HTMLFormElement, isCurrent = () => true) 
   void loadViewer().then(apply);
   function dispose() {
     disposed = true;
+    dropdown?.dispose();
+    dropdown = null;
     listeners.delete(update);
     window.removeEventListener('visitor-session-expired', onExpired);
     window.removeEventListener('pagehide', onPageHide);

@@ -92,7 +92,7 @@ describe('公开读接口的查询参数白名单与穿透防护', () => {
       request: new Request('https://example.test/api/account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-NC-Request': '1', Origin: 'https://example.test', 'CF-Connecting-IP': '192.0.2.88' },
-        body: JSON.stringify({ action: 'register', username: 'hardeneduser', password: 'a-very-long-passphrase-for-test' }),
+        body: JSON.stringify({ action: 'register', username: 'hardeneduser', email: 'hardened@example.com', password: 'a-very-long-passphrase-for-test' }),
       }),
       env: s.env,
     } as never);

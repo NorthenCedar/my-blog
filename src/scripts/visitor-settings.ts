@@ -30,6 +30,9 @@ function show(initial: Visitor | null) {
   const form = node('form', 'visitor-form');
   const username = field(form, 'username', '登录账号（仅自己可见）'); username.value = user.username ?? ''; username.readOnly = true; username.autocomplete = 'username';
   const nickname = field(form, 'nickname', '昵称'); nickname.maxLength = 40; nickname.value = user.nickname; nickname.autocomplete = 'nickname';
+  const email = field(form, 'email', '通知邮箱（接收回复提醒，仅自己可见）', 'email');
+  email.maxLength = 254; email.value = user.email ?? ''; email.autocomplete = 'email';
+  email.placeholder = '请检查是否填写正确，否则不能及时收到回复';
   const bioLabel = node('label', '', '个性签名'), bio = node('textarea'); bio.name = 'bio'; bio.maxLength = 160; bio.rows = 3; bio.value = user.bio; bioLabel.append(bio); form.append(bioLabel);
   const choices = node('div', 'visitor-avatar-groups'); choices.setAttribute('role', 'group'); choices.setAttribute('aria-label', '默认头像');
   let selectedAvatar = '';
@@ -50,10 +53,10 @@ function show(initial: Visitor | null) {
     event.preventDefault(); if (busy) return; busy = true; save.disabled = true; upload.disabled = true; message.textContent = '';
     const startedAt = viewerVersion();
     try {
-      const result = await accountRequest('profile', { nickname: nickname.value, bio: bio.value, avatar: selectedAvatar });
+      const result = await accountRequest('profile', { nickname: nickname.value, bio: bio.value, email: email.value, avatar: selectedAvatar });
       if (viewerVersion() !== startedAt) return;
       user = result.user!;
-      nickname.value = user.nickname; bio.value = user.bio; nicknameText.textContent = user.nickname; avatarImage.src = user.avatarUrl; selectedAvatar = ''; setViewer(user);
+      nickname.value = user.nickname; email.value = user.email ?? ''; bio.value = user.bio; nicknameText.textContent = user.nickname; avatarImage.src = user.avatarUrl; selectedAvatar = ''; setViewer(user);
       message.textContent = '名片已保存，关联的历史留言也会显示新资料。';
     } catch (error) { message.textContent = error instanceof Error ? error.message : '保存失败，请重试'; }
     finally { busy = false; save.disabled = false; upload.disabled = false; }

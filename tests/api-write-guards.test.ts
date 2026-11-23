@@ -202,7 +202,7 @@ describe('并发额度与重复点赞', () => {
   it('匿名与账户身份共用评论额度，不可靠切换身份绕过', async () => {
     const s = setup();
     const headers = { Origin: 'https://example.test', 'X-NC-Request': '1' };
-    const registered = await accountPost({ request: request('account', { action: 'register', username: 'reader', password: 'a-long-password-for-this-account' }, headers), env: s.env } as never);
+    const registered = await accountPost({ request: request('account', { action: 'register', username: 'reader', email: 'reader@example.com', password: 'a-long-password-for-this-account' }, headers), env: s.env } as never);
     expect(registered.status).toBe(201);
     const Cookie = registered.headers.get('Set-Cookie')!.split(';')[0];
     const responses = await Promise.all(Array.from({ length: 6 }, (_, i) => commentPost({ request: request('comments', { ...comment, identity: i % 2 ? 'account' : 'anonymous' }, { ...headers, Cookie }), env: s.env } as never)));

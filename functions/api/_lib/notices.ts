@@ -238,7 +238,7 @@ export async function listReplyNotices(
   }
 }
 
-function noticeHref(slug: string, parentId: number, replyId: number | null): string {
+export function noticeHref(slug: string, parentId: number, replyId: number | null): string {
   if (slug === 'link-apply') return `/links/?application=${Math.abs(parentId)}#link-apply`;
   if (slug.startsWith('talk-')) {
     const reply = replyId === null ? '' : `&reply=${replyId}`;

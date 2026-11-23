@@ -85,6 +85,7 @@ onPage(({ document, window }) => {
         replyTo,
         target: target ?? { kind: 'comment', id: parentId },
         name: () => (form.elements.namedItem('name') as HTMLInputElement).value,
+        email: () => (form.elements.namedItem('email') as HTMLInputElement | null)?.value ?? '',
         onAdded: setCount,
       });
     const showError = (msg: string) => {
@@ -167,6 +168,7 @@ onPage(({ document, window }) => {
       const payload = {
         slug,
         name: String(data.get('name') ?? ''),
+        email: String(data.get('email') ?? ''),
         identity: String(data.get('identity') ?? 'anonymous'),
         body: String(data.get('body') ?? ''),
         website: String(data.get('website') ?? ''),

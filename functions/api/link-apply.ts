@@ -6,6 +6,7 @@ import {
   validateLinkApply,
 } from './_lib/link-apply';
 import { recordLinkApplyNotice } from './_lib/notices';
+import { notifyLinkApplyEmail, runBackgroundMail } from './_lib/mailer';
 import {
   guardPublicWrite,
   hasOnlyQueryParams,
@@ -95,7 +96,7 @@ export const onRequestGet: PagesFunction<VisitorEnv> = async ({ request, env }) 
   }
 };
 
-export const onRequestPost: PagesFunction<VisitorEnv> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<VisitorEnv> = async ({ request, env, waitUntil }) => {
   try {
     guardPublicWrite(request);
     const payload = await readJsonBody(request, 8 * 1024);
@@ -135,6 +136,7 @@ export const onRequestPost: PagesFunction<VisitorEnv> = async ({ request, env })
 
     const applicationId = inserted?.id ?? 0;
     await recordLinkApplyNotice(env, { applicationId, name, href, desc, createdAt });
+    runBackgroundMail(waitUntil, notifyLinkApplyEmail(env, { applicationId, name, href, desc }));
     return json({ ok: true, id: applicationId }, 201);
   } catch (error) {
     if (error instanceof AccountError) return json({ error: error.message }, error.status);

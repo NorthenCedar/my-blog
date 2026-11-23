@@ -9,6 +9,7 @@ import {
   THEME_RENDERER_BUDGET,
   THEME_TOGGLE_BOOT_BUDGET,
   TOC_LAYOUT_BOOT_BUDGET,
+  VISITOR_MODE_DROPDOWN_BUDGET,
   expectMotionStartup,
   siteWideLazyBytes,
 } from './_motion-budget';
@@ -956,14 +957,18 @@ describe.skipIf(!hasDist || PUBLISHED.length === 0)('JS 预算（需要至少一
     /* 2026-11-12：主题开关进顶栏，每页多背一段 ~1 KB 的引导脚本 ⇒ 首屏额度加这一笔。 */
     // 消息整行跳转及评论定位，完整闭包多留 1 KiB，首屏与脚本数量上限照旧。
     const articleBoot = THEME_TOGGLE_BOOT_BUDGET + COMMENT_LIFECYCLE_BUDGET + TOC_LAYOUT_BOOT_BUDGET;
+    // 身份选择抽屉（visitor-mode-dropdown.*.js，实测 ~2.68 KiB）按需加载，仅计入完整闭包。
     const BUDGET = 68608 + articleBoot + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET
-      + SAILING_TOC_BUDGET + NAVIGATION_FEEDBACK_BOOT_BUDGET + PAGE_STATS_BOOT_BUDGET;
+      + SAILING_TOC_BUDGET + NAVIGATION_FEEDBACK_BOOT_BUDGET + PAGE_STATS_BOOT_BUDGET
+      + VISITOR_MODE_DROPDOWN_BUDGET;
     expectMotionStartup(page, 67584 + articleBoot);
     const isSailingToc = (path: string) => /[/\\]toc-motion\.[^/\\]+\.js$/.test(path);
     const sailing = jsClosure(page).files.filter(isSailingToc);
     expect(sailing).toHaveLength(1);
     expect(statSync(sailing[0]).size).toBeLessThan(SAILING_TOC_BUDGET);
     expect(jsClosure(page, { dynamic: false }).files.filter(isSailingToc)).toEqual([]);
+    const isVisitorDropdown = (path: string) => /[/\\]visitor-mode-dropdown\.[^/\\]+\.js$/.test(path);
+    expect(jsClosure(page, { dynamic: false }).files.filter(isVisitorDropdown), '身份下拉抽屉必须按需加载').toEqual([]);
     console.log(`内联脚本体积: ${inline.join(' + ')} = ${inlineTotal} 字节 · 含同源外链合计 ${full} 字节（预算 ${BUDGET}）· ${scripts.length} 处 <script>`);
 
     /* 2026-11-12：上限 6 → 7。主题开关的引导脚本（ThemeToggle.astro 自带）是
@@ -1370,11 +1375,16 @@ describe.skipIf(!hasDist)('/gallery 页 JS 预算（P5 相册页）', () => {
        把 three 拖进来必炸"的量级；三条反面正对照（three / 相册视图 / 播放器）全部照旧。
        ⚠ 中间色**不从模块 import**：那样会把整块预览逻辑拉进首屏包（试过，多出 ~2.9 KB），
          现在只读事件 detail 里的 `mixed`，增量才是现在这个数。 */
-    // 留言板使用同一套消息跳转及评论定位，完整闭包加 1 KiB。
+    // 留言板使用同一套消息跳转及评论定位，完整闭包加 1 KiB；归档同款身份选择抽屉仅登录后按需加载。
     const guestbookBoot = THEME_TOGGLE_BOOT_BUDGET + COMMENT_LIFECYCLE_BUDGET;
     const BUDGET = 69 * 1024 + guestbookBoot + TECH_HEADING_BOOT_BUDGET + MOTION_ENGINE_BUDGET
-      + NAVIGATION_UI_BOOT_BUDGET + NAVIGATION_FEEDBACK_BOOT_BUDGET + PAGE_STATS_BOOT_BUDGET;
+      + NAVIGATION_UI_BOOT_BUDGET + NAVIGATION_FEEDBACK_BOOT_BUDGET + PAGE_STATS_BOOT_BUDGET
+      + VISITOR_MODE_DROPDOWN_BUDGET;
     expectMotionStartup(page, 67 * 1024 + guestbookBoot);
+    expect(
+      jsClosure(page, { dynamic: false }).files.filter((p) => /[/\\]visitor-mode-dropdown\.[^/\\]+\.js$/.test(p)),
+      '身份下拉抽屉必须按需加载',
+    ).toEqual([]);
     const { code, files } = jsClosure(page, { skipMenu: true, skipTechHeading: true });
     const full = Buffer.byteLength(code, 'utf8') - siteWideLazyBytes(files);
     console.log(

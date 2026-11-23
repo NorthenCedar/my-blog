@@ -106,7 +106,7 @@ export function replyLi(r: Reply, onReply: () => void, fresh = false): HTMLLIEle
 export function toggleReplyForm(
   list: HTMLElement,
   li: HTMLElement,
-  ctx: { slug: string; parentId: number; replyTo: string; target?: ReplyTarget; name: () => string; onAdded: (reply: Reply) => void; isCurrent?: () => boolean }
+  ctx: { slug: string; parentId: number; replyTo: string; target?: ReplyTarget; name: () => string; email?: () => string; onAdded: (reply: Reply) => void; isCurrent?: () => boolean }
 ): void {
   const isCurrent = ctx.isCurrent ?? (() => true);
   if (!isCurrent()) return;
@@ -115,9 +115,10 @@ export function toggleReplyForm(
   if (open) return;
 
   const box = li.querySelector<HTMLElement>(':scope > .reply-list')!;
-  const form = el('form', 'reply-form');
+  const form = el('form', 'reply-form music-glass');
   form.noValidate = true;
 
+  const authorRow = el('div', 'reply-author-row');
   const name = el('input', 'reply-name');
   name.type = 'text';
   name.name = 'name';
@@ -126,6 +127,18 @@ export function toggleReplyForm(
   name.placeholder = '名字';
   name.required = true;
   name.value = ctx.name(); // 上面填过就不用再填一次
+
+  const email = el('input', 'reply-email');
+  email.type = 'email';
+  email.name = 'email';
+  email.maxLength = 254;
+  email.autocomplete = 'email';
+  email.setAttribute('aria-label', '邮箱（选填）');
+  email.dataset.emailField = '';
+  email.placeholder = '邮箱（选填 · 检查是否填对，否则收不到回复）';
+  email.value = ctx.email?.() ?? '';
+
+  authorRow.append(name, email);
 
   const body = el('textarea', 'reply-body-input');
   body.rows = 2;
@@ -151,7 +164,7 @@ export function toggleReplyForm(
   error.setAttribute('role', 'alert');
   error.hidden = true;
 
-  form.append(name, body, hp, send, cancel, error);
+  form.append(authorRow, body, hp, send, cancel, error);
   replyIdentityCleanup.set(form, identityControls(form, isCurrent));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -163,6 +176,7 @@ export function toggleReplyForm(
       parentId: ctx.parentId,
       replyTo: ctx.replyTo,
       name: name.value,
+      email: email.disabled ? '' : email.value,
       identity: String(new FormData(form).get('identity') ?? 'anonymous'),
       body: body.value,
       website: hpInput.value,

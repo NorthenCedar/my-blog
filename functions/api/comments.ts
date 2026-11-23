@@ -1,5 +1,6 @@
 import {
   validateComment,
+  isReservedEmail,
   honeypotTripped,
   toRecord,
   toReplyRecord,
@@ -12,17 +13,15 @@ import {
 } from './_lib/comments-core';
 import { commentIdentity, attachCommentAuthors, saveAuthoredComment, missingReplyParent, replyParentExists } from './_lib/visitor-comments';
 import { parseNoticeTarget, recordCommentNotice, recordReplyNotice, validNoticeTarget, type NoticeTarget } from './_lib/notices';
+import { notifyCommentEmail, notifyReplyEmails, runBackgroundMail, saveCommentEmail } from './_lib/mailer';
 import { AccountError } from './_lib/visitor-core';
-import { currentAccount, publicUser } from './_lib/visitor-store';
+import { currentAccount, publicUser, type VisitorEnv } from './_lib/visitor-store';
 import { guardPublicWrite, hasOnlyQueryParams, readJsonBody, SLUG_LIST_RAW_MAX, writeLimitStatements } from './_lib/public-write';
 import targets from './_generated/comment-targets.json';
 
 const publishedTargets = new Set(targets.comments);
 
-interface Env {
-  COMMENTS_DB: D1Database;
-  OWNER_USER_ID?: string;
-}
+type Env = VisitorEnv;
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -149,14 +148,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   return json(withAuthors);
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUntil }) => {
   try {
   guardPublicWrite(request);
   const payload = await readJsonBody(request, 16 * 1024);
 
   const author = await commentIdentity(payload, request, env);
-  const check = validateComment(author ? { ...(payload as Record<string, unknown>), name: author.nickname } : payload);
+  const check = validateComment(author ? { ...(payload as Record<string, unknown>), name: author.nickname, email: '' } : payload);
   if (!check.ok) return json({ error: check.error }, 400);
+  if (!author && check.value.email && isReservedEmail(check.value.email, { isOwner: false, mailFrom: env.MAIL_FROM, ownerNotifyEmail: env.OWNER_NOTIFY_EMAIL })) {
+    return json({ error: '该邮箱为站点或站主保留邮箱，请填写你自己的邮箱' }, 400);
+  }
   if (!publishedTargets.has(check.value.slug)) return json({ error: '页面不存在或尚未开放留言' }, 400);
 
   // 蜜罐命中：**假装成功**但不落库 —— 让机器人以为得手，不来重试。
@@ -213,6 +215,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (author) {
       const id = await saveAuthoredComment(request, env, author, 'comment', [slug, name, body, createdAt, ipHash]);
       await recordCommentNotice(env, { ...notice, parentId: id });
+      runBackgroundMail(waitUntil, notifyCommentEmail(env, { slug, parentId: id, actorName: name, body, skipOwner }));
       return json({ comment: { id, slug, name, body, createdAt, parentId: 0, replyTo: '', author: publicUser(author, env) } }, 201);
     }
     const inserted = await env.COMMENTS_DB.prepare(
@@ -221,8 +224,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       .bind(slug, name, body, createdAt, ipHash)
       .first<{ id: number }>();
 
-    await recordCommentNotice(env, { ...notice, parentId: inserted?.id ?? 0 });
-    return json({ comment: { id: inserted?.id ?? 0, slug, name, body, createdAt, parentId: 0, replyTo: '', author: null } }, 201);
+    const commentId = inserted?.id ?? 0;
+    if (commentId > 0 && check.value.email) {
+      await saveCommentEmail(env, 'comment', commentId, check.value.email);
+    }
+    await recordCommentNotice(env, { ...notice, parentId: commentId });
+    runBackgroundMail(waitUntil, notifyCommentEmail(env, {
+      slug,
+      parentId: commentId,
+      actorName: name,
+      actorEmail: check.value.email,
+      body,
+      skipOwner,
+    }));
+    return json({ comment: { id: commentId, slug, name, body, createdAt, parentId: 0, replyTo: '', author: null } }, 201);
   }
 
   // ---- 回复（parentId > 0）----（父评论已在限流前校验过）
@@ -230,6 +245,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const id = await saveAuthoredComment(request, env, author, 'reply', [slug, parentId, replyTo, name, body, createdAt, ipHash]);
     // 回复已经落库 ⇒ 再记提醒（失败不影响发表，见 _lib/notices.ts）
     await recordReplyNotice(env, { ...notice, parentId, replyId: id, target: noticeTarget! });
+    runBackgroundMail(waitUntil, notifyReplyEmails(env, {
+      slug,
+      parentId,
+      replyId: id,
+      actorName: name,
+      actorId: author.id,
+      body,
+      target: noticeTarget!,
+      skipOwner,
+    }));
     return json({ comment: { id, slug, name, body, createdAt, parentId, replyTo, author: publicUser(author, env) } }, 201);
   }
   const inserted = await env.COMMENTS_DB.prepare(
@@ -240,7 +265,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .first<{ id: number }>();
 
   if (!inserted) return json({ error: missingReplyParent }, 400);
+  if (check.value.email) {
+    await saveCommentEmail(env, 'reply', inserted.id, check.value.email);
+  }
   await recordReplyNotice(env, { ...notice, parentId, replyId: inserted.id, target: noticeTarget! });
+  runBackgroundMail(waitUntil, notifyReplyEmails(env, {
+    slug,
+    parentId,
+    replyId: inserted.id,
+    actorName: name,
+    actorId: null,
+    actorEmail: check.value.email,
+    body,
+    target: noticeTarget!,
+    skipOwner,
+  }));
   return json(
     { comment: { id: inserted.id, slug, name, body, createdAt, parentId, replyTo, author: null } },
     201

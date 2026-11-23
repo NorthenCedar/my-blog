@@ -8,9 +8,11 @@ export function visitorDatabase(accounts = true) {
     sqlite.exec(readFileSync(`migrations/${file}`, 'utf8'));
   }
   if (accounts) {
-    const migration = readFileSync('migrations/0004_visitor_accounts.sql', 'utf8');
-    sqlite.exec(migration);
-    sqlite.exec(migration);
+    for (const file of ['0004_visitor_accounts.sql', '0016_email_notifications.sql']) {
+      const migration = readFileSync(`migrations/${file}`, 'utf8');
+      sqlite.exec(migration);
+      sqlite.exec(migration);
+    }
   }
   const statement = (sql: string, values: unknown[] = []) => {
     values = values.map(value => value instanceof ArrayBuffer ? new Uint8Array(value) : value);

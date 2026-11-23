@@ -12,11 +12,14 @@ function setup() {
   closers.push(() => sqlite.close());
   const env = { COMMENTS_DB: db, OWNER_USER_ID: '' };
   let cookie = '';
-  const call = async (action: string, fields = {}, options: { cookie?: string; origin?: string; ip?: string } = {}) => {
+  const call = async (action: string, fields: Record<string, unknown> = {}, options: { cookie?: string; origin?: string; ip?: string } = {}) => {
+    const payload = action === 'register' && !('email' in fields)
+      ? { action, email: 'reader@example.com', ...fields }
+      : { action, ...fields };
     const response = await onRequestPost({ request: new Request('https://example.test/api/account', {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'X-NC-Request': '1',
         Origin: options.origin ?? 'https://example.test', Cookie: options.cookie ?? cookie,
-        'CF-Connecting-IP': options.ip ?? '192.0.2.1' }, body: JSON.stringify({ action, ...fields }),
+        'CF-Connecting-IP': options.ip ?? '192.0.2.1' }, body: JSON.stringify(payload),
     }), env } as never);
     const set = response.headers.get('Set-Cookie');
     if (set) cookie = set.split(';')[0];

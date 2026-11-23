@@ -15,8 +15,11 @@ export const NAVIGATION_UI_BOOT_BUDGET = 1024;
 export const NAVIGATION_FEEDBACK_BOOT_BUDGET = 6144;
 // 访问事件和页脚可见性控制的编译增量使用独立预算。
 export const PAGE_STATS_BOOT_BUDGET = 1024;
-// 只给评论和文章各自的并发归并、目录缓存计入新增开销。
-export const COMMENT_LIFECYCLE_BUDGET = 1024;
+// 只给评论和文章各自的并发归并、目录缓存、身份下拉按需挂载入口与邮件提醒表单/首登补绑计入新增开销
+// （visitor-client+visitor-dialog+reply-common 新增邮箱与老账户补绑约 +1974 B；留言首屏实测 85500 B vs 新上限 86016 B）。
+export const COMMENT_LIFECYCLE_BUDGET = 3584;
+// 归档同款身份选择抽屉（visitor-mode-dropdown.*.js，实测 2678 B）仅在已登录或切换账户时动态加载。
+export const VISITOR_MODE_DROPDOWN_BUDGET = 3 * 1024;
 export const TOC_LAYOUT_BOOT_BUDGET = 640;
 const SITE_MENU_BUDGET = 232 * 1024;
 // 同一模块覆盖页面内滚动区、顶层弹窗和横向滚动，实测约 3.8 KB。

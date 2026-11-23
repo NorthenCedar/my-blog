@@ -1,7 +1,7 @@
 /** 凭据只在服务端运算；浏览器不导入此模块。 */
 import { scrypt } from 'node:crypto';
 import { DEFAULT_AVATARS } from '../../../src/lib/visitor-avatars';
-import { BODY_CONTROL_OR_BIDI_RE, CONTROL_OR_BIDI_RE, UNSAFE_NAME_RE } from './comments-core';
+import { BODY_CONTROL_OR_BIDI_RE, CONTROL_OR_BIDI_RE, parseOptionalEmail, UNSAFE_NAME_RE, type ReservedEmailOptions } from './comments-core';
 export const AVATARS = [...DEFAULT_AVATARS.map(avatar => avatar.id), 'silence'] as const;
 const encoder = new TextEncoder();
 export class AccountError extends Error {
@@ -22,6 +22,12 @@ export function passwordOf(value: unknown) {
   const length = [...password].length;
   if (length < 15 || length > 128) fail(400, '密码需为 15–128 个字符，可以使用一句长句');
   return password;
+}
+export function emailOf(value: unknown, options?: ReservedEmailOptions) {
+  const checked = parseOptionalEmail(value, options);
+  if (!checked.ok) fail(400, checked.error);
+  if (!checked.value) fail(400, '请填写邮箱地址，以便及时收到回复通知');
+  return checked.value;
 }
 export function profileOf(value: Record<string, unknown>, isOwner: boolean) {
   const nickname = text(value.nickname).trim();
