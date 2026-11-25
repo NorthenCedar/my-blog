@@ -65,6 +65,9 @@ public/art/*
 #   ⇒ 首页 .paper-inf 与所有内页 Topbar 的 ∞ 底纹全不可见（本地 dist/ 里有这个文件，
 #   所以本地怎么核对都发现不了 —— 是拿线上产物 curl 才查出来的，见 docs/rhinelab-spec.md §6.8）。
 !public/art/inf-orig.webp
+# ★ 2026-11-25 三次收窄：`inf-starfield.webp`（资源页星尘粒子 ∞ 底纹）同样是手工素材，
+#   被 `public/art/*` 误伤导致未入库 ⇒ 线上 /art/inf-starfield.webp 返回 404，资源页底纹消失。
+!public/art/inf-starfield.webp
 # 临时探针与证据（_tmp-*.mjs、_tmp-ref/、_tmp-boot-shots/ 截图、_tmp-arknights-cursor 那个嵌套仓库…）。
 # 2026-09-27 事故：站主用 `git add -A` 提交友链时，**239 个临时文件 + 一个嵌套仓库 gitlink 被一起提交**
 # （其中 gitlink 会让 Cloudflare 的克隆/构建失败，线上因此停在上一个成功版本、友链上不去）。

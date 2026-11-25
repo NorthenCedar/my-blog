@@ -832,4 +832,10 @@ describe('资源页 /resources/ 曲面投影、3D 字效与交互', () => {
     expect(resIdx).toBeGreaterThan(forgeIdx);
     expect(html).toContain('>Vault</span>');
   });
+
+  it('资源页星尘底纹素材存在于仓库且未被 .gitignore 误伤忽略', () => {
+    expect(existsSync(join(ROOT, 'public/art/inf-starfield.webp'))).toBe(true);
+    const gitignore = readFileSync(join(ROOT, '.gitignore'), 'utf8');
+    expect(gitignore).toContain('!public/art/inf-starfield.webp');
+  });
 });
