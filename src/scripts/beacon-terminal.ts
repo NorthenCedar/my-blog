@@ -69,14 +69,11 @@ export function renderMarkdownSafe(container: HTMLElement, markdown: string) {
 
   while (i < lines.length) {
     const line = lines[i];
-
-    // 跳过空行
     if (!line.trim()) {
       i++;
       continue;
     }
 
-    // 围栏代码块
     if (line.trimStart().startsWith('```')) {
       const codeLines: string[] = [];
       i++;
@@ -91,14 +88,12 @@ export function renderMarkdownSafe(container: HTMLElement, markdown: string) {
       continue;
     }
 
-    // 分隔线
     if (/^\s*(?:---+|\*\*\*+)\s*$/.test(line)) {
       container.append(document.createElement('hr'));
       i++;
       continue;
     }
 
-    // 标题
     const hMatch = /^(#{1,4})\s+(.*)$/.exec(line);
     if (hMatch) {
       const level = hMatch[1].length as 1 | 2 | 3 | 4;
@@ -110,7 +105,6 @@ export function renderMarkdownSafe(container: HTMLElement, markdown: string) {
       continue;
     }
 
-    // 引用块
     if (line.trimStart().startsWith('>')) {
       const quoteLines: string[] = [];
       while (i < lines.length && lines[i].trimStart().startsWith('>')) {
@@ -125,7 +119,6 @@ export function renderMarkdownSafe(container: HTMLElement, markdown: string) {
       continue;
     }
 
-    // Markdown 表格
     if (
       line.includes('|') &&
       i + 1 < lines.length &&
@@ -168,7 +161,6 @@ export function renderMarkdownSafe(container: HTMLElement, markdown: string) {
       continue;
     }
 
-    // 无序列表
     if (/^\s*[-*]\s+/.test(line)) {
       const ul = el('ul');
       while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
@@ -181,7 +173,6 @@ export function renderMarkdownSafe(container: HTMLElement, markdown: string) {
       continue;
     }
 
-    // 有序列表
     if (/^\s*\d+\.\s+/.test(line)) {
       const ol = el('ol');
       while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
@@ -194,7 +185,6 @@ export function renderMarkdownSafe(container: HTMLElement, markdown: string) {
       continue;
     }
 
-    // 普通段落
     const paraLines: string[] = [];
     while (
       i < lines.length &&
@@ -222,6 +212,71 @@ function formatDate(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** 极克制的地下信号流背景（十六进制素数遥测），遵循 prefers-reduced-motion。 */
+function mountMatrixCanvas(doc: Document): () => void {
+  const canvas = doc.querySelector<HTMLCanvasElement>('[data-beacon-matrix]');
+  if (!canvas) return () => {};
+  const win = doc.defaultView ?? window;
+  const reduced = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  let ctx: CanvasRenderingContext2D | null = null;
+  try {
+    ctx = canvas.getContext('2d');
+  } catch {
+    return () => {};
+  }
+  if (!ctx) return () => {};
+
+  const glyphs = '0123456789ABCDEF·:∞+';
+  let cols = 0;
+  let drops: number[] = [];
+  let rafId = 0;
+  let lastDraw = 0;
+
+  const resize = () => {
+    const dpr = Math.min(win.devicePixelRatio || 1, 2);
+    const w = win.innerWidth || 1280;
+    const h = win.innerHeight || 800;
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cols = Math.max(12, Math.floor(w / 34));
+    drops = Array.from({ length: cols }, (_, idx) => ((idx * 17) % Math.max(10, Math.floor(h / 24))));
+    ctx!.fillStyle = '#030605';
+    ctx!.fillRect(0, 0, w, h);
+  };
+
+  const drawFrame = (now: number) => {
+    if (!ctx) return;
+    if (now - lastDraw >= 95) {
+      lastDraw = now;
+      const w = win.innerWidth || 1280;
+      const h = win.innerHeight || 800;
+      ctx.fillStyle = 'rgba(3, 6, 5, 0.14)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.font = '12px "IBM Plex Mono", ui-monospace, monospace';
+      for (let i = 0; i < cols; i++) {
+        if (i % 2 === 1 && ((i + Math.floor(now / 1200)) % 3 === 0)) continue;
+        const ch = glyphs[(Math.floor(drops[i] * 3 + i * 7)) % glyphs.length];
+        const x = i * 34 + 10;
+        const y = drops[i] * 22;
+        ctx.fillStyle = i % 7 === 0 ? 'rgba(216, 167, 74, 0.34)' : 'rgba(57, 255, 136, 0.24)';
+        ctx.fillText(ch, x, y);
+        drops[i] = y > h + 40 ? 0 : drops[i] + 0.55;
+      }
+    }
+    if (!reduced) rafId = win.requestAnimationFrame(drawFrame);
+  };
+
+  resize();
+  drawFrame(0);
+  if (!reduced) rafId = win.requestAnimationFrame(drawFrame);
+  win.addEventListener('resize', resize);
+  return () => {
+    win.removeEventListener('resize', resize);
+    if (rafId) win.cancelAnimationFrame(rafId);
+  };
+}
+
 export function initBeaconTerminal(doc: Document): () => void {
   const root = doc.querySelector<HTMLElement>('[data-beacon-root]');
   if (!root) return () => {};
@@ -232,6 +287,7 @@ export function initBeaconTerminal(doc: Document): () => void {
   const submitBtn = root.querySelector<HTMLButtonElement>('[data-beacon-submit]');
   const msgEl = root.querySelector<HTMLElement>('[data-beacon-msg]');
   const statePill = root.querySelector<HTMLElement>('[data-beacon-state]');
+  const logEl = root.querySelector<HTMLElement>('[data-beacon-log]');
   const slots = [...root.querySelectorAll<HTMLElement>('[data-beacon-slot]')];
 
   const vaultSection = root.querySelector<HTMLElement>('[data-beacon-vault]');
@@ -253,13 +309,26 @@ export function initBeaconTerminal(doc: Document): () => void {
   let currentExpiresAt = 0;
   let countdownTimer = 0;
   const docCache = new Map<string, string>();
-  const cleanups: (() => void)[] = [];
+  const cleanups: (() => void)[] = [mountMatrixCanvas(doc)];
 
   const listen = (target: EventTarget | null, event: string, fn: EventListener) => {
     if (!target) return;
     target.addEventListener(event, fn);
     cleanups.push(() => target.removeEventListener(event, fn));
   };
+
+  function appendLog(text: string, level: 'sys' | 'gold' | 'ok' | 'err' = 'sys') {
+    if (!logEl) return;
+    const now = new Date();
+    const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    const line = el('p', 'beacon-log-line', `[${ts}] ${text}`);
+    line.dataset.level = level;
+    logEl.append(line);
+    while (logEl.childElementCount > 18) {
+      logEl.firstElementChild?.remove();
+    }
+    logEl.scrollTop = logEl.scrollHeight;
+  }
 
   function setMsg(node: HTMLElement | null, text: string, tone: '' | 'ok' | 'err' = '') {
     if (!node) return;
@@ -289,16 +358,21 @@ export function initBeaconTerminal(doc: Document): () => void {
     boardList.replaceChildren();
     if (!items.length) {
       const empty = el('li', 'beacon-board-row');
-      empty.append(el('span', 'beacon-rank', '#0'), el('span', 'beacon-note', '虚位以待——还没有人留下通关信号，也许你就是第一位。'));
+      empty.append(
+        el('span', 'beacon-rank', '#000'),
+        el('span', 'beacon-note', 'NO OPERATOR REGISTERED YET // 首位捕获信标的席位正虚位以待。'),
+      );
       boardList.append(empty);
       return;
     }
     for (const item of items) {
       const li = el('li', 'beacon-board-row');
+      const rankNode = el('span', 'beacon-rank', `#${String(item.rank).padStart(3, '0')}`);
+      if (item.rank === 1) rankNode.dataset.first = 'true';
       li.append(
-        el('span', 'beacon-rank', `#${item.rank}`),
+        rankNode,
         el('span', 'beacon-codename', item.codename),
-        el('span', 'beacon-note', item.note || '已捕获信标'),
+        el('span', 'beacon-note', item.note || 'SIGNAL CAPTURED'),
         el('span', 'beacon-time', formatDate(item.solvedAt)),
       );
       boardList.append(li);
@@ -319,7 +393,7 @@ export function initBeaconTerminal(doc: Document): () => void {
     if (!expiryEl || !currentExpiresAt) return;
     const remainSec = Math.max(0, Math.floor((currentExpiresAt - Date.now()) / 1000));
     if (remainSec <= 0) {
-      expiryEl.textContent = '本次临时下载凭证已过期，请重新点击校验获取新凭证';
+      expiryEl.textContent = 'HMAC 临时凭证已过期，请重新执行 VERIFY KEY 签发新令牌';
       if (countdownTimer) {
         window.clearInterval(countdownTimer);
         countdownTimer = 0;
@@ -328,7 +402,7 @@ export function initBeaconTerminal(doc: Document): () => void {
     }
     const min = Math.floor(remainSec / 60);
     const sec = remainSec % 60;
-    expiryEl.textContent = `临时签名凭证有效期剩余 ${min} 分 ${String(sec).padStart(2, '0')} 秒（私有 R2 直传，不暴露永久链接）`;
+    expiryEl.textContent = `SIGNED TOKEN TTL: ${min}m ${String(sec).padStart(2, '0')}s // 私有 R2 直传通道`;
   }
 
   async function selectDocTab(docId: string) {
@@ -341,7 +415,7 @@ export function initBeaconTerminal(doc: Document): () => void {
       renderMarkdownSafe(docBodyEl, cached);
       return;
     }
-    docBodyEl.replaceChildren(el('p', '', '正在从私有存储读取说明文档…'));
+    docBodyEl.replaceChildren(el('p', '', '>> FETCHING PRIVATE R2 DOCUMENT...'));
     try {
       const res = await fetch(
         `/api/beacon/doc?name=${encodeURIComponent(docId)}&t=${encodeURIComponent(currentToken)}`,
@@ -354,6 +428,7 @@ export function initBeaconTerminal(doc: Document): () => void {
       }
       docCache.set(docId, data.markdown);
       renderMarkdownSafe(docBodyEl, data.markdown);
+      appendLog(`<< DECRYPTED MANUAL STREAM: ${docId.toUpperCase()}`, 'ok');
     } catch {
       docBodyEl.replaceChildren(el('p', '', '网络异常，暂时无法加载在线预览'));
     }
@@ -368,7 +443,8 @@ export function initBeaconTerminal(doc: Document): () => void {
     void (async () => {
       const rawKey = (keyInput?.value ?? '').trim();
       if (!agreeBox?.checked) {
-        setMsg(msgEl, '请先勾选下方实验环境与合法学习声明。', 'err');
+        setMsg(msgEl, '请先勾选下方实验环境与合法学习协议确认。', 'err');
+        appendLog('!! HANDSHAKE ABORTED: PROTOCOL ACK REQUIRED', 'err');
         return;
       }
       if (!rawKey) {
@@ -377,6 +453,7 @@ export function initBeaconTerminal(doc: Document): () => void {
       }
       if (submitBtn) submitBtn.disabled = true;
       setMsg(msgEl, '正在与服务端核验四段信标摘要…');
+      appendLog('>> TRANSMITTING 4-SEGMENT DIGEST TO /api/beacon/verify ...', 'gold');
 
       try {
         const res = await fetch('/api/beacon/verify', {
@@ -389,18 +466,21 @@ export function initBeaconTerminal(doc: Document): () => void {
 
         if (!res.ok || !data.ok || !data.token) {
           setMsg(msgEl, data.error || '口令校验未通过。', 'err');
+          appendLog(`!! REJECTED: ${data.error || 'INVALID KEY'}`, 'err');
           return;
         }
 
         currentToken = data.token;
         currentExpiresAt = Number(data.expiresAt ?? Date.now() + 15 * 60 * 1000);
         docCache.clear();
+        root.dataset.unlocked = 'true';
 
         if (statePill) {
           statePill.dataset.unlocked = 'true';
           statePill.textContent = 'CARRIER UNLOCKED';
         }
-        setMsg(msgEl, '四段信标全部命中！学习包下载与文档在线预览已解锁。', 'ok');
+        setMsg(msgEl, '四段信标全部命中！私有存储流与离线手册在线预览已解锁。', 'ok');
+        appendLog('++ ACCESS GRANTED: ALL 4 SEGMENTS VERIFIED // R2 VAULT ARMED', 'ok');
 
         if (dlLink) {
           dlLink.href = `/api/beacon/download?t=${encodeURIComponent(currentToken)}`;
@@ -429,10 +509,11 @@ export function initBeaconTerminal(doc: Document): () => void {
         }
 
         if (claimBtn) claimBtn.disabled = false;
-        setMsg(claimMsg, '现在可以留下匿名代号，记录你的通关序号（也可留空直接登记）。');
+        setMsg(claimMsg, '现在可以留下匿名代号记入通关者名录（留空也可直接登记）。');
         void loadBoard();
       } catch {
         setMsg(msgEl, '无法连接到校验服务，请稍后再试。', 'err');
+        appendLog('!! UPLINK FAILURE: CANNOT REACH /api/beacon/verify', 'err');
       } finally {
         if (submitBtn) submitBtn.disabled = false;
       }
@@ -447,7 +528,7 @@ export function initBeaconTerminal(doc: Document): () => void {
         return;
       }
       if (claimBtn) claimBtn.disabled = true;
-      setMsg(claimMsg, '正在登记通关序号…');
+      setMsg(claimMsg, '正在写入通关者名录…');
       try {
         const res = await fetch('/api/beacon/solvers', {
           method: 'POST',
@@ -468,9 +549,10 @@ export function initBeaconTerminal(doc: Document): () => void {
         if (res.ok && data.ok && data.entry) {
           setMsg(
             claimMsg,
-            `登记成功！你是第 ${data.entry.rank} 位捕获信标的探索者（代号：${data.entry.codename}）。`,
+            `登记完成！你是第 #${String(data.entry.rank).padStart(3, '0')} 位捕获信标的探索者（${data.entry.codename}）。`,
             'ok',
           );
+          appendLog(`++ OPERATOR REGISTERED: #${String(data.entry.rank).padStart(3, '0')} ${data.entry.codename}`, 'ok');
           if (codenameInput) codenameInput.value = '';
           if (noteInput) noteInput.value = '';
           void loadBoard();
