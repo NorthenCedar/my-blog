@@ -1,36 +1,19 @@
-/* BEACON 独立极简硬核终端：纯黑白底色 + 少量经典 ANSI 终端色，无导航无装饰。
-   不导入共享 fonts.css，避免改变主站 CSS chunk 拆分顺序；自托管字体直接在此声明。 */
+/* 纯黑白真实命令行终端（/beacon/）：无边框、无卡片、无按钮，仅靠文字与 '---' 字符分隔。
+   不导入主站共享 fonts.css，避免影响主站 CSS 分块顺序。 */
 @font-face {
   font-family: "IBM Plex Mono";
   src: url("/fonts/plex-mono-400.woff2") format("woff2");
   font-weight: 400;
   font-display: swap;
 }
-@font-face {
-  font-family: "IBM Plex Sans";
-  src: url("/fonts/plex-sans-400.woff2") format("woff2");
-  font-weight: 400;
-  font-display: swap;
-}
-@font-face {
-  font-family: "IBM Plex Sans";
-  src: url("/fonts/plex-sans-600.woff2") format("woff2");
-  font-weight: 600;
-  font-display: swap;
-}
+
 :root {
   color-scheme: only dark;
-  --tty-bg: #080808;
-  --tty-surface: #0e0e0e;
-  --tty-line: #242424;
-  --tty-line-hi: #4a4a4a;
-  --tty-fg: #e4e4e4;
-  --tty-bright: #ffffff;
-  --tty-dim: #787878;
-  --tty-cyan: #5fd7ff;
-  --tty-amber: #d7af5f;
-  --tty-red: #ff5f5f;
-  --tty-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --t-bg: #050505;
+  --t-fg: #dcdcdc;
+  --t-hi: #ffffff;
+  --t-dim: #7c7c7c;
+  --t-mono: "IBM Plex Mono", "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 *,
@@ -44,546 +27,294 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  background: var(--tty-bg);
-  color: var(--tty-fg);
-  accent-color: var(--tty-cyan);
-  caret-color: var(--tty-bright);
-  font-family: var(--tty-mono);
-  font-size: 14px;
-  line-height: 1.65;
+  background: var(--t-bg);
+  color: var(--t-fg);
+  caret-color: var(--t-hi);
+  accent-color: var(--t-hi);
+  font-family: var(--t-mono);
+  font-size: 15px;
+  line-height: 1.7;
   -webkit-font-smoothing: antialiased;
+  cursor: text;
 }
 
-a {
-  color: var(--tty-cyan);
+/* 极克制的 CRT 扫描线与暗角，还原真实老式终端质感，完全纯黑白 */
+.crt-scan {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0) 0px,
+      rgba(255, 255, 255, 0) 2px,
+      rgba(0, 0, 0, 0.24) 3px,
+      rgba(0, 0, 0, 0.24) 4px
+    ),
+    radial-gradient(ellipse 80% 70% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.65) 100%);
+}
+
+.term {
+  position: relative;
+  z-index: 1;
+  max-width: 92ch;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(2.5rem, 12vh, 7.5rem) clamp(1.1rem, 4vw, 2.5rem) 5rem;
+}
+
+.term-output {
+  display: block;
+}
+
+.term-line {
+  margin: 0;
+  font-family: var(--t-mono);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.72;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--t-fg);
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.14);
+}
+
+.term-hi {
+  color: var(--t-hi);
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.28);
+}
+
+.term-dim {
+  color: var(--t-dim);
+  text-shadow: none;
+}
+
+.term-spacer {
+  height: 0.7em;
+}
+
+.term-link {
+  color: var(--t-hi);
   text-decoration: underline;
   text-underline-offset: 3px;
+  cursor: pointer;
 }
 
-a:hover {
-  color: var(--tty-bright);
+.term-link:hover {
+  background: var(--t-hi);
+  color: #000000;
+  text-decoration: none;
 }
 
-.tty {
-  max-width: 820px;
-  margin: 0 auto;
-  padding: clamp(1.5rem, 4vw, 3rem) 1.25rem 3.5rem;
-  display: grid;
-  gap: 1.75rem;
+.term-cmd-chip {
+  color: var(--t-hi);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 
-.tty-head {
-  display: grid;
-  gap: 0.65rem;
+.term-cmd-chip:hover {
+  background: var(--t-hi);
+  color: #000000;
+  text-decoration: none;
 }
 
-.tty-bar {
+/* 命令行输入行：无边框、无底色，和上面的文字完全融为一体 */
+.term-prompt-line {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.65ch;
+  margin-top: 0.35rem;
+}
+
+.term-ps1 {
+  color: var(--t-hi);
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.28);
+  white-space: nowrap;
+  user-select: none;
+  flex: 0 0 auto;
+}
+
+.term-input-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding-bottom: 0.65rem;
-  border-bottom: 1px solid var(--tty-line);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  color: var(--tty-dim);
 }
 
-.tty-sep {
-  margin: 0 0.55rem;
-  color: #363636;
+.term-idle-block {
+  position: absolute;
+  left: 0;
+  width: 0.62em;
+  height: 1.15em;
+  background: var(--t-hi);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+  animation: term-blink 1.05s steps(2, start) infinite;
 }
 
-.tty-status {
-  color: var(--tty-amber);
-  font-weight: 600;
+.term-idle-block[hidden] {
+  display: none;
 }
 
-.tty-status[data-unlocked="true"] {
-  color: var(--tty-cyan);
+@keyframes term-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
-.tty-head h1 {
-  margin: 0.2rem 0 0;
-  font-size: clamp(1.45rem, 3vw, 1.9rem);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--tty-bright);
+@media (prefers-reduced-motion: reduce) {
+  .term-idle-block {
+    animation: none;
+  }
 }
 
-.tty-desc {
+.term-input {
+  width: 100%;
+  min-width: 0;
   margin: 0;
-  color: var(--tty-dim);
-  font-size: 13px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--t-hi);
+  caret-color: var(--t-hi);
+  font-family: var(--t-mono);
+  font-size: 15px;
+  line-height: 1.72;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.22);
 }
 
-.tty-desc code,
-.tty-hint-list code {
-  color: var(--tty-fg);
-  background: #141414;
-  padding: 0.05em 0.35em;
-  border: 1px solid var(--tty-line);
+.term-input[data-empty="true"] {
+  caret-color: transparent;
 }
 
-.tty-section {
-  display: grid;
-  gap: 1rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--tty-line);
+/* 终端内直接阅读 Markdown 文档（无边框无盒子，纯字符 '---' 与缩进排版） */
+.term-doc {
+  margin: 0.4rem 0 0.8rem;
+  color: var(--t-fg);
 }
 
-.tty-log {
-  padding: 0.75rem 0.9rem;
-  background: var(--tty-surface);
-  border: 1px solid var(--tty-line);
-  min-height: 4.5rem;
-  max-height: 9rem;
-  overflow-y: auto;
-  display: grid;
-  gap: 0.2rem;
-  align-content: start;
-  font-size: 12.5px;
-  line-height: 1.55;
+.term-doc h1,
+.term-doc h2,
+.term-doc h3,
+.term-doc h4 {
+  margin: 1.15em 0 0.35em;
+  font-family: var(--t-mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--t-hi);
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.22);
 }
 
-.tty-log-line {
-  margin: 0;
+.term-doc h1::before {
+  content: "# ";
+  content: "# " / "";
+  color: var(--t-dim);
+}
+
+.term-doc h2::before {
+  content: "## ";
+  content: "## " / "";
+  color: var(--t-dim);
+}
+
+.term-doc h3::before {
+  content: "### ";
+  content: "### " / "";
+  color: var(--t-dim);
+}
+
+.term-doc p {
+  margin: 0.45em 0;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.tty-log-line[data-level="dim"] { color: var(--tty-dim); }
-.tty-log-line[data-level="info"] { color: var(--tty-amber); }
-.tty-log-line[data-level="ok"] { color: var(--tty-cyan); }
-.tty-log-line[data-level="err"] { color: var(--tty-red); }
-
-.tty-slots {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  font-size: 12.5px;
-}
-
-.tty-slot {
-  padding: 0.24rem 0.58rem;
-  border: 1px solid var(--tty-line);
-  background: var(--tty-surface);
-  color: var(--tty-dim);
-  letter-spacing: 0.06em;
-}
-
-.tty-slot span {
-  color: var(--tty-fg);
-  margin-left: 0.25rem;
-}
-
-.tty-slot[data-status="ok"] {
-  border-color: var(--tty-cyan);
-  color: var(--tty-cyan);
-}
-
-.tty-slot[data-status="ok"] span {
-  color: var(--tty-bright);
-}
-
-.tty-slot[data-status="err"] {
-  border-color: var(--tty-red);
-  color: var(--tty-red);
-}
-
-.tty-slot[data-status="err"] span {
-  color: var(--tty-red);
-}
-
-.tty-form {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.tty-prompt-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.55rem;
-  border: 1px solid var(--tty-line-hi);
-  background: #000000;
-  padding: 0.25rem 0.35rem 0.25rem 0.75rem;
-}
-
-.tty-prompt-row:focus-within {
-  border-color: var(--tty-bright);
-}
-
-.tty-prompt {
-  color: var(--tty-cyan);
-  font-weight: 600;
-  white-space: nowrap;
-  user-select: none;
-}
-
-.tty-input {
-  flex: 1 1 240px;
-  min-width: 0;
+.term-doc hr {
   border: 0;
-  background: transparent;
-  color: var(--tty-bright);
-  padding: 0.48rem 0.2rem;
-  font-family: var(--tty-mono);
-  font-size: 14px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  outline: none;
-}
-
-.tty-input::placeholder {
-  color: #3f3f3f;
-  letter-spacing: 0.05em;
-}
-
-.tty-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.48rem 0.95rem;
-  border: 1px solid var(--tty-fg);
-  background: transparent;
-  color: var(--tty-fg);
-  font-family: var(--tty-mono);
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.tty-btn:hover:not(:disabled),
-.tty-btn--invert {
-  background: var(--tty-bright);
-  border-color: var(--tty-bright);
-  color: #000000;
-}
-
-.tty-btn--invert:hover:not(:disabled) {
-  background: var(--tty-cyan);
-  border-color: var(--tty-cyan);
-  color: #000000;
-}
-
-.tty-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.tty-check {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  font-size: 12.5px;
-  color: var(--tty-dim);
-  cursor: pointer;
-}
-
-.tty-check input {
-  margin-top: 0.25rem;
-}
-
-.tty-msg {
-  min-height: 1.4em;
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--tty-dim);
-}
-
-.tty-msg[data-tone="ok"] { color: var(--tty-cyan); }
-.tty-msg[data-tone="err"] { color: var(--tty-red); }
-
-.tty-hints summary {
-  cursor: pointer;
-  list-style: none;
-  font-size: 12.5px;
-  color: var(--tty-dim);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.tty-hints summary::-webkit-details-marker {
-  display: none;
-}
-
-.tty-hints summary::before {
-  content: ">";
-  content: ">" / "";
-  color: var(--tty-fg);
-}
-
-.tty-hints[open] summary::before {
-  content: "v";
-  content: "v" / "";
-}
-
-.tty-hint-list {
-  margin: 0.65rem 0 0;
-  padding-left: 1.15rem;
-  display: grid;
-  gap: 0.38rem;
-  font-size: 12.5px;
-  color: var(--tty-dim);
-}
-
-/* ── 解锁区 ── */
-.tty-vault[hidden] {
-  display: none;
-}
-
-.tty-unlock-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.85rem;
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--tty-cyan);
-  background: var(--tty-surface);
-}
-
-.tty-unlock-title {
-  color: var(--tty-bright);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.tty-dim {
-  font-size: 12.5px;
-  color: var(--tty-dim);
-}
-
-.tty-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.tty-tab {
-  padding: 0.36rem 0.72rem;
-  border: 1px solid var(--tty-line);
-  background: var(--tty-surface);
-  color: var(--tty-dim);
-  font-family: var(--tty-mono);
-  font-size: 12.5px;
-  cursor: pointer;
-}
-
-.tty-tab[aria-selected="true"] {
-  border-color: var(--tty-bright);
-  background: var(--tty-bright);
-  color: #000000;
-  font-weight: 600;
-}
-
-.tty-doc {
-  color-scheme: only dark;
-  max-height: 560px;
-  overflow: auto;
-  padding: 1rem 1.15rem;
-  border: 1px solid var(--tty-line);
-  background: var(--tty-surface);
-  color: #d8d8d8;
-  font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
-  font-size: 14px;
-  line-height: 1.72;
-}
-
-.tty-doc h1,
-.tty-doc h2,
-.tty-doc h3,
-.tty-doc h4 {
-  font-family: var(--tty-mono);
-  color: var(--tty-bright);
-  margin: 1.25em 0 0.45em;
-  line-height: 1.3;
-}
-
-.tty-doc h1:first-child,
-.tty-doc h2:first-child { margin-top: 0; }
-.tty-doc p { margin: 0.6em 0; }
-
-.tty-doc pre {
+  height: auto;
   margin: 0.8em 0;
-  padding: 0.85rem 0.95rem;
-  border: 1px solid var(--tty-line);
-  background: #000000;
-  color: #e4e4e4;
-  overflow-x: auto;
-  font-family: var(--tty-mono);
-  font-size: 12.5px;
-  line-height: 1.55;
+  color: var(--t-dim);
 }
 
-.tty-doc code {
-  font-family: var(--tty-mono);
-  font-size: 0.88em;
-  color: var(--tty-cyan);
-  background: #171717;
-  padding: 0.08em 0.3em;
+.term-doc hr::before {
+  content: "------------------------------------------------------------";
+  content: "------------------------------------------------------------" / "";
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
-.tty-doc pre code {
-  color: inherit;
-  background: transparent;
-  padding: 0;
-}
-
-.tty-doc blockquote {
-  margin: 0.75em 0;
-  padding: 0.3rem 0.85rem;
-  border-left: 2px solid var(--tty-line-hi);
-  color: #a6a6a6;
-}
-
-.tty-doc ul,
-.tty-doc ol {
+.term-doc pre {
   margin: 0.55em 0;
-  padding-left: 1.4rem;
+  padding: 0 0 0 2ch;
+  background: transparent;
+  border: 0;
+  color: var(--t-hi);
+  overflow-x: auto;
+  font-family: var(--t-mono);
+  font-size: 14px;
+  line-height: 1.6;
 }
 
-.tty-doc table {
-  width: 100%;
+.term-doc code {
+  font-family: var(--t-mono);
+  color: var(--t-hi);
+}
+
+.term-doc blockquote {
+  margin: 0.5em 0;
+  padding-left: 2ch;
+  color: var(--t-dim);
+}
+
+.term-doc blockquote p::before {
+  content: "| ";
+  content: "| " / "";
+}
+
+.term-doc ul,
+.term-doc ol {
+  margin: 0.45em 0;
+  padding-left: 2.5ch;
+}
+
+.term-doc table {
   border-collapse: collapse;
-  margin: 0.85em 0;
-  font-size: 12.5px;
+  margin: 0.6em 0;
+  font-size: 13.5px;
+  width: 100%;
 }
 
-.tty-doc th,
-.tty-doc td {
-  padding: 0.42rem 0.62rem;
-  border: 1px solid var(--tty-line);
+.term-doc th,
+.term-doc td {
+  padding: 0.25rem 1.2ch 0.25rem 0;
+  border: 0;
   text-align: left;
   vertical-align: top;
 }
 
-.tty-doc th {
-  background: #141414;
-  color: var(--tty-bright);
-  font-family: var(--tty-mono);
+.term-doc th {
+  color: var(--t-hi);
+  font-weight: 700;
 }
 
-/* ── 登记与通关名录 ── */
-.tty-claim {
-  display: grid;
-  gap: 0.65rem;
-  padding-top: 0.85rem;
-  border-top: 1px dashed var(--tty-line);
+.term-doc a {
+  color: var(--t-hi);
+  text-decoration: underline;
 }
 
-.tty-claim-head {
-  font-size: 12.5px;
-  color: var(--tty-fg);
-}
-
-.tty-claim-row {
-  display: grid;
-  grid-template-columns: minmax(150px, 210px) 1fr auto;
-  gap: 0.5rem;
-}
-
-.tty-field {
-  min-width: 0;
-  padding: 0.5rem 0.7rem;
-  border: 1px solid var(--tty-line-hi);
-  background: #000000;
-  color: var(--tty-bright);
-  font-family: var(--tty-mono);
-  font-size: 13px;
-  outline: none;
-}
-
-.tty-field:focus {
-  border-color: var(--tty-bright);
-}
-
-.tty-subhead {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.5rem;
-}
-
-.tty-subhead h2 {
-  margin: 0;
-  font-size: 13.5px;
-  letter-spacing: 0.1em;
-  color: var(--tty-bright);
-}
-
-.tty-board {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.35rem;
-}
-
-.tty-board-row {
-  display: grid;
-  grid-template-columns: auto minmax(88px, auto) 1fr auto;
-  align-items: baseline;
-  gap: 0.75rem;
-  padding: 0.42rem 0.65rem;
-  border: 1px solid var(--tty-line);
-  background: var(--tty-surface);
-  font-size: 12.5px;
-}
-
-.tty-rank {
-  color: var(--tty-cyan);
-  font-weight: 600;
-}
-
-.tty-rank[data-first="true"] {
-  color: var(--tty-amber);
-}
-
-.tty-codename {
-  color: var(--tty-bright);
-  font-weight: 600;
-}
-
-.tty-note {
-  color: var(--tty-dim);
-  overflow-wrap: anywhere;
-}
-
-.tty-time {
-  color: #555555;
-  white-space: nowrap;
-}
-
-.tty-foot {
-  padding-top: 1rem;
-  border-top: 1px solid var(--tty-line);
-  font-size: 12px;
-}
-
-.tty-foot a {
-  color: var(--tty-dim);
-  text-decoration: none;
-}
-
-.tty-foot a:hover {
-  color: var(--tty-bright);
-}
-
-@media (max-width: 680px) {
-  .tty-claim-row {
-    grid-template-columns: 1fr;
+@media (max-width: 640px) {
+  html,
+  body,
+  .term-line,
+  .term-input {
+    font-size: 13.5px;
   }
-  .tty-board-row {
-    grid-template-columns: auto 1fr;
-  }
-  .tty-note,
-  .tty-time {
-    grid-column: 1 / -1;
+  .term {
+    padding-top: 2rem;
   }
 }

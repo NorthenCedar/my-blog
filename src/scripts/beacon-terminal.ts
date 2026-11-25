@@ -21,6 +21,15 @@ interface SolversResponse {
   error?: string;
 }
 
+const RULE = '------------------------------------------------------------';
+
+const STAGE_HINTS: Record<string, string> = {
+  '1': '[01] 文章页按 F12 -> Network 刷新看主文档响应头 X-Beacon-Signal，或 Ctrl+U 看末尾 HTML 注释；按文中「独立通道」数量算偏移量做 Caesar 逆推。',
+  '2': '[02] 下载 PNG 后先查元数据（Comment 文本块），再按提示用 unzip / 7z / binwalk 或直接改后缀为 .zip 提取追加在 IEND 之后的压缩载荷。',
+  '3': '[03] 下载 WAV 先听低频慢速摩斯电码，再拖进 Audacity（切频谱图视图）或 Sonic Visualiser 查看 6 kHz - 13 kHz 线性频段。',
+  '4': '[04] 访问任意不存在的站内路径触发 404 页，查看源码末尾注释，按配方从 /about/ 与 /resources/ 拼出 17 位全大写英文密钥做 Vigenere 解密。',
+};
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className = '',
@@ -210,298 +219,491 @@ function formatDate(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function looksLikeKey(raw: string): boolean {
+  const cleaned = raw.trim().toUpperCase().replace(/\s+/g, '');
+  const segs = cleaned.split('-').filter(Boolean);
+  if (segs.length === 5 && segs[0] === 'BEACON') return segs.slice(1).every((s) => /^[A-Z0-9]{2,24}$/.test(s));
+  if (segs.length === 4) return segs.every((s) => /^[A-Z0-9]{2,24}$/.test(s));
+  return false;
+}
+
 export function initBeaconTerminal(doc: Document): () => void {
   const root = doc.querySelector<HTMLElement>('[data-beacon-root]');
-  if (!root) return () => {};
+  const out = doc.querySelector<HTMLElement>('[data-term-output]');
+  const form = doc.querySelector<HTMLFormElement>('[data-term-form]');
+  const ps1 = doc.querySelector<HTMLElement>('[data-term-ps1]');
+  const input = doc.querySelector<HTMLInputElement>('[data-term-input]');
+  const idleBlock = doc.querySelector<HTMLElement>('[data-term-block]');
+  if (!root || !out || !form || !ps1 || !input) return () => {};
 
-  const form = root.querySelector<HTMLFormElement>('[data-beacon-form]');
-  const keyInput = root.querySelector<HTMLInputElement>('[data-beacon-key]');
-  const agreeBox = root.querySelector<HTMLInputElement>('[data-beacon-agree]');
-  const submitBtn = root.querySelector<HTMLButtonElement>('[data-beacon-submit]');
-  const msgEl = root.querySelector<HTMLElement>('[data-beacon-msg]');
-  const statePill = root.querySelector<HTMLElement>('[data-beacon-state]');
-  const logEl = root.querySelector<HTMLElement>('[data-beacon-log]');
-  const slots = [...root.querySelectorAll<HTMLElement>('[data-beacon-slot]')];
+  const syncIdleCursor = () => {
+    const empty = input.value.length === 0;
+    input.dataset.empty = empty ? 'true' : 'false';
+    if (idleBlock) idleBlock.hidden = !empty;
+  };
 
-  const vaultSection = root.querySelector<HTMLElement>('[data-beacon-vault]');
-  const dlLink = root.querySelector<HTMLAnchorElement>('[data-beacon-download]');
-  const expiryEl = root.querySelector<HTMLElement>('[data-beacon-expiry]');
-  const docTabsEl = root.querySelector<HTMLElement>('[data-beacon-doc-tabs]');
-  const docBodyEl = root.querySelector<HTMLElement>('[data-beacon-doc-body]');
-
-  const claimForm = root.querySelector<HTMLFormElement>('[data-beacon-claim-form]');
-  const codenameInput = root.querySelector<HTMLInputElement>('[data-beacon-codename]');
-  const noteInput = root.querySelector<HTMLInputElement>('[data-beacon-note]');
-  const claimBtn = root.querySelector<HTMLButtonElement>('[data-beacon-claim-btn]');
-  const claimMsg = root.querySelector<HTMLElement>('[data-beacon-claim-msg]');
-
-  const totalEls = [...root.querySelectorAll<HTMLElement>('[data-beacon-total]')];
-  const boardList = root.querySelector<HTMLElement>('[data-beacon-board]');
+  const DEFAULT_PS1 = 'beacon@northcedar:~$';
+  const CONFIRM_PS1 = 'confirm [y/N]>';
 
   let currentToken = '';
   let currentExpiresAt = 0;
-  let countdownTimer = 0;
+  let currentBundle = 'beacon-framework-bundle.zip';
+  let pendingKey = '';
+  let busy = false;
   const docCache = new Map<string, string>();
+  const history: string[] = [];
+  let histIdx = -1;
   const cleanups: (() => void)[] = [];
 
-  const listen = (target: EventTarget | null, event: string, fn: EventListener) => {
-    if (!target) return;
+  const listen = (target: EventTarget, event: string, fn: EventListener) => {
     target.addEventListener(event, fn);
     cleanups.push(() => target.removeEventListener(event, fn));
   };
 
-  function appendLog(text: string, level: 'dim' | 'info' | 'ok' | 'err' = 'dim') {
-    if (!logEl) return;
-    const now = new Date();
-    const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-    const line = el('p', 'tty-log-line', `[${ts}] ${text}`);
-    line.dataset.level = level;
-    logEl.append(line);
-    while (logEl.childElementCount > 20) {
-      logEl.firstElementChild?.remove();
-    }
-    logEl.scrollTop = logEl.scrollHeight;
+  function scrollBottom() {
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'auto' });
   }
 
-  function setMsg(node: HTMLElement | null, text: string, tone: '' | 'ok' | 'err' = '') {
-    if (!node) return;
-    node.textContent = text;
-    if (tone) node.dataset.tone = tone;
-    else delete node.dataset.tone;
+  function print(text: string, variant: '' | 'hi' | 'dim' = '') {
+    const cls = variant === 'hi' ? 'term-line term-hi' : variant === 'dim' ? 'term-line term-dim' : 'term-line';
+    out!.append(el('p', cls, text));
+    scrollBottom();
   }
 
-  function updateSlotPreview(raw: string, matched?: [boolean, boolean, boolean, boolean]) {
-    const cleaned = raw.trim().toUpperCase().replace(/\s+/g, '');
-    const segs = cleaned.split('-').filter(Boolean);
-    const parts = segs[0] === 'BEACON' ? segs.slice(1) : segs;
-    slots.forEach((slot, idx) => {
-      const valNode = slot.querySelector<HTMLElement>('[data-slot-val]');
-      if (valNode) valNode.textContent = parts[idx] || '-----';
-      if (matched) {
-        slot.dataset.status = matched[idx] ? 'ok' : 'err';
-      } else {
-        delete slot.dataset.status;
+  function printSpacer() {
+    out!.append(el('div', 'term-spacer'));
+  }
+
+  function printCmdLine(promptText: string, cmdText: string) {
+    const p = el('p', 'term-line');
+    p.append(el('span', 'term-hi', `${promptText} `), document.createTextNode(cmdText));
+    out!.append(p);
+  }
+
+  function printClickableHint(prefix: string, cmd: string, suffix = '') {
+    const p = el('p', 'term-line');
+    if (prefix) p.append(document.createTextNode(prefix));
+    const chip = el('span', 'term-cmd-chip', cmd);
+    chip.tabIndex = 0;
+    chip.setAttribute('role', 'button');
+    const run = () => {
+      input!.value = cmd;
+      input!.focus();
+      form!.requestSubmit();
+    };
+    chip.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      run();
+    });
+    chip.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        run();
       }
     });
+    p.append(chip);
+    if (suffix) p.append(document.createTextNode(suffix));
+    out!.append(p);
+    scrollBottom();
   }
 
-  function renderBoard(total: number, items: SolverEntry[]) {
-    for (const node of totalEls) node.textContent = String(total);
-    if (!boardList) return;
-    boardList.replaceChildren();
-    if (!items.length) {
-      const empty = el('li', 'tty-board-row');
-      empty.append(el('span', 'tty-rank', '#000'), el('span', 'tty-note', 'empty — waiting for first solver.'));
-      boardList.append(empty);
-      return;
-    }
-    for (const item of items) {
-      const li = el('li', 'tty-board-row');
-      const rankNode = el('span', 'tty-rank', `#${String(item.rank).padStart(3, '0')}`);
-      if (item.rank === 1) rankNode.dataset.first = 'true';
-      li.append(
-        rankNode,
-        el('span', 'tty-codename', item.codename),
-        el('span', 'tty-note', item.note || '-'),
-        el('span', 'tty-time', formatDate(item.solvedAt)),
-      );
-      boardList.append(li);
+  function tokenValid(): boolean {
+    return Boolean(currentToken && currentExpiresAt > Date.now());
+  }
+
+  function remainText(): string {
+    const sec = Math.max(0, Math.floor((currentExpiresAt - Date.now()) / 1000));
+    return `${Math.floor(sec / 60)}m${String(sec % 60).padStart(2, '0')}s`;
+  }
+
+  async function doVerify(rawKey: string) {
+    busy = true;
+    print('正在校验四段信标摘要...', 'dim');
+    try {
+      const res = await fetch('/api/beacon/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-NC-Request': '1' },
+        body: JSON.stringify({ key: rawKey, agreed: true }),
+      });
+      const data = (await res.json()) as VerifyResponse;
+
+      if (data.matched) {
+        const segStr = data.matched
+          .map((ok, idx) => `[0${idx + 1}:${ok ? 'OK' : 'ERR'}]`)
+          .join(' ');
+        print(`SEGMENTS  ${segStr}`, data.ok ? 'hi' : 'dim');
+      }
+
+      if (!res.ok || !data.ok || !data.token) {
+        print(`[DENIED] ${data.error || '口令未通过校验'}`, 'hi');
+        return;
+      }
+
+      currentToken = data.token;
+      currentExpiresAt = Number(data.expiresAt ?? Date.now() + 15 * 60 * 1000);
+      currentBundle = data.bundleName || 'beacon-framework-bundle.zip';
+      docCache.clear();
+      root!.dataset.unlocked = 'true';
+
+      print(`[OK] 校验通过，私有归档已解锁（凭证有效期 ${remainText()}）。`, 'hi');
+      print(RULE, 'dim');
+      print('  beacon-framework-bundle.zip    完整学习包（源码包 + 两份手册）');
+      print('  beacon-framework-README.md     框架总览与部署说明');
+      print('  本机单机部署.md                单机实验部署手册');
+      print(RULE, 'dim');
+      printClickableHint('  输入或点击 ', 'download', '           一键下载完整学习包 (.zip)');
+      printClickableHint('  输入或点击 ', 'cat readme', '         在终端直接阅读 README');
+      printClickableHint('  输入或点击 ', 'cat deploy', '         在终端直接阅读本机单机部署手册');
+      printClickableHint('  输入或点击 ', 'solvers', '            查看当前通关名录');
+      print('  输入 "register <代号> [留语]" 登记你的通关序号（也可直接输入 "register" 匿名登记）', 'dim');
+      print(RULE, 'dim');
+    } catch {
+      print('[ERROR] 无法连接到 /api/beacon/verify，请稍后重试。', 'hi');
+    } finally {
+      busy = false;
     }
   }
 
-  async function loadBoard() {
+  async function doSolvers() {
+    busy = true;
     try {
       const res = await fetch('/api/beacon/solvers', { cache: 'no-store' });
       const data = (await res.json()) as SolversResponse;
-      if (res.ok) renderBoard(Number(data.total ?? 0), data.items ?? []);
-    } catch {
-      // ignore offline
-    }
-  }
-
-  function updateCountdown() {
-    if (!expiryEl || !currentExpiresAt) return;
-    const remainSec = Math.max(0, Math.floor((currentExpiresAt - Date.now()) / 1000));
-    if (remainSec <= 0) {
-      expiryEl.textContent = 'token expired — verify again to reissue';
-      if (countdownTimer) {
-        window.clearInterval(countdownTimer);
-        countdownTimer = 0;
-      }
-      return;
-    }
-    const min = Math.floor(remainSec / 60);
-    const sec = remainSec % 60;
-    expiryEl.textContent = `token ttl: ${min}m ${String(sec).padStart(2, '0')}s (private R2 stream)`;
-  }
-
-  async function selectDocTab(docId: string) {
-    if (!docTabsEl || !docBodyEl || !currentToken) return;
-    for (const btn of docTabsEl.querySelectorAll<HTMLButtonElement>('[data-doc-id]')) {
-      btn.setAttribute('aria-selected', btn.dataset.docId === docId ? 'true' : 'false');
-    }
-    const cached = docCache.get(docId);
-    if (cached !== undefined) {
-      renderMarkdownSafe(docBodyEl, cached);
-      return;
-    }
-    docBodyEl.replaceChildren(el('p', '', 'loading document...'));
-    try {
-      const res = await fetch(
-        `/api/beacon/doc?name=${encodeURIComponent(docId)}&t=${encodeURIComponent(currentToken)}`,
-        { cache: 'no-store' },
-      );
-      const data = (await res.json()) as { ok?: boolean; markdown?: string; error?: string };
-      if (!res.ok || !data.ok || typeof data.markdown !== 'string') {
-        docBodyEl.replaceChildren(el('p', '', data.error || 'failed to load document'));
+      if (!res.ok) {
+        print(`[ERROR] ${data.error || '无法读取通关名录'}`, 'hi');
         return;
       }
-      docCache.set(docId, data.markdown);
-      renderMarkdownSafe(docBodyEl, data.markdown);
-      appendLog(`loaded doc: ${docId}`, 'ok');
+      const total = Number(data.total ?? 0);
+      const items = data.items ?? [];
+      print(RULE, 'dim');
+      print(`HALL OF SIGNALS   TOTAL: ${total}`, 'hi');
+      print(RULE, 'dim');
+      if (!items.length) {
+        print('  #000  (暂无记录 — 首位通关席位虚位以待)', 'dim');
+      } else {
+        for (const item of items) {
+          const rank = `#${String(item.rank).padStart(3, '0')}`;
+          const when = formatDate(item.solvedAt);
+          const note = item.note ? `  // ${item.note}` : '';
+          print(`  ${rank}  ${item.codename}  [${when}]${note}`, item.rank === 1 ? 'hi' : '');
+        }
+      }
+      print(RULE, 'dim');
     } catch {
-      docBodyEl.replaceChildren(el('p', '', 'network error while loading document'));
+      print('[ERROR] 无法读取通关名录。', 'hi');
+    } finally {
+      busy = false;
     }
   }
 
-  listen(keyInput, 'input', () => {
-    updateSlotPreview(keyInput?.value ?? '');
-  });
+  async function doRegister(codename: string, note: string) {
+    if (!tokenValid()) {
+      print('[LOCKED] 请先使用 "unlock <口令>" 解锁后再登记通关序号。', 'hi');
+      return;
+    }
+    busy = true;
+    try {
+      const res = await fetch('/api/beacon/solvers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-NC-Request': '1' },
+        body: JSON.stringify({ token: currentToken, codename, note }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        entry?: SolverEntry;
+        total?: number;
+        error?: string;
+      };
+      if (res.ok && data.ok && data.entry) {
+        print(
+          `[OK] 登记成功：你是第 #${String(data.entry.rank).padStart(3, '0')} 位通关者（代号：${data.entry.codename}）。`,
+          'hi',
+        );
+      } else {
+        print(`[DENIED] ${data.error || '登记失败'}`, 'hi');
+      }
+    } catch {
+      print('[ERROR] 网络异常，暂时无法登记。', 'hi');
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function doCat(target: string) {
+    if (!tokenValid()) {
+      print('[LOCKED] 未解锁或凭证已过期，请先输入 "unlock <口令>"。', 'hi');
+      return;
+    }
+    const norm = target.trim().toLowerCase();
+    let docId: 'readme' | 'local-deploy' | null = null;
+    if (norm === 'readme' || norm === 'beacon-framework-readme.md' || norm === '1') {
+      docId = 'readme';
+    } else if (norm === 'deploy' || norm === 'local-deploy' || norm === '本机单机部署.md' || norm === '2') {
+      docId = 'local-deploy';
+    }
+    if (!docId) {
+      print('用法：cat readme  或  cat deploy', 'dim');
+      return;
+    }
+
+    busy = true;
+    try {
+      let md = docCache.get(docId);
+      if (md === undefined) {
+        print(`正在从私有存储读取 ${docId} ...`, 'dim');
+        const res = await fetch(
+          `/api/beacon/doc?name=${encodeURIComponent(docId)}&t=${encodeURIComponent(currentToken)}`,
+          { cache: 'no-store' },
+        );
+        const data = (await res.json()) as { ok?: boolean; markdown?: string; error?: string };
+        if (!res.ok || !data.ok || typeof data.markdown !== 'string') {
+          print(`[ERROR] ${data.error || '读取文档失败'}`, 'hi');
+          return;
+        }
+        md = data.markdown;
+        docCache.set(docId, md);
+      }
+
+      print(RULE, 'dim');
+      print(`FILE: ${docId === 'readme' ? 'beacon-framework-README.md' : '本机单机部署.md'}`, 'hi');
+      print(RULE, 'dim');
+      const host = el('article', 'term-doc');
+      renderMarkdownSafe(host, md);
+      out!.append(host);
+      print(RULE, 'dim');
+      print(`EOF (${docId}) — 输入 "clear" 清屏，或输入 "download" 下载完整包。`, 'dim');
+      scrollBottom();
+    } catch {
+      print('[ERROR] 网络异常，读取文档失败。', 'hi');
+    } finally {
+      busy = false;
+    }
+  }
+
+  function doDownload() {
+    if (!tokenValid()) {
+      print('[LOCKED] 未解锁或凭证已过期，请先输入 "unlock <口令>"。', 'hi');
+      return;
+    }
+    const href = `/api/beacon/download?t=${encodeURIComponent(currentToken)}`;
+    const a = el('a', 'term-link', currentBundle);
+    a.href = href;
+    a.download = currentBundle;
+
+    const line = el('p', 'term-line');
+    line.append(
+      document.createTextNode(`[DL] 正在拉取私有归档（剩余有效 ${remainText()}）：`),
+      a,
+    );
+    out!.append(line);
+    scrollBottom();
+
+    // 触发浏览器下载
+    const trigger = document.createElement('a');
+    trigger.href = href;
+    trigger.download = currentBundle;
+    trigger.style.display = 'none';
+    document.body.append(trigger);
+    trigger.click();
+    trigger.remove();
+  }
+
+  function printHelp() {
+    print(RULE, 'dim');
+    print('  help                      查看可用命令');
+    print('  hint [1|2|3|4]            查看各关工具方向（不剧透答案）');
+    print('  unlock <口令>             校验口令（BEACON-X-X-X-X）');
+    print('  solvers                   查看通关者名录与人数');
+    print('  clear                     清空终端输出');
+    print('  exit                      返回博客首页 (/)');
+    print(RULE, 'dim');
+    print('  [解锁后可用命令]', 'dim');
+    print('  ls                        查看已解锁文件与令牌剩余时间');
+    print('  download                  一键下载完整学习包 (.zip)');
+    print('  cat readme                终端直接阅读 beacon-framework-README.md');
+    print('  cat deploy                终端直接阅读 本机单机部署.md');
+    print('  register [代号] [留语]    匿名登记通关序号（代号可留空）');
+    print(RULE, 'dim');
+  }
+
+  async function handleCommand(raw: string) {
+    const trimmed = raw.trim();
+
+    // 若正在等待 y/N 授权协议确认
+    if (pendingKey) {
+      printCmdLine(CONFIRM_PS1, trimmed || 'n');
+      const ans = trimmed.toLowerCase();
+      const keyToUse = pendingKey;
+      pendingKey = '';
+      ps1!.textContent = DEFAULT_PS1;
+      if (ans === 'y' || ans === 'yes') {
+        await doVerify(keyToUse);
+      } else {
+        print('已取消校验。', 'dim');
+      }
+      return;
+    }
+
+    printCmdLine(DEFAULT_PS1, trimmed);
+    if (!trimmed) return;
+
+    if (history[history.length - 1] !== trimmed) history.push(trimmed);
+    histIdx = history.length;
+
+    const tokens = trimmed.split(/\s+/);
+    const cmd = tokens[0].toLowerCase().replace(/^\//, '');
+    const args = tokens.slice(1);
+
+    if (cmd === 'help' || cmd === '?') {
+      printHelp();
+      return;
+    }
+
+    if (cmd === 'clear' || cmd === 'cls') {
+      out!.replaceChildren();
+      return;
+    }
+
+    if (cmd === 'exit' || cmd === 'quit' || (cmd === 'cd' && args[0] === '/')) {
+      print('closing session -> / ...', 'dim');
+      window.location.href = '/';
+      return;
+    }
+
+    if (cmd === 'hint' || cmd === 'hints') {
+      print(RULE, 'dim');
+      const pick = args[0];
+      if (pick && STAGE_HINTS[pick]) {
+        print(STAGE_HINTS[pick]);
+      } else {
+        for (const k of ['1', '2', '3', '4']) print(STAGE_HINTS[k]);
+      }
+      print(RULE, 'dim');
+      return;
+    }
+
+    if (cmd === 'solvers' || cmd === 'rank' || cmd === 'who') {
+      await doSolvers();
+      return;
+    }
+
+    if (cmd === 'ls') {
+      if (!tokenValid()) {
+        print('total 0 (vault locked — 输入 "unlock <口令>" 解锁)', 'dim');
+        return;
+      }
+      print(RULE, 'dim');
+      print(`token ttl: ${remainText()}`, 'dim');
+      print('  -rw-------  beacon-framework-bundle.zip');
+      print('  -r--------  beacon-framework-README.md   (cat readme)');
+      print('  -r--------  本机单机部署.md               (cat deploy)');
+      print(RULE, 'dim');
+      return;
+    }
+
+    if (cmd === 'download' || cmd === 'dl' || cmd === 'get') {
+      doDownload();
+      return;
+    }
+
+    if (cmd === 'cat' || cmd === 'less' || cmd === 'read') {
+      await doCat(args.join(' '));
+      return;
+    }
+
+    if (cmd === 'register' || cmd === 'claim') {
+      const codename = args[0] ?? '';
+      const note = args.slice(1).join(' ');
+      await doRegister(codename, note);
+      return;
+    }
+
+    if (cmd === 'unlock' || cmd === 'login' || cmd === 'verify' || looksLikeKey(trimmed)) {
+      const rawArgs = looksLikeKey(trimmed) ? [trimmed] : args;
+      const autoAgree = rawArgs.some((a) => a === '-y' || a === '--agree');
+      const keyArg = rawArgs.find((a) => !a.startsWith('-')) ?? '';
+      if (!keyArg) {
+        print('用法：unlock BEACON-碎片1-碎片2-碎片3-碎片4', 'dim');
+        return;
+      }
+      if (autoAgree) {
+        await doVerify(keyArg);
+      } else {
+        pendingKey = keyArg;
+        ps1!.textContent = CONFIRM_PS1;
+        print('[!] 确认声明：下载的源码与手册仅用于本人自有设备或明确授权的隔离实验环境学习，不用于任何未授权目标？输入 y 确认。', 'hi');
+      }
+      return;
+    }
+
+    print(`sh: command not found: ${tokens[0]}  （输入 "help" 查看命令）`, 'dim');
+  }
+
+  listen(input, 'input', syncIdleCursor);
 
   listen(form, 'submit', (ev) => {
     ev.preventDefault();
-    void (async () => {
-      const rawKey = (keyInput?.value ?? '').trim();
-      if (!agreeBox?.checked) {
-        setMsg(msgEl, '请先勾选学习与授权实验环境声明。', 'err');
-        appendLog('abort: protocol ack unchecked', 'err');
-        return;
-      }
-      if (!rawKey) {
-        setMsg(msgEl, '请输入口令：BEACON-XXXX-XXXX-XXXX-XXXX', 'err');
-        return;
-      }
-      if (submitBtn) submitBtn.disabled = true;
-      setMsg(msgEl, 'verifying...');
-      appendLog('POST /api/beacon/verify ...', 'info');
-
-      try {
-        const res = await fetch('/api/beacon/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-NC-Request': '1' },
-          body: JSON.stringify({ key: rawKey, agreed: true }),
-        });
-        const data = (await res.json()) as VerifyResponse;
-        if (data.matched) updateSlotPreview(rawKey, data.matched);
-
-        if (!res.ok || !data.ok || !data.token) {
-          setMsg(msgEl, data.error || '校验失败。', 'err');
-          appendLog(`denied: ${data.error || 'mismatch'}`, 'err');
-          return;
-        }
-
-        currentToken = data.token;
-        currentExpiresAt = Number(data.expiresAt ?? Date.now() + 15 * 60 * 1000);
-        docCache.clear();
-        root.dataset.unlocked = 'true';
-
-        if (statePill) {
-          statePill.dataset.unlocked = 'true';
-          statePill.textContent = 'UNLOCKED';
-        }
-        setMsg(msgEl, '校验通过，归档与文档流已解锁。', 'ok');
-        appendLog('ok: 4/4 segments verified — vault unlocked', 'ok');
-
-        if (dlLink) {
-          dlLink.href = `/api/beacon/download?t=${encodeURIComponent(currentToken)}`;
-          dlLink.download = data.bundleName || 'beacon-framework-bundle.zip';
-        }
-        if (vaultSection) vaultSection.hidden = false;
-
-        if (countdownTimer) window.clearInterval(countdownTimer);
-        updateCountdown();
-        countdownTimer = window.setInterval(updateCountdown, 1000);
-
-        if (docTabsEl && Array.isArray(data.docs) && data.docs.length) {
-          docTabsEl.replaceChildren();
-          data.docs.forEach((d, idx) => {
-            const btn = el('button', 'tty-tab', d.title);
-            btn.type = 'button';
-            btn.dataset.docId = d.id;
-            btn.setAttribute('role', 'tab');
-            btn.setAttribute('aria-selected', idx === 0 ? 'true' : 'false');
-            btn.addEventListener('click', () => {
-              void selectDocTab(d.id);
-            });
-            docTabsEl.append(btn);
-          });
-          void selectDocTab(data.docs[0].id);
-        }
-
-        if (claimBtn) claimBtn.disabled = false;
-        setMsg(claimMsg, '可登记匿名代号记入下方名录（留空也可直接登记）。');
-        void loadBoard();
-      } catch {
-        setMsg(msgEl, '无法连接校验服务，请稍后再试。', 'err');
-        appendLog('error: verify request failed', 'err');
-      } finally {
-        if (submitBtn) submitBtn.disabled = false;
-      }
-    })();
+    if (busy) return;
+    const val = input.value;
+    input.value = '';
+    syncIdleCursor();
+    void handleCommand(val).finally(() => {
+      syncIdleCursor();
+  input.focus();
+      scrollBottom();
+    });
   });
 
-  listen(claimForm, 'submit', (ev) => {
-    ev.preventDefault();
-    void (async () => {
-      if (!currentToken) {
-        setMsg(claimMsg, '请先通过口令校验。', 'err');
-        return;
+  listen(input, 'keydown', (ev) => {
+    const ke = ev as KeyboardEvent;
+    if (ke.key === 'ArrowUp') {
+      if (!history.length) return;
+      ke.preventDefault();
+      histIdx = Math.max(0, histIdx - 1);
+      input.value = history[histIdx] ?? '';
+      syncIdleCursor();
+    } else if (ke.key === 'ArrowDown') {
+      if (!history.length) return;
+      ke.preventDefault();
+      histIdx = Math.min(history.length, histIdx + 1);
+      input.value = history[histIdx] ?? '';
+      syncIdleCursor();
+    } else if (ke.key === 'Tab') {
+      const v = input.value.trim().toLowerCase();
+      const cmds = ['help', 'hint', 'unlock ', 'solvers', 'ls', 'download', 'cat readme', 'cat deploy', 'register ', 'clear', 'exit'];
+      const hit = v ? cmds.find((c) => c.startsWith(v)) : undefined;
+      if (hit) {
+        ke.preventDefault();
+        input.value = hit;
+        syncIdleCursor();
       }
-      if (claimBtn) claimBtn.disabled = true;
-      setMsg(claimMsg, 'registering...');
-      try {
-        const res = await fetch('/api/beacon/solvers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-NC-Request': '1' },
-          body: JSON.stringify({
-            token: currentToken,
-            codename: codenameInput?.value ?? '',
-            note: noteInput?.value ?? '',
-          }),
-        });
-        const data = (await res.json()) as {
-          ok?: boolean;
-          alreadyClaimed?: boolean;
-          entry?: SolverEntry;
-          total?: number;
-          error?: string;
-        };
-        if (res.ok && data.ok && data.entry) {
-          setMsg(
-            claimMsg,
-            `已登记为 #${String(data.entry.rank).padStart(3, '0')}（${data.entry.codename}）。`,
-            'ok',
-          );
-          appendLog(`registered solver #${String(data.entry.rank).padStart(3, '0')} ${data.entry.codename}`, 'ok');
-          if (codenameInput) codenameInput.value = '';
-          if (noteInput) noteInput.value = '';
-          void loadBoard();
-        } else {
-          setMsg(claimMsg, data.error || '登记失败。', 'err');
-          if (!data.alreadyClaimed && claimBtn) claimBtn.disabled = false;
-        }
-      } catch {
-        setMsg(claimMsg, '网络异常，请稍后再试。', 'err');
-        if (claimBtn) claimBtn.disabled = false;
-      }
-    })();
+    }
   });
 
-  cleanups.push(() => {
-    if (countdownTimer) window.clearInterval(countdownTimer);
+  // 点页面空白处自动聚焦命令行（选中复制文字时不抢焦点）
+  listen(doc, 'click', () => {
+    const sel = window.getSelection?.();
+    if (sel && sel.toString().length > 0) return;
+    syncIdleCursor();
+  input.focus();
   });
 
-  void loadBoard();
+  // 静默加载当前通关人数显示在欢迎区下方一行
+  void (async () => {
+    try {
+      const res = await fetch('/api/beacon/solvers', { cache: 'no-store' });
+      const data = (await res.json()) as SolversResponse;
+      if (res.ok && typeof data.total === 'number') {
+        printSpacer();
+        print(`status: locked  |  solvers: ${data.total}`, 'dim');
+      }
+    } catch {
+      // ignore offline
+    }
+  })();
+
+  syncIdleCursor();
+  input.focus();
   return () => {
     for (const fn of cleanups) fn();
   };

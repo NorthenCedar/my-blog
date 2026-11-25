@@ -8,131 +8,41 @@ import '../styles/beacon.css';
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="only dark" />
     <meta name="robots" content="noindex, nofollow" />
-    <meta name="description" content="BEACON 终端" />
+    <meta name="description" content="beacon@northcedar" />
     <link rel="canonical" href="https://northcedar.top/beacon/" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>BEACON</title>
+    <title>beacon@northcedar</title>
   </head>
   <body>
-    <main class="tty" data-beacon-root data-unlocked="false">
-      <header class="tty-head">
-        <div class="tty-bar">
-          <span>NORTHCEDAR // BEACON</span>
-          <span>
-            <span class="tty-status" data-beacon-state data-unlocked="false">LOCKED</span>
-            <span class="tty-sep" aria-hidden="true">|</span>
-            <span>SOLVERS: <strong data-beacon-total>0</strong></span>
-          </span>
-        </div>
-        <h1>beacon(1)</h1>
-        <p class="tty-desc">
-          输入四段拼装口令以解除私有归档封锁（下载 <code>beacon-framework-bundle.zip</code> 并在线阅览两份说明文档）。
-        </p>
-      </header>
+    <div class="crt-scan" aria-hidden="true"></div>
+    <main class="term" data-beacon-root data-unlocked="false">
+      <div class="term-output" data-term-output role="log" aria-live="polite">
+        <h1 class="term-line term-hi">&gt; welcome to beacon@northcedar.</h1>
+        <p class="term-line term-dim">私有归档已封存（仅限本人设备或明确授权的隔离实验环境学习）。</p>
+        <p class="term-line">输入 "help" 按回车查看命令，或直接输入 "unlock &lt;口令&gt;" 校验解锁。</p>
+      </div>
 
-      <section class="tty-section" aria-label="终端输出">
-        <div class="tty-log" data-beacon-log role="log" aria-live="polite">
-          <p class="tty-log-line" data-level="dim">[00:00:00] session ready. vault bound to private storage.</p>
-          <p class="tty-log-line" data-level="dim">[00:00:00] awaiting 4-segment key: BEACON-XXXX-XXXX-XXXX-XXXX</p>
-        </div>
-
-        <div class="tty-slots" aria-label="四段口令状态">
-          <span class="tty-slot" data-beacon-slot="0">01:<span data-slot-val>-----</span></span>
-          <span class="tty-slot" data-beacon-slot="1">02:<span data-slot-val>-----</span></span>
-          <span class="tty-slot" data-beacon-slot="2">03:<span data-slot-val>-----</span></span>
-          <span class="tty-slot" data-beacon-slot="3">04:<span data-slot-val>-----</span></span>
-        </div>
-
-        <form class="tty-form" data-beacon-form novalidate>
-          <div class="tty-prompt-row">
-            <label class="tty-prompt" for="beacon-key-input">beacon:~$</label>
-            <input
-              id="beacon-key-input"
-              type="text"
-              class="tty-input"
-              data-beacon-key
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="BEACON-FRAG1-FRAG2-FRAG3-FRAG4"
-            />
-            <button type="submit" class="tty-btn" data-beacon-submit>VERIFY</button>
-          </div>
-
-          <label class="tty-check">
-            <input type="checkbox" data-beacon-agree />
-            <span>我确认下载的源码与文档仅用于本人自有设备或明确授权的隔离实验环境学习，不用于任何未授权目标。</span>
-          </label>
-
-          <p class="tty-msg" data-beacon-msg role="status" aria-live="polite">
-            不区分大小写；校验失败时会指出未匹配的段位。
-          </p>
-        </form>
-
-        <details class="tty-hints">
-          <summary>hints（仅工具方向，不剧透答案）</summary>
-          <ul class="tty-hint-list">
-            <li><code>01</code> 文章页 F12 → Network 刷新查响应头 <code>X-Beacon-Signal</code> 或 HTML 注释，按文中通道数用 Caesar 逆推。</li>
-            <li><code>02</code> 先查 PNG 的 <code>Comment</code> 元数据，再按提示用 <code>unzip</code> / <code>7z</code> / <code>binwalk</code> 或改后缀 <code>.zip</code> 提取 IEND 后的载荷。</li>
-            <li><code>03</code> 低频蜂鸣为摩斯电码；用 Audacity / Sonic Visualiser 打开频谱图查看 6–13 kHz 线性频段。</li>
-            <li><code>04</code> 访问不存在路径触发 404 查看源码注释，按配方从 <code>/about/</code> 与 <code>/resources/</code> 拼出密钥做 Vigenère 解密。</li>
-          </ul>
-        </details>
-      </section>
-
-      <section class="tty-section tty-vault" data-beacon-vault hidden aria-label="已解锁归档">
-        <div class="tty-unlock-bar">
-          <div>
-            <div class="tty-unlock-title">UNLOCKED // beacon-framework-bundle.zip</div>
-            <div class="tty-dim">含 beacon-framework-261109.zip + beacon-framework-README.md + 本机单机部署.md</div>
-            <div class="tty-dim" data-beacon-expiry></div>
-          </div>
-          <a class="tty-btn tty-btn--invert" data-beacon-download href="#unlocked">DOWNLOAD .ZIP</a>
-        </div>
-
-        <div class="tty-tabs" data-beacon-doc-tabs role="tablist" aria-label="文档预览"></div>
-        <article class="tty-doc" data-beacon-doc-body aria-label="文档正文"></article>
-
-        <form class="tty-claim" data-beacon-claim-form novalidate>
-          <div class="tty-claim-head">REGISTER CALLSIGN（登记通关序号，代号可留空）</div>
-          <div class="tty-claim-row">
-            <input
-              type="text"
-              class="tty-field"
-              data-beacon-codename
-              maxlength="24"
-              placeholder="代号（默认：匿名信号）"
-              aria-label="匿名代号"
-            />
-            <input
-              type="text"
-              class="tty-field"
-              data-beacon-note
-              maxlength="80"
-              placeholder="一句话留痕（选填，最多 80 字）"
-              aria-label="通关留语"
-            />
-            <button type="submit" class="tty-btn" data-beacon-claim-btn>REGISTER</button>
-          </div>
-          <p class="tty-msg" data-beacon-claim-msg role="status" aria-live="polite"></p>
-        </form>
-      </section>
-
-      <section class="tty-section" aria-label="通关名录">
-        <div class="tty-subhead">
-          <h2>SOLVERS</h2>
-          <span class="tty-dim">TOTAL: <strong data-beacon-total>0</strong></span>
-        </div>
-        <ol class="tty-board" data-beacon-board>
-          <li class="tty-board-row">
-            <span class="tty-rank">---</span>
-            <span class="tty-dim">loading...</span>
-          </li>
-        </ol>
-      </section>
-
-      <footer class="tty-foot">
-        <a href="/">cd /</a>
-      </footer>
+      <form class="term-prompt-line" data-term-form autocomplete="off">
+        <label class="term-ps1" for="term-input" data-term-ps1>beacon@northcedar:~$</label>
+        <span class="term-input-wrap">
+          <span class="term-idle-block" data-term-block aria-hidden="true"></span>
+          <input
+            id="term-input"
+            type="text"
+            class="term-input"
+            data-term-input
+            autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+            autofocus
+            aria-label="终端命令输入"
+          />
+        </span>
+      </form>
+      <noscript>
+        <p class="term-line term-dim">此终端需要启用 JavaScript。</p>
+      </noscript>
     </main>
 
     <script>
