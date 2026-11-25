@@ -4,6 +4,7 @@ import { parseDocument,isMap,isSeq,isAlias,visit,type YAMLMap } from 'yaml';
 import { TAGS } from '../../tag-registry.ts';
 import { projectSchema,safeLink } from '../project-schema.ts';
 import { forgePageSchema } from '../forge-page-schema.ts';
+import { resourcesPageSchema } from '../resources-schema.ts';
 import { z } from 'astro/zod';
 import MarkdownIt from 'markdown-it';
 import { requireContentLink } from '../content-urls.mjs';
@@ -201,8 +202,8 @@ function checkProjectBodyImages(body:string,assets:WriterValue['assets'],allowPr
   };
   visit(projectMarkdown.parse(body,{}));
 }
-export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:WriterDraft['base']=null){
-  validateWriterValue(kind,value,base);
+export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:WriterDraft['base']=null,key?:string){
+  validateWriterValue(kind,value,base,key);
   if(kind==='gallery'){
     try{validateAlbumFields(value.fields,{publish:true});}catch(error){bad((error as Error).message);}
     const uploaded=new Set(value.assets.map(a=>'writer-asset:'+a.sha256));
@@ -210,6 +211,17 @@ export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:
     return;
   }
   if(kind==='forge'){
+    if(key==='resources'||(key!=='links'&&!('mine' in value.fields)&&Array.isArray(value.fields.groups))){
+      const checked=resourcesPageSchema.safeParse(value.fields);
+      if(!checked.success)bad('资源资料不完整：'+checked.error.issues[0].path.join('.')+'，'+checked.error.issues[0].message);
+      const uploaded=new Set(value.assets.map(a=>'writer-asset:'+a.sha256));
+      for(const group of checked.data.groups)for(const item of group.items){
+        if(item.cover&&item.cover.startsWith('writer-asset:')&&!uploaded.has(item.cover))bad('资源封面引用了未上传的图片');
+        for(const img of item.images??[])if(img&&img.startsWith('writer-asset:')&&!uploaded.has(img))bad('资源内容图片引用了未上传的图片');
+        for(const m of (item.detail??'').matchAll(/writer-asset:([a-f0-9]{64})/g))if(!uploaded.has('writer-asset:'+m[1]))bad('资源详细说明引用了未上传的图片');
+      }
+      return;
+    }
     if(Array.isArray(value.fields.groups)){
       const checked=linksPageSchema.safeParse(value.fields);
       if(!checked.success)bad('友链资料不完整：'+checked.error.issues[0].path.join('.')+'，'+checked.error.issues[0].message);
@@ -256,7 +268,7 @@ export function validatePublish(kind:WriterDraft['kind'],value:WriterValue,base:
   }
 }
 export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,currentText:string|null,assetBytes:Map<string,Uint8Array>):WriterChange[]{
-  const {kind,key}=validateTarget(draft.kind,draft.key),value=validateWriterValue(kind,draft.value,draft.base,key);validatePublish(kind,value,draft.base);
+  const {kind,key}=validateTarget(draft.kind,draft.key),value=validateWriterValue(kind,draft.value,draft.base,key);validatePublish(kind,value,draft.base,key);
   const changes:WriterChange[]=[],known=new Map(value.assets.map(a=>[a.sha256,a]));
   const clips=new Map(value.audios.map(a=>[a.sha256,a]));
   for(const clip of clips.values()){
@@ -273,14 +285,25 @@ export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,
         ...((value.fields.groups as Array<{items:Array<{avatar?:string}>}>)??[]).flatMap(g=>g.items.map(it=>it.avatar)),
       ].filter((v):v is string=>typeof v==='string'&&v.startsWith('writer-asset:')))
     :null;
-  const assetFilter=galleryReferences??linksReferences;
+  const resourcesReferences=kind==='forge'&&key==='resources'
+    ?new Set(
+        ((value.fields.groups as Array<{items:Array<{cover?:string;images?:string[];detail?:string}>}>)??[])
+          .flatMap(g=>g.items.flatMap(it=>[
+            it.cover,
+            ...(Array.isArray(it.images)?it.images:[]),
+            ...(typeof it.detail==='string'?Array.from(it.detail.matchAll(/writer-asset:([a-f0-9]{64})/g),m=>'writer-asset:'+m[1]):[]),
+          ]))
+          .filter((v):v is string=>typeof v==='string'&&v.startsWith('writer-asset:'))
+      )
+    :null;
+  const assetFilter=galleryReferences??linksReferences??resourcesReferences;
   for(const asset of value.assets){
     if(assetFilter&&!assetFilter.has('writer-asset:'+asset.sha256))continue;
     const bytes=assetBytes.get(asset.sha256);if(!bytes||writerHash(bytes)!==asset.sha256) bad('配图缺失或摘要不一致，请重新上传');
     if(!directory)bad('页面文案不能发布配图');
     changes.push({path:`${directory}writer-${asset.sha256}.webp`,bytes});
   }
-  const resolve=(sha:string)=>{if(!known.has(sha)) return bad('正文引用了未保存的图片');return `${kind==='talk'?'':kind==='forge'&&key==='links'?'/avatars/friends/':'./'}writer-${sha}.webp`;};
+  const resolve=(sha:string)=>{if(!known.has(sha)) return bad('正文引用了未保存的图片');return `${kind==='talk'?'':kind==='forge'&&key==='links'?'/avatars/friends/':kind==='forge'&&key==='resources'?'/resources/covers/':'./'}writer-${sha}.webp`;};
   let text:string;
   if(kind==='project'||kind==='forge'||kind==='gallery'){
     if(draft.base?currentText!==draft.base.text:currentText!==null)return conflict();
@@ -313,6 +336,26 @@ export function planChanges(draft:Pick<WriterDraft,'kind'|'key'|'base'|'value'>,
           items:Array.isArray(g.items)?(g.items as Array<Record<string,unknown>>).map(it=>
             'avatar' in it?{...it,avatar:resolveAvatar(it.avatar)}:it
           ):g.items,
+        }));
+      }
+    }
+    if(kind==='forge'&&key==='resources'){
+      const resolveCover=(v:unknown)=>typeof v==='string'&&v.startsWith('writer-asset:')?resolve(v.slice(13)):v;
+      if(Array.isArray(fields.groups)){
+        fields.groups=(fields.groups as Array<Record<string,unknown>>).map(g=>({
+          ...g,
+          items:Array.isArray(g.items)?(g.items as Array<Record<string,unknown>>).map(it=>{
+            const next:Record<string,unknown>={...it};
+            if('cover' in next)next.cover=resolveCover(next.cover);
+            if(Array.isArray(next.images)){
+              const imgs=(next.images as unknown[]).map(resolveCover).filter((s):s is string=>typeof s==='string'&&Boolean(s.trim()));
+              if(imgs.length)next.images=imgs;else delete next.images;
+            }
+            if(typeof next.detail==='string'&&next.detail.includes('writer-asset:')){
+              next.detail=next.detail.replace(/writer-asset:([a-f0-9]{64})/g,(_all,sha:string)=>resolve(sha));
+            }
+            return next;
+          }):g.items,
         }));
       }
     }

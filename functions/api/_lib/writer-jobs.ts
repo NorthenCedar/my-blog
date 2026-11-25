@@ -37,7 +37,7 @@ export async function createJob(db:D1Database,proof:WriterProof,input:{draftId:s
   const old=await jobSelect(db,proof.owner,{requestId:input.requestId},summaryColumns).first<JobSummary>();
   if(old){if(old.draft_id!==input.draftId||old.revision!==input.revision) writerFail(409,'request_reused','发布请求已用于另一版本');return publicJob(old);}
   if(snapshot.revision!==input.revision) writerFail(409,'version_conflict','草稿已变化，请先重新保存');
-  validatePublish(snapshot.kind,snapshot.value,snapshot.base);
+  validatePublish(snapshot.kind,snapshot.value,snapshot.base,snapshot.key);
   const id=randomToken(16),marker=randomToken(16),text=JSON.stringify(snapshot),now=Date.now();
   try{
     const results=await db.batch([

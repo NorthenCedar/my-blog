@@ -54,3 +54,30 @@ it('友链候选支持导出已引用的上传头像到 public/avatars/friends/ 
   expect(savedLinks).toContain('https://northcedar.top/my-avatar');
   expect(savedLinks).toContain(`/avatars/friends/writer-${sha}.webp`);
 });
+
+it('资源候选支持导出已引用的上传封面与模块内容配图到 public/resources/covers/ 并保留既有资源',()=>{
+  const git=gitFixture(),text=readFileSync('content/pages/resources.md','utf8');
+  git.cloudCommit('content/pages/resources.md',text);
+  const value=readPost(text);
+  const bytes=new Uint8Array([3,4,5,6]),sha=writerHash(bytes);
+  const bytes2=new Uint8Array([7,8,9,10]),sha2=writerHash(bytes2);
+  const groups=value.fields.groups as Array<{title:string;items:Array<{name:string;href:string;summary:string;detail?:string;cover?:string;images?:string[]}>}>;
+  const existingItemName=groups[0].items[0].name;
+  groups[0].items[0].cover='writer-asset:'+sha;
+  groups[0].items[0].images=['writer-asset:'+sha2];
+  groups[0].items[0].detail='查看 [文档](https://example.com/docs) 与示例截图。';
+  value.assets=[{sha256:sha,alt:'资源封面'},{sha256:sha2,alt:'模块内容图'}];
+  const snapshot={kind:'forge',key:'resources',base:{commit:git.must(git.cloud,['rev-parse','HEAD']),blobSha:'1'.repeat(40),text},value};
+  const assets=new Map([[sha,bytes],[sha2,bytes2]]);
+  const prepared=prepare({repoDir:git.cloud,snapshot,assets,jobId:'e'.repeat(32)});
+  expect(prepared.paths).toEqual([
+    'content/pages/resources.md',
+    `public/resources/covers/writer-${sha}.webp`,
+    `public/resources/covers/writer-${sha2}.webp`,
+  ]);
+  verifySnapshotCandidate({repoDir:git.cloud,prepared,snapshot,assets});
+  const savedResources=readFileSync(join(git.cloud,'content/pages/resources.md'),'utf8');
+  expect(savedResources).toContain(`/resources/covers/writer-${sha}.webp`);
+  expect(savedResources).toContain(`/resources/covers/writer-${sha2}.webp`);
+  expect(savedResources).toContain(existingItemName);
+});

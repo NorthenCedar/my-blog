@@ -452,7 +452,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     const navBlock = (html: string) => html.match(/<nav\b[^>]*class="navpanel staggered-menu-panel"[^>]*>([\s\S]*?)<\/nav>/)?.[1] ?? '';
     const sample = readFileSync(join(DIST, 'about', 'index.html'), 'utf8');
     const navHrefs = [...navBlock(sample).matchAll(/<a\b[^>]*href="(\/[^"]*)"/g)].map((match) => match[1]);
-    expect(navHrefs).toHaveLength(11);
+    expect(navHrefs).toHaveLength(12);
     const dead = navHrefs.filter((href) => {
       const file = href === '/rss.xml' ? join(DIST, 'rss.xml')
         : href === '/' ? join(DIST, 'index.html')
@@ -461,7 +461,7 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     });
     expect(dead, '导航清单里出现死链').toEqual([]);
 
-    const labels = ['Home', 'About', 'Posts', 'Links', 'Talks', 'Wall', 'Album', 'Forge', 'Log', 'Tags'];
+    const labels = ['Home', 'About', 'Posts', 'Links', 'Talks', 'Wall', 'Album', 'Forge', 'Vault', 'Log', 'Tags'];
     for (const file of pages) {
       const html = readFileSync(file, 'utf8');
       expect(html.match(/aria-label="主导航"/g), file).toHaveLength(1);
@@ -567,13 +567,22 @@ describe.skipIf(!hasDist)('全局硬约束', () => {
     //   拦得**对**（名字确实借错了），但判据本身选错了代理。
     //   `data-stats` 是 SiteStats 容器**自己的**标记（`<div class="stats" data-stats …>`），
     //   它表达的正是这条断言要问的那件事。意图（内页有 / 首页没有）一个字没改。
-    const HOME = `${DIST}/index.html`; // 只排除主页这一个（内页也各有 index.html，别误伤）
-    const pages = publicHtmlFiles().filter((f) => !f.endsWith('404.html') && f.replace(/\\/g, '/') !== HOME);
+    // ★ 2026-11-24 站主要求把资源页页脚去掉，改成底部 3D 跑道冲刺小游戏控制台 ⇒
+    //   `dist/resources/index.html` 同样刻意不渲染 SiteFooter，改由 `data-res-game-dock` 替代。
+    const HOME = `${DIST}/index.html`; // 只排除主页与资源页（其余内页各自有 index.html，别误伤）
+    const RESOURCES = `${DIST}/resources/index.html`;
+    const pages = publicHtmlFiles().filter((f) => {
+      const norm = f.replace(/\\/g, '/');
+      return !f.endsWith('404.html') && norm !== HOME && norm !== RESOURCES;
+    });
     const missing = pages.filter((f) => !readFileSync(f, 'utf8').includes('data-stats'));
     expect(missing, `这些页面没有页脚统计：${missing.slice(0, 6).join(', ')}`).toEqual([]);
     const home = readFileSync(join(DIST, 'index.html'), 'utf8');
     expect(home, '站主第七轮要求删掉主页底部那一栏 ⇒ 首页不该再有页脚统计').not.toContain('data-stats');
     expect(home, '站主第七轮要求删掉主页底部那一栏 ⇒ 首页不该再有 .foot 版式').not.toContain('class="foot');
+    const resPage = readFileSync(join(DIST, 'resources', 'index.html'), 'utf8');
+    expect(resPage, '资源页页脚已替换为底部小游戏 ⇒ 不该再有 .foot 版式').not.toContain('class="foot');
+    expect(resPage, '资源页底部应包含 3D 跑道小游戏控制台').toContain('data-res-game-dock');
     // 起点日期来自内容层，不是写死在组件里
     const siteMd = readFileSync('content/site.md', 'utf8');
     expect(siteMd, 'content/site.md 里没有 since（页脚运行时长没有起点）').toMatch(/^since:\s*\d{4}-\d{2}-\d{2}\s*$/m);

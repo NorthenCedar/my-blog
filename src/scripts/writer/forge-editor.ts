@@ -75,6 +75,8 @@ export function mountForgeFields(host:HTMLElement,{value,onChange}:Context){
 
 export type FriendItem={name:string;href:string;avatar?:string;desc?:string;[key:string]:unknown};
 export type FriendGroup={title:string;note?:string;items:FriendItem[];[key:string]:unknown};
+export type ResourceItemField={name:string;href:string;summary:string;detail?:string;badge?:string;cta?:string;code?:string;cover?:string;images?:string[];tags?:string[];[key:string]:unknown};
+export type ResourceGroupField={title:string;note?:string;items:ResourceItemField[];[key:string]:unknown};
 export function mountLinksFields(host:HTMLElement,{value,onChange,onError,resolveImage,uploadAvatar}:Context){
   const fields=value.fields;
   textField(host,'intro','页头引言',fields.intro,text=>{fields.intro=text;onChange();},{maxLength:320,multiline:true,wide:true});
@@ -159,11 +161,202 @@ export function mountLinksFields(host:HTMLElement,{value,onChange,onError,resolv
   render();
 }
 
+export function mountResourcesFields(host:HTMLElement,{value,onChange,onError,resolveImage,uploadAvatar}:Context){
+  const fields=value.fields;
+  textField(host,'intro','页头引言',fields.intro,text=>{fields.intro=text;onChange();},{maxLength:320,multiline:true,wide:true});
+  const section=el('section','','wide writer-forge-section'),list=el('div','','writer-repeat-list');
+  section.append(el('h3','资源分类与条目'),el('p','可自由新增或调整资源种类（如应用与安装包、小说、好用网站）。大文件放网盘或 R2，填写分享链接与提取码即可。','writer-note'),list);
+  host.append(section);
+  const getGroups=()=>{if(!Array.isArray(fields.groups))fields.groups=[{title:'应用与安装包',note:'',items:[]}];return fields.groups as ResourceGroupField[];};
+  function render(){
+    list.replaceChildren();
+    getGroups().forEach((group,gi)=>{
+      if(!Array.isArray(group.items))group.items=[];
+      const card=el('section','','writer-note-card');
+      textField(card,`group-${gi}-title`,`分类 ${gi+1} · 名称`,group.title,text=>{group.title=text;onChange();},{maxLength:60});
+      textField(card,`group-${gi}-note`,'分类说明（可选）',group.note??'',text=>{if(text)group.note=text;else delete group.note;onChange();},{maxLength:200});
+      const itemsHost=el('div','','writer-repeat-list');
+      group.items.forEach((item,ii)=>{
+        const row=el('div','','writer-link-row');
+        const thumb=el('img','','writer-link-avatar');
+        const syncThumb=()=>{
+          const src=typeof item.cover==='string'&&item.cover.trim()?resolveImage(item.cover):null;
+          if(src){thumb.src=src;thumb.alt=item.name||'资源封面';thumb.hidden=false;}
+          else{thumb.removeAttribute('src');thumb.alt='';thumb.hidden=true;}
+        };
+        syncThumb();
+        textField(row,`group-${gi}-item-${ii}-name`,`资源 ${ii+1} · 名称`,item.name,text=>{item.name=text;onChange();},{maxLength:80});
+        textField(row,`group-${gi}-item-${ii}-href`,'链接地址',item.href,text=>{item.href=text;onChange();},{maxLength:500});
+        textField(row,`group-${gi}-item-${ii}-summary`,'一句话简介（平放显示，160 字内）',item.summary??'',text=>{item.summary=text;onChange();},{maxLength:160,wide:true});
+        textField(row,`group-${gi}-item-${ii}-badge`,'角标（可选，如 Windows · 免费）',item.badge??'',text=>{if(text.trim())item.badge=text.trim();else delete item.badge;onChange();},{maxLength:40});
+        textField(row,`group-${gi}-item-${ii}-cta`,'按钮文案（可选，默认 前往获取）',item.cta??'',text=>{if(text.trim())item.cta=text.trim();else delete item.cta;onChange();},{maxLength:24});
+        textField(row,`group-${gi}-item-${ii}-code`,'提取码（可选）',item.code??'',text=>{if(text.trim())item.code=text.trim();else delete item.code;onChange();},{maxLength:64});
+        textField(row,`group-${gi}-item-${ii}-tags`,'标签（可选，逗号分隔，最多 4 个）',Array.isArray(item.tags)?item.tags.join(', '):'',text=>{
+          const parsed=text.split(/[,，]/).map(s=>s.trim()).filter(Boolean).slice(0,4);
+          if(parsed.length)item.tags=parsed;else delete item.tags;
+          onChange();
+        },{maxLength:90});
+        textField(row,`group-${gi}-item-${ii}-detail`,'详细说明（立起模块内展示；支持 [文字](https://...) 或直接粘贴网址，展示时点击新标签页打开）',item.detail??'',text=>{if(text.trim())item.detail=text;else delete item.detail;onChange();},{maxLength:1200,multiline:true,wide:true});
+        const contentImgsBox=el('div','','writer-res-images wide');
+        const contentImgsHead=el('div','','writer-res-images-head');
+        contentImgsHead.append(el('span','模块内容配图（最多 4 张，直接展示在立起模块内）','writer-note'));
+        const contentImgsList=el('div','','writer-res-images-grid');
+        const currentImgs=()=>Array.isArray(item.images)?item.images.filter(s=>typeof s==='string'&&Boolean(s.trim())):[];
+        currentImgs().forEach((imgSrc,imgIdx)=>{
+          const chip=el('div','','writer-res-img-card');
+          const resolved=resolveImage(imgSrc);
+          if(resolved){
+            const previewImg=el('img','','writer-res-img-thumb');
+            previewImg.src=resolved;previewImg.alt=`${item.name||`资源 ${ii+1}`} 内容图 ${imgIdx+1}`;previewImg.loading='lazy';
+            chip.append(previewImg);
+          }else{
+            chip.append(el('p',imgSrc,'writer-note'));
+          }
+          const imgTools=el('div','','writer-toolbar');
+          const leftBtn=button('前移',()=>{
+            const arr=currentImgs();if(imgIdx<=0)return;
+            [arr[imgIdx-1],arr[imgIdx]]=[arr[imgIdx],arr[imgIdx-1]];
+            item.images=arr;onChange();render();
+          });
+          const rightBtn=button('后移',()=>{
+            const arr=currentImgs();if(imgIdx>=arr.length-1)return;
+            [arr[imgIdx],arr[imgIdx+1]]=[arr[imgIdx+1],arr[imgIdx]];
+            item.images=arr;onChange();render();
+          });
+          leftBtn.disabled=imgIdx===0;rightBtn.disabled=imgIdx===currentImgs().length-1;
+          imgTools.append(leftBtn,rightBtn,button('移除',()=>{
+            const arr=currentImgs();arr.splice(imgIdx,1);
+            if(arr.length)item.images=arr;else delete item.images;
+            onChange();render();
+          }));
+          chip.append(imgTools);
+          contentImgsList.append(chip);
+        });
+        const contentImgActions=el('div','','writer-link-avatar-tools');
+        if(uploadAvatar){
+          const multiInput=el('input');
+          multiInput.type='file';
+          multiInput.accept='image/jpeg,image/png,image/webp';
+          multiInput.multiple=true;
+          multiInput.name=`group-${gi}-item-${ii}-images-file`;
+          multiInput.hidden=true;
+          multiInput.setAttribute('aria-label',`上传 ${item.name||`资源 ${ii+1}`} 的模块内容图片`);
+          let addImgBtn!:HTMLButtonElement;
+          multiInput.addEventListener('change',()=>{
+            const picked=Array.from(multiInput.files??[]);
+            multiInput.value='';
+            if(!picked.length) return;
+            const remain=4-currentImgs().length;
+            if(remain<=0){onError(Error('每个资源模块最多添加 4 张内容配图'));return;}
+            addImgBtn.disabled=true;
+            (async()=>{
+              const arr=currentImgs();
+              for(const f of picked.slice(0,remain)){
+                const ref=await uploadAvatar(f);
+                arr.push(ref);
+              }
+              item.images=arr;onChange();render();
+            })().catch(err=>{addImgBtn.disabled=false;onError(err);});
+          });
+          addImgBtn=button('＋ 上传内容图片',()=>multiInput.click());
+          addImgBtn.disabled=currentImgs().length>=4;
+          contentImgActions.append(multiInput,addImgBtn);
+        }
+        const imgUrlInput=el('input');
+        imgUrlInput.type='url';
+        imgUrlInput.placeholder='或粘贴图片地址（https://... 或 /resources/covers/...）';
+        imgUrlInput.name=`group-${gi}-item-${ii}-images-url`;
+        imgUrlInput.maxLength=400;
+        const addUrlBtn=button('添加图片链接',()=>{
+          const next=imgUrlInput.value.trim();
+          if(!next) return;
+          const arr=currentImgs();
+          if(arr.length>=4){onError(Error('每个资源模块最多添加 4 张内容配图'));return;}
+          arr.push(next);
+          item.images=arr;
+          imgUrlInput.value='';
+          onChange();render();
+        });
+        addUrlBtn.disabled=currentImgs().length>=4;
+        contentImgActions.append(imgUrlInput,addUrlBtn);
+        contentImgsBox.append(contentImgsHead,contentImgsList,contentImgActions);
+        row.append(contentImgsBox);
+        const coverInput=textField(row,`group-${gi}-item-${ii}-cover`,'封面/图标（可选）',item.cover??'',text=>{
+          if(text.trim())item.cover=text.trim();else delete item.cover;
+          onChange();syncThumb();clearCover.disabled=!item.cover;
+        },{maxLength:400});
+        const coverTools=el('div','','writer-link-avatar-tools');
+        coverTools.append(thumb);
+        const clearCover=button('清除封面',()=>{delete item.cover;coverInput.value='';onChange();render();});
+        clearCover.disabled=!item.cover;
+        if(uploadAvatar){
+          const fileInput=el('input');
+          fileInput.type='file';
+          fileInput.accept='image/jpeg,image/png,image/webp';
+          fileInput.name=`group-${gi}-item-${ii}-cover-file`;
+          fileInput.hidden=true;
+          fileInput.setAttribute('aria-label',`上传 ${item.name||`资源 ${ii+1}`} 的封面`);
+          let uploadBtn!:HTMLButtonElement;
+          fileInput.addEventListener('change',()=>{
+            const picked=fileInput.files?.[0];
+            fileInput.value='';
+            if(!picked) return;
+            uploadBtn.disabled=true;
+            uploadAvatar(picked).then(ref=>{item.cover=ref;onChange();render();}).catch(err=>{uploadBtn.disabled=false;onError(err);});
+          });
+          uploadBtn=button('上传封面',()=>fileInput.click());
+          coverTools.append(fileInput,uploadBtn);
+        }
+        coverTools.append(clearCover);
+        const itemActions=el('div','','writer-toolbar');
+        const moveItem=(from:number,to:number)=>{if(to<0||to>=group.items.length)return;const [entry]=group.items.splice(from,1);group.items.splice(to,0,entry);onChange();render();};
+        const upItem=button('上移',()=>moveItem(ii,ii-1)),downItem=button('下移',()=>moveItem(ii,ii+1));
+        upItem.disabled=ii===0;downItem.disabled=ii===group.items.length-1;
+        itemActions.append(upItem,downItem,button('移除资源',()=>{group.items.splice(ii,1);onChange();render();}));
+        row.append(coverTools,itemActions);
+        itemsHost.append(row);
+      });
+      const addItem=button('＋ 添加资源',()=>{group.items.push({name:'',href:'https://',summary:''});onChange();render();},'primary');
+      const upGroup=button('分类上移',()=>{if(gi<=0)return;const gs=getGroups();[gs[gi-1],gs[gi]]=[gs[gi],gs[gi-1]];onChange();render();});
+      const downGroup=button('分类下移',()=>{const gs=getGroups();if(gi>=gs.length-1)return;[gs[gi],gs[gi+1]]=[gs[gi+1],gs[gi]];onChange();render();});
+      upGroup.disabled=gi===0;downGroup.disabled=gi===getGroups().length-1;
+      const removeGroup=button('移除此分类',()=>{getGroups().splice(gi,1);onChange();render();});
+      removeGroup.disabled=getGroups().length<=1;
+      card.append(itemsHost,addItem,upGroup,downGroup,removeGroup);
+      list.append(card);
+    });
+    const addGroup=button('＋ 添加分类',()=>{getGroups().push({title:'新分类',note:'',items:[{name:'',href:'https://',summary:''}]});onChange();render();});
+    list.append(addGroup);
+  }
+  render();
+}
+
 export function renderForgePreview(kind:'project'|'forge',value:WriterValue,resolveImage:Context['resolveImage'],key?:string){
-  const fragment=document.createDocumentFragment(),fields=value.fields;fragment.append(el('h2',String(fields.title??(key==='links'?'友链':''))));
+  const fragment=document.createDocumentFragment(),fields=value.fields;fragment.append(el('h2',String(fields.title??(key==='links'?'友链':key==='resources'?'资源':''))));
   if(kind==='project'){
     fragment.append(el('p',String(fields.summary??'')),el('p',String(fields.tagline??''),'writer-note'));
     const images=el('div','','writer-gallery');for(const image of gallery(value)){const card=el('section','','writer-image');thumbnail(card,image.src,image.alt,resolveImage,'主图');if(image.darkSrc)thumbnail(card,image.darkSrc,image.alt,resolveImage,'暗色替图');images.append(card);}fragment.append(images);
+  }else if(key==='resources'){
+    if(fields.intro)fragment.append(el('p',String(fields.intro)));
+    for(const g of (Array.isArray(fields.groups)?fields.groups as ResourceGroupField[]:[])){
+      fragment.append(el('h3',String(g.title??'')));
+      if(g.note)fragment.append(el('p',String(g.note),'writer-note'));
+      for(const it of (Array.isArray(g.items)?g.items:[])){
+        const row=el('p','','writer-link-preview');
+        const coverUrl=typeof it.cover==='string'&&it.cover.trim()?resolveImage(it.cover):null;
+        if(coverUrl){const img=el('img','','writer-link-avatar');img.src=coverUrl;img.alt='';row.append(img);}
+        row.append(el('span',`${it.name??''}${it.badge?` [${it.badge}]`:''} · ${it.href??''} — ${it.summary??''}${it.code?`（提取码 ${it.code}）`:''}`));
+        fragment.append(row);
+        if(Array.isArray(it.images)&&it.images.length){
+          const strip=el('div','','writer-res-images-grid');
+          for(const imgSrc of it.images){
+            const imgUrl=typeof imgSrc==='string'&&imgSrc.trim()?resolveImage(imgSrc):null;
+            if(imgUrl){const im=el('img','','writer-res-img-thumb');im.src=imgUrl;im.alt=it.name??'';strip.append(im);}
+          }
+          if(strip.childElementCount)fragment.append(strip);
+        }
+      }
+    }
   }else if(key==='links'||Array.isArray(fields.groups)){
     if(fields.intro)fragment.append(el('p',String(fields.intro)));
     for(const g of (Array.isArray(fields.groups)?fields.groups as FriendGroup[]:[])){

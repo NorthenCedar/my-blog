@@ -11,7 +11,7 @@ import { JOB_LABELS } from './publish';
 import { showWriterStorage } from './storage';
 import { mountWriterBody } from './body-editor';
 import { restoreImageAssets, writerBodyImages } from './markdown';
-import { mountProjectFields,mountForgeFields,mountLinksFields,renderForgePreview,projectImageReferences } from './forge-editor';
+import { mountProjectFields,mountForgeFields,mountLinksFields,mountResourcesFields,renderForgePreview,projectImageReferences } from './forge-editor';
 type Api=typeof writerApi;
 type Store=ReturnType<typeof createRecoveryStore>;
 type PendingImage={id:string;blob:Blob;alt:string;url:string;cover?:boolean;width?:number;height?:number;originalSize?:number};
@@ -71,7 +71,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
           if(mode==='jobs'){await options.onJob?.(item.id);return;}
           const result=mode==='drafts'
             ?await api('/drafts?id='+item.id,{signal:selection})
-            :await api('/drafts',{method:'POST',body:JSON.stringify({action:'import',kind:mode==='links'?'forge':mode,key:item.key})});
+            :await api('/drafts',{method:'POST',body:JSON.stringify({action:'import',kind:mode==='links'||mode==='resources'?'forge':mode,key:item.key})});
           await openDraft(result.draft,selection,true);
           if(!selection.aborted)catalog.open=matchMedia('(min-width:768px)').matches;
         },selection);
@@ -167,7 +167,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     const edit=()=>{if(controller){if(bodyEditor)working.value.body=bodyEditor.getMarkdown();const restored=restoreImageAssets(working.value.body,working.value.assets,knownImages);if(restored.length!==working.value.assets.length){working.value.assets=restored;renderImages();}controller.edit(working.value);if(!preview.hidden)renderPreview();}};
     const resolveImage=(source:string)=>{
       if(source.startsWith('writer-asset:')){const sha=source.slice(13);return knownImages.has(sha)?imageUrl(sha):null;}
-      if(working.kind==='forge'&&working.key==='links'){
+      if(working.kind==='forge'&&(working.key==='links'||working.key==='resources')){
         const raw=source.trim();
         if(!raw) return null;
         if(/^https?:\/\//i.test(raw)){
@@ -175,7 +175,8 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
           return raw;
         }
         if(raw==='/my-avatar'||raw==='/my-avatar.jpg') return working.base?`/api/writer/content?commit=${working.base.commit}&image=${encodeURIComponent('public/my-avatar.jpg')}`:'/my-avatar.jpg';
-        if(/^\/avatars\/friends\/[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(raw)&&!raw.includes('..')){
+        const allowedPrefix = working.key==='links' ? /^\/avatars\/friends\// : /^\/resources\/covers\//;
+        if(allowedPrefix.test(raw)&&/^\/(?:avatars\/friends|resources\/covers)\/[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(raw)&&!raw.includes('..')){
           return working.base?`/api/writer/content?commit=${working.base.commit}&image=${encodeURIComponent('public'+raw)}`:raw;
         }
         return null;
@@ -288,23 +289,25 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
       fields.append(postCover);
       refreshCover();
     }
-    async function uploadLinkAvatar(file:File){
+    async function uploadStructuredAsset(file:File){
       if(pending.length) throw Error('还有未处理的待上传图片');
       const existing=publishedAssetHashes(working.base);
-      if(working.value.assets.filter(a=>!existing.has(a.sha256)).length>=writerImageLimit(working.kind,working.key)) throw Error('友链上传头像数量已达上限');
+      if(working.value.assets.filter(a=>!existing.has(a.sha256)).length>=writerImageLimit(working.kind,working.key)) throw Error('上传图片数量已达上限');
       const prepared=await prepareWriterImage(file);
       URL.revokeObjectURL(prepared.previewUrl);
       if(ticket!==generation) throw Error('编辑会话已切换，请重新上传');
       const result=await api<{sha256:string}>('/assets',{method:'POST',headers:{'Content-Type':'image/webp'},body:prepared.blob});
       if(ticket!==generation) throw Error('编辑会话已切换，请重新上传');
-      if(!working.value.assets.some(a=>a.sha256===result.sha256)) working.value.assets.push({sha256:result.sha256,alt:file.name||'友链头像'});
+      const fallbackAlt=working.key==='resources'?'资源封面':'友链头像';
+      if(!working.value.assets.some(a=>a.sha256===result.sha256)) working.value.assets.push({sha256:result.sha256,alt:file.name||fallbackAlt});
       knownImages.set(result.sha256,working.value.assets.find(a=>a.sha256===result.sha256)!);
       return 'writer-asset:'+result.sha256;
     }
     if(working.kind==='gallery'){galleryFields=mountGalleryFields(fields,{value:working.value,onChange:edit,resolveImage,index:working.base?.galleryIndex??0});galleryDestroy=()=>galleryFields?.destroy();}
     if(working.kind==='project')projectFields=mountProjectFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage});
     if(working.kind==='forge'){
-      if(working.key==='links')mountLinksFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage,uploadAvatar:uploadLinkAvatar});
+      if(working.key==='links')mountLinksFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage,uploadAvatar:uploadStructuredAsset});
+      else if(working.key==='resources')mountResourcesFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage,uploadAvatar:uploadStructuredAsset});
       else mountForgeFields(fields,{value:working.value,onChange:edit,onError:showError,resolveImage});
     }
     else bodyEditor=mountWriterBody(bodyLabel,working.value.body,{onChange:edit,resolveImage,onImageFiles:input=>void perform(()=>files(input)),onError:showError});
@@ -376,7 +379,7 @@ export function mountWriterEditor(root:HTMLElement,api:Api,recovery:Store,option
     const deleteDraft=button('删除这份云端草稿',()=>perform(async()=>{if(!confirm(`删除「${working.value.fields.title??working.key}」草稿及其已结束任务？网站上已发布的内容会保留。建议先导出。`))return;await api('/drafts',{method:'POST',body:JSON.stringify({action:'delete',id:working.id,revision:controller!.current().revision})});await controller!.dispose();controller=null;active=null;generation++;releaseUrls();pane.replaceChildren(el('p','草稿已删除，已发布内容仍在网站上。'));await loadList('drafts');}));
     pane.append(tools,status,backup,fields);if(working.kind!=='forge')pane.append(bodyLabel);pane.append(preview);if(working.kind!=='forge')pane.append(imageSection);if(working.kind==='post'||working.kind==='talk')pane.append(audioSection);pane.append(metadata,conflict,publishing,el('p',options.publish?'保存不会发布，点击发布后还需确认本次内容。':'发布尚未配置；私密草稿仍可保存和导出。','writer-note'),deleteDraft);renderImages();renderAudio();void controller.ready;
   }
-  navigation.setAttribute('aria-label','内容分类');for(const [mode,label]of [['drafts','草稿'],['post','文章'],['talk','说说'],['links','友链'],['project','造物台项目'],['gallery','相册'],['forge','页面文案'],['jobs','发布记录']])navigation.append(button(label,()=>perform(()=>loadList(mode))));
+  navigation.setAttribute('aria-label','内容分类');for(const [mode,label]of [['drafts','草稿'],['post','文章'],['talk','说说'],['links','友链'],['resources','资源'],['project','造物台项目'],['gallery','相册'],['forge','页面文案'],['jobs','发布记录']])navigation.append(button(label,()=>perform(()=>loadList(mode))));
   const newButtons=el('div','','writer-toolbar');newButtons.append(button('新文章',()=>start('post'),'primary'),button('新说说',()=>start('talk')),button('新项目',()=>start('project')),button('新相册',()=>start('gallery')));sidebar.prepend(newButtons);
   const storage=el('div','','writer-storage');storage.append(button('配图占用与清理',()=>perform(async()=>{await flush();await showWriterStorage(pane,api);})));sidebar.append(storage);
   pane.append(el('h2',`你好，${options.user.nickname}`),el('p','选择一份草稿，或写下新的文章、说说与造物台项目。造物台页面文案可从左侧导入编辑。保存只会留在你的私密空间里。'));

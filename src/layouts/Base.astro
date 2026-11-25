@@ -68,8 +68,10 @@ interface Props {
    *   transform 改变 fixed 的包含块 ⇒ 打开页面时装饰层从下往上跳（实测 91px）。
    */
   chrome?: 'band' | 'console' | 'page';
+  /** 资源页底部由 3D 跑道小游戏控制台接管，省略常规站点页脚。 */
+  noFooter?: boolean;
 }
-const { title, description, shareImage, shareImageAlt, pageType = 'website', current, noCanonical, noIndex, chrome, bodyClass, fullWidth = false } = Astro.props;
+const { title, description, shareImage, shareImageAlt, pageType = 'website', current, noCanonical, noIndex, chrome, bodyClass, fullWidth = false, noFooter = false } = Astro.props;
 // 站名/简介/联系方式来自 content/site.md —— 主题不持有任何文案
 const site = await getSite();
 // 关于「Topbar 静态 import 的成本」：Astro 的样式图按 import 收集（不是按 render），
@@ -219,7 +221,7 @@ const imageURL = /^https?:$/.test(shareURL.protocol) ? shareURL.href : new URL('
     <main id="main">
       {fullWidth ? <slot /> : <div class="shell"><slot /></div>}
     </main>
-    {chrome !== 'console' && <SiteFooter name={site.name} email={site.email} github={site.github} since={site.since ?? '2026-09-25'} />}
+    {chrome !== 'console' && !noFooter && <SiteFooter name={site.name} email={site.email} github={site.github} since={site.since ?? '2026-09-25'} />}
     {/* 页面过渡的蒙版（2026-09-30 v3：**原型 v10.6 的墨色浸染**，总长 900ms）。
         上一版 v2（2200ms 四段：无菌纸柔雾 / 坐标锁定 / 无菌舱门 / 内容落地）已整体作废 ——
         站主要「视觉包括风格全换成今天的最终版，页与页的过渡动画也换」。

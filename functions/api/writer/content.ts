@@ -17,6 +17,7 @@ export const onRequestGet:PagesFunction<WriterEnv>=async({request,env})=>{
     if(kind==='project'){const items=await repo.listProjects(commit);return writerJson({commit,items:items.slice((page-1)*20,page*20),more:items.length>page*20});}
     if(kind==='forge'){const source=await repo.readForge(commit);return writerJson({commit,items:[{key:'forge',title:String(readPost(source.text).fields.title??'造物台页面文案')}],more:false});}
     if(kind==='links'){const source=await repo.readLinks(commit);return writerJson({commit,items:[{key:'links',title:String(readPost(source.text).fields.title??'友链')}],more:false});}
+    if(kind==='resources'){const source=await repo.readResources(commit);return writerJson({commit,items:[{key:'resources',title:String(readPost(source.text).fields.title??'资源')}],more:false});}
     if(kind==='talk'){const source=await repo.readTalks(commit),items=readTalks(source.text).map(r=>({key:r.key,title:r.value.body.slice(0,100),date:r.value.fields.date}));return writerJson({commit,items:items.slice((page-1)*20,page*20),more:items.length>page*20});}
     writerFail(400,'invalid_kind','请选择要编辑的内容类型');
   }catch(error){return writerError(error);}

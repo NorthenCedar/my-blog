@@ -1163,3 +1163,77 @@ html.dark{--photo-lightbox-accent:#ffb570;}
 :root{--mask-solid:#000000;
   --liquid-tint:#ffffff03;--liquid-glint:#ffffff8c;--liquid-inner:#ffffff2e;--liquid-shade:#0014238c;--liquid-drop:#00000059;--liquid-cool:#a0c8ff29;--liquid-sheen:#ffffff0d;--liquid-shadow:#000a1e12;--liquid-rim:#ffffff26;}
 html.dark{--liquid-tint:#ffffff03;--liquid-glint:#ffffff73;--liquid-inner:#ffffff21;--liquid-shade:#0000008c;--liquid-drop:#00000080;--liquid-cool:#adc9d929;--liquid-sheen:#ffffff0a;--liquid-shadow:#0000001a;--liquid-rim:#ffffff21;}
+
+/* 资源页立体跑道：亮色白底网配全墨绿带，暗色纯黑底网配纯橙带，端点纯 hex 供软条平滑插值。 */
+:root {
+  --res-void: #ffffff;
+  --res-void-grid: #0d683814;
+  --res-void-major: #0d68382c;
+  --res-horizon-halo: #0d683814;
+  --res-runway-bg: #0d6838;
+  --res-runway-alt: #b4ea34;
+  --res-runway-edge: #07442373;
+  --res-runway-tick: #0d683880;
+  --res-rail-bg: #ffffffeb;
+  --res-rail-ink: #0a2617;
+  --res-rail-border: #0d683833;
+  --res-card-bg: #b4ea34;
+  --res-card-raised: #c4f34e;
+  --res-card-border: #0a261742;
+  --res-card-edge: #6d9c10;
+  --res-slab-ink: #0a2617;
+  --res-slab-muted: #1b4228;
+  --res-card-alt-bg: #0d6838;
+  --res-card-alt-raised: #117d44;
+  --res-card-alt-border: #ffffff5c;
+  --res-card-alt-edge: #063d1f;
+  --res-slab-alt-ink: #ffffff;
+  --res-slab-alt-muted: #e6f5ec;
+  --res-card-inner: #ffffff;
+  --res-card-inner-ink: #122118;
+  --res-card-inner-muted: #4b5d52;
+  --res-card-shadow: #0000008c;
+  --res-card-glow: #29c46e4d;
+  --res-scrim: #000000a6;
+  --res-pill-bg: #062816e6;
+  --res-pill-fg: #ffffff;
+  --res-cta-fg: #ffffff;
+  --res-inf-color: #6c747a;
+  --res-inf-opacity: 0.68
+}
+html.dark {
+  --res-void: #000000;
+  --res-void-grid: #ffffff1f;
+  --res-void-major: #ffffff42;
+  --res-horizon-halo: #ff6a0024;
+  --res-runway-bg: #ff6a00;
+  --res-runway-alt: #1d39c4;
+  --res-runway-edge: #ffffff4d;
+  --res-runway-tick: #ffffff73;
+  --res-rail-bg: #140b05e6;
+  --res-rail-ink: #ffffff;
+  --res-rail-border: #ffffff38;
+  --res-card-bg: #1d39c4;
+  --res-card-raised: #2948e0;
+  --res-card-border: #ffffff5c;
+  --res-card-edge: #10207a;
+  --res-slab-ink: #ffffff;
+  --res-slab-muted: #dce5ff;
+  --res-card-alt-bg: #ff6a00;
+  --res-card-alt-raised: #ff7f24;
+  --res-card-alt-border: #ffffff66;
+  --res-card-alt-edge: #b34700;
+  --res-slab-alt-ink: #ffffff;
+  --res-slab-alt-muted: #fff0e3;
+  --res-card-inner: #14110f;
+  --res-card-inner-ink: #f7f3ef;
+  --res-card-inner-muted: #c0b4aa;
+  --res-card-shadow: #000000a6;
+  --res-card-glow: #ff8c2b59;
+  --res-scrim: #000000b3;
+  --res-pill-bg: #170d06e6;
+  --res-pill-fg: #ffffff;
+  --res-cta-fg: #140c04;
+  --res-inf-color: #ffffff;
+  --res-inf-opacity: 0.72
+}

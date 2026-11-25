@@ -144,4 +144,35 @@ describe('造物台单页文案发布',()=>{
     expect(firstGroup.items[0].avatar).toBe('/avatars/friends/willowxi.jpg');
     expect(firstGroup.items.at(-1)!.avatar).toBe(`/avatars/friends/writer-${sha}.webp`);
   });
+
+  it('资源页保持前导注释与结构，支持增删分类、更新导语并导出封面图到 public/resources/covers/',()=>{
+    const original=readFileSync('content/pages/resources.md','utf8'),value=readPost(original);
+    value.fields.intro='测试后的资源页导语';
+    const bytes=new Uint8Array([5,6,7,8]),sha=createHash('sha256').update(bytes).digest('hex'),ref='writer-asset:'+sha;
+    const groups=value.fields.groups as Array<{title:string;note?:string;items:Array<Record<string,unknown>>}>;
+    const baseTitles=groups.map(g=>g.title);
+    groups[0].items[0].cover=ref;
+    groups.push({
+      title:'设计素材',
+      note:'图标与配色灵感',
+      items:[{name:'Lucide Icons',href:'https://lucide.dev/',summary:'干净一致的矢量图标库',badge:'SVG',cta:'前往浏览',tags:['图标','开源']}],
+    });
+    groups.push({title:'空分类占位',items:[]});
+    value.assets=[{sha256:sha,alt:'资源封面'}];
+
+    const changes=planChanges({kind:'forge',key:'resources',base:base(original),value},original,new Map([[sha,bytes]]));
+    expect(changes.map(c=>c.path)).toEqual(['content/pages/resources.md',`public/resources/covers/writer-${sha}.webp`]);
+    const output=textOf(changes);
+    expect(output).toContain('# 资源页内容');
+    const parsed=readPost(output);
+    expect(parsed.fields.intro).toBe('测试后的资源页导语');
+    const savedGroups=parsed.fields.groups as typeof groups;
+    expect(savedGroups.map(g=>g.title)).toEqual([...baseTitles,'设计素材','空分类占位']);
+    expect(savedGroups[0].items[0].cover).toBe(`/resources/covers/writer-${sha}.webp`);
+    expect(savedGroups.at(-1)!.items).toEqual([]);
+
+    const badValue=structuredClone(value);
+    (badValue.fields.groups as typeof groups)[0].items[0].href='javascript:alert(1)';
+    expect(()=>planChanges({kind:'forge',key:'resources',base:base(original),value:badValue},original,new Map())).toThrow();
+  });
 });

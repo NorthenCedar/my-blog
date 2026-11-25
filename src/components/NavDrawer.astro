@@ -11,7 +11,7 @@ const { current } = Astro.props;
 const { email, github } = await getSite();
 const labels: Record<NavKey, string> = {
   index: 'Home', about: 'About', archive: 'Posts', links: 'Links', talks: 'Talks',
-  guestbook: 'Wall', gallery: 'Album', forge: 'Forge', log: 'Log', tags: 'Tags',
+  guestbook: 'Wall', gallery: 'Album', forge: 'Forge', resources: 'Vault', log: 'Log', tags: 'Tags',
 };
 const socialLinks = [
   { href: github, label: 'GitHub' },
@@ -197,6 +197,7 @@ const socialLinks = [
     background: var(--nav-panel-surface);
     color: var(--ink);
     overscroll-behavior: contain;
+    padding-top: 4.1em;
   }
   :is(.site-staggered, .navshell) :is(.sm-panel-item, .sm-socials-link) { color: var(--ink); }
   :is(.site-staggered, .navshell) :is(.sm-panel-item, .sm-socials-link):is(:hover, :focus-visible, [aria-current='page']) {

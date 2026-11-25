@@ -1,0 +1,398 @@
+---
+import { getEntry } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import PageTitle from '../components/PageTitle.astro';
+import { resourcesPageSchema } from '../lib/resources-schema';
+import { parseResourceDetail } from '../lib/resources-rich';
+import '../styles/resources.css';
+
+const entry = await getEntry('pages', 'resources');
+if (!entry) throw new Error('缺少资源页内容：content/pages/resources.md');
+const d = resourcesPageSchema.parse(entry.data);
+const groups = d.groups;
+const totalCount = groups.reduce((n, g) => n + g.items.length, 0);
+const coverSrc = (raw?: string) => {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  return s && !s.startsWith('writer-asset:') ? s : '';
+};
+const isExternal = (href: string) => /^https?:/i.test(href);
+const hostOf = (href: string) => {
+  try {
+    return /^https?:/i.test(href) ? new URL(href).hostname : href;
+  } catch {
+    return href;
+  }
+};
+
+// 纸面编注小字（仿画册/技术手册印在曲面跑道纸面上的三栏细碎注记）
+const PAPER_NOTES: readonly [string, string, string][] = [
+  [
+    '01 / ACCESS · 先稳定连上外部世界，再去折腾趁手的工具与工作流。',
+    'ROUTING · 新手优先零配置入口，进阶再自建节点配合规则分流。',
+    'VERIFY · 切换线路后顺手测一下延迟与出口地区，心里更有底。',
+  ],
+  [
+    '02 / TOOLING · 选工具的标准很简单：干净、克制、少弹窗、能直奔主题。',
+    'GITHUB · 仓库发布页遇到拉取慢，先开本地加速或走代理中转即可。',
+    'HYGIENE · 装机先查硬件、卸载必清残留，系统几年下来依然轻快。',
+  ],
+  [
+    '03 / IMAGING · 调色重色彩管理，修图重顺手与快捷键肌肉记忆。',
+    'PACKAGE · 体积动辄数 GB 的专业套件走独立存储或官方免费通道。',
+    'WORKFLOW · 手机轻修配桌面精修，同一套审美可以跨设备延续。',
+  ],
+  [
+    '04 / AGENTS · 让模型接管重复检索与脚手架，把注意力留给判断与结构。',
+    'ENDPOINT · 通过统一路由自由切换模型，不被单一入口锁死。',
+    'SANDBOX · 移动端 Agent 开始接管终端与文件，口袋里也能跑开发。',
+  ],
+  [
+    '05 / STORIES · 好的长篇世界观像精密齿轮，越往后读伏笔越响亮。',
+    'ARCHIVE · 全本精校 TXT 打包直链，放到电纸书或手机里离线慢读。',
+    'WATCHING · 追番看重片源完整与高码率，少一点贴片多一点沉浸。',
+  ],
+  [
+    '06 / PLAY · 启动器越干净，进世界前的等待就越像一场轻快的起跳。',
+    'CLEAN · 所有自改与收录版本均剥离个人存档与账号，解压即用。',
+    'DEALS · 正版入库前多比一次价，省下来的预算刚好再收一部独立作。',
+  ],
+  [
+    '07 / IDENTITY · 跨区注册与测试账单，最省事的是规范且一次通过。',
+    'REGION · 免税州街道与邮编按标准格式生成，减少反复报错的摩擦。',
+    'SMS · 临时接码仅用于非核心外区验证，重要账号仍建议绑定主号。',
+  ],
+  [
+    '08 / VAULT · 留一格给懂的人，不喧哗，不张扬，按需自取即可。',
+    'LOCAL · 移动端安装包均经拆包核验，确认不含任何本地账号数据。',
+    'STUDIO · 可视化姿势与光影参考，本身就是极顺手的构图草稿板。',
+  ],
+  [
+    '09 / CURIOSITY · 互联网最迷人的地方，在于随时能拐进意想不到的角落。',
+    'MEMORY · 时光机替人类记住被遗忘的旧页面、老软件与早期设计语言。',
+    'EXPLORE · 换一套搜索引擎或实时生成试衣，常能看到另一种视野。',
+  ],
+];
+
+type CardLayoutVariant = {
+  spanClass: string;
+  staggerDown: boolean;
+  isWide: boolean;
+};
+
+function computeCardLayout(
+  groupIdx: number,
+  itemIdx: number,
+  total: number,
+  hasMedia: boolean,
+): CardLayoutVariant {
+  if (total === 1) {
+    return { spanClass: 'res-card-wide res-span-12', staggerDown: false, isWide: true };
+  }
+  // Odd-count groups: place a full-width / asymmetrically offset showcase card (rotating slot by groupIdx so groups never look repetitive)
+  if (total % 2 === 1) {
+    const heroPos = groupIdx % 3 === 0 ? 0 : groupIdx % 3 === 1 ? total - 1 : Math.min(2, total - 1);
+    if (itemIdx === heroPos) {
+      const wideVariant =
+        groupIdx % 3 === 0
+          ? 'res-card-wide res-span-12'
+          : groupIdx % 3 === 1
+            ? 'res-card-wide res-span-11-left'
+            : 'res-card-wide res-span-11-right';
+      return { spanClass: wideVariant, staggerDown: false, isWide: true };
+    }
+    const pairPos = itemIdx < heroPos ? itemIdx : itemIdx - 1;
+    const row = Math.floor(pairPos / 2);
+    const col = pairPos % 2;
+    const leftHeavy = (groupIdx + row) % 2 === 0;
+    const spanClass = col === 0
+      ? (leftHeavy ? 'res-span-7' : 'res-span-5')
+      : (leftHeavy ? 'res-span-5' : 'res-span-7');
+    const staggerDown = col === 1 && (row + groupIdx) % 2 === 0 && !hasMedia;
+    return { spanClass, staggerDown, isWide: false };
+  }
+  // Even-count groups: alternate 7/5 and 5/7 rows with subtle staggered vertical rhythm (like Shopify Editions!)
+  const row = Math.floor(itemIdx / 2);
+  const col = itemIdx % 2;
+  const leftHeavy = (groupIdx + row) % 2 === 0;
+  const spanClass = col === 0
+    ? (leftHeavy ? 'res-span-7' : 'res-span-5')
+    : (leftHeavy ? 'res-span-5' : 'res-span-7');
+  const staggerDown = (col === 1 ? (row + groupIdx) % 2 === 0 : (row + groupIdx) % 3 === 1) && !hasMedia;
+  return { spanClass, staggerDown, isWide: false };
+}
+---
+
+<Base
+  title={d.title || '资源'}
+  description={d.intro || '个人收藏与自用的应用、安装包、小说和网站'}
+  current="resources"
+  chrome="page"
+  fullWidth
+  noFooter
+  bodyClass="resources-plate"
+>
+  <div class="res-page" data-resources-page>
+    <nav class="res-rail" aria-label="资源分类" data-res-rail>
+      <div class="res-rail-list" data-res-rail-list>
+        {groups.map((g, gi) => (
+          <button
+            type="button"
+            class="res-rail-btn"
+            data-rail-target={gi}
+            aria-current={gi === 0 ? 'true' : 'false'}
+          >
+            <span class="res-rail-label">{g.title}</span>
+            <span class="res-rail-dot" aria-hidden="true"></span>
+          </button>
+        ))}
+      </div>
+      <canvas class="res-rail-arcs" data-res-rail-arcs aria-hidden="true"></canvas>
+    </nav>
+
+    <button
+      type="button"
+      class="res-dim-toggle liquid-glass liquid-glass--player"
+      data-dim-toggle
+      aria-pressed="false"
+      title="切换立体曲面 / 平面视图（快捷键 `）"
+    >
+      <span class="res-corner-mark" aria-hidden="true">
+        <svg viewBox="-12 -12 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" data-corner-svg>
+          <path data-svg-hidden opacity="0" d="" />
+          <path data-svg-shadow opacity="0" d="" />
+          <path data-svg-solid d="M-9.5 -9.5L9.5 -9.5L9.5 9.5L-9.5 9.5Z" />
+          <path data-svg-curve d="" />
+          <circle data-svg-tip cx="6.5" cy="-6.5" r="1.25" fill="currentColor" stroke="none" />
+        </svg>
+      </span>
+      <span data-dim-label>立体视图</span>
+    </button>
+
+    <div class="res-stage" data-res-stage data-stage-mode="2d" data-gl-active="false" data-gpu-backend="2d">
+      <canvas class="res-gl-canvas" data-res-canvas aria-hidden="true"></canvas>
+      <canvas class="res-wire-canvas" data-res-wires aria-hidden="true"></canvas>
+
+      <div class="res-track" data-res-track>
+        <div class="res-runway" data-res-runway>
+          <header class="res-head" data-res-hero>
+            <div class="res-hero-title" data-res-title3d="hero">
+              <PageTitle>{d.title || '资源'}</PageTitle>
+            </div>
+            {d.intro && <p class="res-head-note">{d.intro}</p>}
+
+            <div class="res-controls-slot">
+              <div class="res-controls">
+                <div class="res-search-wrap">
+                  <input
+                    type="search"
+                    class="res-search"
+                    data-res-search
+                    placeholder="搜索资源名称、格式或标签…"
+                    aria-label="搜索资源"
+                  />
+                  <button type="button" class="res-search-clear" data-res-clear hidden>清空</button>
+                </div>
+                <output class="res-count" data-res-count>共 {totalCount} 项</output>
+              </div>
+            </div>
+
+            <div class="res-mobile-pills">
+              {groups.map((g, gi) => (
+                <a href={`#res-g-${gi}`}>{g.title}</a>
+              ))}
+            </div>
+          </header>
+
+          {groups.map((g, gi) => (
+            <section class="res-group" data-res-group={gi} id={`res-g-${gi}`}>
+              <div class="res-group-head">
+                <span class="res-group-code">{String(gi + 1).padStart(2, '0')}</span>
+                <h2 data-res-title3d={`group-${gi}`}>{g.title}</h2>
+                <span class="res-group-count">{g.items.length} 项</span>
+                {g.note && <p class="res-group-note">{g.note}</p>}
+              </div>
+
+              <div class="res-paper-notes" data-res-paper-notes={gi} aria-hidden="true">
+                {PAPER_NOTES[gi % PAPER_NOTES.length].map((noteText) => (
+                  <p class="res-paper-note-col">{noteText}</p>
+                ))}
+              </div>
+
+              <div class="res-grid">
+                {g.items.map((it, ii) => {
+                  const thumb = coverSrc(it.cover);
+                  const detailRaw = it.detail || it.summary;
+                  const parsedDetail = parseResourceDetail(detailRaw);
+                  const contentImages = [
+                    ...(it.images ?? []).map((src) => ({ src: coverSrc(src), alt: it.name })),
+                    ...parsedDetail.inlineImages.map((img) => ({ src: coverSrc(img.src), alt: img.alt || it.name })),
+                  ]
+                    .filter((img) => Boolean(img.src))
+                    .slice(0, 4);
+                  const hasMedia = contentImages.length > 0;
+                  const layout = computeCardLayout(gi, ii, g.items.length, hasMedia);
+                  const searchQuery = [it.name, it.summary, it.detail ?? '', it.badge ?? '', ...(it.tags ?? [])]
+                    .join(' ')
+                    .toLowerCase();
+                  return (
+                    <article
+                      class:list={[
+                        'res-card',
+                        layout.spanClass,
+                        layout.staggerDown && 'res-stagger-down',
+                        hasMedia && 'res-card-has-media',
+                      ]}
+                      data-res-card
+                      data-wide={layout.isWide ? 'true' : 'false'}
+                      data-band-alt={gi % 2 === 1 ? 'true' : 'false'}
+                      data-q={searchQuery}
+                      tabindex="0"
+                      role="button"
+                      aria-expanded="false"
+                    >
+                      <div class="res-card-face">
+                        <div class="res-card-top">
+                          <div class="res-card-headcopy">
+                            <h3>{it.name}</h3>
+                            <p class="res-summary">{it.summary}</p>
+                          </div>
+                        </div>
+
+                        <div class="res-card-pillbar">
+                          <a
+                            class="res-cta"
+                            href={it.href}
+                            target={isExternal(it.href) ? '_blank' : undefined}
+                            rel={isExternal(it.href) ? 'noopener noreferrer' : undefined}
+                          >
+                            {it.cta || '前往获取'}
+                          </a>
+                          {it.code && (
+                            <button type="button" class="res-copy" data-copy-code={it.code}>
+                              提取码 {it.code} · 复制
+                            </button>
+                          )}
+                          {it.badge && <span class="res-badge">{it.badge}</span>}
+                        </div>
+
+                        <div class="res-card-stage">
+                          <div class="res-card-stage-bar">
+                            <span class="res-stage-host">{hostOf(it.href)}</span>
+                            <span class="res-stage-dots" aria-hidden="true">•••</span>
+                          </div>
+                          <div class="res-card-stage-body">
+                            <div class="res-card-stage-copy">
+                              <p class="res-stage-desc" data-detail-raw={detailRaw}>
+                                {parsedDetail.segments.map((seg) =>
+                                  seg.kind === 'link' ? (
+                                    <a
+                                      class="res-inline-link"
+                                      href={seg.href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      {seg.label}
+                                    </a>
+                                  ) : (
+                                    seg.text
+                                  ),
+                                )}
+                              </p>
+                              {contentImages.length > 0 && (
+                                <div class="res-stage-gallery" data-count={contentImages.length}>
+                                  {contentImages.map((img) => (
+                                    <img
+                                      class="res-stage-img"
+                                      src={img.src}
+                                      alt={img.alt}
+                                      loading="lazy"
+                                      decoding="async"
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                              {it.tags && it.tags.length > 0 && (
+                                <div class="res-tags">
+                                  {it.tags.map((tag) => (
+                                    <span class="res-tag">{tag}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            {thumb && <img class="res-cover" src={thumb} alt={it.name} loading="lazy" decoding="async" />}
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+
+          <p class="res-empty" data-res-empty hidden>没有找到匹配的资源，换个关键词试试。</p>
+        </div>
+      </div>
+
+      <section
+        class="res-game-dock"
+        data-res-game-dock
+        data-visible="false"
+        data-phase="idle"
+        aria-label="立体跑道冲刺小游戏"
+      >
+        <div class="res-game-finish" data-res-game-finish hidden>
+          <span class="res-game-grade" data-res-game-grade>A+</span>
+          <div class="res-game-finish-meta">
+            <strong>冲线完成</strong>
+            <span data-res-game-summary>收集 0 项 · 峰值 700 px/s · 用时 0.0 s</span>
+          </div>
+          <div class="res-game-finish-actions">
+            <button type="button" class="res-game-act" data-res-game-replay>再来一局 ↑</button>
+            <button type="button" class="res-game-act res-game-act--ghost" data-res-game-exit>退出</button>
+          </div>
+        </div>
+
+        <div class="res-game-bar">
+          <div class="res-game-cell">
+            <span class="res-game-k">hop</span>
+            <span class="res-game-v">space</span>
+          </div>
+          <div class="res-game-cell">
+            <span class="res-game-k">steer</span>
+            <span class="res-game-v">← → A D</span>
+          </div>
+          <div class="res-game-cell">
+            <span class="res-game-k">faster</span>
+            <span class="res-game-v">↑ W scroll up</span>
+          </div>
+          <button type="button" class="res-game-start" data-res-game-start>
+            <span data-res-game-start-label>start ↑</span>
+          </button>
+          <div class="res-game-cell">
+            <span class="res-game-k">brake</span>
+            <span class="res-game-v">↓ S scroll down</span>
+          </div>
+          <div class="res-game-cell">
+            <span class="res-game-k">speed</span>
+            <span class="res-game-v" data-res-game-speed>v ≥ 350 px/s</span>
+          </div>
+          <div class="res-game-cell">
+            <span class="res-game-k">to the finish</span>
+            <span class="res-game-v" data-res-game-dist>↑ 0 px</span>
+          </div>
+        </div>
+
+        <div class="res-game-dim" aria-hidden="true">
+          <span class="res-game-dim-line"></span>
+          <span class="res-game-dim-text" data-res-game-width>page W = 1,280 px</span>
+          <span class="res-game-dim-line"></span>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    import '../scripts/resources-runway';
+  </script>
+</Base>

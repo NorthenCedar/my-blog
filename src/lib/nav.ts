@@ -17,6 +17,7 @@ export type NavKey =
   | 'guestbook'
   | 'gallery'
   | 'forge'
+  | 'resources'
   | 'log'
   | 'tags';
 
@@ -45,6 +46,7 @@ export const NAV_LINKS: { href: string; label: string; key: NavKey }[] = [
   { href: '/guestbook/', label: '留言', key: 'guestbook' },
   { href: '/gallery/', label: '相册', key: 'gallery' },
   { href: '/forge/', label: '造物台', key: 'forge' },
+  { href: '/resources/', label: '资源', key: 'resources' },
   { href: '/log/', label: '日志', key: 'log' },
   { href: '/tags/', label: '标签', key: 'tags' },
 ];

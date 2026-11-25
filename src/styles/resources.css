@@ -1,0 +1,987 @@
+/* 资源页：顶部 2D 平铺，800ms 丝滑进入 Shopify 同款 WebGPU（含 HTML-in-Canvas / WebGL2 回退）满宽曲面跑道。
+   亮色两侧白底网配全墨绿纸面，暗色纯黑底网配纯橙纸面（--res-*），绝不使用裸 --accent-bright 或 html.dark 选择器。 */
+
+body.resources-plate {
+  --res-t: 0;
+  --runway-tilt: 0deg;
+  --res-2d-vis: 1;
+}
+
+/* 资源页专属星尘粒子无限符号底纹：亮色银灰、暗色纯白，3D ↔ 2D 丝滑淡入淡出。
+   显式双类提高特异性（0,3,1 > Topbar 的 body.chrome-page .page-inf 0,2,1），防止硬刷新时因样式表顺序被 Topbar 覆盖。 */
+body.chrome-page.resources-plate .page-inf {
+  width: min(116vw, 1520px);
+  aspect-ratio: 16 / 9;
+  background: var(--res-inf-color);
+  -webkit-mask: url('/art/inf-starfield.webp') center / contain no-repeat;
+  mask: url('/art/inf-starfield.webp') center / contain no-repeat;
+  opacity: calc(var(--res-inf-opacity, 0.68) * var(--res-2d-vis, 1));
+  will-change: opacity;
+}
+
+.res-page {
+  position: relative;
+  min-height: 84vh;
+}
+
+.res-stage {
+  position: relative;
+  width: 100%;
+  overflow-x: clip;
+  --res-canvas-op: 0;
+  --res-dom-op: 1;
+  --res-controls-op: 1;
+}
+
+.res-gl-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  opacity: var(--res-canvas-op, 0);
+}
+
+.res-wire-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.res-stage[data-gl-active="true"] .res-gl-canvas {
+  pointer-events: auto;
+}
+
+.res-track {
+  position: relative;
+  width: 100%;
+}
+
+.res-stage[data-gl-active="true"] .res-track {
+  pointer-events: none;
+}
+
+/* ── 满宽跑道排布容器（不建层叠上下文，避免困住右上角浮窗搜索栏；内容块平滑交叉淡出） ── */
+.res-runway {
+  position: relative;
+  width: 100%;
+  padding: var(--sp-6) max(2.25rem, calc((100vw - 1380px) / 2)) calc(var(--sp-8) + 12rem);
+}
+
+.res-stage[data-stage-mode="3d"] .res-runway {
+  padding-bottom: 580px;
+}
+
+.res-runway > :not(.res-head),
+.res-head > :not(.res-controls-slot) {
+  opacity: var(--res-dom-op, 1);
+}
+
+.res-stage[data-dom-hidden="true"] .res-runway > :not(.res-head),
+.res-stage[data-dom-hidden="true"] .res-head > :not(.res-controls-slot) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 搜索栏：2D 原位淡出 -> 过中点后在 3D 右上角淡入，绝不跳闪 */
+.res-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  opacity: var(--res-controls-op, 1);
+}
+
+.res-stage[data-controls-dock="float"] .res-controls {
+  visibility: visible;
+  pointer-events: auto;
+  position: fixed;
+  top: 4.4rem;
+  right: var(--gutter);
+  z-index: 8;
+  padding: 0.42rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--res-rail-border);
+  background: var(--res-rail-bg);
+  color: var(--res-rail-ink);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: 0 8px 24px var(--res-card-shadow);
+}
+
+.res-stage[data-controls-dock="float"] .res-search {
+  width: 12.5rem;
+  padding: 0.32rem 0.72rem;
+  font-size: var(--fs-xs);
+  color: var(--res-rail-ink);
+  background: transparent;
+  border-color: var(--res-rail-border);
+}
+
+.res-stage[data-controls-dock="float"] .res-search::placeholder {
+  color: var(--res-rail-ink);
+  opacity: 0.58;
+}
+
+.res-stage[data-controls-dock="float"] .res-count {
+  color: var(--res-rail-ink);
+}
+
+/* ── 页头与搜索 ── */
+.res-head {
+  padding: var(--sp-5) 0 var(--sp-8);
+  border-bottom: 1px solid var(--hair);
+}
+
+.res-hero-title {
+  display: inline-block;
+}
+
+.res-hero-title h1.h.title {
+  font-size: clamp(3.4rem, 6vw, 5.2rem);
+  line-height: 1.02;
+}
+
+.res-head-note {
+  margin: var(--sp-3) 0 0;
+  max-width: 60ch;
+  color: var(--muted);
+  font-size: var(--fs-base);
+  line-height: 1.65;
+}
+
+.res-controls-slot {
+  margin-top: var(--sp-4);
+  min-height: 2.6rem;
+}
+
+.res-search-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.res-search {
+  width: clamp(14rem, 32vw, 22rem);
+  padding: 0.48rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  background: var(--panel);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.res-search:focus {
+  border-color: var(--accent);
+}
+
+.res-search-clear {
+  margin-left: 0.45rem;
+  padding: 0.24rem 0.6rem;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.res-search-clear:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.res-count {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+
+.res-mobile-pills {
+  display: none;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: var(--sp-4);
+}
+
+.res-mobile-pills a {
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: var(--fs-xs);
+}
+
+/* ── 左侧悬浮分类导航：Shopify 同款无边框右对齐圆点 + 悬停弧线与模块连线 ── */
+.res-rail {
+  position: fixed;
+  left: clamp(1rem, 1.8vw, 1.8rem);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--res-rail-ink);
+  pointer-events: none;
+  opacity: clamp(0.62, calc(0.62 + var(--res-t, 0) * 0.38), 1);
+  transition: opacity 0.25s ease;
+}
+
+.res-rail:hover {
+  opacity: 1;
+}
+
+.res-rail-list {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  pointer-events: auto;
+}
+
+.res-rail-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.15rem;
+  min-width: 7.4rem;
+  padding: 0.16rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--res-rail-ink);
+  opacity: 0.78;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.45;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.18s ease, opacity 0.18s ease;
+}
+
+.res-rail-btn:hover {
+  opacity: 1;
+}
+
+.res-rail-btn:hover .res-rail-label {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.res-rail-btn[aria-current="true"] {
+  color: var(--res-rail-ink);
+  opacity: 1;
+  font-weight: 700;
+}
+
+.res-rail-btn[hidden] {
+  display: none;
+}
+
+.res-rail-dot {
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 999px;
+  border: 1.4px solid currentColor;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.res-rail-btn[aria-current="true"] .res-rail-dot {
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.res-rail-arcs {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 1;
+  color: var(--res-rail-ink);
+}
+
+/* ── 左下角：歌单同款透明液态玻璃 + 变形立方曲线按钮 ── */
+.res-dim-toggle,
+.res-dim-toggle.liquid-glass {
+  position: fixed;
+  left: clamp(0.9rem, 1.8vw, 1.8rem);
+  bottom: clamp(1rem, 2.8vh, 1.8rem);
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  height: 46px;
+  padding: 0 1.05rem 0 0.82rem;
+  color: var(--res-rail-ink);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.res-dim-toggle:hover {
+  transform: translateY(-2px);
+}
+
+.res-corner-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+}
+
+/* ── 分类区块与大幅 Shopify 比例卡片网格 ── */
+.res-group {
+  margin-top: clamp(7.5rem, 11vw, 11.5rem);
+  padding-bottom: 4rem;
+}
+
+.res-group[hidden],
+.res-card[hidden] {
+  display: none;
+}
+
+.res-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.7rem 1.15rem;
+  margin-bottom: 3.5rem;
+  padding-top: 2.5rem;
+  padding-bottom: 1.4rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.res-group-code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: var(--fs-xs);
+  color: var(--accent-ink);
+}
+
+.res-group-head h2 {
+  margin: 0;
+  font-size: clamp(3.2rem, 5.4vw, 5rem);
+  line-height: 1.04;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.res-group-count {
+  margin-left: auto;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+
+.res-group-note {
+  margin: 0.35rem 0 0;
+  flex-basis: 100%;
+  font-size: var(--fs-base);
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.res-paper-notes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem 2.2rem;
+  margin: -1.4rem 0 2.6rem;
+  padding: 0 0.15rem;
+}
+
+.res-paper-note-col {
+  margin: 0;
+  font-family: "IBM Plex Mono", system-ui, sans-serif;
+  font-size: 0.78rem;
+  line-height: 1.62;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  opacity: 0.88;
+}
+
+.res-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 2.8rem 2.6rem;
+  align-items: start;
+}
+
+/* ── 大幅薄卡体：与所在纸面反色撞色外壳 + 内嵌高对比预览框（12列不规则错落排布） ── */
+.res-card {
+  position: relative;
+  grid-column: span 6;
+  min-height: 540px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  cursor: pointer;
+  outline: none;
+  contain: layout style;
+  --_card-bg: var(--res-card-bg);
+  --_card-raised: var(--res-card-raised);
+  --_card-border: var(--res-card-border);
+  --_card-edge: var(--res-card-edge);
+  --_slab-ink: var(--res-slab-ink);
+  --_slab-muted: var(--res-slab-muted);
+  box-shadow: 0 4px 0 0 var(--_card-edge), 0 16px 32px var(--res-card-shadow);
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease;
+}
+
+.res-card[data-band-alt="true"] {
+  --_card-bg: var(--res-card-alt-bg);
+  --_card-raised: var(--res-card-alt-raised);
+  --_card-border: var(--res-card-alt-border);
+  --_card-edge: var(--res-card-alt-edge);
+  --_slab-ink: var(--res-slab-alt-ink);
+  --_slab-muted: var(--res-slab-alt-muted);
+}
+
+.res-span-12,
+.res-card-wide {
+  grid-column: 1 / -1;
+  min-height: 580px;
+}
+
+.res-span-11-left {
+  grid-column: 1 / 12;
+  min-height: 580px;
+}
+
+.res-span-11-right {
+  grid-column: 2 / 13;
+  min-height: 580px;
+}
+
+.res-span-7 {
+  grid-column: span 7;
+}
+
+.res-span-5 {
+  grid-column: span 5;
+}
+
+.res-stagger-down {
+  margin-top: 2.8rem;
+}
+
+.res-card-has-media {
+  min-height: 700px;
+}
+
+.res-card-wide.res-card-has-media {
+  min-height: 760px;
+}
+
+.res-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 0 var(--_card-edge), 0 20px 38px var(--res-card-shadow);
+}
+
+.res-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.res-card[data-raised="true"] {
+  z-index: 4;
+  box-shadow: 0 8px 0 0 var(--_card-edge), 0 24px 46px var(--res-card-shadow), 0 0 28px var(--res-card-glow);
+}
+
+.res-card-face {
+  flex: 1;
+  width: 100%;
+  padding: 2rem 2.2rem 1.75rem;
+  border-radius: 14px;
+  border: 1.5px solid var(--_card-border);
+  background: var(--_card-bg);
+  color: var(--_slab-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.res-card[data-raised="true"] .res-card-face {
+  background: var(--_card-raised);
+  border-color: var(--_slab-ink);
+}
+
+.res-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.res-card-headcopy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+}
+
+.res-card-face h3 {
+  margin: 0;
+  font-size: clamp(1.65rem, 2.3vw, 2.15rem);
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--_slab-ink);
+}
+
+.res-card-face .res-summary {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.58;
+  color: var(--_slab-muted);
+}
+
+.res-card-pillbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.res-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 38px;
+  padding: 0 1.05rem;
+  border-radius: 999px;
+  background: var(--res-pill-bg);
+  color: var(--res-pill-fg);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.res-cta:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.res-copy {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  border: 1.2px solid var(--_card-border);
+  background: transparent;
+  color: var(--_slab-ink);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.res-copy:hover {
+  border-color: var(--_slab-ink);
+}
+
+.res-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  border: 1.1px solid var(--_card-border);
+  color: var(--_slab-ink);
+  white-space: nowrap;
+}
+
+/* 卡片内嵌展示窗 */
+.res-card-stage {
+  margin-top: auto;
+  min-height: 290px;
+  padding: 1.4rem 1.6rem;
+  border-radius: 12px;
+  background: var(--res-card-inner);
+  color: var(--res-card-inner-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.res-card-stage-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: var(--fs-xs);
+  color: var(--res-card-inner-muted);
+}
+
+.res-card-stage-body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  flex: 1;
+}
+
+.res-card-stage-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  flex: 1;
+}
+
+.res-stage-desc {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.72;
+  color: var(--res-card-inner-ink);
+  word-break: break-word;
+}
+
+.res-inline-link {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1.5px;
+  font-weight: 500;
+  transition: opacity 0.16s ease;
+}
+
+.res-inline-link:hover {
+  opacity: 0.78;
+}
+
+.res-stage-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.res-stage-gallery[data-count="1"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.res-stage-img {
+  width: 100%;
+  height: auto;
+  max-height: 360px;
+  border-radius: 8px;
+  object-fit: contain;
+  border: 1px solid var(--hair);
+  background: var(--panel);
+  display: block;
+}
+
+.res-stage-gallery:not([data-count="1"]) .res-stage-img {
+  height: 220px;
+  object-fit: contain;
+}
+
+.res-cover {
+  width: 140px;
+  height: 105px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--hair);
+  flex-shrink: 0;
+}
+
+.res-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: auto;
+}
+
+.res-tag {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 5px;
+  background: var(--accent-wash);
+  color: var(--accent-ink);
+}
+
+.res-empty {
+  padding: var(--sp-6) 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+/* ── 底部 Shopify 同款 3D 跑道冲刺小游戏控制台（替代页脚） ── */
+.res-game-dock {
+  position: fixed;
+  left: 50%;
+  bottom: clamp(0.7rem, 2vh, 1.35rem);
+  transform: translate(-50%, 16px);
+  z-index: 7;
+  width: min(calc(100vw - 380px), 920px);
+  min-width: min(92vw, 680px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.res-game-dock[data-visible="true"] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+.res-game-dock[data-canvas-ui="true"] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.res-game-dock[data-mode="world"] {
+  bottom: auto;
+  transform: translate(-50%, -18%);
+  transition: opacity 0.16s ease;
+}
+
+.res-game-dock[data-mode="world"][data-visible="true"] {
+  transform: translate(-50%, -18%);
+}
+
+.res-game-bar {
+  display: grid;
+  grid-template-columns: 0.78fr 0.92fr 1.2fr 1.12fr 1.2fr 1.08fr 1.08fr;
+  align-items: stretch;
+  border: 1px solid var(--res-rail-border);
+  background: var(--res-void);
+  color: var(--res-rail-ink);
+  box-shadow: 0 12px 34px var(--res-card-shadow), inset 0 1px 0 var(--res-rail-border);
+}
+
+.res-game-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.32rem;
+  padding: 0.58rem 0.78rem 0.64rem;
+  border-right: 1px solid var(--res-rail-border);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  min-width: 0;
+}
+
+.res-game-cell:last-child {
+  border-right: 0;
+}
+
+.res-game-k {
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  opacity: 0.58;
+  white-space: nowrap;
+}
+
+.res-game-v {
+  font-size: 0.84rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.res-game-start {
+  appearance: none;
+  border: 0;
+  border-right: 1px solid var(--res-rail-border);
+  margin: -6px 0 -2px;
+  padding: 0.75rem 1rem;
+  background: var(--res-rail-ink);
+  color: var(--res-void);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.96rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 -4px 0 0 var(--res-card-edge), 0 8px 20px var(--res-card-shadow);
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.res-game-start:hover {
+  transform: translateY(-2px);
+}
+
+.res-game-start:active {
+  transform: translateY(0);
+}
+
+.res-game-dim {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  color: var(--res-rail-ink);
+  opacity: 0.52;
+  padding: 0 0.2rem;
+}
+
+.res-game-dim-line {
+  flex: 1;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.res-game-dim-text {
+  white-space: nowrap;
+}
+
+.res-game-finish {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.72rem 1.15rem;
+  border: 1px solid var(--res-rail-border);
+  background: var(--res-void);
+  color: var(--res-rail-ink);
+  box-shadow: 0 14px 36px var(--res-card-shadow);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.res-game-finish[hidden] {
+  display: none;
+}
+
+.res-game-grade {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0.35rem 0.65rem;
+  background: var(--res-rail-ink);
+  color: var(--res-void);
+}
+
+.res-game-finish-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  font-size: 0.8rem;
+}
+
+.res-game-finish-meta span {
+  opacity: 0.72;
+  font-size: 0.74rem;
+}
+
+.res-game-finish-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 0.5rem;
+}
+
+.res-game-act {
+  appearance: none;
+  border: 1px solid var(--res-rail-ink);
+  background: var(--res-rail-ink);
+  color: var(--res-void);
+  padding: 0.42rem 0.8rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.res-game-act--ghost {
+  background: transparent;
+  color: var(--res-rail-ink);
+}
+
+@media (max-width: 1180px) {
+  .res-rail {
+    display: none;
+  }
+  .res-mobile-pills {
+    display: flex;
+  }
+}
+
+@media (max-width: 899px) {
+  .res-rail,
+  .res-dim-toggle,
+  .res-gl-canvas,
+  .res-wire-canvas,
+  .res-game-dock {
+    display: none !important;
+  }
+
+  .res-runway {
+    padding: var(--sp-5) var(--gutter) var(--sp-8);
+  }
+
+  .res-group {
+    margin-top: var(--sp-7);
+    padding-bottom: 0;
+  }
+
+  .res-group-head {
+    margin-bottom: var(--sp-4);
+    padding-top: var(--sp-3);
+    padding-bottom: var(--sp-3);
+  }
+
+  .res-group-head h2 {
+    font-size: clamp(1.6rem, 6vw, 2.2rem);
+  }
+
+  .res-paper-notes {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.45rem;
+    margin: -0.6rem 0 1.25rem;
+  }
+
+  .res-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.15rem;
+  }
+
+  .res-card,
+  .res-card-wide,
+  .res-span-12,
+  .res-span-11-left,
+  .res-span-11-right,
+  .res-span-7,
+  .res-span-5,
+  .res-card-has-media {
+    grid-column: 1 / -1;
+    margin-top: 0;
+    min-height: 300px;
+  }
+
+  .res-card-stage {
+    min-height: 150px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .res-card,
+  .res-dim-toggle {
+    transition: none !important;
+  }
+}

@@ -68,12 +68,14 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
     async readGallery(commit:string,key:string){validateTarget('gallery',key);return textFile(commit,`content/gallery/${key}/index.md`);},
     async readForge(commit:string){return textFile(commit,'content/pages/forge.md');},
     async readLinks(commit:string){return textFile(commit,'content/pages/links.md');},
+    async readResources(commit:string){return textFile(commit,'content/pages/resources.md');},
     async readTalks(commit:string){return textFile(commit,'content/pages/talks.md');},
     async readImage(commit:string,path:string){
       const gallery=/^content\/gallery\/([^/]+)\/([\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif))$/u.exec(path);
       if(gallery){validateTarget('gallery',gallery[1]);if(gallery[2].includes('..'))writerFail(400,'invalid_path','配图路径不在相册范围内');return file(commit,path);}
       if(path==='public/my-avatar.jpg') return file(commit,path);
       if(/^public\/avatars\/friends\/[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(path)&&!path.includes('..')) return file(commit,path);
+      if(/^public\/resources\/covers\/[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(path)&&!path.includes('..')) return file(commit,path);
       if(!/^(?:content\/(?:posts|projects)\/[a-z0-9]+(?:-[a-z0-9]+)*\/|src\/assets\/talks\/)[\p{L}\p{N}_ .-]+\.(?:png|jpe?g|webp|avif)$/u.test(path)||path.includes('..')) writerFail(400,'invalid_path','配图路径不在内容范围内');
       return file(commit,path);
     },
@@ -101,7 +103,7 @@ export function createWriterRepository(token:string,fetchImpl:typeof fetch=fetch
 export type WriterRepository=ReturnType<typeof createWriterRepository>;
 export function readPublishedSource(repo:WriterRepository,commit:string,kind:WriterKind,key:string){
   validateTarget(kind,key);
-  return kind==='gallery'?repo.readGallery(commit,key):kind==='post'?repo.readPost(commit,key):kind==='project'?repo.readProject(commit,key):kind==='forge'?(key==='links'?repo.readLinks(commit):repo.readForge(commit)):repo.readTalks(commit);
+  return kind==='gallery'?repo.readGallery(commit,key):kind==='post'?repo.readPost(commit,key):kind==='project'?repo.readProject(commit,key):kind==='forge'?(key==='links'?repo.readLinks(commit):key==='resources'?repo.readResources(commit):repo.readForge(commit)):repo.readTalks(commit);
 }
 export async function importPublished(repo:WriterRepository,db:D1Database,proof:WriterProof,target:{kind:WriterKind;key:string}){
   const {kind,key}=validateTarget(target.kind,target.key),commit=await repo.head(),source=await readPublishedSource(repo,commit,kind,key);
