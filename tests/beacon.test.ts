@@ -332,6 +332,8 @@ describe('BEACON 前端无 innerHTML 渲染与全站埋点结构校验', () => {
     expect(beaconHtml).toContain('name="robots"');
     expect(beaconHtml).toContain('noindex');
     expect(beaconHtml).toContain('data-beacon-root');
+    expect(beaconHtml).not.toContain('data-music');
+    expect(beaconHtml).not.toContain('class="topbar');
 
     const sitemap = readFileSync(join(DIST, 'sitemap-0.xml'), 'utf8');
     expect(sitemap).not.toContain('/beacon/');

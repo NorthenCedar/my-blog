@@ -1,209 +1,143 @@
 ---
-import Base from '../layouts/Base.astro';
+import '../styles/fonts.css';
 import '../styles/beacon.css';
 ---
-
-<Base
-  title="BEACON // SIGNAL"
-  description="信标解密终端 · 仅限授权实验环境学习归档"
-  chrome="page"
-  bodyClass="beacon-sanctum"
-  noIndex
->
-  <Fragment slot="plate">
-    <div class="beacon-plate" aria-hidden="true">
-      <canvas class="beacon-matrix" data-beacon-matrix></canvas>
-      <div class="beacon-grid-overlay"></div>
-      <div class="beacon-scanlines"></div>
-    </div>
-  </Fragment>
-
-  <section class="beacon-wrap" data-beacon-root data-unlocked="false">
-    <header class="beacon-hero">
-      {/* 蝉 3301 风格神秘几何图腾：对称蝉翼 × 北杉无限眼 */}
-      <svg
-        class="beacon-sigil"
-        viewBox="0 0 240 152"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.25"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <g class="beacon-sigil-ring" opacity="0.45">
-          <circle cx="120" cy="76" r="64" stroke-dasharray="3 6" />
-          <polygon points="120,12 175,44 175,108 120,140 65,108 65,44" stroke-width="0.9" />
-        </g>
-        {/* 对称几何蝉翼 */}
-        <path d="M120 42 L74 28 L26 60 L54 96 L96 86 Z" fill="currentColor" fill-opacity="0.06" />
-        <path d="M120 42 L166 28 L214 60 L186 96 L144 86 Z" fill="currentColor" fill-opacity="0.06" />
-        <path d="M96 86 L64 114 L92 126 L112 104" opacity="0.72" />
-        <path d="M144 86 L176 114 L148 126 L128 104" opacity="0.72" />
-        {/* 翼脉 */}
-        <path d="M74 28 L54 96 M46 50 L96 86 M166 28 L186 96 M194 50 L144 86" opacity="0.45" stroke-width="0.9" />
-        {/* 中枢菱形躯干与无限眼 */}
-        <polygon points="120,26 134,54 126,124 120,136 114,124 106,54" fill="currentColor" fill-opacity="0.1" />
-        <path
-          class="beacon-sigil-pulse"
-          d="M96 76 C96 66 108 66 120 76 C132 86 144 86 144 76 C144 66 132 66 120 76 C108 86 96 86 96 76 Z"
-          stroke-width="2"
-        />
-        <circle cx="120" cy="76" r="3" fill="currentColor" stroke="none" />
-      </svg>
-
-      <div class="beacon-kicker">
-        <span class="beacon-dot" aria-hidden="true"></span>
-        <span>NORTHCEDAR // SUBTERRANEAN SIGNAL VAULT</span>
-      </div>
-
-      <h1>BEACON // 3301</h1>
-
-      <p class="beacon-sub">
-        若你循着响应头、字节残片、声谱波形与站内暗码抵达此处，证明你不是路过的访客。
-        将四枚碎片拼合成完整信标密钥，通过服务端加密校验后即可解除私有存储封锁，获取
-        <code>beacon-framework-bundle.zip</code> 并于终端内直接阅览两份离线手册。
-      </p>
-    </header>
-
-    <div class="beacon-panel">
-      <div class="beacon-topbar">
-        <span class="beacon-state-pill" data-beacon-state data-unlocked="false">CARRIER LOCKED</span>
-        <span class="beacon-counter">
-          SIGNAL CAPTURED BY <strong data-beacon-total>0</strong> OPERATORS
-        </span>
-      </div>
-
-      <div class="beacon-console-log" data-beacon-log role="log" aria-live="polite" aria-label="终端状态日志">
-        <p class="beacon-log-line" data-level="sys">[00.00] BOOTING NORTHCEDAR CRYPT TERMINAL // VER 5.0</p>
-        <p class="beacon-log-line" data-level="sys">[00.08] VAULT BINDING: PRIVATE R2 STREAM · ZERO PUBLIC INDEX</p>
-        <p class="beacon-log-line" data-level="gold">[00.16] AWAITING 4-SEGMENT HANDSHAKE: BEACON-XXXX-XXXX-XXXX-XXXX</p>
-      </div>
-
-      <div class="beacon-slots" aria-label="四段信标碎片状态">
-        <div class="beacon-slot" data-beacon-slot="0">
-          <span class="beacon-slot-idx"><span>01 // CAESAR</span><span class="beacon-slot-led" aria-hidden="true"></span></span>
-          <span class="beacon-slot-val" data-slot-val>-----</span>
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="only dark" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="BEACON 终端" />
+    <link rel="canonical" href="https://northcedar.top/beacon/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>BEACON</title>
+  </head>
+  <body>
+    <main class="tty" data-beacon-root data-unlocked="false">
+      <header class="tty-head">
+        <div class="tty-bar">
+          <span>NORTHCEDAR // BEACON</span>
+          <span>
+            <span class="tty-status" data-beacon-state data-unlocked="false">LOCKED</span>
+            <span class="tty-sep" aria-hidden="true">|</span>
+            <span>SOLVERS: <strong data-beacon-total>0</strong></span>
+          </span>
         </div>
-        <div class="beacon-slot" data-beacon-slot="1">
-          <span class="beacon-slot-idx"><span>02 // STEGO</span><span class="beacon-slot-led" aria-hidden="true"></span></span>
-          <span class="beacon-slot-val" data-slot-val>-----</span>
-        </div>
-        <div class="beacon-slot" data-beacon-slot="2">
-          <span class="beacon-slot-idx"><span>03 // SPECTRUM</span><span class="beacon-slot-led" aria-hidden="true"></span></span>
-          <span class="beacon-slot-val" data-slot-val>-----</span>
-        </div>
-        <div class="beacon-slot" data-beacon-slot="3">
-          <span class="beacon-slot-idx"><span>04 // BOOK-VIG</span><span class="beacon-slot-led" aria-hidden="true"></span></span>
-          <span class="beacon-slot-val" data-slot-val>-----</span>
-        </div>
-      </div>
+        <h1>beacon(1)</h1>
+        <p class="tty-desc">
+          输入四段拼装口令以解除私有归档封锁（下载 <code>beacon-framework-bundle.zip</code> 并在线阅览两份说明文档）。
+        </p>
+      </header>
 
-      <form class="beacon-form" data-beacon-form novalidate>
-        <div class="beacon-cli-row">
-          <div class="beacon-cli-box">
-            <span class="beacon-prompt" aria-hidden="true">beacon@vault:~#</span>
+      <section class="tty-section" aria-label="终端输出">
+        <div class="tty-log" data-beacon-log role="log" aria-live="polite">
+          <p class="tty-log-line" data-level="dim">[00:00:00] session ready. vault bound to private storage.</p>
+          <p class="tty-log-line" data-level="dim">[00:00:00] awaiting 4-segment key: BEACON-XXXX-XXXX-XXXX-XXXX</p>
+        </div>
+
+        <div class="tty-slots" aria-label="四段口令状态">
+          <span class="tty-slot" data-beacon-slot="0">01:<span data-slot-val>-----</span></span>
+          <span class="tty-slot" data-beacon-slot="1">02:<span data-slot-val>-----</span></span>
+          <span class="tty-slot" data-beacon-slot="2">03:<span data-slot-val>-----</span></span>
+          <span class="tty-slot" data-beacon-slot="3">04:<span data-slot-val>-----</span></span>
+        </div>
+
+        <form class="tty-form" data-beacon-form novalidate>
+          <div class="tty-prompt-row">
+            <label class="tty-prompt" for="beacon-key-input">beacon:~$</label>
             <input
+              id="beacon-key-input"
               type="text"
-              class="beacon-input"
+              class="tty-input"
               data-beacon-key
               autocomplete="off"
               spellcheck="false"
               placeholder="BEACON-FRAG1-FRAG2-FRAG3-FRAG4"
-              aria-label="信标完整口令"
             />
+            <button type="submit" class="tty-btn" data-beacon-submit>VERIFY</button>
           </div>
-          <button type="submit" class="beacon-btn" data-beacon-submit>VERIFY KEY</button>
+
+          <label class="tty-check">
+            <input type="checkbox" data-beacon-agree />
+            <span>我确认下载的源码与文档仅用于本人自有设备或明确授权的隔离实验环境学习，不用于任何未授权目标。</span>
+          </label>
+
+          <p class="tty-msg" data-beacon-msg role="status" aria-live="polite">
+            不区分大小写；校验失败时会指出未匹配的段位。
+          </p>
+        </form>
+
+        <details class="tty-hints">
+          <summary>hints（仅工具方向，不剧透答案）</summary>
+          <ul class="tty-hint-list">
+            <li><code>01</code> 文章页 F12 → Network 刷新查响应头 <code>X-Beacon-Signal</code> 或 HTML 注释，按文中通道数用 Caesar 逆推。</li>
+            <li><code>02</code> 先查 PNG 的 <code>Comment</code> 元数据，再按提示用 <code>unzip</code> / <code>7z</code> / <code>binwalk</code> 或改后缀 <code>.zip</code> 提取 IEND 后的载荷。</li>
+            <li><code>03</code> 低频蜂鸣为摩斯电码；用 Audacity / Sonic Visualiser 打开频谱图查看 6–13 kHz 线性频段。</li>
+            <li><code>04</code> 访问不存在路径触发 404 查看源码注释，按配方从 <code>/about/</code> 与 <code>/resources/</code> 拼出密钥做 Vigenère 解密。</li>
+          </ul>
+        </details>
+      </section>
+
+      <section class="tty-section tty-vault" data-beacon-vault hidden aria-label="已解锁归档">
+        <div class="tty-unlock-bar">
+          <div>
+            <div class="tty-unlock-title">UNLOCKED // beacon-framework-bundle.zip</div>
+            <div class="tty-dim">含 beacon-framework-261109.zip + beacon-framework-README.md + 本机单机部署.md</div>
+            <div class="tty-dim" data-beacon-expiry></div>
+          </div>
+          <a class="tty-btn tty-btn--invert" data-beacon-download href="#unlocked">DOWNLOAD .ZIP</a>
         </div>
 
-        <label class="beacon-agree">
-          <input type="checkbox" data-beacon-agree />
-          <span>
-            [PROTOCOL ACK] 我确认下载的框架源码与手册仅用于本人自有设备或明确授权的隔离实验环境学习，绝不用于任何未授权目标。
-          </span>
-        </label>
+        <div class="tty-tabs" data-beacon-doc-tabs role="tablist" aria-label="文档预览"></div>
+        <article class="tty-doc" data-beacon-doc-body aria-label="文档正文"></article>
 
-        <p class="beacon-msg" data-beacon-msg role="status" aria-live="polite">
-          FORMAT: BEACON-碎片1-碎片2-碎片3-碎片4（不区分大小写；校验失败时示波格会标出未命中段位）
-        </p>
-      </form>
-
-      <details class="beacon-hints">
-        <summary>DECRYPT TOOLKIT HINTS // 卡关工具方向（绝不剧透答案）</summary>
-        <div class="beacon-hint-grid">
-          <div class="beacon-hint-item">
-            <strong>STAGE 01 // 响应头与凯撒</strong>
-            在《不触发杀毒的隐秘监控程序》页打开 F12 → Network（刷新一次看主文档响应头 <code>X-Beacon-Signal</code>）或 Elements 末尾 HTML 注释，用 CyberChef 的 Caesar / ROT13 按文中通道数计算偏移量逆推。
-          </div>
-          <div class="beacon-hint-item">
-            <strong>STAGE 02 // 图片双层隐写</strong>
-            先用 ExifTool / PNG 元数据工具或记事本搜 <code>Comment</code> 读取提示，再对同一张 PNG 使用 <code>binwalk</code>、<code>7z</code>、<code>unzip</code> 或改后缀 <code>.zip</code> 解出追加在 IEND 之后的隐藏文本。
-          </div>
-          <div class="beacon-hint-item">
-            <strong>STAGE 03 // 摩斯与高频声谱</strong>
-            低频慢速蜂鸣是摩斯电码；将 <code>.wav</code> 拖入 Audacity（轨道下拉切「频谱图」）或 Sonic Visualiser，把纵轴范围调至 6 kHz – 13 kHz 线性频率即可肉眼读出字母。
-          </div>
-          <div class="beacon-hint-item">
-            <strong>STAGE 04 // 404 与书本维吉尼亚</strong>
-            访问任意不存在的站内路径触发 404 页，打开源码注释拿到维吉尼亚密文与密钥配方，去 <code>/about/</code> 与 <code>/resources/</code> 拼出 17 位全大写英文密钥后用 Vigenère Decode 还原。
-          </div>
-        </div>
-      </details>
-
-      <div class="beacon-vault" data-beacon-vault hidden>
-        <div class="beacon-vault-actions">
-          <div class="beacon-vault-meta">
-            <strong>[ACCESS GRANTED] beacon-framework-bundle.zip</strong>
-            <span>内含：beacon-framework-261109.zip + beacon-framework-README.md + 本机单机部署.md</span>
-            <span data-beacon-expiry></span>
-          </div>
-          <a class="beacon-btn" data-beacon-download href="#unlocked">DOWNLOAD ARCHIVE (.ZIP)</a>
-        </div>
-
-        <div class="beacon-doc-tabs" data-beacon-doc-tabs role="tablist" aria-label="在线说明文档预览"></div>
-        <article class="beacon-doc-body" data-beacon-doc-body aria-label="文档预览正文"></article>
-
-        <form class="beacon-claim" data-beacon-claim-form novalidate>
-          <strong class="beacon-claim-title">// REGISTER OPERATOR CALLSIGN（匿名登记你的通关序号）</strong>
-          <div class="beacon-claim-row">
+        <form class="tty-claim" data-beacon-claim-form novalidate>
+          <div class="tty-claim-head">REGISTER CALLSIGN（登记通关序号，代号可留空）</div>
+          <div class="tty-claim-row">
             <input
               type="text"
-              class="beacon-field"
+              class="tty-field"
               data-beacon-codename
               maxlength="24"
-              placeholder="匿名代号（留空默认：匿名信号）"
+              placeholder="代号（默认：匿名信号）"
               aria-label="匿名代号"
             />
             <input
               type="text"
-              class="beacon-field"
+              class="tty-field"
               data-beacon-note
               maxlength="80"
-              placeholder="留下一句信号注记（选填，最多 80 字）"
+              placeholder="一句话留痕（选填，最多 80 字）"
               aria-label="通关留语"
             />
-            <button type="submit" class="beacon-btn beacon-btn--gold" data-beacon-claim-btn>CLAIM RANK</button>
+            <button type="submit" class="tty-btn" data-beacon-claim-btn>REGISTER</button>
           </div>
-          <p class="beacon-msg" data-beacon-claim-msg role="status" aria-live="polite"></p>
+          <p class="tty-msg" data-beacon-claim-msg role="status" aria-live="polite"></p>
         </form>
-      </div>
-    </div>
+      </section>
 
-    <section class="beacon-panel" aria-label="通关信号榜">
-      <div class="beacon-board-head">
-        <h2>HALL OF SIGNALS // 通关者名录</h2>
-        <span class="beacon-msg">TOTAL CAPTURED: <strong data-beacon-total>0</strong></span>
-      </div>
-      <ol class="beacon-board-list" data-beacon-board>
-        <li class="beacon-board-row">
-          <span class="beacon-rank">...</span>
-          <span class="beacon-note">SYNCING SIGNAL LEDGER...</span>
-        </li>
-      </ol>
-    </section>
-  </section>
-</Base>
+      <section class="tty-section" aria-label="通关名录">
+        <div class="tty-subhead">
+          <h2>SOLVERS</h2>
+          <span class="tty-dim">TOTAL: <strong data-beacon-total>0</strong></span>
+        </div>
+        <ol class="tty-board" data-beacon-board>
+          <li class="tty-board-row">
+            <span class="tty-rank">---</span>
+            <span class="tty-dim">loading...</span>
+          </li>
+        </ol>
+      </section>
 
-<script>
-  import '../scripts/beacon-terminal';
-</script>
+      <footer class="tty-foot">
+        <a href="/">cd /</a>
+      </footer>
+    </main>
+
+    <script>
+      import '../scripts/beacon-terminal';
+    </script>
+  </body>
+</html>

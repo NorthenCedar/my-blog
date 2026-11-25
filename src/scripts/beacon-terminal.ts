@@ -1,5 +1,3 @@
-import { onPage } from './page-lifecycle';
-
 interface VerifyResponse {
   ok: boolean;
   matched?: [boolean, boolean, boolean, boolean];
@@ -212,71 +210,6 @@ function formatDate(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** 极克制的地下信号流背景（十六进制素数遥测），遵循 prefers-reduced-motion。 */
-function mountMatrixCanvas(doc: Document): () => void {
-  const canvas = doc.querySelector<HTMLCanvasElement>('[data-beacon-matrix]');
-  if (!canvas) return () => {};
-  const win = doc.defaultView ?? window;
-  const reduced = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-  let ctx: CanvasRenderingContext2D | null = null;
-  try {
-    ctx = canvas.getContext('2d');
-  } catch {
-    return () => {};
-  }
-  if (!ctx) return () => {};
-
-  const glyphs = '0123456789ABCDEF·:∞+';
-  let cols = 0;
-  let drops: number[] = [];
-  let rafId = 0;
-  let lastDraw = 0;
-
-  const resize = () => {
-    const dpr = Math.min(win.devicePixelRatio || 1, 2);
-    const w = win.innerWidth || 1280;
-    const h = win.innerHeight || 800;
-    canvas.width = Math.floor(w * dpr);
-    canvas.height = Math.floor(h * dpr);
-    ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cols = Math.max(12, Math.floor(w / 34));
-    drops = Array.from({ length: cols }, (_, idx) => ((idx * 17) % Math.max(10, Math.floor(h / 24))));
-    ctx!.fillStyle = '#030605';
-    ctx!.fillRect(0, 0, w, h);
-  };
-
-  const drawFrame = (now: number) => {
-    if (!ctx) return;
-    if (now - lastDraw >= 95) {
-      lastDraw = now;
-      const w = win.innerWidth || 1280;
-      const h = win.innerHeight || 800;
-      ctx.fillStyle = 'rgba(3, 6, 5, 0.14)';
-      ctx.fillRect(0, 0, w, h);
-      ctx.font = '12px "IBM Plex Mono", ui-monospace, monospace';
-      for (let i = 0; i < cols; i++) {
-        if (i % 2 === 1 && ((i + Math.floor(now / 1200)) % 3 === 0)) continue;
-        const ch = glyphs[(Math.floor(drops[i] * 3 + i * 7)) % glyphs.length];
-        const x = i * 34 + 10;
-        const y = drops[i] * 22;
-        ctx.fillStyle = i % 7 === 0 ? 'rgba(216, 167, 74, 0.34)' : 'rgba(57, 255, 136, 0.24)';
-        ctx.fillText(ch, x, y);
-        drops[i] = y > h + 40 ? 0 : drops[i] + 0.55;
-      }
-    }
-    if (!reduced) rafId = win.requestAnimationFrame(drawFrame);
-  };
-
-  resize();
-  drawFrame(0);
-  if (!reduced) rafId = win.requestAnimationFrame(drawFrame);
-  win.addEventListener('resize', resize);
-  return () => {
-    win.removeEventListener('resize', resize);
-    if (rafId) win.cancelAnimationFrame(rafId);
-  };
-}
-
 export function initBeaconTerminal(doc: Document): () => void {
   const root = doc.querySelector<HTMLElement>('[data-beacon-root]');
   if (!root) return () => {};
@@ -309,7 +242,7 @@ export function initBeaconTerminal(doc: Document): () => void {
   let currentExpiresAt = 0;
   let countdownTimer = 0;
   const docCache = new Map<string, string>();
-  const cleanups: (() => void)[] = [mountMatrixCanvas(doc)];
+  const cleanups: (() => void)[] = [];
 
   const listen = (target: EventTarget | null, event: string, fn: EventListener) => {
     if (!target) return;
@@ -317,14 +250,14 @@ export function initBeaconTerminal(doc: Document): () => void {
     cleanups.push(() => target.removeEventListener(event, fn));
   };
 
-  function appendLog(text: string, level: 'sys' | 'gold' | 'ok' | 'err' = 'sys') {
+  function appendLog(text: string, level: 'dim' | 'info' | 'ok' | 'err' = 'dim') {
     if (!logEl) return;
     const now = new Date();
     const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-    const line = el('p', 'beacon-log-line', `[${ts}] ${text}`);
+    const line = el('p', 'tty-log-line', `[${ts}] ${text}`);
     line.dataset.level = level;
     logEl.append(line);
-    while (logEl.childElementCount > 18) {
+    while (logEl.childElementCount > 20) {
       logEl.firstElementChild?.remove();
     }
     logEl.scrollTop = logEl.scrollHeight;
@@ -357,23 +290,20 @@ export function initBeaconTerminal(doc: Document): () => void {
     if (!boardList) return;
     boardList.replaceChildren();
     if (!items.length) {
-      const empty = el('li', 'beacon-board-row');
-      empty.append(
-        el('span', 'beacon-rank', '#000'),
-        el('span', 'beacon-note', 'NO OPERATOR REGISTERED YET // 首位捕获信标的席位正虚位以待。'),
-      );
+      const empty = el('li', 'tty-board-row');
+      empty.append(el('span', 'tty-rank', '#000'), el('span', 'tty-note', 'empty — waiting for first solver.'));
       boardList.append(empty);
       return;
     }
     for (const item of items) {
-      const li = el('li', 'beacon-board-row');
-      const rankNode = el('span', 'beacon-rank', `#${String(item.rank).padStart(3, '0')}`);
+      const li = el('li', 'tty-board-row');
+      const rankNode = el('span', 'tty-rank', `#${String(item.rank).padStart(3, '0')}`);
       if (item.rank === 1) rankNode.dataset.first = 'true';
       li.append(
         rankNode,
-        el('span', 'beacon-codename', item.codename),
-        el('span', 'beacon-note', item.note || 'SIGNAL CAPTURED'),
-        el('span', 'beacon-time', formatDate(item.solvedAt)),
+        el('span', 'tty-codename', item.codename),
+        el('span', 'tty-note', item.note || '-'),
+        el('span', 'tty-time', formatDate(item.solvedAt)),
       );
       boardList.append(li);
     }
@@ -385,7 +315,7 @@ export function initBeaconTerminal(doc: Document): () => void {
       const data = (await res.json()) as SolversResponse;
       if (res.ok) renderBoard(Number(data.total ?? 0), data.items ?? []);
     } catch {
-      // 静态预览无后端时静默降级
+      // ignore offline
     }
   }
 
@@ -393,7 +323,7 @@ export function initBeaconTerminal(doc: Document): () => void {
     if (!expiryEl || !currentExpiresAt) return;
     const remainSec = Math.max(0, Math.floor((currentExpiresAt - Date.now()) / 1000));
     if (remainSec <= 0) {
-      expiryEl.textContent = 'HMAC 临时凭证已过期，请重新执行 VERIFY KEY 签发新令牌';
+      expiryEl.textContent = 'token expired — verify again to reissue';
       if (countdownTimer) {
         window.clearInterval(countdownTimer);
         countdownTimer = 0;
@@ -402,7 +332,7 @@ export function initBeaconTerminal(doc: Document): () => void {
     }
     const min = Math.floor(remainSec / 60);
     const sec = remainSec % 60;
-    expiryEl.textContent = `SIGNED TOKEN TTL: ${min}m ${String(sec).padStart(2, '0')}s // 私有 R2 直传通道`;
+    expiryEl.textContent = `token ttl: ${min}m ${String(sec).padStart(2, '0')}s (private R2 stream)`;
   }
 
   async function selectDocTab(docId: string) {
@@ -415,7 +345,7 @@ export function initBeaconTerminal(doc: Document): () => void {
       renderMarkdownSafe(docBodyEl, cached);
       return;
     }
-    docBodyEl.replaceChildren(el('p', '', '>> FETCHING PRIVATE R2 DOCUMENT...'));
+    docBodyEl.replaceChildren(el('p', '', 'loading document...'));
     try {
       const res = await fetch(
         `/api/beacon/doc?name=${encodeURIComponent(docId)}&t=${encodeURIComponent(currentToken)}`,
@@ -423,14 +353,14 @@ export function initBeaconTerminal(doc: Document): () => void {
       );
       const data = (await res.json()) as { ok?: boolean; markdown?: string; error?: string };
       if (!res.ok || !data.ok || typeof data.markdown !== 'string') {
-        docBodyEl.replaceChildren(el('p', '', data.error || '文档读取失败，请重新校验口令'));
+        docBodyEl.replaceChildren(el('p', '', data.error || 'failed to load document'));
         return;
       }
       docCache.set(docId, data.markdown);
       renderMarkdownSafe(docBodyEl, data.markdown);
-      appendLog(`<< DECRYPTED MANUAL STREAM: ${docId.toUpperCase()}`, 'ok');
+      appendLog(`loaded doc: ${docId}`, 'ok');
     } catch {
-      docBodyEl.replaceChildren(el('p', '', '网络异常，暂时无法加载在线预览'));
+      docBodyEl.replaceChildren(el('p', '', 'network error while loading document'));
     }
   }
 
@@ -443,17 +373,17 @@ export function initBeaconTerminal(doc: Document): () => void {
     void (async () => {
       const rawKey = (keyInput?.value ?? '').trim();
       if (!agreeBox?.checked) {
-        setMsg(msgEl, '请先勾选下方实验环境与合法学习协议确认。', 'err');
-        appendLog('!! HANDSHAKE ABORTED: PROTOCOL ACK REQUIRED', 'err');
+        setMsg(msgEl, '请先勾选学习与授权实验环境声明。', 'err');
+        appendLog('abort: protocol ack unchecked', 'err');
         return;
       }
       if (!rawKey) {
-        setMsg(msgEl, '请输入四段拼装口令，例如 BEACON-XXXX-XXXX-XXXX-XXXX。', 'err');
+        setMsg(msgEl, '请输入口令：BEACON-XXXX-XXXX-XXXX-XXXX', 'err');
         return;
       }
       if (submitBtn) submitBtn.disabled = true;
-      setMsg(msgEl, '正在与服务端核验四段信标摘要…');
-      appendLog('>> TRANSMITTING 4-SEGMENT DIGEST TO /api/beacon/verify ...', 'gold');
+      setMsg(msgEl, 'verifying...');
+      appendLog('POST /api/beacon/verify ...', 'info');
 
       try {
         const res = await fetch('/api/beacon/verify', {
@@ -465,8 +395,8 @@ export function initBeaconTerminal(doc: Document): () => void {
         if (data.matched) updateSlotPreview(rawKey, data.matched);
 
         if (!res.ok || !data.ok || !data.token) {
-          setMsg(msgEl, data.error || '口令校验未通过。', 'err');
-          appendLog(`!! REJECTED: ${data.error || 'INVALID KEY'}`, 'err');
+          setMsg(msgEl, data.error || '校验失败。', 'err');
+          appendLog(`denied: ${data.error || 'mismatch'}`, 'err');
           return;
         }
 
@@ -477,10 +407,10 @@ export function initBeaconTerminal(doc: Document): () => void {
 
         if (statePill) {
           statePill.dataset.unlocked = 'true';
-          statePill.textContent = 'CARRIER UNLOCKED';
+          statePill.textContent = 'UNLOCKED';
         }
-        setMsg(msgEl, '四段信标全部命中！私有存储流与离线手册在线预览已解锁。', 'ok');
-        appendLog('++ ACCESS GRANTED: ALL 4 SEGMENTS VERIFIED // R2 VAULT ARMED', 'ok');
+        setMsg(msgEl, '校验通过，归档与文档流已解锁。', 'ok');
+        appendLog('ok: 4/4 segments verified — vault unlocked', 'ok');
 
         if (dlLink) {
           dlLink.href = `/api/beacon/download?t=${encodeURIComponent(currentToken)}`;
@@ -495,7 +425,7 @@ export function initBeaconTerminal(doc: Document): () => void {
         if (docTabsEl && Array.isArray(data.docs) && data.docs.length) {
           docTabsEl.replaceChildren();
           data.docs.forEach((d, idx) => {
-            const btn = el('button', 'beacon-tab', d.title);
+            const btn = el('button', 'tty-tab', d.title);
             btn.type = 'button';
             btn.dataset.docId = d.id;
             btn.setAttribute('role', 'tab');
@@ -509,11 +439,11 @@ export function initBeaconTerminal(doc: Document): () => void {
         }
 
         if (claimBtn) claimBtn.disabled = false;
-        setMsg(claimMsg, '现在可以留下匿名代号记入通关者名录（留空也可直接登记）。');
+        setMsg(claimMsg, '可登记匿名代号记入下方名录（留空也可直接登记）。');
         void loadBoard();
       } catch {
-        setMsg(msgEl, '无法连接到校验服务，请稍后再试。', 'err');
-        appendLog('!! UPLINK FAILURE: CANNOT REACH /api/beacon/verify', 'err');
+        setMsg(msgEl, '无法连接校验服务，请稍后再试。', 'err');
+        appendLog('error: verify request failed', 'err');
       } finally {
         if (submitBtn) submitBtn.disabled = false;
       }
@@ -524,11 +454,11 @@ export function initBeaconTerminal(doc: Document): () => void {
     ev.preventDefault();
     void (async () => {
       if (!currentToken) {
-        setMsg(claimMsg, '请先通过信标口令校验。', 'err');
+        setMsg(claimMsg, '请先通过口令校验。', 'err');
         return;
       }
       if (claimBtn) claimBtn.disabled = true;
-      setMsg(claimMsg, '正在写入通关者名录…');
+      setMsg(claimMsg, 'registering...');
       try {
         const res = await fetch('/api/beacon/solvers', {
           method: 'POST',
@@ -549,19 +479,19 @@ export function initBeaconTerminal(doc: Document): () => void {
         if (res.ok && data.ok && data.entry) {
           setMsg(
             claimMsg,
-            `登记完成！你是第 #${String(data.entry.rank).padStart(3, '0')} 位捕获信标的探索者（${data.entry.codename}）。`,
+            `已登记为 #${String(data.entry.rank).padStart(3, '0')}（${data.entry.codename}）。`,
             'ok',
           );
-          appendLog(`++ OPERATOR REGISTERED: #${String(data.entry.rank).padStart(3, '0')} ${data.entry.codename}`, 'ok');
+          appendLog(`registered solver #${String(data.entry.rank).padStart(3, '0')} ${data.entry.codename}`, 'ok');
           if (codenameInput) codenameInput.value = '';
           if (noteInput) noteInput.value = '';
           void loadBoard();
         } else {
-          setMsg(claimMsg, data.error || '登记失败，请稍后重试。', 'err');
+          setMsg(claimMsg, data.error || '登记失败。', 'err');
           if (!data.alreadyClaimed && claimBtn) claimBtn.disabled = false;
         }
       } catch {
-        setMsg(claimMsg, '网络异常，请稍后重试。', 'err');
+        setMsg(claimMsg, '网络异常，请稍后再试。', 'err');
         if (claimBtn) claimBtn.disabled = false;
       }
     })();
@@ -577,4 +507,10 @@ export function initBeaconTerminal(doc: Document): () => void {
   };
 }
 
-onPage(() => initBeaconTerminal(document));
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => initBeaconTerminal(document), { once: true });
+  } else {
+    initBeaconTerminal(document);
+  }
+}

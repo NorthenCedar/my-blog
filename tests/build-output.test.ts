@@ -72,8 +72,11 @@ const htmlFiles = () =>
   (hasDist ? walk(DIST, (n) => n.endsWith('.html')) : []).filter(
     (f) => !DEMO_HTML.test(f.replaceAll('\\', '/')),
   );
-// /write/ 是经批准的原生编辑外壳：公开页面仍完整检查光标、装饰、导航及统计。
-const publicHtmlFiles = () => htmlFiles().filter(f=>f.replaceAll('\\','/')!=='dist/write/index.html');
+// /write/ 与 /beacon/ 是经批准的独立极简外壳：公开站点页面仍完整检查光标、装饰、导航及统计。
+const publicHtmlFiles = () => htmlFiles().filter((f) => {
+  const norm = f.replaceAll('\\', '/');
+  return norm !== 'dist/write/index.html' && norm !== 'dist/beacon/index.html';
+});
 
 /** dist 下全部 CSS 拼成一个字符串（多处断言都要用；名前加 dist 以免和各用例里的局部 cssFiles 混淆） */
 const allDistCss = () =>
