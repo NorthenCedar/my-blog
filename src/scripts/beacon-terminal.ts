@@ -512,7 +512,7 @@ export function initBeaconTerminal(doc: Document): () => void {
     print(RULE, 'dim');
     print('  help                      查看可用命令');
     print('  hint [1|2|3|4]            查看各关工具方向（不剧透答案）');
-    print('  unlock <口令>             校验口令（BEACON-X-X-X-X）');
+    print('  unlock BEACON-X-X-X-X     校验四段口令解锁私有归档');
     print('  solvers                   查看通关者名录与人数');
     print('  clear                     清空终端输出');
     print('  exit                      返回博客首页 (/)');
@@ -618,12 +618,12 @@ export function initBeaconTerminal(doc: Document): () => void {
       return;
     }
 
-    if (cmd === 'unlock' || cmd === 'login' || cmd === 'verify' || looksLikeKey(trimmed)) {
-      const rawArgs = looksLikeKey(trimmed) ? [trimmed] : args;
-      const autoAgree = rawArgs.some((a) => a === '-y' || a === '--agree');
-      const keyArg = rawArgs.find((a) => !a.startsWith('-')) ?? '';
+    if (cmd === 'unlock' || cmd === 'login' || cmd === 'verify') {
+      const autoAgree = args.some((a) => a === '-y' || a === '--agree');
+      const rawKeyArg = args.find((a) => !a.startsWith('-')) ?? '';
+      const keyArg = rawKeyArg.replace(/^[<"'`]+|[>"'`]+$/g, '');
       if (!keyArg) {
-        print('用法：unlock BEACON-碎片1-碎片2-碎片3-碎片4', 'dim');
+        print('用法：unlock BEACON-碎片1-碎片2-碎片3-碎片4（不要加尖括号）', 'dim');
         return;
       }
       if (autoAgree) {
@@ -633,6 +633,11 @@ export function initBeaconTerminal(doc: Document): () => void {
         ps1!.textContent = CONFIRM_PS1;
         print('[!] 确认声明：下载的源码与手册仅用于本人自有设备或明确授权的隔离实验环境学习，不用于任何未授权目标？输入 y 确认。', 'hi');
       }
+      return;
+    }
+
+    if (looksLikeKey(trimmed)) {
+      print(`请加上 unlock 命令再提交：unlock ${trimmed}`, 'dim');
       return;
     }
 
