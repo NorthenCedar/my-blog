@@ -1,4 +1,23 @@
-/* BEACON 独立极简硬核终端：纯黑白底色 + 少量经典 ANSI 终端色，无导航无装饰。 */
+/* BEACON 独立极简硬核终端：纯黑白底色 + 少量经典 ANSI 终端色，无导航无装饰。
+   不导入共享 fonts.css，避免改变主站 CSS chunk 拆分顺序；自托管字体直接在此声明。 */
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/fonts/plex-mono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("/fonts/plex-sans-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("/fonts/plex-sans-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
 :root {
   color-scheme: only dark;
   --tty-bg: #080808;
