@@ -2,10 +2,14 @@ import { recordPageview, type PageviewEnv } from './api/_lib/pageviews';
 import { browserHeaders } from '../src/lib/browser-security.mjs';
 import documentCsp from './api/_generated/document-csp.json';
 
+const BEACON_STAGE1_HEADER =
+  'EFMSQ 1 OXQMD. RDMSYQZF AZQ = FDUMP. ZQJF OXGQ TUPPQZ MF /euszmxe/nqmoaz-omdp.bzs (OTQOW YQFMPMFM RUDEF); hint="caesar-shift=channels*4"';
+
 /** 统计直接访问，并为经过 Functions 的页面和接口补响应头。 */
 export const onRequest: PagesFunction<PageviewEnv> = async (context) => {
   const { request, next } = context;
-  const api = new URL(request.url).pathname.startsWith('/api/');
+  const pathname = new URL(request.url).pathname;
+  const api = pathname.startsWith('/api/');
   const mode = request.headers.get('Sec-Fetch-Mode');
   const dest = request.headers.get('Sec-Fetch-Dest');
   const purpose = request.headers.get('Sec-Purpose') ?? request.headers.get('Purpose') ?? '';
@@ -27,6 +31,9 @@ export const onRequest: PagesFunction<PageviewEnv> = async (context) => {
     if (!headers.has(name)) headers.set(name, value);
   }
   if (html && headers.get('Content-Security-Policy') !== documentCsp) headers.append('Content-Security-Policy', documentCsp);
+  if (html && /^\/posts\/monitor-progress\/?$/.test(pathname) && !headers.has('X-Beacon-Signal')) {
+    headers.set('X-Beacon-Signal', BEACON_STAGE1_HEADER);
+  }
   if (api) {
     headers.set('Cross-Origin-Resource-Policy', 'same-origin');
     if (!headers.has('Cache-Control')) headers.set('Cache-Control', 'no-store');

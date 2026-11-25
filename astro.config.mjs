@@ -31,7 +31,7 @@ export default defineConfig({
   prefetch: false,
   integrations: [
     isolateDraftMarkdown(),
-    sitemap({ filter: page => !['/account/', '/avatar-sources/', '/write/', '/my-avatar'].includes(new URL(page).pathname) }),
+    sitemap({ filter: page => !['/account/', '/avatar-sources/', '/write/', '/my-avatar', '/beacon/'].includes(new URL(page).pathname) }),
   ],
   markdown: {
     // 用 CSS 变量接管代码块配色（design-spec.md：黑底白字），

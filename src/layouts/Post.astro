@@ -88,6 +88,11 @@ const shareCover = !entry.data.draft && entry.data.cover ? `/post-covers/${meta.
       )}
     </aside>
     <div class="prose"><Content /></div>
+    {meta.slug === 'monitor-progress' && (
+      <Fragment
+        set:html={`<!--\n[BEACON // STAGE 1]\nCIPHER (CAESAR): EFMSQ 1 OXQMD. RDMSYQZF AZQ = FDUMP. ZQJF OXGQ TUPPQZ MF /euszmxe/nqmoaz-omdp.bzs (OTQOW YQFMPMFM RUDEF)\nHINT: 偏移量 = 本文第五节提到的「独立通道」数量 × 4（向前逆推即可还原，例如 CyberChef 的 Caesar / ROT13 解码）\n-->`}
+      />
+    )}
   </article>
 
   <nav class="adj" aria-label="相邻文章">

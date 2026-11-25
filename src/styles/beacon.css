@@ -1,0 +1,548 @@
+/* 隐藏信标解密终端（/beacon/）：遵循全站亮/暗 token，零硬编码暗色覆盖。 */
+.beacon-wrap {
+  max-width: min(980px, 100%);
+  margin: 0 auto;
+  padding: var(--sp-5) 0 var(--sp-8);
+  display: grid;
+  gap: var(--sp-5);
+}
+
+.beacon-head {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.beacon-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+
+.beacon-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.beacon-head h1 {
+  margin: 0;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: clamp(2rem, 4.4vw, 3.1rem);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+
+.beacon-sub {
+  margin: 0;
+  max-width: 64ch;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+}
+
+.beacon-card {
+  position: relative;
+  border: 1px solid var(--hair);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  padding: clamp(1.1rem, 2.5vw, 1.8rem);
+  display: grid;
+  gap: var(--sp-4);
+  box-shadow: 0 18px 42px -28px rgba(0, 0, 0, 0.28);
+}
+
+.beacon-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px dashed var(--hair);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+
+.beacon-state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.22rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  background: color-mix(in srgb, var(--paper) 65%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.beacon-state-pill[data-unlocked="true"] {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.beacon-slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.beacon-slot {
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  background: color-mix(in srgb, var(--paper) 68%, transparent);
+  display: grid;
+  gap: 0.2rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.beacon-slot-idx {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.beacon-slot-val {
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.beacon-slot[data-status="ok"] {
+  border-color: #16a34a;
+  background: color-mix(in srgb, #16a34a 12%, var(--paper));
+}
+
+.beacon-slot[data-status="ok"] .beacon-slot-idx {
+  color: #15803d;
+}
+
+.beacon-slot[data-status="err"] {
+  border-color: #dc2626;
+  background: color-mix(in srgb, #dc2626 11%, var(--paper));
+}
+
+.beacon-slot[data-status="err"] .beacon-slot-idx {
+  color: #dc2626;
+}
+
+.beacon-form {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.beacon-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.beacon-input {
+  flex: 1 1 280px;
+  min-width: 0;
+  padding: 0.78rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--hair);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.96rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.beacon-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.beacon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.74rem 1.25rem;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.beacon-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  opacity: 0.94;
+}
+
+.beacon-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.beacon-btn--ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--hair);
+}
+
+.beacon-btn--ghost:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.beacon-agree {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.beacon-agree input {
+  margin-top: 0.22rem;
+  accent-color: var(--accent);
+}
+
+.beacon-msg {
+  min-height: 1.4em;
+  margin: 0;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+
+.beacon-msg[data-tone="ok"] {
+  color: #15803d;
+}
+
+.beacon-msg[data-tone="err"] {
+  color: #dc2626;
+}
+
+/* 卡关提示抽屉 */
+.beacon-hints {
+  border-top: 1px dashed var(--hair);
+  padding-top: var(--sp-3);
+}
+
+.beacon-hints summary {
+  cursor: pointer;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.beacon-hints summary::before {
+  content: "+";
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  font-weight: 600;
+}
+
+.beacon-hints[open] summary::before {
+  content: "−";
+}
+
+.beacon-hint-grid {
+  margin-top: var(--sp-3);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.75rem;
+}
+
+.beacon-hint-item {
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+  background: color-mix(in srgb, var(--paper) 62%, transparent);
+  font-size: var(--fs-xs);
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.beacon-hint-item strong {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  color: var(--ink);
+}
+
+/* 解锁后的下载 + 文档预览 + 留名区域 */
+.beacon-vault[hidden] {
+  display: none;
+}
+
+.beacon-vault-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--hair));
+  background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+}
+
+.beacon-vault-meta {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.beacon-vault-meta strong {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.beacon-vault-meta span {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+
+.beacon-doc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--hair);
+  padding-bottom: 0.65rem;
+}
+
+.beacon-tab {
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.beacon-tab[aria-selected="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent-ink);
+}
+
+.beacon-doc-body {
+  max-height: 560px;
+  overflow: auto;
+  padding: 1rem 1.15rem;
+  border-radius: 14px;
+  border: 1px solid var(--hair);
+  background: var(--paper);
+  font-size: var(--fs-sm);
+  line-height: 1.72;
+  color: var(--ink);
+}
+
+.beacon-doc-body h1,
+.beacon-doc-body h2,
+.beacon-doc-body h3,
+.beacon-doc-body h4 {
+  margin: 1.25em 0 0.5em;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.beacon-doc-body h1:first-child,
+.beacon-doc-body h2:first-child {
+  margin-top: 0;
+}
+
+.beacon-doc-body p {
+  margin: 0.65em 0;
+}
+
+.beacon-doc-body pre {
+  margin: 0.85em 0;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--hair);
+  background: #111514;
+  color: #eef4f0;
+  overflow-x: auto;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.beacon-doc-body code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.86em;
+  padding: 0.12em 0.35em;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--hair) 45%, transparent);
+}
+
+.beacon-doc-body pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.beacon-doc-body blockquote {
+  margin: 0.75em 0;
+  padding: 0.35rem 0.9rem;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+}
+
+.beacon-doc-body ul,
+.beacon-doc-body ol {
+  margin: 0.6em 0;
+  padding-left: 1.4rem;
+}
+
+.beacon-doc-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.85em 0;
+  font-size: var(--fs-xs);
+}
+
+.beacon-doc-body th,
+.beacon-doc-body td {
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--hair);
+  text-align: left;
+  vertical-align: top;
+}
+
+.beacon-doc-body th {
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  font-weight: 600;
+}
+
+/* 匿名留名表单 + 通关榜 */
+.beacon-claim {
+  display: grid;
+  gap: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px dashed var(--hair);
+}
+
+.beacon-claim-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 240px) 1fr auto;
+  gap: 0.65rem;
+}
+
+.beacon-field {
+  min-width: 0;
+  padding: 0.62rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--hair);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  outline: none;
+}
+
+.beacon-field:focus {
+  border-color: var(--accent);
+}
+
+.beacon-board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.beacon-board-head h2 {
+  margin: 0;
+  font-size: 1.08rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.beacon-board-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.beacon-board-row {
+  display: grid;
+  grid-template-columns: auto minmax(90px, auto) 1fr auto;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.58rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--hair);
+  background: color-mix(in srgb, var(--paper) 70%, transparent);
+  font-size: var(--fs-xs);
+}
+
+.beacon-rank {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-weight: 700;
+  color: var(--accent-ink);
+}
+
+.beacon-codename {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.beacon-note {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.beacon-time {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .beacon-slots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .beacon-claim-row {
+    grid-template-columns: 1fr;
+  }
+  .beacon-board-row {
+    grid-template-columns: auto 1fr;
+  }
+  .beacon-note,
+  .beacon-time {
+    grid-column: 1 / -1;
+  }
+}

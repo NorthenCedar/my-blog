@@ -20,3 +20,9 @@ pages_build_output_dir = "dist"
 binding = "COMMENTS_DB"
 database_name = "beishan-comments"
 database_id = "f45ae1cc-793e-4c5b-b821-149486990db5"
+
+# 私有 R2 桶（无公网域名）：存放 BEACON 解谜通关后的学习压缩包与两份离线说明文档。
+# 仅由服务端 /api/beacon/* 在校验一次性签名令牌后流式读取，桶内对象绝不进 Git 仓库。
+[[r2_buckets]]
+binding = "BEACON_VAULT"
+bucket_name = "beishan-vault"
