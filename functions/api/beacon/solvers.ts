@@ -16,6 +16,7 @@ import {
 } from '../_lib/public-write';
 import { hashIp } from '../_lib/reactions-core';
 import { AccountError } from '../_lib/visitor-core';
+import { currentAccount } from '../_lib/visitor-store';
 
 type SolverRow = {
   id: number;
@@ -75,6 +76,17 @@ export const onRequestPost: PagesFunction<BeaconEnv> = async ({ request, env }) 
     const tokenCheck = await verifyUnlockToken(payload.token, signingKey);
     if (!tokenCheck.ok) return beaconJson({ error: tokenCheck.error }, 403);
 
+    // 站主账号不占用访客通关名额
+    let account = null;
+    try {
+      account = await currentAccount(request, env);
+    } catch {
+      account = null;
+    }
+    if (account && env.OWNER_USER_ID && account.id === env.OWNER_USER_ID) {
+      return beaconJson({ ok: false, error: '站主账号不计入通关名录，不会占用访客排名' }, 403);
+    }
+
     const claimCheck = validateSolverClaim(payload);
     if (!claimCheck.ok) return beaconJson({ error: claimCheck.error }, 400);
 
@@ -84,20 +96,31 @@ export const onRequestPost: PagesFunction<BeaconEnv> = async ({ request, env }) 
       writeLimitStatements(env, 'beacon:claim:ip', ipHash, BEACON_CLAIM_RATE_MAX, Date.now()),
     );
     if (!limits[1].results?.length) {
-      return beaconJson({ error: '登记过于频繁，请稍后再试' }, 429);
+      return beaconJson({ error: '操作过于频繁，请稍后再试' }, 429);
     }
 
     const solvedAt = new Date().toISOString();
     const { codename, note } = claimCheck.value;
+    const keepName = payload.keepCodename === true;
 
-    const runInsert = async () => {
+    const runUpsert = async () => {
       const existing = await env.COMMENTS_DB.prepare(
         'SELECT id, codename, note, solved_at FROM beacon_solvers WHERE token_nonce = ? LIMIT 1',
       )
         .bind(tokenCheck.nonce)
         .first<SolverRow>();
+
       if (existing) {
-        return { duplicate: true as const, row: existing };
+        const nextName = keepName ? existing.codename : codename;
+        const updated = await env.COMMENTS_DB.prepare(
+          `UPDATE beacon_solvers
+              SET codename = ?, note = ?
+            WHERE token_nonce = ?
+        RETURNING id, codename, note, solved_at`,
+        )
+          .bind(nextName, note, tokenCheck.nonce)
+          .first<SolverRow>();
+        return { updated: true as const, row: updated };
       }
 
       const inserted = await env.COMMENTS_DB.prepare(
@@ -107,27 +130,16 @@ export const onRequestPost: PagesFunction<BeaconEnv> = async ({ request, env }) 
       )
         .bind(tokenCheck.nonce, codename, note, solvedAt)
         .first<SolverRow>();
-      return { duplicate: false as const, row: inserted };
+      return { updated: false as const, row: inserted };
     };
 
     let outcome;
     try {
-      outcome = await runInsert();
+      outcome = await runUpsert();
     } catch (error) {
       if (noSuchTable(error)) {
         await ensureBeaconSolversTable(env.COMMENTS_DB);
-        outcome = await runInsert();
-      } else if (/UNIQUE constraint failed:\s*beacon_solvers\.token_nonce/i.test(String(error))) {
-        const existing = await env.COMMENTS_DB.prepare(
-          'SELECT id, codename, note, solved_at FROM beacon_solvers WHERE token_nonce = ? LIMIT 1',
-        )
-          .bind(tokenCheck.nonce)
-          .first<SolverRow>();
-        if (existing) {
-          outcome = { duplicate: true as const, row: existing };
-        } else {
-          throw error;
-        }
+        outcome = await runUpsert();
       } else {
         throw error;
       }
@@ -138,26 +150,14 @@ export const onRequestPost: PagesFunction<BeaconEnv> = async ({ request, env }) 
       'SELECT COUNT(*) AS total FROM beacon_solvers',
     ).first<{ total: number }>();
 
-    if (outcome.duplicate) {
-      return beaconJson(
-        {
-          ok: false,
-          alreadyClaimed: true,
-          error: `本次解锁凭证已登记为第 ${outcome.row.id} 位通关者`,
-          entry: toPublicSolver(outcome.row),
-          total: Number(countRow?.total ?? 0),
-        },
-        409,
-      );
-    }
-
     return beaconJson(
       {
         ok: true,
+        updated: outcome.updated,
         entry: toPublicSolver(outcome.row),
         total: Number(countRow?.total ?? 0),
       },
-      201,
+      outcome.updated ? 200 : 201,
     );
   } catch (error) {
     if (error instanceof AccountError) return beaconJson({ error: error.message }, error.status);

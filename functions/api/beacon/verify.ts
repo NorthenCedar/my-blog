@@ -3,15 +3,27 @@ import {
   BEACON_DOCS,
   BEACON_VERIFY_RATE_MAX,
   beaconJson,
+  ensureBeaconSolversTable,
   parseBeaconKey,
   parseStoredHashes,
   signUnlockToken,
+  validateSolverClaim,
   verifyBeaconKey,
   type BeaconEnv,
 } from '../_lib/beacon';
 import { guardPublicWrite, readJsonBody, writeLimitStatements } from '../_lib/public-write';
 import { hashIp } from '../_lib/reactions-core';
 import { AccountError } from '../_lib/visitor-core';
+import { currentAccount } from '../_lib/visitor-store';
+
+type SolverRow = {
+  id: number;
+  codename: string;
+  note: string;
+  solved_at: string;
+};
+
+const noSuchTable = (error: unknown) => /no such table:\s*beacon_solvers\b/i.test(String(error));
 
 export const onRequestPost: PagesFunction<BeaconEnv> = async ({ request, env }) => {
   try {
@@ -67,7 +79,63 @@ export const onRequestPost: PagesFunction<BeaconEnv> = async ({ request, env }) 
       );
     }
 
-    const { token, expiresAt } = await signUnlockToken(signingKey);
+    // 识别当前登录身份：站主账号测试不计入通关名录，普通访客/读者解锁即自动计入排名
+    let account = null;
+    try {
+      account = await currentAccount(request, env);
+    } catch {
+      account = null;
+    }
+    const isOwner = Boolean(account && env.OWNER_USER_ID && account.id === env.OWNER_USER_ID);
+    const { token, expiresAt, nonce } = await signUnlockToken(signingKey);
+
+    let rank: number | null = null;
+    let codename = '匿名信号';
+    let total = 0;
+
+    if (isOwner) {
+      try {
+        const row = await env.COMMENTS_DB.prepare('SELECT COUNT(*) AS total FROM beacon_solvers').first<{ total: number }>();
+        total = Number(row?.total ?? 0);
+      } catch (error) {
+        if (!noSuchTable(error)) throw error;
+      }
+    } else {
+      const fallbackName = account?.nickname?.trim() ?? '';
+      const checkedName = validateSolverClaim({ codename: fallbackName, note: '' });
+      codename = checkedName.ok ? checkedName.value.codename : '匿名信号';
+      const solvedAt = new Date().toISOString();
+
+      const insertSolver = async () => {
+        const inserted = await env.COMMENTS_DB.prepare(
+          `INSERT INTO beacon_solvers (token_nonce, codename, note, solved_at)
+           VALUES (?, ?, '', ?)
+           RETURNING id, codename, note, solved_at`,
+        )
+          .bind(nonce, codename, solvedAt)
+          .first<SolverRow>();
+        const countRow = await env.COMMENTS_DB.prepare('SELECT COUNT(*) AS total FROM beacon_solvers').first<{ total: number }>();
+        return { inserted, total: Number(countRow?.total ?? 0) };
+      };
+
+      try {
+        const resInsert = await insertSolver();
+        rank = resInsert.inserted?.id ?? null;
+        codename = resInsert.inserted?.codename ?? codename;
+        total = resInsert.total;
+      } catch (error) {
+        if (noSuchTable(error)) {
+          await ensureBeaconSolversTable(env.COMMENTS_DB);
+          const resInsert = await insertSolver();
+          rank = resInsert.inserted?.id ?? null;
+          codename = resInsert.inserted?.codename ?? codename;
+          total = resInsert.total;
+        } else {
+          throw error;
+        }
+      }
+    }
+
     return beaconJson({
       ok: true,
       matched: [true, true, true, true],
@@ -75,6 +143,10 @@ export const onRequestPost: PagesFunction<BeaconEnv> = async ({ request, env }) 
       expiresAt,
       bundleName: BEACON_BUNDLE_FILENAME,
       docs: Object.values(BEACON_DOCS).map(({ id, title }) => ({ id, title })),
+      isOwner,
+      rank,
+      codename,
+      total,
     });
   } catch (error) {
     if (error instanceof AccountError) return beaconJson({ ok: false, error: error.message }, error.status);

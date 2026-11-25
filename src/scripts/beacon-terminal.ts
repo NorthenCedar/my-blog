@@ -5,6 +5,10 @@ interface VerifyResponse {
   expiresAt?: number;
   bundleName?: string;
   docs?: Array<{ id: string; title: string }>;
+  isOwner?: boolean;
+  rank?: number | null;
+  codename?: string;
+  total?: number;
   error?: string;
 }
 
@@ -346,6 +350,14 @@ export function initBeaconTerminal(doc: Document): () => void {
       root!.dataset.unlocked = 'true';
 
       print(`[OK] 校验通过，私有归档已解锁（凭证有效期 ${remainText()}）。`, 'hi');
+      if (data.isOwner) {
+        print('[OWNER] 检测到站主登录：本次测试不计入通关名录，不会占用访客排名。', 'dim');
+      } else if (typeof data.rank === 'number') {
+        print(
+          `[RANK] 你是第 #${String(data.rank).padStart(3, '0')} 位解开信标的探索者（当前名录代号：${data.codename || '匿名信号'}）。`,
+          'hi',
+        );
+      }
       print(RULE, 'dim');
       print('  beacon-framework-bundle.zip    完整学习包（源码包 + 两份手册）');
       print('  beacon-framework-README.md     框架总览与部署说明');
@@ -354,8 +366,11 @@ export function initBeaconTerminal(doc: Document): () => void {
       printClickableHint('  输入或点击 ', 'download', '           一键下载完整学习包 (.zip)');
       printClickableHint('  输入或点击 ', 'cat readme', '         在终端直接阅读 README');
       printClickableHint('  输入或点击 ', 'cat deploy', '         在终端直接阅读本机单机部署手册');
-      printClickableHint('  输入或点击 ', 'solvers', '            查看当前通关名录');
-      print('  输入 "register <代号> [留语]" 登记你的通关序号（也可直接输入 "register" 匿名登记）', 'dim');
+      printClickableHint('  输入或点击 ', 'solvers', '            查看通关者名录与留言');
+      if (!data.isOwner) {
+        print('  输入 "register <代号> [留言]" 修改你的代号并写下通关留言', 'dim');
+        print('  输入 "say <留言>" 保持当前代号，直接留下一句通关留言', 'dim');
+      }
       print(RULE, 'dim');
     } catch {
       print('[ERROR] 无法连接到 /api/beacon/verify，请稍后重试。', 'hi');
@@ -384,8 +399,12 @@ export function initBeaconTerminal(doc: Document): () => void {
         for (const item of items) {
           const rank = `#${String(item.rank).padStart(3, '0')}`;
           const when = formatDate(item.solvedAt);
-          const note = item.note ? `  // ${item.note}` : '';
-          print(`  ${rank}  ${item.codename}  [${when}]${note}`, item.rank === 1 ? 'hi' : '');
+          print(`  ${rank}  ${item.codename}   [${when}]`, item.rank === 1 ? 'hi' : '');
+          if (item.note) {
+            print(`        > ${item.note}`);
+          } else {
+            print('        (未留言)', 'dim');
+          }
         }
       }
       print(RULE, 'dim');
@@ -396,9 +415,9 @@ export function initBeaconTerminal(doc: Document): () => void {
     }
   }
 
-  async function doRegister(codename: string, note: string) {
+  async function doRegister(codename: string, note: string, keepCodename = false) {
     if (!tokenValid()) {
-      print('[LOCKED] 请先使用 "unlock <口令>" 解锁后再登记通关序号。', 'hi');
+      print('[LOCKED] 请先使用 "unlock 口令" 解锁后再修改代号或留言。', 'hi');
       return;
     }
     busy = true;
@@ -406,24 +425,26 @@ export function initBeaconTerminal(doc: Document): () => void {
       const res = await fetch('/api/beacon/solvers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-NC-Request': '1' },
-        body: JSON.stringify({ token: currentToken, codename, note }),
+        body: JSON.stringify({ token: currentToken, codename, note, keepCodename }),
       });
       const data = (await res.json()) as {
         ok?: boolean;
+        updated?: boolean;
         entry?: SolverEntry;
         total?: number;
         error?: string;
       };
       if (res.ok && data.ok && data.entry) {
+        const msgPart = data.entry.note ? `，留言：「${data.entry.note}」` : '';
         print(
-          `[OK] 登记成功：你是第 #${String(data.entry.rank).padStart(3, '0')} 位通关者（代号：${data.entry.codename}）。`,
+          `[OK] 已更新第 #${String(data.entry.rank).padStart(3, '0')} 位通关记录（代号：${data.entry.codename}${msgPart}）。输入 "solvers" 可查看。`,
           'hi',
         );
       } else {
         print(`[DENIED] ${data.error || '登记失败'}`, 'hi');
       }
     } catch {
-      print('[ERROR] 网络异常，暂时无法登记。', 'hi');
+      print('[ERROR] 网络异常，暂时无法保存。', 'hi');
     } finally {
       busy = false;
     }
@@ -522,7 +543,8 @@ export function initBeaconTerminal(doc: Document): () => void {
     print('  download                  一键下载完整学习包 (.zip)');
     print('  cat readme                终端直接阅读 beacon-framework-README.md');
     print('  cat deploy                终端直接阅读 本机单机部署.md');
-    print('  register [代号] [留语]    匿名登记通关序号（代号可留空）');
+    print('  register <代号> [留言]    修改通关代号并留下留言');
+    print('  say <留言>                保持当前代号，直接写一句通关留言');
     print(RULE, 'dim');
   }
 
@@ -614,7 +636,17 @@ export function initBeaconTerminal(doc: Document): () => void {
     if (cmd === 'register' || cmd === 'claim') {
       const codename = args[0] ?? '';
       const note = args.slice(1).join(' ');
-      await doRegister(codename, note);
+      await doRegister(codename, note, false);
+      return;
+    }
+
+    if (cmd === 'say' || cmd === 'note' || cmd === 'msg') {
+      const note = args.join(' ').trim();
+      if (!note) {
+        print('用法：say 你的通关留言（最多 80 字）', 'dim');
+        return;
+      }
+      await doRegister('', note, true);
       return;
     }
 
@@ -675,7 +707,7 @@ export function initBeaconTerminal(doc: Document): () => void {
       syncIdleCursor();
     } else if (ke.key === 'Tab') {
       const v = input.value.trim().toLowerCase();
-      const cmds = ['help', 'hint', 'unlock ', 'solvers', 'ls', 'download', 'cat readme', 'cat deploy', 'register ', 'clear', 'exit'];
+      const cmds = ['help', 'hint', 'unlock ', 'solvers', 'ls', 'download', 'cat readme', 'cat deploy', 'register ', 'say ', 'clear', 'exit'];
       const hit = v ? cmds.find((c) => c.startsWith(v)) : undefined;
       if (hit) {
         ke.preventDefault();
@@ -700,7 +732,8 @@ export function initBeaconTerminal(doc: Document): () => void {
       const data = (await res.json()) as SolversResponse;
       if (res.ok && typeof data.total === 'number') {
         printSpacer();
-        print(`status: locked  |  solvers: ${data.total}`, 'dim');
+        const suffix = data.total > 0 ? '  （输入 "solvers" 查看名录与留言）' : '';
+        print(`status: locked  |  solvers: ${data.total}${suffix}`, 'dim');
       }
     } catch {
       // ignore offline

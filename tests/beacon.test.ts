@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -78,14 +78,21 @@ function setupBeaconEnv(withTable = true) {
     [BEACON_DOCS['local-deploy'].key]: '# 单机部署\n\n| 项 | 值 |\n| --- | --- |\n| 端口 | 4444 |',
   });
 
+  const ownerToken = 'e'.repeat(64);
+  sqlite.prepare('INSERT INTO visitor_accounts(id,username,nickname,password_hash,recovery_hash,created_at) VALUES(?,?,?,?,?,?)')
+    .run('owner-id', 'owner', '北杉', 'pw', 'rc', '2026-11-25');
+  sqlite.prepare('INSERT INTO visitor_sessions(token_hash,user_id,auth_version,expires_at) VALUES(?,?,0,?)')
+    .run(createHash('sha256').update(ownerToken).digest('hex'), 'owner-id', Date.now() + 86_400_000);
+
   const env: BeaconEnv = {
     COMMENTS_DB: db,
+    OWNER_USER_ID: 'owner-id',
     BEACON_VAULT: vault,
     BEACON_SIGNING_KEY: TEST_SIGNING_KEY,
     BEACON_HASHES: TEST_HASHES,
   };
 
-  const jsonReq = (path: string, body: unknown, ip = '198.51.100.10') =>
+  const jsonReq = (path: string, body: unknown, ip = '198.51.100.10', extraHeaders: Record<string, string> = {}) =>
     new Request(`https://northcedar.top${path}`, {
       method: 'POST',
       headers: {
@@ -93,6 +100,7 @@ function setupBeaconEnv(withTable = true) {
         Origin: 'https://northcedar.top',
         'X-NC-Request': '1',
         'CF-Connecting-IP': ip,
+        ...extraHeaders,
       },
       body: JSON.stringify(body),
     });
@@ -103,7 +111,7 @@ function setupBeaconEnv(withTable = true) {
       headers: { Origin: 'https://northcedar.top' },
     });
 
-  return { env, fakeZip, jsonReq, getReq };
+  return { env, fakeZip, jsonReq, getReq, ownerToken };
 }
 
 describe('BEACON 解谜后端校验、R2 流式下载、文档预览与通关榜', () => {
@@ -203,54 +211,94 @@ describe('BEACON 解谜后端校验、R2 流式下载、文档预览与通关榜
     expect(badName.status).toBe(400);
   });
 
-  it('通关信号榜：按次序登记、默认匿名代号、同一令牌防重复刷榜、拒绝非法脚本内容', async () => {
-    const { env, jsonReq, getReq } = setupBeaconEnv(false); // 顺带测试自动建表兜底
+  it('通关信号榜（方案 A）：访客解锁自动计入排名、同令牌原位改名与留言不重复计数、站主测试不占排名', async () => {
+    const { env, jsonReq, getReq, ownerToken } = setupBeaconEnv(false); // 顺带测试自动建表兜底
     const initBoard = await solversGet({ request: getReq('/api/beacon/solvers'), env } as never);
     expect(initBoard.status).toBe(200);
     expect(await initBoard.json()).toEqual({ total: 0, items: [] });
 
-    const { token: tok1 } = await signUnlockToken(TEST_SIGNING_KEY);
+    // 1. 站主账号解锁：允许下载预览，但 isOwner=true 且不计入排名
+    const ownerVerify = await verifyPost({
+      request: jsonReq('/api/beacon/verify', { key: TEST_MASTER, agreed: true }, '198.51.100.5', {
+        Cookie: `__Host-nc_session=${ownerToken}`,
+      }),
+      env,
+    } as never);
+    expect(ownerVerify.status).toBe(200);
+    const ownerData = (await ownerVerify.json()) as { ok: boolean; isOwner: boolean; rank: number | null; total: number; token: string };
+    expect(ownerData.ok).toBe(true);
+    expect(ownerData.isOwner).toBe(true);
+    expect(ownerData.rank).toBeNull();
+    expect(ownerData.total).toBe(0);
+
+    // 站主调用 register 也被礼貌拒绝，不占用访客排名
+    const ownerClaim = await solversPost({
+      request: jsonReq('/api/beacon/solvers', { token: ownerData.token, codename: '站主', note: 'test' }, '198.51.100.5', {
+        Cookie: `__Host-nc_session=${ownerToken}`,
+      }),
+      env,
+    } as never);
+    expect(ownerClaim.status).toBe(403);
+
+    // 2. 普通访客解锁：自动计入 #1（默认“匿名信号”）
+    const v1 = await verifyPost({
+      request: jsonReq('/api/beacon/verify', { key: TEST_MASTER, agreed: true }, '198.51.100.10'),
+      env,
+    } as never);
+    expect(v1.status).toBe(200);
+    const v1Data = (await v1.json()) as { isOwner: boolean; rank: number; codename: string; total: number; token: string };
+    expect(v1Data.isOwner).toBe(false);
+    expect(v1Data.rank).toBe(1);
+    expect(v1Data.codename).toBe('匿名信号');
+    expect(v1Data.total).toBe(1);
+
+    // 拒绝非法脚本内容
     const badName = await solversPost({
-      request: jsonReq('/api/beacon/solvers', { token: tok1, codename: '<img onerror=1>', note: 'hi' }),
+      request: jsonReq('/api/beacon/solvers', { token: v1Data.token, codename: '<img onerror=1>', note: 'hi' }),
       env,
     } as never);
     expect(badName.status).toBe(400);
 
+    // 同一解锁令牌修改代号并留言：原位更新 #1，总数仍为 1（绝不重复刷榜）
     const claim1 = await solversPost({
-      request: jsonReq('/api/beacon/solvers', { token: tok1, codename: 'GhostOwl', note: '频谱图很好玩' }),
+      request: jsonReq('/api/beacon/solvers', { token: v1Data.token, codename: 'GhostOwl', note: '频谱图很好玩' }),
       env,
     } as never);
-    expect(claim1.status).toBe(201);
-    const claim1Data = (await claim1.json()) as { ok: boolean; entry: { rank: number; codename: string }; total: number };
+    expect(claim1.status).toBe(200);
+    const claim1Data = (await claim1.json()) as { ok: boolean; updated: boolean; entry: { rank: number; codename: string; note: string }; total: number };
     expect(claim1Data.ok).toBe(true);
+    expect(claim1Data.updated).toBe(true);
     expect(claim1Data.entry.rank).toBe(1);
     expect(claim1Data.entry.codename).toBe('GhostOwl');
+    expect(claim1Data.entry.note).toBe('频谱图很好玩');
     expect(claim1Data.total).toBe(1);
 
-    // 同一解锁令牌重复提交返回 409
-    const dup = await solversPost({
-      request: jsonReq('/api/beacon/solvers', { token: tok1, codename: 'SecondTry' }),
+    // keepCodename=true（对应终端 say 命令）：保留 GhostOwl，只更新留言
+    const say1 = await solversPost({
+      request: jsonReq('/api/beacon/solvers', { token: v1Data.token, codename: '', note: '四关全都解开了！', keepCodename: true }),
       env,
     } as never);
-    expect(dup.status).toBe(409);
+    expect(say1.status).toBe(200);
+    const say1Data = (await say1.json()) as { entry: { rank: number; codename: string; note: string }; total: number };
+    expect(say1Data.entry.codename).toBe('GhostOwl');
+    expect(say1Data.entry.note).toBe('四关全都解开了！');
+    expect(say1Data.total).toBe(1);
 
-    // 第二位留空代号使用默认“匿名信号”
-    const { token: tok2 } = await signUnlockToken(TEST_SIGNING_KEY);
-    const claim2 = await solversPost({
-      request: jsonReq('/api/beacon/solvers', { token: tok2, codename: '   ', note: '' }, '198.51.100.11'),
+    // 第二位访客解锁自动计入 #2
+    const v2 = await verifyPost({
+      request: jsonReq('/api/beacon/verify', { key: TEST_MASTER, agreed: true }, '198.51.100.11'),
       env,
     } as never);
-    expect(claim2.status).toBe(201);
-    const claim2Data = (await claim2.json()) as { entry: { rank: number; codename: string }; total: number };
-    expect(claim2Data.entry.rank).toBe(2);
-    expect(claim2Data.entry.codename).toBe('匿名信号');
-    expect(claim2Data.total).toBe(2);
+    const v2Data = (await v2.json()) as { rank: number; codename: string; total: number };
+    expect(v2Data.rank).toBe(2);
+    expect(v2Data.codename).toBe('匿名信号');
+    expect(v2Data.total).toBe(2);
 
     const boardAfter = await solversGet({ request: getReq('/api/beacon/solvers'), env } as never);
-    const boardJson = (await boardAfter.json()) as { total: number; items: Array<{ rank: number; codename: string }> };
+    const boardJson = (await boardAfter.json()) as { total: number; items: Array<{ rank: number; codename: string; note: string }> };
     expect(boardJson.total).toBe(2);
     expect(boardJson.items[0].rank).toBe(2);
-    expect(boardJson.items[1].rank).toBe(1);
+    expect(boardJson.items[1]).toMatchObject({ rank: 1, codename: 'GhostOwl', note: '四关全都解开了！' });
   });
 
   it('校验接口内置单 IP 限流，连续爆破被 429 拦截', async () => {
