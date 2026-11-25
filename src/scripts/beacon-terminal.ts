@@ -276,7 +276,7 @@ export function initBeaconTerminal(doc: Document): () => void {
 
   function printCmdLine(promptText: string, cmdText: string) {
     const p = el('p', 'term-line');
-    p.append(el('span', 'term-hi', `${promptText} `), document.createTextNode(cmdText));
+    p.append(el('span', 'term-ps1', `${promptText} `), document.createTextNode(cmdText));
     out!.append(p);
   }
 

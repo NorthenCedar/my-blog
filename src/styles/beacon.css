@@ -130,8 +130,8 @@ body {
 }
 
 .term-ps1 {
-  color: var(--t-hi);
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.28);
+  color: #39ff5a;
+  text-shadow: 0 0 10px rgba(57, 255, 90, 0.48);
   white-space: nowrap;
   user-select: none;
   flex: 0 0 auto;
