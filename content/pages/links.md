@@ -37,7 +37,7 @@ groups:
         desc: UpXuu 的个人博客
       - name: 三段荒の窝
         href: https://sanduanhuang.dpdns.org/
-        avatar: https://favicon.im/sanduanhuang.dpdns.org
+        avatar: /avatars/friends/sanduanhuang-0a42ba5cf4.webp
         desc: 业余开发者,独立游戏作者
   - title: 本站入口
     note: 我自己的几个门

@@ -44,7 +44,7 @@ onPage(({ document, window }) => {
     img.src = target;
   };
   for (const img of document.querySelectorAll<HTMLImageElement>('img[data-avatar-fallback]')) {
-    if (img.complete && img.naturalWidth === 0) fallbackImg(img);
+    if (img.loading !== 'lazy' && img.complete && img.naturalWidth === 0) fallbackImg(img);
     else img.addEventListener('error', () => fallbackImg(img), { once: true });
   }
 
