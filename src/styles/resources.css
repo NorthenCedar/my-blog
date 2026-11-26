@@ -115,11 +115,24 @@ body.chrome-page.resources-plate .page-inf {
 
 .res-stage[data-controls-dock="float"] .res-search {
   width: 12.5rem;
-  padding: 0.32rem 0.72rem;
+  padding: 0.32rem 2rem 0.32rem 0.72rem;
   font-size: var(--fs-xs);
   color: var(--res-rail-ink);
   background: transparent;
   border-color: var(--res-rail-border);
+}
+
+.res-stage[data-controls-dock="float"] .res-search-clear {
+  right: 0.32rem;
+  width: 1.3rem;
+  height: 1.3rem;
+  color: var(--res-rail-ink);
+  opacity: 0.72;
+}
+
+.res-stage[data-controls-dock="float"] .res-search-clear:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--res-rail-ink) 12%, transparent);
 }
 
 .res-stage[data-controls-dock="float"] .res-search::placeholder {
@@ -167,7 +180,7 @@ body.chrome-page.resources-plate .page-inf {
 
 .res-search {
   width: clamp(14rem, 32vw, 22rem);
-  padding: 0.48rem 0.85rem;
+  padding: 0.48rem 2.15rem 0.48rem 0.85rem;
   border-radius: 999px;
   border: 1px solid var(--hair);
   background: var(--panel);
@@ -177,24 +190,50 @@ body.chrome-page.resources-plate .page-inf {
   transition: border-color 0.2s ease;
 }
 
+/* 隐藏浏览器原生 Shadow-DOM 搜索清除叉（避免与自定义圆形光标冲突及出现双清除控件） */
+.res-search::-webkit-search-cancel-button,
+.res-search::-webkit-search-decoration,
+.res-search::-webkit-search-results-button,
+.res-search::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
 .res-search:focus {
   border-color: var(--accent);
 }
 
 .res-search-clear {
-  margin-left: 0.45rem;
-  padding: 0.24rem 0.6rem;
-  border: 1px solid var(--hair);
+  position: absolute;
+  right: 0.42rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  padding: 0;
+  border: 0;
   border-radius: 999px;
   background: transparent;
   color: var(--muted);
-  font-size: var(--fs-xs);
   cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.res-search-clear[hidden] {
+  display: none;
+}
+
+.res-search-clear svg {
+  pointer-events: none;
 }
 
 .res-search-clear:hover {
-  border-color: var(--accent);
-  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
 }
 
 .res-count {

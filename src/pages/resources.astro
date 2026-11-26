@@ -190,7 +190,11 @@ function computeCardLayout(
                     placeholder="搜索资源名称、格式或标签…"
                     aria-label="搜索资源"
                   />
-                  <button type="button" class="res-search-clear" data-res-clear hidden>清空</button>
+                  <button type="button" class="res-search-clear" data-res-clear hidden aria-label="清空搜索">
+                    <svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                      <path d="M2.5 2.5L9.5 9.5M9.5 2.5L2.5 9.5" />
+                    </svg>
+                  </button>
                 </div>
                 <output class="res-count" data-res-count>共 {totalCount} 项</output>
               </div>
