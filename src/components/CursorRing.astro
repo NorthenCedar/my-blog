@@ -214,7 +214,7 @@ onPage(({document, addEventListener, matchMedia, requestAnimationFrame, Mutation
         const [cw, ch] = [t.clientWidth, t.clientHeight];
         root.toggleAttribute(
           'cbar',
-          (t.offsetWidth > cw && e.offsetX >= cw) || (t.offsetHeight > ch && e.offsetY >= ch),
+          (t.offsetWidth - cw > 4 && e.offsetX >= cw) || (t.offsetHeight - ch > 4 && e.offsetY >= ch),
         );
         // 悬停可点元素：盘缩小 + 描边转绿（给"这里能点"的反馈）。文字上不再特殊处理 ——
         // 站主要的就是"页面上只有白点"，所以点与盘在任何地方都显形。

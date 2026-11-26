@@ -109,7 +109,9 @@ button {
    !important 只在 JS 已确认启用自定义光标后生效，避免账户 summary、禁用按钮等
    更具体的控件规则重新露出系统光标；减少动态效果与触摸设备不加此类。 */
 html.cursor-none,
-html.cursor-none * {
+html.cursor-none *,
+html.cursor-none input[type='search']::-webkit-search-cancel-button,
+html.cursor-none input[type='search']::-webkit-search-decoration {
   cursor: none !important;
 }
 
