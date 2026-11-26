@@ -7,7 +7,7 @@ const endpoint='https://northcedar.top/api/writer/runner';
 const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
 function context(){
   const jobId=writerId(process.env.WRITER_JOB_ID),runId=process.env.WRITER_RUN_ID;
-  if(!/^\d{1,20}$/.test(runId??'')||process.env.GITHUB_REPOSITORY!=='NorthenCedar/personal'||process.env.GITHUB_REF!=='refs/heads/main'||!process.env.RUNNER_TEMP)writerFail(403,'invalid_runner','只能在固定仓库主分支的发布工作流运行');
+  if(!/^\d{1,20}$/.test(runId??'')||process.env.GITHUB_REPOSITORY!=='NorthenCedar/my-blog'||process.env.GITHUB_REF!=='refs/heads/main'||!process.env.RUNNER_TEMP)writerFail(403,'invalid_runner','只能在固定仓库主分支的发布工作流运行');
   const base=resolve(process.env.RUNNER_TEMP),directory=join(base,'northcedar-writer-'+jobId);
   if(!directory.startsWith(base+sep)||lstatSync(directory,{throwIfNoEntry:false})?.isSymbolicLink())writerFail(400,'invalid_path','私密临时目录不安全');
   return {jobId,runId,directory,record:join(directory,'state.json')};

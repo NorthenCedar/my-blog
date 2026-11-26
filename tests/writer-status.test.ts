@@ -17,7 +17,7 @@ async function setup(reconcile=true) {
   const job=await createJob(db,proof,{draftId:draft.id,revision:1,requestId});
   const env={...fixture.env,WRITER_GITHUB_TOKEN:'测试凭据'};
   const status=(lookup=`?id=${job.id}`)=>onRequestGet({request:request('/publish'+lookup),env} as never);
-  const run={id:1001,display_title:`云端写作 ${job.id}`,head_branch:'main',event:'workflow_dispatch',path:'.github/workflows/cloud-writer.yml',repository:{full_name:'NorthenCedar/personal'},status:'in_progress',conclusion:null};
+  const run={id:1001,display_title:`云端写作 ${job.id}`,head_branch:'main',event:'workflow_dispatch',path:'.github/workflows/cloud-writer.yml',repository:{full_name:'NorthenCedar/my-blog'},status:'in_progress',conclusion:null};
   return {...fixture,proof,draft,job,status,run};
 }
 

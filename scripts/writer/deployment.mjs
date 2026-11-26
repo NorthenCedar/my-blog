@@ -12,7 +12,7 @@ export function deploymentState(checks,commit){
 export async function waitForDeployment(commit,{token,fetchImpl=fetch,attempts=20,pause=()=>new Promise(resolve=>setTimeout(resolve,15000))}={}){
   if(!token||!/^[a-f0-9]{40}$/.test(commit))fail('deployment_query_unavailable');
   for(let attempt=0;attempt<attempts;attempt++){
-    const response=await fetchImpl(`https://api.github.com/repos/NorthenCedar/personal/commits/${commit}/check-runs?filter=latest&per_page=100`,{redirect:'error',signal:AbortSignal.timeout(8000),headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'northcedar-cloud-writer'}});
+    const response=await fetchImpl(`https://api.github.com/repos/NorthenCedar/my-blog/commits/${commit}/check-runs?filter=latest&per_page=100`,{redirect:'error',signal:AbortSignal.timeout(8000),headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'northcedar-cloud-writer'}});
     // 权限拒绝立即停止；不回显 GitHub 正文或凭据。
     if(!response.ok){await response.body?.cancel();fail('deployment_query_failed');}
     const reader=response.body?.getReader(),parts=[];let size=0;

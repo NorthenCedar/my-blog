@@ -59,7 +59,7 @@ export function mountPublish(root:HTMLElement,api:typeof writerApi,options:{owne
     status.textContent=job.code==='deployment_check_running'?'正在重新检查上线':job.code==='push_unconfirmed'?'推送结果待确认，请查询运行记录':job.code==='owner_closed_unconfirmed'?'已结束待确认任务，请核对仓库内容':JOB_LABELS[job.state]??'正在查询';
     message.textContent=job.code==='deployment_dispatch_unknown'?'部署检查触发结果待确认，请查看运行日志；不会自动重复触发。':job.code==='deployment_check_queued'?'独立部署检查已排队，只查询原提交，不再提交正文。':job.code==='deployment_pending'?'本次等待结束，部署仍待确认；可单独重新检查上线，无须再次发布正文。':job.state==='deployment_failed'?'内容提交仍在仓库中，网站可能继续显示上次成功版本。修复部署后点击“重新检查上线”，不必再次提交正文。':job.state==='ready'?'任务已获推送许可，正在确认实际结果。此时不能保证取消尚未完成的跨服务操作。':job.state==='dispatch_unknown'?'触发应答尚未确定；查询会寻找已有运行，不会重复提交正文。':'';
     actions.replaceChildren();
-    if(job.runId){const link=el('a','查看运行日志');link.href=`https://github.com/NorthenCedar/personal/actions/runs/${job.runId}`;link.target='_blank';link.rel='noopener noreferrer';actions.append(link);}
+    if(job.runId){const link=el('a','查看运行日志');link.href=`https://github.com/NorthenCedar/my-blog/actions/runs/${job.runId}`;link.target='_blank';link.rel='noopener noreferrer';actions.append(link);}
     actions.append(button('重新查询',()=>query(true)));
     if(['pushed','deployment_failed'].includes(job.state))actions.append(button('重新检查上线',()=>mutate(next,()=>post({action:'check_deployment',id:job.id}))));
     if(job.state==='ready'&&job.code==='push_unconfirmed')actions.append(button('结束已停止的待确认任务',()=>{

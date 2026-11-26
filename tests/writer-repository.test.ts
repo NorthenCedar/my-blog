@@ -21,7 +21,7 @@ it('导入固定提交的内容，服务端基线和正文真实落库，不接�
   const repo=createWriterRepository('私密测试凭据',transport),proof=await writerProof(s.request(),{id:s.owner,auth_version:0} as never);
   const opened=await importPublished(repo,s.db,proof,{kind:'post',key:'example'});
   expect(opened.base).toEqual({commit,blobSha:sha,text});expect(opened.value.body).toBe('正文\n');
-  expect(seen[1]).toBe(`https://api.github.com/repos/NorthenCedar/personal/contents/content/posts/example/index.md?ref=${commit}`);
+  expect(seen[1]).toBe(`https://api.github.com/repos/NorthenCedar/my-blog/contents/content/posts/example/index.md?ref=${commit}`);
   await expect(repo.readPost('main','../../.github')).rejects.toMatchObject({status:400});
   await expect(repo.readImage(commit,'src/../.env')).rejects.toMatchObject({status:400});
 });

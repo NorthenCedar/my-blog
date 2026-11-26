@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.repository == 'NorthenCedar/personal' && github.ref == 'refs/heads/main' && !inputs.diagnostic
+    if: github.repository == 'NorthenCedar/my-blog' && github.ref == 'refs/heads/main' && !inputs.diagnostic
     permissions:
       contents: read
       checks: read
@@ -70,7 +70,7 @@ jobs:
         if: always()
         run: node scripts/writer/run.mjs cleanup
   probe:
-    if: github.repository == 'NorthenCedar/personal' && github.ref == 'refs/heads/main' && inputs.diagnostic && inputs.jobId == '00000000000000000000000000000000'
+    if: github.repository == 'NorthenCedar/my-blog' && github.ref == 'refs/heads/main' && inputs.diagnostic && inputs.jobId == '00000000000000000000000000000000'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     permissions:

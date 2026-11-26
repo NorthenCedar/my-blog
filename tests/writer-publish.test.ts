@@ -16,7 +16,7 @@ const jobId='b'.repeat(32);
 it('运行器收到非 JSON 平台错误时保留 HTTP 状态，不回显正文或重复请求',()=>{
   const s=gitFixture(),moduleUrl=pathToFileURL(join(process.cwd(),'scripts/writer/run.mjs')).href;
   const code=`import {runPhase} from ${JSON.stringify(moduleUrl)};let calls=0;globalThis.fetch=async()=>{calls++;return new Response('不应泄露的远端正文',{status:503});};try{await runPhase('probe');process.exitCode=1;}catch(error){if(error.code!=='runner_http_503'||calls!==1)throw error;console.log(error.code);}`;
-  const result=spawnSync(process.execPath,['--input-type=module','-e',code],{cwd:s.cloud,encoding:'utf8',env:{...process.env,RUNNER_TEMP:s.root,WRITER_JOB_ID:'0'.repeat(32),WRITER_RUN_ID:'1002',GITHUB_REPOSITORY:'NorthenCedar/personal',GITHUB_REF:'refs/heads/main',WRITER_RUNNER_SECRET:'s'.repeat(64)}});
+  const result=spawnSync(process.execPath,['--input-type=module','-e',code],{cwd:s.cloud,encoding:'utf8',env:{...process.env,RUNNER_TEMP:s.root,WRITER_JOB_ID:'0'.repeat(32),WRITER_RUN_ID:'1002',GITHUB_REPOSITORY:'NorthenCedar/my-blog',GITHUB_REF:'refs/heads/main',WRITER_RUNNER_SECRET:'s'.repeat(64)}});
   expect(result.status,result.stderr).toBe(0);expect(result.stdout).toContain('runner_http_503');expect(result.stdout+result.stderr).not.toContain('不应泄露的远端正文');
 });
 it('Node 实际重查阶段跳过准备、verify 和推送，只读取准确部署并回传',()=>{
@@ -34,7 +34,7 @@ it('Node 实际重查阶段跳过准备、verify 和推送，只读取准确部�
     for(const phase of ['prepare','verify','publish','deployment'])await runPhase(phase);
     if(JSON.stringify(calls)!==JSON.stringify(['claim','deployment']))throw Error('运行调用不对');
   `;
-  const result=spawnSync(process.execPath,['--input-type=module','-e',code],{cwd:s.cloud,encoding:'utf8',env:{...process.env,RUNNER_TEMP:s.root,WRITER_JOB_ID:jobId,WRITER_RUN_ID:'1002',GITHUB_REPOSITORY:'NorthenCedar/personal',GITHUB_REF:'refs/heads/main',WRITER_RUNNER_SECRET:'s'.repeat(64),GITHUB_TOKEN:'只读临时令牌'}});
+  const result=spawnSync(process.execPath,['--input-type=module','-e',code],{cwd:s.cloud,encoding:'utf8',env:{...process.env,RUNNER_TEMP:s.root,WRITER_JOB_ID:jobId,WRITER_RUN_ID:'1002',GITHUB_REPOSITORY:'NorthenCedar/my-blog',GITHUB_REF:'refs/heads/main',WRITER_RUNNER_SECRET:'s'.repeat(64),GITHUB_TOKEN:'只读临时令牌'}});
   expect(result.status,result.stderr).toBe(0);expect(result.stdout).toContain('本次只重新检查上线');
   expect(s.must(s.cloud,['status','--porcelain'])).toBe('');expect(s.must(s.remote,['rev-list','--count','main'])).toBe('1');
 });

@@ -16,7 +16,7 @@
 |---|---|
 | 技术栈 | **Astro** 静态站（无框架运行时）+ Cloudflare Pages Functions（评论/点赞接口）+ D1 |
 | 依赖 | 运行时 = **`tests/_deps.ts` 里那张白名单**（唯一一份；骨架 3 条 + Jelly Slider 渲染器 + 立体 ∞ 后处理 + React Bits / Dome Gallery / Shape Waves 等**按需懒加载**的组件依赖，2026-11-13 核对）。**加任何一条都要显式改那张白名单**（多处断言都读它）否则 `npm test` 直接红；⚠ 旧记法中「零第三方 / 只许 3 条」已于 2026-10-18 由站主撤除，别再拿它判违规 |
-| 仓库 | `https://github.com/NorthenCedar/personal`（**私有**）· 主分支 `main` |
+| 仓库 | `https://github.com/NorthenCedar/my-blog`（**私有**）· 主分支 `main` |
 | 部署 | push 到 `main` ⇒ Cloudflare Pages **自动构建**（约 1 分钟）。**构建失败时线上继续挂着上一个成功的部署** |
 | 内容 | `content/posts/<slug>/index.md`（一篇文章一个文件夹，图放同目录）· `content/pages/*.md`（关于/日志等单页） |
 | 站主语言 | 中文。**所有回话、注释、文档、提交信息都用中文** |

@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | Pages 正式环境 | `OWNER_USER_ID` | 已绑定的站主 ID，沿用现有值 |
 | Pages 正式环境 | `COMMENTS_DB` | 现有 D1 数据库绑定 |
-| Pages 正式环境 Secret | `WRITER_GITHUB_TOKEN` | 仅 `NorthenCedar/personal`：Contents 读、Actions 读写、Metadata 读 |
+| Pages 正式环境 Secret | `WRITER_GITHUB_TOKEN` | 仅 `NorthenCedar/my-blog`：Contents 读、Actions 读写、Metadata 读 |
 | 仓库 Actions Secret | `WRITER_PUBLISH_TOKEN` | 仅本仓库：Contents 读写；仅最终推送步骤获得它 |
 | Pages 正式环境与 Actions Secret | `WRITER_RUNNER_SECRET` | 两处完全一致，至少 32 字节的随机秘密，用于运行器私密接口 |
 
@@ -30,9 +30,9 @@ Pages 的变量变更须随一次新部署生效。不要只保存设置便声�
 
 先刷新 `/write/`，尝试新建自己的私密草稿并保存；出现“已保存到云端”后刷新重开，核对正文。新建、保存、导出草稿不要求 GitHub 令牌；“文章”“说说”中的已发布内容读取和导入要求读取令牌，发布要求上表配置齐全。
 
-1. 打开 [GitHub 细粒度令牌创建页](https://github.com/settings/personal-access-tokens/new)。Resource owner 选 `NorthenCedar`，Repository access 选 **Only select repositories**，只勾选 `personal`。分别创建两枚有有效期的令牌：`WRITER_GITHUB_TOKEN` 的 Repository permissions 为 **Contents: Read-only、Actions: Read and write**；`WRITER_PUBLISH_TOKEN` 仅给 **Contents: Read and write**。Metadata 读为必需的附带权限。到期后更新对应 Secret。
+1. 打开 [GitHub 细粒度令牌创建页](https://github.com/settings/personal-access-tokens/new)。Resource owner 选 `NorthenCedar`，Repository access 选 **Only select repositories**，只勾选 `my-blog`。分别创建两枚有有效期的令牌：`WRITER_GITHUB_TOKEN` 的 Repository permissions 为 **Contents: Read-only、Actions: Read and write**；`WRITER_PUBLISH_TOKEN` 仅给 **Contents: Read and write**。Metadata 读为必需的附带权限。到期后更新对应 Secret。
 2. 在 [Cloudflare Pages 项目设置](https://dash.cloudflare.com/4bcfa9cf29fad54bd0ca74b90903a10c/pages/view/personal/settings) 的正式环境 **Variables and Secrets** 中，以 **Secret** 类型保存 `WRITER_GITHUB_TOKEN`。令牌值只粘贴到平台的受保护输入框。
-3. 在 [GitHub 仓库 Actions Secrets](https://github.com/NorthenCedar/personal/settings/secrets/actions) 中点 **New repository secret**，保存 `WRITER_PUBLISH_TOKEN`。
+3. 在 [GitHub 仓库 Actions Secrets](https://github.com/NorthenCedar/my-blog/settings/secrets/actions) 中点 **New repository secret**，保存 `WRITER_PUBLISH_TOKEN`。
 4. 在普通 PowerShell 运行下面的命令，生成 32 字节的随机秘密并复制到剪贴板；不需要管理员，不写文件，也不打印秘密。把同一份值分别保存为 Pages 正式环境和 GitHub Actions 的 `WRITER_RUNNER_SECRET`：
 
    ```powershell
@@ -57,10 +57,10 @@ Pages 的变量变更须随一次新部署生效。不要只保存设置便声�
 
 在 GitHub 的 Fine-grained tokens 列表核对两枚发布令牌的 Expiration，建议提前 3–7 天更新。到期日从每枚令牌实际创建时间计算，Secret 保存在平台中不会为令牌自动续期。
 
-推荐先创建两枚新令牌，仍仅授权 `NorthenCedar/personal`：读取/调度令牌使用 Contents 读、Actions 读写；推送令牌使用 Contents 读写；Metadata 保持默认读。令牌显示名称可加日期，平台 Secret 名称保持不变。
+推荐先创建两枚新令牌，仍仅授权 `NorthenCedar/my-blog`：读取/调度令牌使用 Contents 读、Actions 读写；推送令牌使用 Contents 读写；Metadata 保持默认读。令牌显示名称可加日期，平台 Secret 名称保持不变。
 
 1. Pages `personal` → Settings → Production → Variables and Secrets，编辑已有 `WRITER_GITHUB_TOKEN`，替换为新的读取/调度令牌，保持 Secret/Encrypt 类型。
-2. GitHub `personal` → Settings → Secrets and variables → Actions，编辑已有 `WRITER_PUBLISH_TOKEN`，粘贴新的推送令牌并保存。
+2. GitHub `my-blog` → Settings → Secrets and variables → Actions，编辑已有 `WRITER_PUBLISH_TOKEN`，粘贴新的推送令牌并保存。
 3. Pages → Deployments，重试最新正式部署，让新的 Pages Secret 生效。GitHub Actions 的新运行读取更新后的仓库 Secret。
 4. 正式部署成功后运行只读配置核验：`jobId` 填 32 个零、`diagnostic=true`；核验不会发布文章，也不能替代推送令牌实际写权限的验收。需要排查运行环境时可额外选 `verifySource=true`，只校验已提交源码，不读取私密草稿。确认新配置正常，再删除旧令牌。
 

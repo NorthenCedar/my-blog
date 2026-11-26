@@ -13,7 +13,7 @@ afterEach(()=>vi.unstubAllGlobals());
 const commit='3'.repeat(40),details='https://dash.cloudflare.com/4bcfa9cf29fad54bd0ca74b90903a10c/pages/view/personal/deployments/example';
 const json=(data:unknown)=>new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}});
 async function setup(){const s=await writerFixture(),proof=await writerProof(s.request(),{id:s.owner,auth_version:0} as never),draft=await createDraft(s.db,proof,{kind:'post',key:'example',base:null,value:{fields:{title:'标题',date:'2026-10-23',summary:'简介',tags:['随笔']},body:'正文',assets:[]}}),job=await createJob(s.db,proof,{draftId:draft.id,revision:1,requestId:'1'.repeat(32)});return {...s,proof,draft,job};}
-const run=(id:string)=>({id:1001,display_title:`云端写作 ${id}`,head_branch:'main',event:'workflow_dispatch',path:'.github/workflows/cloud-writer.yml',repository:{full_name:'NorthenCedar/personal'},status:'in_progress',conclusion:null});
+const run=(id:string)=>({id:1001,display_title:`云端写作 ${id}`,head_branch:'main',event:'workflow_dispatch',path:'.github/workflows/cloud-writer.yml',repository:{full_name:'NorthenCedar/my-blog'},status:'in_progress',conclusion:null});
 it('细粒度令牌查询已推送任务时不调用它不支持的 Checks API',async()=>{
   const s=await setup(),{lease}=await claimJob(s.db,s.job.id,'1001');await authorizePush(s.db,s.job.id,lease,'1001');
   await recordJob(s.db,s.job.id,lease,{state:'pushed',runId:'1001',commit,publishedBase:{commit,blobSha:'4'.repeat(40),text:'已发布'}});
